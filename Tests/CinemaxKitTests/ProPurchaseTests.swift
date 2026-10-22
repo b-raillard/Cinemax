@@ -405,6 +405,39 @@ struct ProFeatureCatalogueTests {
         #expect(Set(ProFeatureCatalogue.features.map(\.id)).count == ProFeatureCatalogue.features.count)
     }
 
+    /// Spec 2026-10-22: « Regarder ensemble » (créer), le menu personnalisé et
+    /// les couleurs d'accent sont GRATUITS ; les icônes de l'app entrent.
+    @Test("Le périmètre Pro arrêté le 2026-10-22, dans l'ordre de la page")
+    func scope() {
+        #expect(ProFeatureCatalogue.features.map(\.id) == [
+            .memorizedAccounts, .administration, .playOn, .appIcons, .seasonalAllYear, .shortcuts,
+        ])
+        #expect(ProFeatureID.allCases.count == ProFeatureCatalogue.features.count)
+    }
+
+    /// `isGated` says a gate site really exists. Lot B gates the
+    /// administration, « Lire sur… » and Siri / Raccourcis; the icons wait for
+    /// their picker (none exists yet) and the seasons all year for lot C —
+    /// each flips here deliberately, together with its gate site.
+    @Test("Les fonctions réellement verrouillées après le lot B")
+    func gatedSet() {
+        let gated = Set(ProFeatureCatalogue.features.filter(\.isGated).map(\.id))
+        #expect(gated == [.memorizedAccounts, .administration, .playOn, .shortcuts])
+    }
+
+    @Test("Chaque fonction a son titre, son détail et son nom court, dans chaque langue")
+    func keysExistInEveryLanguage() throws {
+        for lang in AppLanguage.supported {
+            let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
+            let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
+            for feature in ProFeatureCatalogue.features {
+                for key in [feature.titleKey, feature.detailKey, feature.shortKey] {
+                    #expect(table[key] != nil, "\(lang): \(key)")
+                }
+            }
+        }
+    }
+
     /// RULE R8 of the spec: setting the production pivot ends the free period,
     /// so every feature the Pro page sells must be locked by then.
     @Test("Pas de pivot de production tant qu'une fonction vendue reste libre")

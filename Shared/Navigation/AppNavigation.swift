@@ -45,11 +45,16 @@ struct AppNavigation: View {
     /// Free / Pro — a process singleton like the stores above: its `init`
     /// reads the defaults AND the iCloud key-value store and starts listening
     /// for iCloud's external changes, none of which a scene-struct recreation
-    /// may repeat. Nothing gates on it yet (`Shared/Entitlements/CLAUDE.md`).
+    /// may repeat. Read through `ProFeatureGate` (`Shared/Entitlements/CLAUDE.md`).
     private static let sharedEntitlements = EntitlementStore()
     /// Early adopters (installed before the Pro): a process singleton — its
-    /// `init` reads the Keychain cache. Nothing grants on it yet.
+    /// `init` reads the Keychain cache. The founders' grant, via `ProFeatureGate`.
     private static let sharedEarlyAdopter = EarlyAdopterService()
+    /// The gate sites' one entry point and the root's contextual Pro sheet
+    /// (lot B). Not `private`, for the same reason as `sharedAppState`: an App
+    /// Intent has no environment and must ask THIS instance — built from the
+    /// two stores above, so it answers before any view exists.
+    static let sharedProAccess = ProFeatureAccess(entitlements: sharedEntitlements, earlyAdopter: sharedEarlyAdopter)
     /// The Pro purchase (StoreKit 2): a process singleton — it listens to
     /// `Transaction.updates` for the life of the process, which a scene-struct
     /// recreation must not start twice.
@@ -69,13 +74,14 @@ struct AppNavigation: View {
     @State private var entitlements = Self.sharedEntitlements
     @State private var earlyAdopter = Self.sharedEarlyAdopter
     @State private var proStore = Self.sharedProStore
+    @State private var proAccess = Self.sharedProAccess
     @State private var accountLocks = Self.sharedAccountLocks
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
     private var remoteControl: RemoteControlListener { Self.sharedRemoteControl }
     @State private var playlistPresenter = AddToPlaylistPresenter()
-    @State private var cardActions = CardActionPresenter()
+    @State private var cardActions = CardActionPresenter(access: Self.sharedProAccess)
     @State private var settingsNav = SettingsNavCoordinator()
     @State private var hasCheckedSession = false
     /// tvOS « Qui regarde ? » at launch (multi-account) — decided once, right
@@ -274,6 +280,7 @@ struct AppNavigation: View {
             toast: toasts
         ))
         .environment(cardActions)
+        .environment(proAccess)
         // Same reason as the playlist sheet: playback is launched from context
         // menus inside lazy grids, where a presentation attached to the cell
         // dies with it. Nothing to host here on tvOS — the menu calls
@@ -297,6 +304,18 @@ struct AppNavigation: View {
             themeManager: themeManager,
             loc: loc,
             toast: toasts
+        ))
+        // The contextual Pro sheet of a refused gate (lot B): raised by a tap
+        // on a Pro entry (« Lire sur… », the Administration row) or by a
+        // Siri / Raccourcis run — hosted once here, like the two above.
+        .modifier(ProUpsellPresentation(
+            feature: $proAccess.upsell,
+            entitlements: entitlements,
+            earlyAdopter: earlyAdopter,
+            proStore: proStore,
+            loc: loc,
+            themeManager: themeManager,
+            toasts: toasts
         ))
         .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
             appToggle: motionEffects,
@@ -393,8 +412,8 @@ struct AppNavigation: View {
             // (open to everyone until the Pro launches — `ProFeatureGate`); a
             // protected profile, or one less restricted than the current one
             // while a parental code is set, needs a code (`AppState.switchAccount`).
-            appState.multiAccountProvider = { [entitlements, earlyAdopter] in
-                entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures
+            appState.multiAccountProvider = { [proAccess] in
+                proAccess.allows(.memorizedAccounts)
             }
             appState.accountLockProvider = { [accountLocks] key in accountLocks.hasLock(key) }
             appState.parentalLockProvider = { [parentalLock] in parentalLock.isEnabled }
@@ -422,7 +441,7 @@ struct AppNavigation: View {
             // The living-room picker: only with several remembered accounts to
             // choose from, and only when the household asked for it.
             if appState.isAuthenticated, accountsAskOnLaunch,
-               entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures,
+               proAccess.allows(.memorizedAccounts),
                appState.activeAccounts.count >= 2 {
                 showWhoIsWatching = true
             }

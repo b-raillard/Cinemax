@@ -218,6 +218,42 @@ struct ProFeatureGateTests {
         #expect(ProFeatureGate.tier(proLaunched: false, isPro: false, isEarlyAdopter: true, override: .launched) == .founder)
     }
 
+    /// Lot B (spec 2026-10-22): every gate site asks `allows(_:tier:)`. Before
+    /// the Pro launches nobody may lose anything — whatever the purchase and
+    /// the founder facts, EVERY feature stays open.
+    @Test("Avant le lancement, chaque fonction Pro reste ouverte, quels que soient achat et fondateur", arguments: [
+        (false, false), (true, false), (false, true), (true, true),
+    ])
+    func everyFeatureOpenBeforeLaunch(isPro: Bool, isEarlyAdopter: Bool) {
+        let tier = ProFeatureGate.tier(proLaunched: false, isPro: isPro, isEarlyAdopter: isEarlyAdopter, override: .automatic)
+        for feature in ProFeatureID.allCases {
+            #expect(ProFeatureGate.allows(feature, tier: tier), "\(feature)")
+        }
+    }
+
+    @Test("Après le lancement : le gratuit est refusé, le Pro et le fondateur passent, pour chaque fonction")
+    func everyFeatureAfterLaunch() {
+        for feature in ProFeatureID.allCases {
+            #expect(!ProFeatureGate.allows(feature, tier: .free), "\(feature)")
+            #expect(ProFeatureGate.allows(feature, tier: .pro), "\(feature)")
+            #expect(ProFeatureGate.allows(feature, tier: .founder), "\(feature)")
+        }
+    }
+
+    /// The default icon is never paid; an alternate one is the Pro's. A tier
+    /// that drops never takes an icon back (`setAlternateIconName` raises a
+    /// system alert — the picker locks, it does not revert).
+    @Test("Icônes : celle par défaut toujours permise, une autre seulement en Pro ou fondateur")
+    func appIconChoice() {
+        for tier in [ProTier.free, .pro, .founder] {
+            #expect(ProFeatureGate.mayChooseAppIcon(alternateName: nil, tier: tier))
+        }
+        #expect(!ProFeatureGate.mayChooseAppIcon(alternateName: "AppIconRose", tier: .free))
+        #expect(ProFeatureGate.mayChooseAppIcon(alternateName: "AppIconRose", tier: .pro))
+        #expect(ProFeatureGate.mayChooseAppIcon(alternateName: "AppIconRose", tier: .founder))
+        #expect(!ProFeatureGate.revertsAppIconWhenTierDrops)
+    }
+
     @Test("Le choix Debug parcourt automatique → lancé → gratuit → Pro → fondateur → automatique")
     func overrideCycle() {
         #expect(ProTierOverride.automatic.next == .launched)
@@ -240,4 +276,75 @@ struct ProFeatureGateTests {
         #expect(reopened.proTierOverride == .free)
     }
     #endif
+}
+
+// MARK: - Pro feature access (the gate sites' one entry point)
+
+@MainActor
+@Suite("Accès aux fonctions Pro")
+struct ProFeatureAccessTests {
+
+    private func access(launched: Bool, isPro: Bool = false, isEarlyAdopter: Bool = false) -> ProFeatureAccess {
+        ProFeatureAccess {
+            ProFeatureGate.tier(proLaunched: launched, isPro: isPro, isEarlyAdopter: isEarlyAdopter, override: .automatic)
+        }
+    }
+
+    @Test("Avant le lancement, tout est admis et aucune feuille Pro ne s'ouvre")
+    func beforeLaunchAdmitsEverything() {
+        let gate = access(launched: false)
+        for feature in ProFeatureID.allCases {
+            #expect(gate.admit(feature))
+        }
+        #expect(gate.upsell == nil)
+    }
+
+    @Test("Gratuit après le lancement : refusé, et la feuille de CETTE fonction s'ouvre")
+    func freeRaisesTheSheet() {
+        let gate = access(launched: true)
+        #expect(!gate.admit(.administration))
+        #expect(gate.upsell == .administration)
+        #expect(!gate.allows(.playOn))
+        #expect(gate.upsell == .administration, "allows() only asks, it never opens a sheet")
+    }
+
+    @Test("Pro et fondateur après le lancement : admis, sans feuille")
+    func paidAndFoundersPass() {
+        for gate in [access(launched: true, isPro: true), access(launched: true, isEarlyAdopter: true)] {
+            #expect(gate.admit(.playOn))
+            #expect(gate.upsell == nil)
+        }
+    }
+
+    /// « Lire sur… » has three senders (the iOS fiche chip, the tvOS fiche
+    /// button, the card menu) and ONE gate: the root presenter they all go
+    /// through.
+    @Test("« Lire sur… » : refusé en gratuit → feuille Pro, pas de sélecteur ; permis → sélecteur")
+    func remotePlayGoesThroughTheGate() {
+        let intent = RemotePlayIntent(itemId: "a", title: "A", startPositionTicks: nil, mediaSourceId: nil)
+
+        let free = access(launched: true)
+        let refused = CardActionPresenter(access: free)
+        refused.present(remotePlay: intent)
+        #expect(refused.remotePlay == nil)
+        #expect(free.upsell == .playOn)
+
+        let open = access(launched: false)
+        let allowed = CardActionPresenter(access: open)
+        allowed.present(remotePlay: intent)
+        #expect(allowed.remotePlay == intent)
+        #expect(open.upsell == nil)
+    }
+
+    @Test("Lire une vidéo depuis une carte ne passe JAMAIS par la porte Pro")
+    func playbackIsNeverGated() {
+        let free = access(launched: true)
+        let presenter = CardActionPresenter(access: free)
+        presenter.present(playback: CardPlaybackRequest(
+            itemId: "a", title: "A", startTime: nil,
+            previousEpisode: nil, nextEpisode: nil, episodeNavigator: nil
+        ))
+        #expect(presenter.playback != nil)
+        #expect(free.upsell == nil)
+    }
 }

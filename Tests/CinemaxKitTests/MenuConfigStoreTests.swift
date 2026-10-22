@@ -760,6 +760,15 @@ struct SettingsCategoryTests {
         }
     }
 
+    /// Lot B: the Administration row is the one Settings entry behind the Pro
+    /// gate — shown to a free admin with a lock, its tap opening the Pro sheet.
+    @Test("Seule la catégorie Administration est une fonction Pro")
+    func administrationIsTheProCategory() {
+        for category in SettingsCategory.allCases {
+            #expect(category.proFeature == (category == .administration ? .administration : nil), "\(category)")
+        }
+    }
+
     @Test("le hub Interface expose exactement les quatre sous-pages écran, dans l'ordre")
     func interfaceSubPages() {
         #expect(InterfaceSubcategory.allCases == [.menu, .homePage, .library, .detailPage])

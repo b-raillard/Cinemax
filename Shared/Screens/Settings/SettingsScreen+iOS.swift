@@ -107,8 +107,12 @@ extension SettingsScreen {
     @ViewBuilder
     func iOSCategoryButton(_ category: SettingsCategory) -> some View {
         let isFirst = category == .appearance
+        // A Pro category (Administration) a free user still sees, badged:
+        // the tap opens the Pro sheet instead of the page.
+        let isLocked = category.proFeature.map { proAccess?.allows($0) == false } ?? false
 
         Button {
+            if let feature = category.proFeature, proAccess?.admit(feature) == false { return }
             selectedCategory = category
         } label: {
             HStack(spacing: CinemaSpacing.spacing3) {
@@ -131,10 +135,14 @@ extension SettingsScreen {
 
                 Spacer()
 
-                // Chevron
-                Image(systemName: "chevron.right")
-                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
-                    .foregroundStyle(isFirst ? themeManager.onAccentContainer.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
+                if isLocked {
+                    ProBadge()
+                } else {
+                    // Chevron
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                        .foregroundStyle(isFirst ? themeManager.onAccentContainer.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
+                }
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)
@@ -154,6 +162,7 @@ extension SettingsScreen {
             .shadow(color: isFirst ? themeManager.accentContainer.opacity(0.3) : .clear, radius: 20, y: 4)
         }
         .buttonStyle(.plain)
+        .accessibilityHint(isLocked ? loc.localized("pro.locked.hint") : "")
     }
 
     // MARK: iOS Rate App

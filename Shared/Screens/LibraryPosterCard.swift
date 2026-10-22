@@ -96,6 +96,8 @@ struct LibraryPosterCard: View {
 /// already-computed values), while `LibraryPosterCard.body` never does.
 private struct PosterCardContent: View {
     @Environment(AppState.self) private var appState
+    /// The admin overlay is a Pro tool (lot B): hidden for a free admin.
+    @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
     /// Published by the host screen (grid / genre row) — see `CardZoom`.
     @Environment(\.cardZoomScope) private var zoomScope
 
@@ -175,7 +177,8 @@ private struct PosterCardContent: View {
 
                 #if os(iOS)
                 // No handler, no menu: its destinations need a host screen.
-                if appState.isAdministrator, onAdminAction != nil {
+                if appState.isAdministrator, onAdminAction != nil,
+                   proAccess?.allows(.administration) ?? true {
                     AdminItemMenu(
                         item: item,
                         onSelectDestination: { dest in

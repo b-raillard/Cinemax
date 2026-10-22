@@ -64,6 +64,9 @@ struct MediaDetailScreen: View {
     /// (`MediaCardContextMenu`), so the presentation itself now lives on
     /// `AppNavigation` — same optionality rationale as `playlists` above.
     @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
+    /// The Pro gate of the admin menu (lot B): a free admin's per-item admin
+    /// shortcuts are hidden, the Settings row being the one door.
+    @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
     /// Read through `@AppStorage`, not `SyncPlayController.isEngineSupported`,
     /// so flipping « Lecteur natif » re-renders the action row.
     @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
@@ -459,8 +462,9 @@ struct MediaDetailScreen: View {
         #if os(iOS)
         // Admin-gated 3-dot menu (Identifier / Edit metadata / Refresh /
         // Delete). Server enforces authorization on every endpoint; client
-        // gating is UX only.
-        if appState.isAdministrator {
+        // gating is UX only. The admin tools are Pro (lot B): hidden for a
+        // free admin, never paywalled here.
+        if appState.isAdministrator, proAccess?.allows(.administration) ?? true {
             adminMenuPill(for: item)
         }
         #endif

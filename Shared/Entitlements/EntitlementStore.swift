@@ -4,9 +4,10 @@ import Observation
 /// Free or Pro, for the whole app. A process singleton hosted by
 /// `AppNavigation` (`sharedEntitlements`) and injected through the environment.
 ///
-/// A FOUNDATION: no StoreKit, no purchase UI, and nothing reads `state` to
-/// hide a feature yet — only Settings → Debug displays it. Plain stored
-/// properties + explicit mutators — no `didSet` on an `@Observable` (root RULE).
+/// No StoreKit here (that is `ProStore`). No feature reads `state` directly:
+/// every gate goes through `ProFeatureGate` (`proTier(earlyAdopter:)`,
+/// `ProFeatureAccess`). Plain stored properties + explicit mutators — no
+/// `didSet` on an `@Observable` (root RULE).
 @MainActor @Observable
 final class EntitlementStore {
     private(set) var state: EntitlementState = .free

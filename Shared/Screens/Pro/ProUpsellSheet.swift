@@ -2,8 +2,9 @@ import SwiftUI
 
 /// The contextual sheet of ONE locked feature (story PRO-03): what it does,
 /// the purchase, « Voir tout ce que Pro inclut », « Pas maintenant ». Opened
-/// only by a tap on an entry marked PRO — never on its own (spec R9), never on
-/// a playback path.
+/// only when the user reaches for a Pro feature — a tap on an entry marked
+/// PRO, on « Lire sur… », or a Siri / Raccourcis run (`ProFeatureAccess.admit`)
+/// — never on its own (spec R9), never on a playback path.
 ///
 /// Presented from places that do not inherit the root's environment (a
 /// popover, a settings sheet): every presenter re-injects `EntitlementStore`,
@@ -105,6 +106,39 @@ struct ProUpsellSheet: View {
         }
         .buttonStyle(.plain)
         #endif
+    }
+}
+
+/// Hosts the contextual sheet of a REFUSED gate at the root
+/// (`ProFeatureAccess.upsell`, lot B): « Lire sur… », the Administration row
+/// and the App Intents raise it from places that cannot present it
+/// themselves — a context menu, a lazy grid, no scene at all. The stores are
+/// re-injected, as every presenter of this sheet does.
+struct ProUpsellPresentation: ViewModifier {
+    @Binding var feature: ProFeatureID?
+    let entitlements: EntitlementStore
+    let earlyAdopter: EarlyAdopterService
+    let proStore: ProStore
+    let loc: LocalizationManager
+    let themeManager: ThemeManager
+    let toasts: ToastCenter
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        content.fullScreenCover(item: $feature) { sheet($0) }
+        #else
+        content.sheet(item: $feature) { sheet($0) }
+        #endif
+    }
+
+    private func sheet(_ feature: ProFeatureID) -> some View {
+        ProUpsellSheet(feature: feature)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
+            .environment(loc)
+            .environment(themeManager)
+            .environment(toasts)
     }
 }
 

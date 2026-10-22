@@ -1191,6 +1191,7 @@
 "intent.error.nothingToResume" = "Nichts zum Fortsetzen vorhanden.";
 "intent.error.itemUnavailable" = "Dieser Titel ist auf dem aktiven Server nicht verfügbar.";
 "intent.error.notEpisodic" = "Dieser Titel ist keine Serie.";
+"intent.error.proRequired" = "Siri und Kurzbefehle gehören zu JellyGlass Pro: Mehr dazu in der App.";
 
 // MARK: - Remote control ("Play on…")
 
@@ -1404,8 +1405,8 @@
 "pro.subline.unlocked" = "Alle Funktionen unten sind auf deinen Geräten freigeschaltet.";
 "pro.founder.card" = "Du hast JellyGlass vor dem Start von Pro genutzt: Alles, was Pro enthält, gehört dir – für immer, auf iPhone, iPad und Apple TV.";
 "pro.alwaysFree.title" = "Immer kostenlos";
-"pro.alwaysFree.body" = "Schauen auf deinen Geräten: Mediathek, Suche, der komplette Player (Spuren, Untertitel, PiP, Überspringen), Fortsetzen, Widgets, Top Shelf, an einer „Gemeinsam schauen“-Sitzung teilnehmen.";
-"pro.alwaysFree.tv" = "Immer kostenlos: Mediathek, Suche, der komplette Player, Fortsetzen, Top Shelf, an „Gemeinsam schauen“ teilnehmen.";
+"pro.alwaysFree.body" = "Schauen auf deinen Geräten: Mediathek, Suche, der komplette Player (Spuren, Untertitel, PiP, Überspringen), Fortsetzen, Widgets, Top Shelf. Eine „Gemeinsam schauen“-Sitzung starten oder ihr beitreten, dein Menü gestalten, deine Akzentfarbe wählen.";
+"pro.alwaysFree.tv" = "Immer kostenlos: Mediathek, Suche, der komplette Player, Fortsetzen, Top Shelf, „Gemeinsam schauen“, dein Menü, deine Akzentfarbe.";
 "pro.buy" = "Freischalten – %@";
 "pro.buy.footnote" = "Einmaliger Kauf, kein Abo. Mit deiner Familienfreigabe geteilt. Schaltet auch iPad und Apple TV mit demselben iCloud-Account frei.";
 "pro.price.unavailable" = "Der Preis ist gerade nicht verfügbar.";
@@ -1428,18 +1429,15 @@
 "pro.upsell.partOf" = "In JellyGlass Pro enthalten, mit vielem mehr, mit einem einzigen Kauf.";
 "pro.upsell.seeAll" = "Alles ansehen, was Pro enthält";
 "pro.upsell.notNow" = "Nicht jetzt";
+"pro.locked.hint" = "JellyGlass-Pro-Funktion: öffnet das Angebot.";
 "pro.feature.accounts.title" = "Gemerkte Konten";
 "pro.feature.accounts.detail" = "Jedes Profil bleibt angemeldet: Wechsel mit einem Tipp, ohne Passwort, auf Wunsch mit Code.";
 "pro.feature.admin.title" = "Dein Server in der Tasche";
 "pro.feature.admin.detail" = "Benutzer, Geräte, Aufgaben und Metadaten – vom iPhone oder iPad aus verwaltet, ganz ohne Computer.";
-"pro.feature.watchTogether.title" = "„Gemeinsam schauen“-Abende";
-"pro.feature.watchTogether.detail" = "Starte eine Sitzung und schaut synchron, jeder bei sich zu Hause. Teilnehmen bleibt kostenlos.";
 "pro.feature.playOn.title" = "„Abspielen auf …“ dem Apple TV";
 "pro.feature.playOn.detail" = "Wähle einen Film auf dem iPhone, er startet auf dem Fernseher im Wohnzimmer.";
-"pro.feature.menu.title" = "Dein Menü, wie du es willst";
-"pro.feature.menu.detail" = "Behalte nur die Tabs, die zählen, in deiner Reihenfolge.";
-"pro.feature.accents.title" = "Alle Farben und Symbole";
-"pro.feature.accents.detail" = "Gestalte JellyGlass nach deinem Geschmack: alle Akzentfarben und alternativen App-Symbole.";
+"pro.feature.icons.title" = "App-Symbole";
+"pro.feature.icons.detail" = "Wähle das Symbol von JellyGlass auf dem Home-Bildschirm aus seinen Farbvarianten. Das Originalsymbol bleibt kostenlos.";
 "pro.feature.seasonal.title" = "Saisonale Themen, das ganze Jahr";
 "pro.feature.seasonal.detail" = "Halloween im April? Behalte dein Lieblingsthema, so lange du willst.";
 "pro.feature.shortcuts.title" = "Siri und Kurzbefehle";
@@ -1462,9 +1460,7 @@
 "pro.list.withPro" = "Mit Pro";
 "pro.feature.accounts.short" = "Konten";
 "pro.feature.admin.short" = "Verwaltung";
-"pro.feature.watchTogether.short" = "Gemeinsam schauen";
 "pro.feature.playOn.short" = "Abspielen auf …";
-"pro.feature.menu.short" = "Menü";
-"pro.feature.accents.short" = "Farben";
+"pro.feature.icons.short" = "Symbole";
 "pro.feature.seasonal.short" = "Jahreszeiten";
 "pro.feature.shortcuts.short" = "Siri";

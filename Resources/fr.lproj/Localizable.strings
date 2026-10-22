@@ -1193,6 +1193,7 @@
 "intent.error.nothingToResume" = "Aucune lecture en cours à reprendre.";
 "intent.error.itemUnavailable" = "Ce titre est introuvable sur le serveur actif.";
 "intent.error.notEpisodic" = "Ce titre n'est pas une série.";
+"intent.error.proRequired" = "Siri et les Raccourcis font partie de JellyGlass Pro : découvrez-le dans l'app.";
 
 // MARK: - Remote control ("Play on…")
 
@@ -1406,8 +1407,8 @@
 "pro.subline.unlocked" = "Toutes les fonctions ci-dessous sont débloquées sur vos appareils.";
 "pro.founder.card" = "Vous utilisiez JellyGlass avant le lancement de Pro : tout ce que Pro contient vous est offert, pour toujours, sur iPhone, iPad et Apple TV.";
 "pro.alwaysFree.title" = "Toujours gratuit";
-"pro.alwaysFree.body" = "Regarder sur vos appareils : bibliothèque, recherche, lecteur complet (pistes, sous-titres, PiP, sauts), reprise, widgets, Top Shelf, rejoindre une séance « Regarder ensemble ».";
-"pro.alwaysFree.tv" = "Toujours gratuit : bibliothèque, recherche, lecteur complet, reprise, Top Shelf, rejoindre « Regarder ensemble ».";
+"pro.alwaysFree.body" = "Regarder sur vos appareils : bibliothèque, recherche, lecteur complet (pistes, sous-titres, PiP, sauts), reprise, widgets, Top Shelf. Lancer ou rejoindre une séance « Regarder ensemble », composer votre menu, choisir votre couleur d'accent.";
+"pro.alwaysFree.tv" = "Toujours gratuit : bibliothèque, recherche, lecteur complet, reprise, Top Shelf, « Regarder ensemble », votre menu, votre couleur d'accent.";
 "pro.buy" = "Débloquer — %@";
 "pro.buy.footnote" = "Achat unique, sans abonnement. Partagé avec votre groupe Partage familial. Débloque aussi l'iPad et l'Apple TV qui utilisent le même compte iCloud.";
 "pro.price.unavailable" = "Le prix n'est pas disponible pour le moment.";
@@ -1430,18 +1431,15 @@
 "pro.upsell.partOf" = "Inclus dans JellyGlass Pro, avec bien d'autres avantages, en un seul achat.";
 "pro.upsell.seeAll" = "Voir tout ce que Pro inclut";
 "pro.upsell.notNow" = "Pas maintenant";
+"pro.locked.hint" = "Fonction JellyGlass Pro : ouvre l'offre.";
 "pro.feature.accounts.title" = "Comptes mémorisés";
 "pro.feature.accounts.detail" = "Chaque profil reste connecté : on passe de l'un à l'autre d'un geste, sans mot de passe, protégé par un code si besoin.";
 "pro.feature.admin.title" = "Votre serveur dans la poche";
 "pro.feature.admin.detail" = "Utilisateurs, appareils, tâches et métadonnées, gérés depuis l'iPhone ou l'iPad, sans ordinateur.";
-"pro.feature.watchTogether.title" = "Soirées « Regarder ensemble »";
-"pro.feature.watchTogether.detail" = "Lancez une séance et regardez en même temps que vos proches, chacun chez soi. La rejoindre reste gratuit.";
 "pro.feature.playOn.title" = "« Lire sur… » l'Apple TV";
 "pro.feature.playOn.detail" = "Choisissez un film sur l'iPhone, il démarre sur la télé du salon.";
-"pro.feature.menu.title" = "Votre menu, à votre façon";
-"pro.feature.menu.detail" = "Gardez seulement les onglets qui comptent, dans l'ordre qui vous plaît.";
-"pro.feature.accents.title" = "Toutes les couleurs et icônes";
-"pro.feature.accents.detail" = "Habillez JellyGlass à votre goût : toutes les couleurs d'accent et les icônes alternatives.";
+"pro.feature.icons.title" = "Icônes de l'app";
+"pro.feature.icons.detail" = "Choisissez l'icône de JellyGlass sur l'écran d'accueil parmi ses déclinaisons de couleur. L'icône d'origine reste gratuite.";
 "pro.feature.seasonal.title" = "Les thèmes saisonniers, toute l'année";
 "pro.feature.seasonal.detail" = "Halloween en avril ? Gardez votre thème préféré aussi longtemps que vous voulez.";
 "pro.feature.shortcuts.title" = "Siri et Raccourcis";
@@ -1464,9 +1462,7 @@
 "pro.list.withPro" = "Avec Pro";
 "pro.feature.accounts.short" = "Comptes";
 "pro.feature.admin.short" = "Administration";
-"pro.feature.watchTogether.short" = "Regarder ensemble";
 "pro.feature.playOn.short" = "Lire sur…";
-"pro.feature.menu.short" = "Menu";
-"pro.feature.accents.short" = "Couleurs";
+"pro.feature.icons.short" = "Icônes";
 "pro.feature.seasonal.short" = "Saisons";
 "pro.feature.shortcuts.short" = "Siri";

@@ -1191,6 +1191,7 @@
 "intent.error.nothingToResume" = "Nothing in progress to resume.";
 "intent.error.itemUnavailable" = "That title isn't available on the active server.";
 "intent.error.notEpisodic" = "That title isn't a series.";
+"intent.error.proRequired" = "Siri and Shortcuts are part of JellyGlass Pro: find out more in the app.";
 
 // MARK: - Remote control ("Play on…")
 
@@ -1404,8 +1405,8 @@
 "pro.subline.unlocked" = "Every feature below is unlocked on your devices.";
 "pro.founder.card" = "You used JellyGlass before Pro launched: everything Pro includes is yours, forever, on iPhone, iPad and Apple TV.";
 "pro.alwaysFree.title" = "Always free";
-"pro.alwaysFree.body" = "Watching on your devices: library, search, the full player (tracks, subtitles, PiP, skips), resume, widgets, Top Shelf, joining a Watch Together session.";
-"pro.alwaysFree.tv" = "Always free: library, search, the full player, resume, Top Shelf, joining Watch Together.";
+"pro.alwaysFree.body" = "Watching on your devices: library, search, the full player (tracks, subtitles, PiP, skips), resume, widgets, Top Shelf. Starting or joining a Watch Together session, arranging your menu, choosing your accent colour.";
+"pro.alwaysFree.tv" = "Always free: library, search, the full player, resume, Top Shelf, Watch Together, your menu, your accent colour.";
 "pro.buy" = "Unlock — %@";
 "pro.buy.footnote" = "One-time purchase, no subscription. Shared with your Family Sharing group. Also unlocks the iPad and Apple TV using the same iCloud account.";
 "pro.price.unavailable" = "The price isn't available right now.";
@@ -1428,18 +1429,15 @@
 "pro.upsell.partOf" = "Included in JellyGlass Pro, with plenty more, in a single purchase.";
 "pro.upsell.seeAll" = "See everything Pro includes";
 "pro.upsell.notNow" = "Not now";
+"pro.locked.hint" = "JellyGlass Pro feature: opens the offer.";
 "pro.feature.accounts.title" = "Remembered accounts";
 "pro.feature.accounts.detail" = "Every profile stays signed in: switch in one tap, no password, with an optional passcode.";
 "pro.feature.admin.title" = "Your server in your pocket";
 "pro.feature.admin.detail" = "Users, devices, tasks and metadata, managed from iPhone or iPad, no computer needed.";
-"pro.feature.watchTogether.title" = "Watch Together nights";
-"pro.feature.watchTogether.detail" = "Start a session and watch in sync with your loved ones, each at home. Joining one stays free.";
 "pro.feature.playOn.title" = "“Play on…” your Apple TV";
 "pro.feature.playOn.detail" = "Pick a film on your iPhone, it starts on the living-room TV.";
-"pro.feature.menu.title" = "Your menu, your way";
-"pro.feature.menu.detail" = "Keep only the tabs that matter, in the order you like.";
-"pro.feature.accents.title" = "Every colour and icon";
-"pro.feature.accents.detail" = "Make JellyGlass yours: every accent colour and the alternate app icons.";
+"pro.feature.icons.title" = "App icons";
+"pro.feature.icons.detail" = "Pick JellyGlass's Home Screen icon among its colour variants. The original icon stays free.";
 "pro.feature.seasonal.title" = "Seasonal themes, all year round";
 "pro.feature.seasonal.detail" = "Halloween in April? Keep your favourite theme as long as you like.";
 "pro.feature.shortcuts.title" = "Siri and Shortcuts";
@@ -1462,9 +1460,7 @@
 "pro.list.withPro" = "With Pro";
 "pro.feature.accounts.short" = "Accounts";
 "pro.feature.admin.short" = "Admin";
-"pro.feature.watchTogether.short" = "Watch Together";
 "pro.feature.playOn.short" = "Play on…";
-"pro.feature.menu.short" = "Menu";
-"pro.feature.accents.short" = "Colours";
+"pro.feature.icons.short" = "Icons";
 "pro.feature.seasonal.short" = "Seasons";
 "pro.feature.shortcuts.short" = "Siri";

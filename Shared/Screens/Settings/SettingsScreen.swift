@@ -77,6 +77,16 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The Pro feature behind this category, if any (lot B): Administration
+    /// stays LISTED for a free admin, with a PRO badge, and its tap opens the
+    /// Pro sheet (`ProFeatureAccess.admit`) instead of the page.
+    var proFeature: ProFeatureID? {
+        switch self {
+        case .administration: .administration
+        default: nil
+        }
+    }
+
     /// Whether this category is admin-gated. Used by the iOS landing to hide
     /// admin rows for non-admin users. tvOS never renders admin entries at
     /// all (admin workflows are mobile-only by product decision).
@@ -211,6 +221,9 @@ struct SettingsScreen: View {
     @Environment(EarlyAdopterService.self) var earlyAdopter
     @Environment(ProStore.self) var proStore
     @Environment(AccountLockStore.self) var accountLocks
+    /// The Pro gate of the Administration row (lot B). Optional like the
+    /// presenters above: absent ⇒ ungated.
+    @Environment(ProFeatureAccess.self) var proAccess: ProFeatureAccess?
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false

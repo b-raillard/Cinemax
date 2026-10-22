@@ -120,3 +120,72 @@ extension ProFeatureGate {
         #endif
     }
 }
+
+// MARK: - Lot B — the gate sites (spec 2026-10-22)
+
+extension ProFeatureGate {
+    /// THE question every gate site asks. Pure: the tier decides, and before
+    /// the launch `tier(…)` is never `.free` — so every feature stays open
+    /// until the pivot is set, whatever the purchase and the founder facts.
+    /// `feature` is part of the question on purpose: a future feature with
+    /// its own rule (a lower tier, a trial) changes this line, not the sites.
+    static func allows(_ feature: ProFeatureID, tier: ProTier) -> Bool {
+        switch feature {
+        case .memorizedAccounts, .administration, .playOn, .appIcons, .seasonalAllYear, .shortcuts:
+            tier.unlocksProFeatures
+        }
+    }
+
+    /// App icons: the default icon (`nil`) is never paid, an alternate one is
+    /// the Pro's. No picker calls this yet — see the App Icons RULE in
+    /// `Shared/DesignSystem/CLAUDE.md`.
+    static func mayChooseAppIcon(alternateName: String?, tier: ProTier) -> Bool {
+        alternateName == nil || allows(.appIcons, tier: tier)
+    }
+
+    /// A tier that drops (refund, end of family sharing) never takes an icon
+    /// back: `setAlternateIconName` raises a system alert of its own, so a
+    /// revert would be a dialog nobody asked for. The picker just locks.
+    static let revertsAppIconWhenTierDrops = false
+}
+
+/// The gate sites' one entry point (lot B): asks `ProFeatureGate.allows` for
+/// THIS user, and — through `admit` — raises the contextual Pro sheet, which
+/// the root presents (`ProUpsellPresentation`). A process singleton
+/// (`AppNavigation.sharedProAccess`), injected through the environment and
+/// reached directly by the App Intents, which have no environment.
+///
+/// The tier is a closure over the two stores, built at init — never wired
+/// late from a `.task`: an intent can cold-launch the app and ask before any
+/// view exists. Reading it inside a `body` reads `EntitlementStore` /
+/// `EarlyAdopterService` observable properties, so a tier change redraws the
+/// gated entries like any other observed value.
+@MainActor @Observable
+final class ProFeatureAccess {
+    /// The feature whose contextual sheet the root shows; `nil` = none.
+    var upsell: ProFeatureID?
+    @ObservationIgnored private let tier: @MainActor () -> ProTier
+
+    /// `tier` is a test seam; the app uses `init(entitlements:earlyAdopter:)`.
+    init(tier: @escaping @MainActor () -> ProTier) {
+        self.tier = tier
+    }
+
+    convenience init(entitlements: EntitlementStore, earlyAdopter: EarlyAdopterService) {
+        self.init { entitlements.proTier(earlyAdopter: earlyAdopter) }
+    }
+
+    /// Only asks — never opens anything. For drawing a lock, or hiding a
+    /// per-item shortcut.
+    func allows(_ feature: ProFeatureID) -> Bool {
+        ProFeatureGate.allows(feature, tier: tier())
+    }
+
+    /// Asks, and when refused raises the sheet of THIS feature. For a tap.
+    @discardableResult
+    func admit(_ feature: ProFeatureID) -> Bool {
+        if allows(feature) { return true }
+        upsell = feature
+        return false
+    }
+}

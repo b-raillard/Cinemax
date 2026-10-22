@@ -17,6 +17,7 @@ enum CinemaxIntentError: Error, CustomLocalizedStringResourceConvertible {
     case nothingToResume
     case itemUnavailable
     case notEpisodic
+    case proRequired
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
@@ -24,7 +25,28 @@ enum CinemaxIntentError: Error, CustomLocalizedStringResourceConvertible {
         case .nothingToResume: "intent.error.nothingToResume"
         case .itemUnavailable: "intent.error.itemUnavailable"
         case .notEpisodic:     "intent.error.notEpisodic"
+        case .proRequired:     "intent.error.proRequired"
         }
+    }
+}
+
+/// Siri, Shortcuts and the Control Center « Reprendre » are ONE Pro feature
+/// (`ProFeatureID.shortcuts`, spec 2026-10-22). Asked FIRST in every
+/// `perform()` — before the session, so a free user hears « fonction Pro »,
+/// not « connectez-vous ». Refused ⇒ `proRequired`, and `admit` has raised the
+/// Pro sheet, which the root presents on the app `openAppWhenRun` has already
+/// opened. Before the Pro launches everybody passes (`ProFeatureGate`).
+@MainActor
+enum IntentProGate {
+    static func admit(_ access: ProFeatureAccess) throws {
+        guard access.admit(.shortcuts) else { throw CinemaxIntentError.proRequired }
+    }
+
+    /// The app's own gate — a process singleton readable without a scene: the
+    /// entitlement comes from UserDefaults + the iCloud KVS and the founder
+    /// facts from the Keychain cache, all read synchronously at init.
+    static func admit() throws {
+        try admit(AppNavigation.sharedProAccess)
     }
 }
 
@@ -82,6 +104,7 @@ struct ResumePlaybackIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         guard let session = IntentSessionProvider.makeSession() else {
             throw CinemaxIntentError.notSignedIn
         }
@@ -106,6 +129,7 @@ struct PlayMediaItemIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         IntentRouter.play(itemId: try activeServerItemId(for: item))
         return .result()
     }
@@ -123,6 +147,7 @@ struct PlayNextEpisodeIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         // Refused up front rather than opening a movie and doing nothing —
         // the entity carries its kind precisely so this costs no round-trip.
         guard series.isEpisodic else { throw CinemaxIntentError.notEpisodic }
@@ -145,6 +170,7 @@ struct OpenMediaItemIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         IntentRouter.open(itemId: try activeServerItemId(for: item))
         return .result()
     }
@@ -162,6 +188,7 @@ struct SearchLibraryIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         // Same hygiene the search field applies: a Shortcuts-supplied term is
         // as untrusted as a pasted one.
         let cleaned = LibrarySearchRanker.sanitize(query)

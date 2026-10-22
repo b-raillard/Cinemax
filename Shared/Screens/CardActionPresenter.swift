@@ -57,12 +57,25 @@ final class CardActionPresenter {
     /// Target count known from the last real poll, `nil` until one has
     /// happened. No speculative poll is triggered here.
     var knownRemoteTargetCount: Int?
+    /// The Pro gate of « Lire sur… » (`AppNavigation.sharedProAccess`).
+    /// `nil` ⇒ ungated (a host with no gate, a preview).
+    @ObservationIgnored private let access: ProFeatureAccess?
 
+    init(access: ProFeatureAccess? = nil) {
+        self.access = access
+    }
+
+    /// Playback: NEVER gated (RULE « playback is never paid »).
     func present(playback request: CardPlaybackRequest) {
         playback = request
     }
 
+    /// « Lire sur… » SENDS a command to another device — nothing plays here —
+    /// and is a Pro feature: this is its ONE gate site, the funnel of its
+    /// three senders (iOS fiche chip, tvOS fiche button, card menu). Refused
+    /// ⇒ no picker, the root's Pro sheet instead (`ProFeatureAccess.admit`).
     func present(remotePlay intent: RemotePlayIntent) {
+        guard access?.admit(.playOn) ?? true else { return }
         remotePlay = intent
     }
 }
