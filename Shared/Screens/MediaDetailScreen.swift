@@ -1128,7 +1128,8 @@ struct MediaDetailScreen: View {
         // screen itself shows the restricted state). An episode is checked on
         // its own rating too: the series' may be absent or milder.
         // The episode as fetched when the fiche was opened for it — not looked
-        // up in `episodes`, which holds only the first and next-up seasons.
+        // up in `episodes`, which holds only the season ON SCREEN (the user
+        // may have switched) and the next-up one.
         let requestedEpisode = viewModel.requestedEpisode
             ?? viewModel.episodes.first(where: { $0.id == viewModel.itemId })
         guard !viewModel.isAgeRestricted,

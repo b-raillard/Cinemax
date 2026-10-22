@@ -809,6 +809,9 @@ final class AppState {
         // that library's queries on the device.
         SearchHistoryStore.clearServer(serverId: entry.id)
         AccountSettingsStore.removeServer(serverId: entry.id, defaults: settingsDefaults)
+        // So does its Home snapshot (`HomeSnapshot`): the cached rails of a
+        // library nothing can sign into any more.
+        HomeSnapshotStore.standard.clear(serverId: entry.id)
         // Its certificate approval goes with it: a pin outliving its server
         // would silently pre-approve whatever answers on that host:port later.
         if let key = ServerCertificateTrust.trustKey(for: entry.url) {
@@ -832,7 +835,12 @@ final class AppState {
         // Keep the entry, drop its credentials: the card stays in the list ready
         // for a re-login. ONLY the active entry is touched, so a confirmed-invalid
         // session can never reach another server's token.
-        if let active { clearSession(of: active) }
+        if let active {
+            clearSession(of: active)
+            // A signed-out server's Home must not paint from disk on the next
+            // sign-in — possibly someone else's (`HomeSnapshot`).
+            HomeSnapshotStore.standard.clear(serverId: active.id)
+        }
 
         keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
         ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)

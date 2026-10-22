@@ -125,6 +125,31 @@ struct FavoritesViewModelTests {
         #expect(api.getItemsCalls[1].limit == 40)
     }
 
+    /// Only the FIRST page pays for the server-side COUNT: `PaginatedLoader`
+    /// keeps that total and ends on a short page (a 10.11 server answered a
+    /// 40-card page in ~84 ms uncounted against ~146 ms counted).
+    @Test("only the first page asks the server to count")
+    func onlyFirstPageCounts() async {
+        let api = MockAPIClient()
+        api.getItemsHandler = { startIndex in
+            if startIndex == 0 {
+                return (makeItems(40, prefix: "Page1"), 120)
+            }
+            // Uncounted: Jellyfin reports the PAGE's size, not 0 (measured, 10.11).
+            return (makeItems(40, prefix: "Page2"), 40)
+        }
+        let vm = FavoritesViewModel()
+        let appState = makeAppState(api: api)
+
+        await vm.load(using: appState)
+        await vm.loadMore(using: appState)
+
+        #expect(api.getItemsQueries.map(\.enableTotalRecordCount) == [true, false])
+        #expect(vm.loader.items.count == 80)
+        #expect(vm.loader.totalCount == 120)
+        #expect(!vm.loader.hasLoadedAll, "a full uncounted page is not the end")
+    }
+
     @Test("a fetch failure on the first page sets loadFailed")
     func firstPageFailureSetsLoadFailed() async {
         let api = MockAPIClient()
@@ -551,6 +576,79 @@ struct PaginatedLoaderTests {
         #expect(loader.totalCount == 2)
         #expect(loader.hasLoadedAll)
         #expect(!loader.isLoadingMore)
+    }
+
+    // MARK: Count once, end on a short page
+
+    @Test("an uncounted later page keeps the first page's total and does not end a full page")
+    func uncountedPageKeepsTotal() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+        await loader.loadMore { _ in (items: [1, 2], total: 5) }
+        // Fetched with `enableTotalRecordCount: false`: Jellyfin then reports
+        // the page's own size as the total (measured on 10.11), never 0.
+        await loader.loadMore { _ in (items: [3, 4], total: 2) }
+
+        #expect(loader.items == [1, 2, 3, 4])
+        #expect(loader.totalCount == 5, "the header keeps the first page's count")
+        #expect(!loader.hasLoadedAll, "a FULL uncounted page is not the end")
+    }
+
+    @Test("an uncounted short page ends pagination")
+    func uncountedShortPageEnds() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+        await loader.loadMore { _ in (items: [1, 2], total: 3) }
+        await loader.loadMore { _ in (items: [3], total: 1) }
+
+        #expect(loader.items == [1, 2, 3])
+        #expect(loader.hasLoadedAll)
+        #expect(loader.totalCount == 3)
+    }
+
+    @Test("an uncounted full page ends the list once the first page's total is reached")
+    func uncountedPageEndsAtFirstTotal() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+        await loader.loadMore { _ in (items: [1, 2], total: 4) }
+        await loader.loadMore { _ in (items: [3, 4], total: 2) }
+
+        #expect(loader.hasLoadedAll, "4 of 4 — no empty extra request")
+        #expect(loader.totalCount == 4)
+    }
+
+    @Test("an empty FIRST page reporting 0 is the end, not an uncounted page")
+    func emptyFirstPageEnds() async {
+        let loader = PaginatedLoader<Int>(pageSize: 2)
+        await loader.loadMore { _ in (items: [], total: 0) }
+
+        #expect(loader.hasLoadedAll)
+        #expect(loader.totalCount == 0)
+    }
+
+    // MARK: Look-ahead trigger
+
+    @Test("the next page is requested half a page before the last card")
+    func shouldLoadMoreLooksAhead() async {
+        let loader = PaginatedLoader<String>(pageSize: 40, identity: { $0 })
+        await loader.loadMore { _ in (items: (0..<40).map { "m\($0)" }, total: 200) }
+
+        #expect(loader.prefetchDistance == 20)
+        #expect(PaginatedLoader<String>(pageSize: 1).prefetchDistance == 1, "never 0 — the trigger would be dead")
+        #expect(!loader.shouldLoadMore(onAppearOf: "m19"), "outside the window")
+        #expect(loader.shouldLoadMore(onAppearOf: "m20"), "first card of the window")
+        #expect(loader.shouldLoadMore(onAppearOf: "m39"), "the last card still triggers")
+        #expect(!loader.shouldLoadMore(onAppearOf: nil))
+        #expect(!loader.shouldLoadMore(onAppearOf: "unknown"))
+    }
+
+    @Test("the look-ahead never fires once everything is loaded, or without an identity")
+    func shouldLoadMoreRespectsEndAndIdentity() async {
+        let done = PaginatedLoader<String>(pageSize: 40, identity: { $0 })
+        await done.loadMore { _ in (items: ["a", "b"], total: 2) }
+        #expect(done.hasLoadedAll)
+        #expect(!done.shouldLoadMore(onAppearOf: "b"))
+
+        let anonymous = PaginatedLoader<String>(pageSize: 40)
+        await anonymous.loadMore { _ in (items: ["a", "b"], total: 10) }
+        #expect(!anonymous.shouldLoadMore(onAppearOf: "b"))
     }
 }
 

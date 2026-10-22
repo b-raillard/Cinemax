@@ -12,8 +12,10 @@ import Foundation
 /// n'a aucune reconnexion en direct. L'image a continué sur le tampon — 18 s la
 /// seconde fois — donc tous les gardes qui regardent l'image voyaient une
 /// lecture saine ; le gel n'a été vu qu'une fois le tampon vide. Ce garde-fou
-/// voit la coupure pendant que l'image tourne encore, ce qui rend le remède bon
-/// marché : un réancrage, seule chose qui fasse rouvrir une connexion neuve.
+/// voit la coupure pendant que l'image tourne encore. Le remède dépend de la
+/// voie : sur la voie DIRECTE, la bascule immédiate au relais (mesuré les 08/10
+/// et 21/10 : le réancrage n'y ramenait aucun octet) ; sur la voie RELAIS, le
+/// réancrage, qui ouvre une connexion locale neuve et donc une requête neuve.
 ///
 /// Les quatre refus sont la partie délicate : une alimentation se tait aussi
 /// pour de bonnes raisons (segments HLS, fichier entièrement lu, saut en cours,
@@ -30,13 +32,18 @@ struct FeedStallPolicyTests {
         adaptive: Bool = false,
         seeking: Bool = false,
         open: Bool = true,
-        endReports: Int = 0
+        endReports: Int = 0,
+        viaRelay: Bool = true
     ) -> FeedStallPolicy.Outcome {
-        // Même ordre que `VLCStreamPresenter.checkFeedStall`.
+        // Même ordre que `VLCStreamPresenter.checkFeedStall`. Par défaut sur la
+        // voie RELAIS, la seule où le remède reste le réancrage : les refus et
+        // la temporisation sont les mêmes sur les deux voies, seul le remède
+        // change (voir « La voie directe » plus bas).
         policy.noteInputEnd(reports: endReports, readBytes: bytes)
         return policy.sample(
             readBytes: bytes, sourceSizeBytes: size, isPlaying: isPlaying,
-            isAdaptiveStream: adaptive, seekSettling: seeking, mediaConfirmedOpen: open
+            feed: adaptive ? .adaptive : (viaRelay ? .relay : .direct),
+            seekSettling: seeking, mediaConfirmedOpen: open
         )
     }
 
@@ -152,7 +159,7 @@ struct FeedStallPolicyTests {
         for _ in 0..<20 {
             #expect(policy.sample(
                 readBytes: nil, sourceSizeBytes: 8_000_000_000, isPlaying: true,
-                isAdaptiveStream: false, seekSettling: false, mediaConfirmedOpen: true
+                feed: .direct, seekSettling: false, mediaConfirmedOpen: true
             ) == .healthy)
         }
     }
@@ -283,5 +290,86 @@ struct FeedStallPolicyTests {
         var outcomes: [FeedStallPolicy.Outcome] = []
         for _ in 0..<5 { outcomes.append(feed(&policy, bytes: 5_000, endReports: 1)) }
         #expect(outcomes.last == .reanchor)
+    }
+
+    // MARK: - La voie directe : bascule au relais
+
+    // Mesuré sur Apple TV le 2026-10-08 puis le 2026-10-21 (MKV en DirectStream
+    // derrière Cloudflare, `peer stream N error: Cancellation (0x8)`) : sur la
+    // voie DIRECTE, le réancrage par saut n'a ramené AUCUN octet — `read=` figé
+    // d'un saut à l'autre (830 942 804 avant comme après, le 21/10) — et seule
+    // la reconstruction a rendu l'alimentation. Les deux réancrages coûtaient
+    // ~16 s de gel avant elle, puis la reconstruction rouvrait EN DIRECT et
+    // retombait sur la même coupure. Le remède sur la voie directe est donc la
+    // reconstruction immédiate par le relais, dont la reconnexion en cours de
+    // flux rend les coupures suivantes invisibles.
+
+    @Test("Voie directe : cinq secondes sans un octet basculent au relais, sans réancrage")
+    func directCutFailsOverToTheRelay() {
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: 830_942_804, viaRelay: false)
+        var outcomes: [FeedStallPolicy.Outcome] = []
+        for _ in 0..<5 { outcomes.append(feed(&policy, bytes: 830_942_804, viaRelay: false)) }
+        #expect(outcomes == [
+            .stalling(seconds: 1), .stalling(seconds: 2), .stalling(seconds: 3),
+            .stalling(seconds: 4), .failoverToRelay
+        ])
+    }
+
+    @Test("Voie relais : le réancrage garde son rôle")
+    func relayCutStillReanchors() {
+        var policy = FeedStallPolicy()
+        _ = feed(&policy, bytes: 500, viaRelay: true)
+        var outcomes: [FeedStallPolicy.Outcome] = []
+        for _ in 0..<5 { outcomes.append(feed(&policy, bytes: 500, viaRelay: true)) }
+        #expect(outcomes.last == .reanchor)
+    }
+
+    @Test("Voie directe : les mêmes refus tiennent (HLS, fin de flux, saut, ouverture)")
+    func directRouteKeepsEveryRefusal() {
+        for (adaptive, seeking, open, endReports) in [
+            (true, false, true, 0), (false, true, true, 0), (false, false, false, 0), (false, false, true, 1),
+        ] {
+            var policy = FeedStallPolicy()
+            _ = feed(&policy, bytes: 500, adaptive: adaptive, seeking: seeking, open: open,
+                     endReports: endReports, viaRelay: false)
+            for _ in 0..<20 {
+                #expect(feed(&policy, bytes: 500, adaptive: adaptive, seeking: seeking, open: open,
+                             endReports: endReports, viaRelay: false) == .healthy)
+            }
+        }
+    }
+
+    @Test("La bascule dépense le même budget : jamais une boucle de reconstructions")
+    func failoverSpendsTheSameBudget() {
+        // Une reconstruction refusée (plus de budget côté image, ou une autre
+        // déjà en cours) laisse la voie directe : le garde-fou ne doit pas
+        // redemander une bascule toutes les cinq secondes pour le reste du film.
+        var policy = FeedStallPolicy()
+        var failovers = 0
+        _ = feed(&policy, bytes: 500, viaRelay: false)
+        for _ in 0..<60 where feed(&policy, bytes: 500, viaRelay: false) == .failoverToRelay { failovers += 1 }
+        #expect(failovers == FeedStallPolicy.reanchorBudget)
+        #expect(policy.reanchorsLeft == 0)
+    }
+
+    @Test("Le scénario du 21/10 : une seule action, la bascule, dès la 5e seconde")
+    func measuredCloudflareCutFailsOverOnce() {
+        // 19:34:45.566 coupure ; 19:34:51.559 premier réancrage ; 19:34:59.618
+        // reconstruction (directe). Désormais : bascule à la 5e seconde de
+        // silence, et plus rien tant que la reconstruction négocie — l'appelant
+        // passe `seekSettling` à vrai pendant la négociation, comme pour le
+        // garde-fou d'image (`reResolve.isNegotiating`).
+        var policy = FeedStallPolicy()
+        var bytes: UInt64 = 830_000_000
+        for _ in 0..<5 { bytes += 600_000; _ = feed(&policy, bytes: bytes, viaRelay: false) }
+        var actions: [Int: FeedStallPolicy.Outcome] = [:]
+        for second in 1...5 {
+            let outcome = feed(&policy, bytes: bytes, viaRelay: false)
+            if outcome == .failoverToRelay || outcome == .reanchor { actions[second] = outcome }
+        }
+        #expect(actions == [FeedStallPolicy.stallSeconds: .failoverToRelay])
+        // La reconstruction négocie (21 s le 21/10) : aucun second remède.
+        for _ in 0..<21 { #expect(feed(&policy, bytes: bytes, seeking: true, viaRelay: false) == .healthy) }
     }
 }

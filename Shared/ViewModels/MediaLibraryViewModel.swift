@@ -219,19 +219,6 @@ final class MediaLibraryViewModel {
         let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
 
         do {
-            // Scoped to the SAME `parentId` as the hero/items query below.
-            // While it wasn't, a library tab surfacing one Jellyfin view got the
-            // WHOLE server's genre list — and the damage wasn't the ~30 dead
-            // chips, it was `fetchGenreItems` only loading `prefix(genreLoadLimit)`
-            // of that list: a scoped library whose own genres sit outside the
-            // server's first 8 lost every genre row and collapsed to its hero
-            // (defect L, measured 2026-08-24).
-            async let genresResult = appState.apiClient.getGenres(
-                userId: userId,
-                parentId: parentId,
-                includeItemTypes: typeFilter
-            )
-
             // The hero query already returns the full `totalCount` (Jellyfin's
             // `totalRecordCount` is the count before `limit`), so a single fetch
             // covers both the count and the hero item. Sort by `dateCreated`
@@ -253,10 +240,34 @@ final class MediaLibraryViewModel {
                 limit: 1
             )
 
-            let fetchedGenres = try await genresResult
+            // Scoped to the SAME `parentId` as the hero/items query above.
+            // While it wasn't, a library tab surfacing one Jellyfin view got the
+            // WHOLE server's genre list — and the damage wasn't the ~30 dead
+            // chips, it was `fetchGenreItems` only loading `prefix(genreLoadLimit)`
+            // of that list: a scoped library whose own genres sit outside the
+            // server's first 8 lost every genre row and collapsed to its hero
+            // (defect L, measured 2026-08-24).
+            let fetchedGenres = try await appState.apiClient.getGenres(
+                userId: userId,
+                parentId: parentId,
+                includeItemTypes: typeFilter
+            )
+            genres = fetchedGenres
+
+            // The genre rows need only the genre list, which lands long before
+            // the hero: its `dateCreated` sort plus the server-side COUNT is the
+            // slowest query of the tab (~130 ms server time on a 10.11 server
+            // with 800 films, against ~13 ms for `/Genres`). So the rows start
+            // NOW, alongside the hero, instead of after it. Replayed with the
+            // app's exact query shapes (6-connection pool, median of 15): every
+            // row landed 237 → 146 ms on the LAN and 407 → 263 ms at 60 ms RTT,
+            // the hero's own paint unchanged (~144 / ~202 ms either way).
+            async let genreRowsDone: Void = fetchGenreItems(
+                using: appState, userId: userId, genres: fetchedGenres
+            )
+
             let heroData = try await heroResult
 
-            genres = fetchedGenres
             totalCount = heroData.totalCount
             heroItem = heroData.items.first
             // A new hero invalidates the previous one's navigation immediately,
@@ -278,6 +289,18 @@ final class MediaLibraryViewModel {
             Task { [weak self] in
                 await self?.loadCollections(using: appState, userId: userId)
             }
+
+            // Genre rows are non-critical to the first paint — a failure here
+            // just drops them (the hero + browse-genres grid still render),
+            // rather than replacing the already-visible content with a full
+            // error screen. A cancellation still supersedes the load so it
+            // isn't marked succeeded.
+            do {
+                try await genreRowsDone
+            } catch {
+                if Self.isCancellation(error) { return false }
+                logger.error("Library genre rows failed: \(error.localizedDescription, privacy: .public)")
+            }
         } catch {
             if Self.isCancellation(error) {
                 logger.debug("Library load cancelled — leaving state for the superseding load")
@@ -289,16 +312,6 @@ final class MediaLibraryViewModel {
             return false
         }
 
-        // Genre rows are non-critical to the first paint — a failure here just
-        // drops them (the hero + browse-genres grid still render), rather than
-        // replacing the already-visible content with a full error screen. A
-        // cancellation still supersedes the load so it isn't marked succeeded.
-        do {
-            try await fetchGenreItems(using: appState, userId: userId, genres: genres)
-        } catch {
-            if Self.isCancellation(error) { return false }
-            logger.error("Library genre rows failed: \(error.localizedDescription, privacy: .public)")
-        }
         return true
     }
 
@@ -326,48 +339,50 @@ final class MediaLibraryViewModel {
         let typeFilter: [BaseItemKind]? = itemType.map { [$0] }
         let parentScopeID = parentId
         let limit = genreItemLimit
-        // Bound the fan-out to chunks of 6 (matching Home's throttle) so a full
+        // At most 6 requests in flight (matching Home's throttle) so a full
         // `genreLoadLimit` set doesn't fire every `getItems` at a self-hosted
-        // server at once.
+        // server at once — as a sliding window, not in waves: chunks of 6 made
+        // the 7th and 8th rows wait for the SLOWEST of the first six before
+        // they even left, one whole extra round trip on every tab open.
         let concurrencyLimit = 6
-        for start in stride(from: 0, to: genresToLoad.count, by: concurrencyLimit) {
-            let chunk = genresToLoad[start..<min(start + concurrencyLimit, genresToLoad.count)]
-            try await withThrowingTaskGroup(of: GenreResult.self) { group in
-                for genre in chunk {
-                    group.addTask {
-                        let result = try await appState.apiClient.getItems(
-                            userId: userId,
-                            parentId: parentScopeID,
-                            includeItemTypes: typeFilter,
-                            sortBy: [snapshot.sortBy],
-                            sortOrder: snapshot.sortAscending ? [.ascending] : [.descending],
-                            genres: [genre],
-                            limit: limit,
-                            // Seul `.items` est lu (voir `GenreResult`), et ceci
-                            // part une fois par genre — jusqu'à 8 COUNT serveur
-                            // par ouverture d'onglet en disposition « parcourir ».
-                            enableTotalRecordCount: false,
-                            // Cards only — no synopsis or genre line (P8).
-                            fieldSet: .card
-                        )
-                        return GenreResult(genre: genre, items: result.items)
-                    }
-                }
-                // One write per CHUNK, not per genre (audit P10): every write to
-                // this dictionary re-evaluates every genre row on screen, so
-                // eight single-genre writes cost eight passes over the whole
-                // browse layout. The rows still fill in progressively — chunk by
-                // chunk — which is what the progressive-render RULE asks for, and
-                // an identical answer (a re-attach, a pull-to-refresh with
-                // nothing new) writes nothing at all.
-                var merged = itemsByGenre
-                for try await entry in group {
-                    merged[entry.genre] = entry.items
-                }
-                if merged != itemsByGenre { itemsByGenre = merged }
-            }
+        let fetchRow: @Sendable (String) async throws -> GenreResult = { genre in
+            let result = try await appState.apiClient.getItems(
+                userId: userId,
+                parentId: parentScopeID,
+                includeItemTypes: typeFilter,
+                sortBy: [snapshot.sortBy],
+                sortOrder: snapshot.sortAscending ? [.ascending] : [.descending],
+                genres: [genre],
+                limit: limit,
+                // Seul `.items` est lu (voir `GenreResult`), et ceci
+                // part une fois par genre — jusqu'à 8 COUNT serveur
+                // par ouverture d'onglet en disposition « parcourir ».
+                enableTotalRecordCount: false,
+                // Cards only — no synopsis or genre line (P8).
+                fieldSet: .card
+            )
+            return GenreResult(genre: genre, items: result.items)
         }
-        // Reached only when every chunk completed without throwing (a failure or
+        try await withThrowingTaskGroup(of: GenreResult.self) { group in
+            var queued = genresToLoad.dropFirst(concurrencyLimit).makeIterator()
+            for genre in genresToLoad.prefix(concurrencyLimit) {
+                group.addTask { try await fetchRow(genre) }
+            }
+            // ONE write for the whole fan-out (audit P10): every write to this
+            // dictionary re-evaluates every genre row on screen, so per-genre
+            // writes cost a pass over the whole browse layout each. An
+            // identical answer (a re-attach, a pull-to-refresh with nothing
+            // new) writes nothing at all.
+            var merged = itemsByGenre
+            for try await entry in group {
+                merged[entry.genre] = entry.items
+                if let genre = queued.next() {
+                    group.addTask { try await fetchRow(genre) }
+                }
+            }
+            if merged != itemsByGenre { itemsByGenre = merged }
+        }
+        // Reached only when every row completed without throwing (a failure or
         // cancellation propagates out above), so the stamp always describes rows
         // that actually landed.
         appliedGenreSortFilter = snapshot
@@ -653,6 +668,10 @@ final class MediaLibraryViewModel {
             nameStartsWithOrGreater: anchor,
             limit: limit,
             startIndex: startIndex,
+            // Only the first page (and a span refresh, which restarts at 0)
+            // pays for the server-side COUNT; `PaginatedLoader` keeps that
+            // total and ends on a short page — see `PaginatedLoader.loadMore`.
+            enableTotalRecordCount: startIndex == 0,
             // The filtered grid draws cards only (P8).
             fieldSet: .card
         )
@@ -668,7 +687,7 @@ final class MediaLibraryViewModel {
             try await self.fetchFilteredPage(
                 using: appState, userId: userId, sortFilter: currentSortFilter,
                 typeFilter: typeFilter, parentScopeID: parentScopeID,
-                anchor: anchor, startIndex: startIndex, limit: 40
+                anchor: anchor, startIndex: startIndex, limit: self.filteredLoader.pageSize
             )
         }
         // Only an unanchored page can speak for the whole set.

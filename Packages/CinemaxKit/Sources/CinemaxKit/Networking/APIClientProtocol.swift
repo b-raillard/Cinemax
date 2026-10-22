@@ -196,8 +196,8 @@ public protocol LibraryAPI: Sendable {
         limit: Int?,
         startIndex: Int?,
         /// `false` tells the server not to COUNT the full matching set (a
-        /// second query over the whole match) and makes `totalCount` come back
-        /// `0` — "didn't count", never "no results". Only a caller that reads
+        /// second query over the whole match); `totalCount` is then the size of
+        /// the returned page, not of the match. Only a caller that reads
         /// the count needs `true`: `PaginatedLoader` (it derives `hasLoadedAll`
         /// from it) and `MediaLibraryViewModel`'s header. See the
         /// implementation for the rest of the contract.
