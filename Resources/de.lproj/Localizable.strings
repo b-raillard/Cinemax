@@ -1377,7 +1377,9 @@
 "settings.seasonal.choice.halloween.detail" = "Das ganze Jahr";
 "settings.appIcon.title" = "App-Symbol";
 "settings.appIcon.classic" = "Klassisch";
-"settings.appIcon.halloween" = "Halloween";
+"settings.appIcon.halloween" = "Halloween-Nacht";
+"settings.appIcon.halloweenPumpkin" = "Kürbis";
+"settings.appIcon.halloweenPotion" = "Zaubertrank";
 "settings.appIcon.locked" = "Erfordert JellyGlass Pro";
 "settings.appIcon.error" = "Das Symbol konnte nicht geändert werden";
 "settings.debug.forceSeason" = "„%@“ erzwingen";

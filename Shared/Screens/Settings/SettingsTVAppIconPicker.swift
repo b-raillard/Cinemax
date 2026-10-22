@@ -40,16 +40,29 @@ extension SettingsScreen {
 
                 Spacer()
 
-                HStack(spacing: CinemaSpacing.spacing4) {
-                    ForEach(AppIconCatalogue.choices) { choice in
-                        tvAppIconChip(
-                            choice,
-                            isSelected: choice == current,
-                            isLocked: choice != current && AppIconPickerPolicy.isLocked(choice, tier: tier)
-                        )
+                // Thirteen icons since 2026-10-22: the chips scroll to the
+                // current one until the picker's redesign (mockups pending).
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: CinemaSpacing.spacing4) {
+                            ForEach(AppIconCatalogue.choices) { choice in
+                                tvAppIconChip(
+                                    choice,
+                                    isSelected: choice == current,
+                                    isLocked: choice != current && AppIconPickerPolicy.isLocked(choice, tier: tier)
+                                )
+                                .id(choice.id)
+                            }
+                        }
+                        .padding(.vertical, CinemaSpacing.spacing2)
+                    }
+                    .frame(maxWidth: 760)
+                    .onChange(of: appIconName, initial: true) { _, name in
+                        if let id = AppIconCatalogue.choice(alternateName: name)?.id {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
                     }
                 }
-                .padding(.vertical, CinemaSpacing.spacing2)
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .frame(maxWidth: .infinity, minHeight: 80)

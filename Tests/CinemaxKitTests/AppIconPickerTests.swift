@@ -11,13 +11,37 @@ struct AppIconPickerTests {
 
     private let halloween = "AppIconHalloween"
 
-    @Test("Classique (l'icône principale, nil) puis Halloween, chacune avec son aperçu")
+    /// Decision 2026-10-22: every variant `recolor.py` declines ships —
+    /// Classique, the three Halloween ones, then the nine accents in
+    /// `AccentOption` order. The list is mirrored by recolor.py's
+    /// `ALTERNATES` and `project.yml` (`bundleWiring` checks the latter).
+    @Test("Classique, les trois Halloween, puis les neuf couleurs d'accent, chacune avec son aperçu")
     func catalogue() {
         let choices = AppIconCatalogue.choices
-        #expect(choices.map(\.alternateName) == [nil, halloween])
+        #expect(choices.map(\.alternateName) == [
+            nil,
+            "AppIconHalloweenPumpkin", "AppIconHalloweenPotion", halloween,
+            "AppIconRed", "AppIconOrange", "AppIconYellow", "AppIconGreen", "AppIconCyan",
+            "AppIconBlue", "AppIconIndigo", "AppIconPurple", "AppIconPink",
+        ])
         #expect(choices.first == AppIconCatalogue.primary)
         #expect(Set(choices.map(\.id)).count == choices.count)
-        #expect(Set(choices.map(\.previewImage)).count == choices.count)
+        #expect(choices.map(\.previewImage) == choices.map { ($0.alternateName ?? "AppIcon") + "Preview" })
+    }
+
+    @Test("Chaque famille à sa place : une classique, trois Halloween, une icône par accent sauf l'arc-en-ciel")
+    func families() {
+        let choices = AppIconCatalogue.choices
+        #expect(choices.map(\.family).first == .classic)
+        #expect(choices.filter { $0.family == .halloween }.count == 3)
+        let accents = choices.compactMap { choice -> AccentOption? in
+            if case .accent(let option) = choice.family { option } else { nil }
+        }
+        #expect(accents == AccentOption.allCases.filter { $0 != .rainbow })
+        // An accent icon is labelled with its colour's own name.
+        for choice in choices {
+            if case .accent(let option) = choice.family { #expect(choice.labelKey == option.nameKey) }
+        }
     }
 
     @Test("Le choix affiché suit le nom que donne le système ; un nom inconnu n'en coche aucun")
@@ -79,10 +103,11 @@ struct AppIconPickerTests {
     /// wrapping; an unknown current name steps from the primary.
     @Test("Apple TV : le pas passe au choix voisin, en boucle")
     func neighbour() {
-        #expect(AppIconCatalogue.neighbour(of: nil, by: 1).alternateName == halloween)
-        #expect(AppIconCatalogue.neighbour(of: nil, by: -1).alternateName == halloween)
-        #expect(AppIconCatalogue.neighbour(of: halloween, by: 1).alternateName == nil)
-        #expect(AppIconCatalogue.neighbour(of: "AppIconRetiree", by: 1).alternateName == halloween)
+        #expect(AppIconCatalogue.neighbour(of: nil, by: 1).alternateName == "AppIconHalloweenPumpkin")
+        #expect(AppIconCatalogue.neighbour(of: nil, by: -1).alternateName == "AppIconPink")
+        #expect(AppIconCatalogue.neighbour(of: halloween, by: 1).alternateName == "AppIconRed")
+        #expect(AppIconCatalogue.neighbour(of: "AppIconPink", by: 1).alternateName == nil)
+        #expect(AppIconCatalogue.neighbour(of: "AppIconRetiree", by: 1).alternateName == "AppIconHalloweenPumpkin")
     }
 
     @Test("Chaque choix a son libellé dans chaque langue")

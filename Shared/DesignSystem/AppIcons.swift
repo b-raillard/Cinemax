@@ -17,6 +17,18 @@ struct AppIconChoice: Identifiable, Sendable, Equatable {
     /// The picker's thumbnail imageset: `UIImage(named:)` cannot read an app
     /// icon set. Written by `design/logo-variantes/recolor.py --alternates`.
     let previewImage: String
+    /// Which kind of icon it is — for a picker that groups or decorates them
+    /// (a section per family, an accent's swatch).
+    let family: Family
+
+    enum Family: Equatable, Sendable {
+        /// The primary icon (`alternateName == nil`).
+        case classic
+        /// A « Nuit d'Halloween » variant.
+        case halloween
+        /// The logo in one accent colour (`AccentOption.accentDark`'s hue).
+        case accent(AccentOption)
+    }
 
     var id: String { alternateName ?? "primary" }
 }
@@ -26,12 +38,28 @@ struct AppIconChoice: Identifiable, Sendable, Equatable {
 enum AppIconCatalogue {
     /// The primary icon — whatever `scripts/seasonal-icon.py` last made it;
     /// its thumbnail moves with it.
-    static let primary = AppIconChoice(alternateName: nil, labelKey: "settings.appIcon.classic", previewImage: "AppIconPreview")
+    static let primary = AppIconChoice(alternateName: nil, labelKey: "settings.appIcon.classic", previewImage: "AppIconPreview", family: .classic)
 
-    static let choices: [AppIconChoice] = [
-        primary,
-        AppIconChoice(alternateName: "AppIconHalloween", labelKey: "settings.appIcon.halloween", previewImage: "AppIconHalloweenPreview")
-    ]
+    /// Every variant `recolor.py` declines (decision 2026-10-22), in picker
+    /// order: Classique, the three Halloween ones, then one per accent in
+    /// `AccentOption` order (no rainbow — it has no hue to recolour with).
+    /// The asset name is the thumbnail's minus « Preview ».
+    static let choices: [AppIconChoice] = [primary] + halloween + accents
+
+    /// A = bell pumpkin, tentacles potion (the PRIMARY icon until the user
+    /// reverts it after 2 November — identical to Classique until then); B =
+    /// the reverse; « Nuit d'Halloween » = A on the theme's aubergine ground.
+    static let halloween: [AppIconChoice] = [
+        ("AppIconHalloweenPumpkin", "settings.appIcon.halloweenPumpkin"),
+        ("AppIconHalloweenPotion", "settings.appIcon.halloweenPotion"),
+        ("AppIconHalloween", "settings.appIcon.halloween")
+    ].map { AppIconChoice(alternateName: $0.0, labelKey: $0.1, previewImage: $0.0 + "Preview", family: .halloween) }
+
+    /// `AppIconRed` … `AppIconPink`, labelled with the accent's own name.
+    static let accents: [AppIconChoice] = AccentOption.allCases.filter { $0 != .rainbow }.map { option in
+        let name = "AppIcon" + option.rawValue.prefix(1).uppercased() + option.rawValue.dropFirst()
+        return AppIconChoice(alternateName: name, labelKey: option.nameKey, previewImage: name + "Preview", family: .accent(option))
+    }
 
     /// The choice the system shows for `UIApplication.alternateIconName`;
     /// `nil` for a name no choice carries (an icon a later version dropped) —

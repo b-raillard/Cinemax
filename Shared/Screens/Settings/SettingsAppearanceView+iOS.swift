@@ -238,13 +238,16 @@ struct IOSAppearanceDetailView: View {
     /// shows is never taken back (`AppIconPickerPolicy.outcome` → `.keep`).
     var appIconSection: some View {
         let tier = proAccess?.currentTier() ?? .founder
+        // Thirteen icons since 2026-10-22: a scrolling row until the picker's
+        // redesign (the user is choosing among mockups) — functional, not final.
         return iOSSettingsRow {
-            HStack(alignment: .top, spacing: CinemaSpacing.spacing4) {
-                ForEach(AppIconCatalogue.choices) { choice in
-                    let isCurrent = choice.alternateName == appIconName
-                    appIconTile(choice, isCurrent: isCurrent, isLocked: !isCurrent && AppIconPickerPolicy.isLocked(choice, tier: tier))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: CinemaSpacing.spacing4) {
+                    ForEach(AppIconCatalogue.choices) { choice in
+                        let isCurrent = choice.alternateName == appIconName
+                        appIconTile(choice, isCurrent: isCurrent, isLocked: !isCurrent && AppIconPickerPolicy.isLocked(choice, tier: tier))
+                    }
                 }
-                Spacer(minLength: 0)
             }
         }
         .onAppear { appIconName = AppIconSwitcher.currentName }
