@@ -2,7 +2,7 @@
 
 > Loaded when you work under `Shared/Entitlements/`. The strategy (what will be Pro, price, sequencing, App Review risks) is in `docs/superpowers/specs/2026-09-30-entitlements-foundation-design.md`. The root file's cross-cutting rules (Swift 6, `@Observable` without `didSet`, xcodegen, tests) still apply. Lines tagged **RULE** override default behavior.
 
-## What is here (2026-09-30: a FOUNDATION, nothing is locked)
+## What is here
 
 - `EntitlementState` (`.free` / `.pro(EntitlementSource)`), `EntitlementPolicy.resolve` (pure: local purchase → `.pro(.purchase)`, else iCloud record → `.pro(.cloudMirror)`, else — DEBUG only — « Simuler Pro » → `.pro(.debugOverride)`, else `.free`).
 - `CloudEntitlementRecord` — the purchase proof, `version` 1, JSON; `decode(_:)` returns `nil` for an unknown version or a malformed blob, never traps. Carries the StoreKit JWS (`signedTransaction`) for a future verifying reader.
