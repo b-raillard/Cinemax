@@ -3246,7 +3246,7 @@
 		2EBCF92CD7DBCE2ED2C2F696 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconHalloween;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/Cinemax.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
@@ -3342,7 +3342,7 @@
 		682D374ADED21B3326C144F6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconHalloween;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
@@ -3384,7 +3384,7 @@
 		A84B37A070A3AF6998724158 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconHalloween;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/Cinemax.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
@@ -3486,7 +3486,7 @@
 		EBEE020B7667D66022B93C7B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconHalloween;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
