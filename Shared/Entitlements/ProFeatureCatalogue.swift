@@ -25,7 +25,7 @@ nonisolated enum ProFeatureCatalogue {
     static let features: [Feature] = [
         Feature(id: .memorizedAccounts, titleKey: "pro.feature.accounts.title", detailKey: "pro.feature.accounts.detail", icon: "person.2.circle", isGated: true),
         Feature(id: .administration, titleKey: "pro.feature.admin.title", detailKey: "pro.feature.admin.detail", icon: "shield.lefthalf.filled", isGated: true),
-        Feature(id: .playOn, titleKey: "pro.feature.playOn.title", detailKey: "pro.feature.playOn.detail", icon: "airplayvideo", isGated: true),
+        Feature(id: .playOn, titleKey: "pro.feature.playOn.title", detailKey: "pro.feature.playOn.detail", icon: "tv.badge.wifi", isGated: true),
         // No picker yet (nothing calls `setAlternateIconName`): gated the day
         // it ships, through `ProFeatureGate.mayChooseAppIcon`.
         Feature(id: .appIcons, titleKey: "pro.feature.icons.title", detailKey: "pro.feature.icons.detail", icon: "app.badge", isGated: false),
