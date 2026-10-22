@@ -100,6 +100,7 @@
 		2071AE386D844DA8B6283716 /* SettingsTVActionRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96FE07986012B06BD4B2E9DD /* SettingsTVActionRow.swift */; };
 		2193AA20E0375074F247E721 /* MediaEntityID.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B900079191219FB59520FA9 /* MediaEntityID.swift */; };
 		223A88A3CC1776DA1267F6D8 /* SyncPlayQueueParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96DF6EED4756FEC6BE0B6AE1 /* SyncPlayQueueParsingTests.swift */; };
+		224ED7196F3DEDE51A2DB11B /* AppIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22B539548ECAE6C427C00E9 /* AppIcons.swift */; };
 		22936040699583C5F2D4E834 /* CardActionPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C683E40EA41CFFB115C0AD25 /* CardActionPresenter.swift */; };
 		237FC704F4298C6323A1AAD0 /* AppStoreLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3D0C06E8FC2D6FCF5591A7F /* AppStoreLookup.swift */; };
 		23F08C5E6904A507BF0E2C93 /* PosterPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD74C7044AE82EE6BA3DDAB0 /* PosterPrefetcher.swift */; };
@@ -142,6 +143,7 @@
 		300942637B6DD7F1430750A3 /* MetadataCastTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADEAE9BB3E538E792AD643F8 /* MetadataCastTab.swift */; };
 		3063AE81691215FA3F5CA882 /* AudioTrackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78A064C067BC85456FB2FE3A /* AudioTrackPolicy.swift */; };
 		3067F37BBC4A112F223D5B39 /* AppShortcuts.strings in Resources */ = {isa = PBXBuildFile; fileRef = E4D43C12622E0B2AACF89D1A /* AppShortcuts.strings */; };
+		308A5A996C525F77387243E6 /* AppIcons.swift in Sources */ = {isa = PBXBuildFile; fileRef = D22B539548ECAE6C427C00E9 /* AppIcons.swift */; };
 		30945A46BE44C9A2CC660A10 /* SeasonalAmbiance.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0D402F52BE3BFD8982C560 /* SeasonalAmbiance.swift */; };
 		310D172DE17EC3F22A5DFA95 /* ChipEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94FA6A5683705668178431E2 /* ChipEditor.swift */; };
 		3130BB68B43604CB9F31F65A /* PlaybackReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 017C266BB19FE6F0097A03A7 /* PlaybackReporter.swift */; };
@@ -370,6 +372,7 @@
 		7613EB8355F9FD8683136102 /* MediaItemQuery.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC029829C85BBFD16FF3B63F /* MediaItemQuery.swift */; };
 		770A530A66494B92176D7AAC /* CloudKeyValueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DA26861069F545AD474AF1 /* CloudKeyValueStore.swift */; };
 		7716D1FC3A2C0236A06E2537 /* IdentifyScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43B577BCED94F9831A8C8171 /* IdentifyScreen.swift */; };
+		772B988430186810A828611C /* SettingsTVAppIconPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2740091E89966499460F06E3 /* SettingsTVAppIconPicker.swift */; };
 		775886D386630AB477D44DBD /* LicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21750E7690B40CFD3168FACA /* LicensesView.swift */; };
 		7885F6C774A599528CADE04B /* AdminNetworkScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55122A5776984A5A63808F80 /* AdminNetworkScreen.swift */; };
 		788D532D6B8D08877027C441 /* VideoResumeSeekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15EF0DA1A754825C8A1CE6C2 /* VideoResumeSeekTests.swift */; };
@@ -402,6 +405,7 @@
 		8430CBF103C7D8FDE321302F /* StreamProxyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C5B18A062473FEFA3852339 /* StreamProxyTests.swift */; };
 		8451EF41053F546B55D41AFE /* CloudEntitlementMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = A870F6ACA5E3A750FDC6AFC3 /* CloudEntitlementMirror.swift */; };
 		84668E94D3ACB7EA30769308 /* ToastOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E5C1E6AA06EF0B35E4B4CD2 /* ToastOverlay.swift */; };
+		84967A660EBBCDDCE24D79CD /* SettingsTVAppIconPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2740091E89966499460F06E3 /* SettingsTVAppIconPicker.swift */; };
 		8497BA437CDCC5ECB1BFC24D /* HeroBackdropImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89294A4325865302AB163A3C /* HeroBackdropImage.swift */; };
 		84B9BC2BB5DDA6C6C179C151 /* MetadataEditorScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D083F5B426B3BAA9F95AB35F /* MetadataEditorScreen.swift */; };
 		850FA2A4714148E59074CC92 /* PosterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AE5FB096BB1BE0581798DFD /* PosterCard.swift */; };
@@ -423,6 +427,7 @@
 		8A4A9494BC7233D7F806E0AA /* AdminLoadStateContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FCF5A94AA4897A4644B777A /* AdminLoadStateContainer.swift */; };
 		8A4EB19907F21FD5DEECA11C /* PlayerAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BAB94F3D72C16AF52301937 /* PlayerAccessibilityTests.swift */; };
 		8A5E5BB643B85685DCA71CEF /* DiagnosticsReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE5214DD9F50345475DB6E05 /* DiagnosticsReport.swift */; };
+		8AA592957B4A1B82F042F796 /* AppIconPickerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AA34FC63B2EA2BD9345DC0B /* AppIconPickerTests.swift */; };
 		8B0BC8C9E0D75F440ACBD95A /* LoginViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D07FDBA8B067335CB393D9 /* LoginViewModelTests.swift */; };
 		8BB2ECBC65D5E6DB72CCC71C /* AdminDashboardScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC3E912535197B53EEAEE7A /* AdminDashboardScreen.swift */; };
 		8BDB9C1786E43DF94E915686 /* SeasonalTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71C62C18C28EFC1BA9F4CBA /* SeasonalTheme.swift */; };
@@ -601,6 +606,7 @@
 		C6E0C3AD2F43862B73C2A143 /* SeasonalTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84AB014A3C1C0B27BC4DF487 /* SeasonalTypography.swift */; };
 		C6ECB352E613955A5A110A8E /* LibraryLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCB36F2BA2BA2F32157D2B57 /* LibraryLogicTests.swift */; };
 		C71D58C3EE1FD8D23F042C29 /* PreAuthChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56B5D2636A930296A6BD74ED /* PreAuthChrome.swift */; };
+		C92B0465DE0CABB0CF8985C9 /* AppIconPickerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AA34FC63B2EA2BD9345DC0B /* AppIconPickerTests.swift */; };
 		C97482DA24D2DFD0355B2D46 /* SeasonalTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71C62C18C28EFC1BA9F4CBA /* SeasonalTheme.swift */; };
 		CA3B2A0FBED8394AD6453A13 /* CardMenuOptimisticStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF37181D8DDD93D930FE74E7 /* CardMenuOptimisticStateTests.swift */; };
 		CA7C7DD812C297C972615E19 /* WhatsNewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2772DBD47739359C36962BA8 /* WhatsNewScreen.swift */; };
@@ -881,6 +887,7 @@
 		25DBC840D04F02A6587A96D6 /* AdminLandingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminLandingScreen.swift; sourceTree = "<group>"; };
 		26CE1748D76D350ED628CCA3 /* CardZoomTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardZoomTransition.swift; sourceTree = "<group>"; };
 		2704DEBD38156198513A11C4 /* RemoteCommandController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteCommandController.swift; sourceTree = "<group>"; };
+		2740091E89966499460F06E3 /* SettingsTVAppIconPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTVAppIconPicker.swift; sourceTree = "<group>"; };
 		2772DBD47739359C36962BA8 /* WhatsNewScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewScreen.swift; sourceTree = "<group>"; };
 		280786386ED204F8AAAF36B6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2B2FB3A383399267B4735B67 /* WhoIsWatchingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhoIsWatchingScreen.swift; sourceTree = "<group>"; };
@@ -956,6 +963,7 @@
 		58BDB8AB3BF62513D67C2E16 /* BaseItemDto+Metadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BaseItemDto+Metadata.swift"; sourceTree = "<group>"; };
 		592DF5F22CD8B9D9D263F7FD /* AdminItemMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminItemMenu.swift; sourceTree = "<group>"; };
 		59CE3A78C397CC15A81F1635 /* GlassTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTextField.swift; sourceTree = "<group>"; };
+		5AA34FC63B2EA2BD9345DC0B /* AppIconPickerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconPickerTests.swift; sourceTree = "<group>"; };
 		5AD9477588ED431D8A6A0878 /* IdentifyFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifyFormView.swift; sourceTree = "<group>"; };
 		5B79C648FDB6E0DBCD80CAEB /* AdminDevicesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminDevicesViewModel.swift; sourceTree = "<group>"; };
 		5B7EA60E10D3E173579C547E /* DeepLinkRouteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkRouteTests.swift; sourceTree = "<group>"; };
@@ -1153,6 +1161,7 @@
 		D083F5B426B3BAA9F95AB35F /* MetadataEditorScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataEditorScreen.swift; sourceTree = "<group>"; };
 		D0E64CC4C2106783BCE3184B /* ProStoreKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProStoreKitTests.swift; sourceTree = "<group>"; };
 		D170AF99C65838B5D919872E /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		D22B539548ECAE6C427C00E9 /* AppIcons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIcons.swift; sourceTree = "<group>"; };
 		D26B6A8F7506FEB0C0F8EFBD /* CloudEntitlementRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudEntitlementRecord.swift; sourceTree = "<group>"; };
 		D2A51D73542F8E7874313164 /* MediaDetailCastSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailCastSection.swift; sourceTree = "<group>"; };
 		D2E4A7D171BFFC2140105DE2 /* MetadataActionsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataActionsTab.swift; sourceTree = "<group>"; };
@@ -1434,6 +1443,7 @@
 				CD3EBB34DE4C848E6DDFF63A /* SettingsScreen+tvOS.swift */,
 				BAF45837A14E93AA0A9739F5 /* SettingsTVAccentPicker.swift */,
 				96FE07986012B06BD4B2E9DD /* SettingsTVActionRow.swift */,
+				2740091E89966499460F06E3 /* SettingsTVAppIconPicker.swift */,
 				F4EBD3E46649C6D2B2201E5F /* SettingsTVLanguagePicker.swift */,
 				1720DF5B530CD8E0201442FE /* SettingsTVProfileSection.swift */,
 				C5EE4DDCFCFE97260F754536 /* SettingsTVSeasonalPicker.swift */,
@@ -1538,6 +1548,7 @@
 				65D2110246789FDDD6EC3AE0 /* AcceptLanguageTests.swift */,
 				61714AC7F3CC3943BC414EF6 /* AdminApiKeysTests.swift */,
 				75FE585AF0EC0507240E8772 /* APICacheTests.swift */,
+				5AA34FC63B2EA2BD9345DC0B /* AppIconPickerTests.swift */,
 				B12FD7645555E29504DB92CD /* AppUpdatePolicyTests.swift */,
 				99E9A3AAAABB29FD8BD3BA01 /* AudioTrackPolicyTests.swift */,
 				192311DCC27E4999E2F70068 /* AuthedURLTests.swift */,
@@ -1820,6 +1831,7 @@
 				5E6DFDAC477F6F7DE6AE0409 /* Seasons */,
 				6972E29F4227F16D517B124A /* AccentOption.swift */,
 				A98492ED27F16C895D0E1E0A /* AdaptiveLayout.swift */,
+				D22B539548ECAE6C427C00E9 /* AppIcons.swift */,
 				26CE1748D76D350ED628CCA3 /* CardZoomTransition.swift */,
 				AEE2FAD0E4FC6B94694E477F /* CinemaDynamicType.swift */,
 				5BF56288932318BE6C754F7B /* CinemaGlassTheme.swift */,
@@ -2304,6 +2316,7 @@
 				03D32DF529FA75DDA8FFC3E6 /* APICacheTests.swift in Sources */,
 				0526BE058C54A7C237DE8B3F /* AcceptLanguageTests.swift in Sources */,
 				FCD6516F86DDAFE26B843E08 /* AdminApiKeysTests.swift in Sources */,
+				8AA592957B4A1B82F042F796 /* AppIconPickerTests.swift in Sources */,
 				334D02C411D5AEA62397BA33 /* AppUpdatePolicyTests.swift in Sources */,
 				F3C244902A8513775567D83E /* AudioTrackPolicyTests.swift in Sources */,
 				AD8B2A84E1FA7469C83C5BE9 /* AuthedURLTests.swift in Sources */,
@@ -2447,6 +2460,7 @@
 				4DBD5B8AFF0C8D6489DB6063 /* AdminUsersScreen.swift in Sources */,
 				F77189A34674CDE16A0C7F4F /* AdminUsersViewModel.swift in Sources */,
 				173F19747EE155F10F3B6115 /* AlphabeticalJumpBar.swift in Sources */,
+				308A5A996C525F77387243E6 /* AppIcons.swift in Sources */,
 				2BC23AB09D961A04A91415F7 /* AppNavigation.swift in Sources */,
 				6A6ACE654BF16E2D8D2456CD /* AppState.swift in Sources */,
 				237FC704F4298C6323A1AAD0 /* AppStoreLookup.swift in Sources */,
@@ -2634,6 +2648,7 @@
 				FD6809BE7F3DE297190B4BC3 /* SettingsScreen.swift in Sources */,
 				C41DF599074B445580E8324A /* SettingsTVAccentPicker.swift in Sources */,
 				2071AE386D844DA8B6283716 /* SettingsTVActionRow.swift in Sources */,
+				772B988430186810A828611C /* SettingsTVAppIconPicker.swift in Sources */,
 				31515E2177896D6C0B3EC858 /* SettingsTVLanguagePicker.swift in Sources */,
 				3A1B0A7811DD9CF81234A706 /* SettingsTVProfileSection.swift in Sources */,
 				ED30733980F0F0FADEBCE24F /* SettingsTVSeasonalPicker.swift in Sources */,
@@ -2691,6 +2706,7 @@
 				00F8C9CB3AF5AB813D516104 /* APICacheTests.swift in Sources */,
 				5405F22011150F9A5F0C4087 /* AcceptLanguageTests.swift in Sources */,
 				19537D049F4829B437E17C6B /* AdminApiKeysTests.swift in Sources */,
+				C92B0465DE0CABB0CF8985C9 /* AppIconPickerTests.swift in Sources */,
 				A2598A58EF117B6BEB78CE70 /* AppUpdatePolicyTests.swift in Sources */,
 				A3EC3067E9F0F3E4853B6AAF /* AudioTrackPolicyTests.swift in Sources */,
 				466FD883F139E311B17A085D /* AuthedURLTests.swift in Sources */,
@@ -2834,6 +2850,7 @@
 				6AA22FC7C2A6B8F51E3B94E5 /* AdminUsersScreen.swift in Sources */,
 				DC1F05EB9B9923CAE0CE8FB2 /* AdminUsersViewModel.swift in Sources */,
 				0A06186102AA10D92923583B /* AlphabeticalJumpBar.swift in Sources */,
+				224ED7196F3DEDE51A2DB11B /* AppIcons.swift in Sources */,
 				8CE621C8D3CAD1DE98B6CA11 /* AppNavigation.swift in Sources */,
 				07D40F3147D08E05E2705B7C /* AppState.swift in Sources */,
 				B4A391FD6E15028D9E905495 /* AppStoreLookup.swift in Sources */,
@@ -3022,6 +3039,7 @@
 				53C1963BDCD2235326155AE6 /* SettingsScreen.swift in Sources */,
 				44BE323B7818EFDC38BBBF64 /* SettingsTVAccentPicker.swift in Sources */,
 				CCD551977D38C74BA8A43DDF /* SettingsTVActionRow.swift in Sources */,
+				84967A660EBBCDDCE24D79CD /* SettingsTVAppIconPicker.swift in Sources */,
 				D795322803A88D523D9D8351 /* SettingsTVLanguagePicker.swift in Sources */,
 				C0E93495C815097BC0DC1ECC /* SettingsTVProfileSection.swift in Sources */,
 				3505FC83E533D06DD01F0370 /* SettingsTVSeasonalPicker.swift in Sources */,
@@ -3228,6 +3246,7 @@
 		2EBCF92CD7DBCE2ED2C2F696 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconHalloween;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/Cinemax.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
@@ -3323,6 +3342,7 @@
 		682D374ADED21B3326C144F6 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconHalloween;
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
@@ -3364,6 +3384,7 @@
 		A84B37A070A3AF6998724158 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconHalloween;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iOS/Cinemax.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
@@ -3465,6 +3486,7 @@
 		EBEE020B7667D66022B93C7B /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconHalloween;
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME = "";
