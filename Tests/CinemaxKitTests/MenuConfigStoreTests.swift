@@ -686,7 +686,7 @@ struct MenuConfigStoreTests {
 /// d'affichage, et `.playback` doit rester visible sur les deux plateformes
 /// pour tout utilisateur — ni admin-gated, ni platform-gated. Depuis le
 /// 2026-10-22 (lot A) : une seule catégorie Administration, et Debug en
-/// dernier, montrée hors App Store (`showsDebug(environment:)`).
+/// dernier, montrée hors App Store (`showsDebug(environment:isDebugBuild:)`).
 @Suite("SettingsCategory")
 struct SettingsCategoryTests {
     @Test("le landing non-admin résout les 5 catégories canoniques puis Debug, dans l'ordre, sur les deux plateformes")
@@ -717,17 +717,20 @@ struct SettingsCategoryTests {
         }
     }
 
-    /// Visible en Xcode et TestFlight, cachée dans la version App Store — par
-    /// l'environnement de l'`AppTransaction`, jamais par `#if DEBUG`. `nil` =
-    /// pas encore connu (une build Debug ne le demande jamais au lancement, un
-    /// simulateur sans compte sandbox ne l'obtient pas) : la page reste
-    /// montrée, sinon la recette la perdrait.
-    @Test("Debug : montrée hors production et tant que l'environnement est inconnu, cachée en production")
+    /// Toujours visible dans une build Debug (Xcode : elle ne demande jamais
+    /// l'`AppTransaction`, et un vieil enregistrement `.production` du
+    /// Trousseau ne doit pas la cacher) ; ailleurs, seulement quand l'App
+    /// Store a CONFIRMÉ un environnement de test (TestFlight = sandbox).
+    /// Inconnu ⇒ cachée : une installation App Store hors ligne au premier
+    /// lancement ne doit jamais l'afficher.
+    @Test("Debug : toujours en build Debug ; en Release seulement si l'environnement confirmé n'est pas la production")
     func debugVisibilityByEnvironment() {
-        #expect(SettingsCategory.showsDebug(environment: nil))
-        #expect(SettingsCategory.showsDebug(environment: .xcode))
-        #expect(SettingsCategory.showsDebug(environment: .sandbox))
-        #expect(!SettingsCategory.showsDebug(environment: .production))
+        #expect(SettingsCategory.showsDebug(environment: nil, isDebugBuild: true))
+        #expect(SettingsCategory.showsDebug(environment: .production, isDebugBuild: true))
+        #expect(SettingsCategory.showsDebug(environment: .sandbox, isDebugBuild: false))
+        #expect(SettingsCategory.showsDebug(environment: .xcode, isDebugBuild: false))
+        #expect(!SettingsCategory.showsDebug(environment: nil, isDebugBuild: false))
+        #expect(!SettingsCategory.showsDebug(environment: .production, isDebugBuild: false))
     }
 
     @Test("l'ancienne catégorie « Admin avancée » ne se décode plus : une valeur brute retombe sur nil, jamais un plantage")

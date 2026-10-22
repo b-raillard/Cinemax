@@ -35,8 +35,9 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     // nothing ever persisted a category, and that raw value now decodes to
     // `nil` (the landing).
     case administration
-    // QA tools, LAST of the list, both platforms — shown unless the App Store
-    // environment says production (`showsDebug(environment:)`).
+    // QA tools, LAST of the list, both platforms — shown in Debug builds and
+    // in a confirmed test environment, never in the App Store build
+    // (`showsDebug(environment:isDebugBuild:)`).
     case debug
 
     var id: String { rawValue }
@@ -86,16 +87,26 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Whether the Debug category is listed: visible in Xcode and TestFlight
-    /// builds, hidden in the App Store build — decided from the verified
-    /// `AppTransaction` environment (`EarlyAdopterService.transaction`), never
-    /// by `#if DEBUG`. `nil` (not known yet) SHOWS it: a Debug build never asks
-    /// the App Store at launch and a simulator has no sandbox account to
-    /// answer, so both run on `nil` for good — hiding it there would take
-    /// « Palier simulé » away from every recette. An App Store install hides
-    /// it from its first verified answer on (see `Settings/CLAUDE.md`).
-    nonisolated static func showsDebug(environment: AppTransactionSnapshot.Environment?) -> Bool {
-        environment != .production
+    /// Whether the Debug category is listed: always in a Debug build (run from
+    /// Xcode — it never asks the App Store, and a stale `.production` record in
+    /// the Keychain must not hide it), otherwise only once the verified
+    /// `AppTransaction` (`EarlyAdopterService.transaction`) has CONFIRMED a
+    /// test environment (TestFlight answers `.sandbox`). Unknown ⇒ hidden: an
+    /// App Store install offline at its first launch must never show it.
+    /// The build flag only ever ADDS visibility (see `Settings/CLAUDE.md`).
+    nonisolated static func showsDebug(environment: AppTransactionSnapshot.Environment?, isDebugBuild: Bool) -> Bool {
+        if isDebugBuild { return true }
+        return environment == .sandbox || environment == .xcode
+    }
+
+    /// `true` in a Debug build — the one input `showsDebug` takes from the
+    /// compiler.
+    nonisolated static var isDebugBuild: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
     }
 
     /// Filters `allCases` by admin visibility, platform and the Debug
@@ -210,7 +221,8 @@ struct SettingsScreen: View {
     /// re-read on every render, so it follows the App Store's answer the
     /// moment `EarlyAdopterService` records it.
     var showsDebugCategory: Bool {
-        SettingsCategory.showsDebug(environment: earlyAdopter.transaction?.environment)
+        SettingsCategory.showsDebug(environment: earlyAdopter.transaction?.environment,
+                                    isDebugBuild: SettingsCategory.isDebugBuild)
     }
 
     var headerTierLook: ProTierLook? {
