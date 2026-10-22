@@ -417,13 +417,13 @@ struct ProFeatureCatalogueTests {
 
     /// `isGated` says a gate site really exists. Lot B gates the
     /// administration, « Lire sur… » and Siri / Raccourcis, lot C Halloween
-    /// all year (the « Halloween » choice of Réglages → Apparence); the icons
-    /// wait for their picker (none exists yet) — each flips here
+    /// all year (the « Halloween » choice of Réglages → Apparence), lot D the
+    /// app icons (the picker of Réglages → Apparence) — each flipped here
     /// deliberately, together with its gate site.
-    @Test("Les fonctions réellement verrouillées après le lot C")
+    @Test("Les fonctions réellement verrouillées après le lot D")
     func gatedSet() {
         let gated = Set(ProFeatureCatalogue.features.filter(\.isGated).map(\.id))
-        #expect(gated == [.memorizedAccounts, .administration, .playOn, .seasonalAllYear, .shortcuts])
+        #expect(gated == [.memorizedAccounts, .administration, .playOn, .appIcons, .seasonalAllYear, .shortcuts])
     }
 
     @Test("Chaque fonction a son titre, son détail et son nom court, dans chaque langue")
@@ -463,5 +463,13 @@ struct ProFeatureCatalogueTests {
         let production = EarlyAdopterConfiguration.production
         let pivotSet = production.pivotBuild != nil || production.pivotDate != nil
         #expect(!pivotSet || ProFeatureCatalogue.features.allSatisfy(\.isGated))
+    }
+
+    /// The same RULE, no longer vacuous: since lot D (the icon picker) every
+    /// feature the page sells has its gate site, so the pivot may be set.
+    @Test("Toutes les fonctions vendues sont verrouillées : le lancement n'est plus bloqué")
+    func everySoldFeatureIsGated() {
+        let stillFree = ProFeatureCatalogue.features.filter { !$0.isGated }.map(\.id)
+        #expect(stillFree.isEmpty, "\(stillFree)")
     }
 }

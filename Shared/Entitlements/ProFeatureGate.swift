@@ -137,7 +137,8 @@ extension ProFeatureGate {
     }
 
     /// App icons: the default icon (`nil`) is never paid, an alternate one is
-    /// the Pro's. No picker calls this yet — see the App Icons RULE in
+    /// the Pro's. Asked by the picker of Réglages → Apparence through
+    /// `AppIconPickerPolicy` — see the App Icons RULE in
     /// `Shared/DesignSystem/CLAUDE.md`.
     static func mayChooseAppIcon(alternateName: String?, tier: ProTier) -> Bool {
         alternateName == nil || allows(.appIcons, tier: tier)
@@ -173,6 +174,12 @@ final class ProFeatureAccess {
 
     convenience init(entitlements: EntitlementStore, earlyAdopter: EarlyAdopterService) {
         self.init { entitlements.proTier(earlyAdopter: earlyAdopter) }
+    }
+
+    /// This user's tier, for a pure policy that takes one
+    /// (`AppIconPickerPolicy`). Reading it in a `body` observes the stores.
+    func currentTier() -> ProTier {
+        tier()
     }
 
     /// Only asks — never opens anything. For drawing a lock, or hiding a

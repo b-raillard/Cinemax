@@ -37,9 +37,9 @@ nonisolated enum ProFeatureCatalogue {
         Feature(id: .administration, titleKey: "pro.feature.admin.title", detailKey: "pro.feature.admin.detail", icon: "shield.lefthalf.filled", isGated: true),
         Feature(id: .playOn, titleKey: "pro.feature.playOn.title", detailKey: "pro.feature.playOn.detail", icon: "tv.badge.wifi", isGated: true,
                 tvTitleKey: "pro.feature.playOn.title.tv", tvDetailKey: "pro.feature.playOn.detail.tv"),
-        // No picker yet (nothing calls `setAlternateIconName`): gated the day
-        // it ships, through `ProFeatureGate.mayChooseAppIcon`.
-        Feature(id: .appIcons, titleKey: "pro.feature.icons.title", detailKey: "pro.feature.icons.detail", icon: "app.badge", isGated: false),
+        // Lot D: the picker of Réglages → Apparence → « Icône de l'app »,
+        // through `ProFeatureGate.mayChooseAppIcon` (the default icon is free).
+        Feature(id: .appIcons, titleKey: "pro.feature.icons.title", detailKey: "pro.feature.icons.detail", icon: "app.badge", isGated: true),
         // Lot C: forcing Halloween at any date (Réglages → Apparence). Free
         // keeps Automatique (Halloween in season) and Désactivé.
         Feature(id: .seasonalAllYear, titleKey: "pro.feature.seasonal.title", detailKey: "pro.feature.seasonal.detail", icon: "leaf", isGated: true),
