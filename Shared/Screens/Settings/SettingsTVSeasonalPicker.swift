@@ -10,9 +10,9 @@ extension SettingsScreen {
     /// way, wrapping. The chip lit is the EFFECTIVE choice (a forced Halloween
     /// the tier refuses reads Automatique). Halloween at any date is the
     /// Pro's: locked, its chip wears a lock, and reaching it raises the Pro
-    /// sheet (`ProFeatureAccess.admit`) while the step lands on the choice
-    /// after it — a free user is never stuck in front of the lock
-    /// (`SeasonalSetting.stepped`).
+    /// sheet (`ProFeatureAccess.admit`) while the selection STAYS where it
+    /// was (`SeasonalSetting.stepped`) — nothing is written the user did not
+    /// choose; the other direction still reaches every free choice.
     var tvSeasonalPicker: some View {
         let isFocused = focusedItem == .toggle("seasonalTheme")
         let selected = seasonal.effectiveSetting

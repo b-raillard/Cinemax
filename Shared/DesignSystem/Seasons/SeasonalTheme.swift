@@ -151,18 +151,17 @@ enum SeasonalSetting: String, Sendable, CaseIterable {
     var isOptedIn: Bool { self != .off }
 
     /// The choice `step` places away (±1, wrapping — the tvOS row's press and
-    /// Left / Right), skipping each one `admit` refuses. `admit` is asked once
-    /// per candidate: for the Pro choice it is `ProFeatureAccess.admit`, whose
-    /// refusal raises the Pro sheet — the step then lands on the next one, so
-    /// a free user is never stuck in front of the locked choice.
+    /// Left / Right), if `admit` lets the user have it; refused, the selection
+    /// STAYS. `admit` is asked once: for the Pro choice it is
+    /// `ProFeatureAccess.admit`, whose refusal raises the Pro sheet. Never
+    /// skip past a refused choice: that wrote the one after it — Left from
+    /// Automatique landed on Désactivé and took Halloween off a free user's
+    /// screen in season (recette lot C). The other way round still reaches
+    /// every free choice.
     func stepped(by step: Int, admit: (Self) -> Bool) -> Self {
         let all = Self.choices
         guard let start = all.firstIndex(of: self) else { return self }
-        var index = start
-        for _ in 1..<all.count {
-            index = ((index + step) % all.count + all.count) % all.count
-            if admit(all[index]) { return all[index] }
-        }
-        return self
+        let next = all[((start + step) % all.count + all.count) % all.count]
+        return admit(next) ? next : self
     }
 }

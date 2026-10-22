@@ -164,19 +164,23 @@ struct SeasonalThemePolicyTests {
         #expect(!SeasonalSetting.off.isOptedIn)
     }
 
-    @Test("Stepping through the choices skips a refused one, both ways, wrapping")
+    /// A refused choice never moves the selection: skipping past it wrote
+    /// the NEXT choice — Left from Automatique landed on Désactivé and took
+    /// Halloween off a free user's screen in season (recette lot C).
+    @Test("Stepping wraps both ways; a refused choice leaves the selection where it was")
     func stepping() {
         let refuseHalloween: (SeasonalSetting) -> Bool = { $0 != .halloween }
         #expect(SeasonalSetting.automatic.stepped(by: 1) { _ in true } == .off)
         #expect(SeasonalSetting.off.stepped(by: 1) { _ in true } == .halloween)
         #expect(SeasonalSetting.halloween.stepped(by: 1) { _ in true } == .automatic)
         #expect(SeasonalSetting.automatic.stepped(by: -1) { _ in true } == .halloween)
-        #expect(SeasonalSetting.off.stepped(by: 1, admit: refuseHalloween) == .automatic)
-        #expect(SeasonalSetting.automatic.stepped(by: -1, admit: refuseHalloween) == .off)
-        // Asked once per refused choice — each ask raises the Pro sheet.
+        #expect(SeasonalSetting.off.stepped(by: 1, admit: refuseHalloween) == .off)
+        #expect(SeasonalSetting.automatic.stepped(by: -1, admit: refuseHalloween) == .automatic)
+        #expect(SeasonalSetting.off.stepped(by: -1, admit: refuseHalloween) == .automatic)
+        // Asked once — the one ask raises the Pro sheet.
         var asked: [SeasonalSetting] = []
         _ = SeasonalSetting.off.stepped(by: 1) { asked.append($0); return $0 != .halloween }
-        #expect(asked == [.halloween, .automatic])
+        #expect(asked == [.halloween])
     }
 
     @Test("Catalogue lookup by id")
