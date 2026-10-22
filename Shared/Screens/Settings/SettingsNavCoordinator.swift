@@ -22,5 +22,9 @@ final class SettingsNavCoordinator {
     /// Detail page). `nil` ⇒ Interface hub.
     var selectedInterfaceSub: InterfaceSubcategory?
 
+    /// tvOS: Apparence → « Icône de l'app » (design B), a third-level page
+    /// like an Interface sub-page. iOS pushes its own page instead.
+    var showsAppIconPage = false
+
     init() {}
 }

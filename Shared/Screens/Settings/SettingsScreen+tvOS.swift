@@ -17,7 +17,11 @@ extension SettingsScreen {
                 Color.clear.frame(height: 0).id("settings.top")
 
                 Group {
-                    if let sub = selectedInterfaceSub {
+                    if showsAppIconPage {
+                        // Apparence → « Icône de l'app » (lot D, design B).
+                        tvAppIconPage
+                            .tvBackAction { showsAppIconPage = false }
+                    } else if let sub = selectedInterfaceSub {
                         // Three-level state: pop sub → hub.
                         //
                         // Registered on `TVBackCoordinator` rather than held in
@@ -44,6 +48,7 @@ extension SettingsScreen {
                 // back to the top so the tab bar resurfaces naturally.
                 if newValue == nil {
                     selectedInterfaceSub = nil
+                    showsAppIconPage = false
                     tierChipFocusable = false
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
@@ -52,6 +57,9 @@ extension SettingsScreen {
                 if newValue == nil {
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
+            }
+            .onChange(of: showsAppIconPage) { _, _ in
+                proxy.scrollTo("settings.top", anchor: .top)
             }
             // No `.onAppear { scrollTo(top) }` — that fired whenever SwiftUI
             // re-presented this view inside the `TabView` (which happens on

@@ -177,6 +177,8 @@ enum SettingsFocus: Hashable {
     case switchAccount
     case refreshConnection
     case toggle(String)
+    /// A tile of the « Icône de l'app » page, keyed by `AppIconChoice.id`.
+    case appIcon(String)
     case accentColor(String)
     case language(String)
     case rateApp
@@ -283,6 +285,10 @@ struct SettingsScreen: View {
     var selectedInterfaceSub: InterfaceSubcategory? {
         get { settingsNav.selectedInterfaceSub }
         nonmutating set { settingsNav.selectedInterfaceSub = newValue }
+    }
+    var showsAppIconPage: Bool {
+        get { settingsNav.showsAppIconPage }
+        nonmutating set { settingsNav.showsAppIconPage = newValue }
     }
 
     // Shared stored properties — keys + defaults live in SettingsKey
