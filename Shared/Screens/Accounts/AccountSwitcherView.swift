@@ -209,7 +209,9 @@ struct AccountSwitcherView: View {
         .sheet(isPresented: $showAddAccount) { signInSheet(prefilled: nil) }
         // « Ajouter »: Quick Connect (approve from a device where the account
         // is signed in — no password typed) or username + password.
-        .confirmationDialog(loc.localized("accounts.add.title"), isPresented: $showAddChoice, titleVisibility: .visible) {
+        // An `.alert`, never a `confirmationDialog`: iOS 27 shows the latter
+        // as a popover with « Annuler » hidden (recette 2026-10-23, Q-ANNULER).
+        .alert(loc.localized("accounts.add.title"), isPresented: $showAddChoice) {
             Button(loc.localized("accounts.add.quickConnect")) { showQuickConnect = true }
             Button(loc.localized("accounts.add.password")) { showAddAccount = true }
             Button(loc.localized("action.cancel"), role: .cancel) {}
@@ -239,11 +241,10 @@ struct AccountSwitcherView: View {
             dismiss()
         }
         // « Se reconnecter » (free tier, or an account without a session):
-        // Quick Connect or the password, as for « Ajouter ».
-        .confirmationDialog(
+        // Quick Connect or the password, as for « Ajouter » — an `.alert` too.
+        .alert(
             loc.localized("accounts.reconnect.title", flow.reconnect?.username ?? ""),
             isPresented: reconnectChoice,
-            titleVisibility: .visible,
             presenting: flow.reconnect
         ) { account in
             Button(loc.localized("accounts.add.quickConnect")) { showQuickConnect = true }
