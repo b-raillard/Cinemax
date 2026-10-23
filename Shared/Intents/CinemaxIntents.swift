@@ -10,16 +10,20 @@ import JellyfinAPI
 ///
 /// These deliberately do **not** go through `LocalizationManager.userFacingMessage(for:)`:
 /// that manager is part of the app's UI layer and doesn't exist in a headless
-/// intent context. `LocalizedStringResource` keys resolve from
-/// `Localizable.strings` at the system level instead.
-enum CinemaxIntentError: Error, CustomLocalizedStringResourceConvertible {
+/// intent context. The text is read from the APP's own table, in the app's
+/// language (`appLanguage`, as `IntentSessionProvider.preferredLanguage`
+/// reads it), and handed over already resolved: a bare key was resolved by
+/// the system in the DEVICE's language — an English phone running the app in
+/// French answered « Siri and Shortcuts are part of JellyGlass Pro »
+/// (recette 2026-10-23, DEF-IOS3).
+enum CinemaxIntentError: Error, CaseIterable, CustomLocalizedStringResourceConvertible {
     case notSignedIn
     case nothingToResume
     case itemUnavailable
     case notEpisodic
     case proRequired
 
-    var localizedStringResource: LocalizedStringResource {
+    var key: String {
         switch self {
         case .notSignedIn:     "intent.error.notSignedIn"
         case .nothingToResume: "intent.error.nothingToResume"
@@ -27,6 +31,18 @@ enum CinemaxIntentError: Error, CustomLocalizedStringResourceConvertible {
         case .notEpisodic:     "intent.error.notEpisodic"
         case .proRequired:     "intent.error.proRequired"
         }
+    }
+
+    var localizedStringResource: LocalizedStringResource {
+        localizedStringResource(defaults: .standard)
+    }
+
+    func localizedStringResource(defaults: UserDefaults) -> LocalizedStringResource {
+        let language = IntentSessionProvider.preferredLanguage(defaults: defaults)
+        let text = Bundle.localizedBundle(for: language).localizedString(forKey: key, value: nil, table: nil)
+        // Interpolated, the value's key is `%@` — found in no table — so it
+        // resolves to `text` verbatim, in whichever process shows it.
+        return LocalizedStringResource("\(text)", locale: Locale(identifier: language))
     }
 }
 

@@ -138,11 +138,28 @@ struct IntentProGateTests {
 
     @Test("Le message « fonction Pro » existe dans chaque langue")
     func messageLocalized() throws {
-        #expect(CinemaxIntentError.proRequired.localizedStringResource.key == "intent.error.proRequired")
+        #expect(CinemaxIntentError.proRequired.key == "intent.error.proRequired")
         for lang in AppLanguage.supported {
             let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
             let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
             #expect(table["intent.error.proRequired"] != nil, "\(lang)")
+        }
+    }
+
+    /// Recette 2026-10-23, DEF-IOS3: appareil en anglais, app en français →
+    /// « Siri and Shortcuts are part of JellyGlass Pro ». The system resolved
+    /// the key in the DEVICE's language.
+    @Test("Les erreurs des intents parlent la langue de l'app, pas celle de l'appareil")
+    func errorsFollowTheAppLanguage() throws {
+        for lang in AppLanguage.supported {
+            let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
+            let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
+            let defaults = UserDefaults.isolatedForTesting()
+            defaults.set(lang, forKey: SettingsKey.appLanguage)
+            for error in CinemaxIntentError.allCases {
+                let expected = try #require(table[error.key], "\(lang) \(error.key)")
+                #expect(String(localized: error.localizedStringResource(defaults: defaults)) == expected, "\(lang) \(error)")
+            }
         }
     }
 }
