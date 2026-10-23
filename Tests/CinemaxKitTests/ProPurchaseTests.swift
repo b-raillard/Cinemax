@@ -453,9 +453,12 @@ struct ProFeatureCatalogueTests {
         #expect(playOn.displayDetailKey(onTV: false) == "pro.feature.playOn.detail")
         #expect(playOn.displayTitleKey(onTV: true) == "pro.feature.playOn.title.tv")
         #expect(playOn.displayDetailKey(onTV: true) == "pro.feature.playOn.detail.tv")
+        // Administration and Siri exist on iPhone / iPad only (« Sur iPhone et
+        // iPad : … »); remembered accounts are switched with a click, not a tap.
         let iPhoneOnly: [ProFeatureID: String] = [
             .administration: "pro.feature.admin.detail.tv",
-            .shortcuts: "pro.feature.shortcuts.detail.tv"
+            .shortcuts: "pro.feature.shortcuts.detail.tv",
+            .memorizedAccounts: "pro.feature.accounts.detail.tv"
         ]
         for (id, tvDetail) in iPhoneOnly {
             let feature = try #require(ProFeatureCatalogue.feature(id))

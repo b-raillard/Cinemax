@@ -1457,6 +1457,7 @@
 "pro.locked.hint" = "JellyGlass Pro feature: opens the offer.";
 "pro.feature.accounts.title" = "Remembered accounts";
 "pro.feature.accounts.detail" = "Every profile stays signed in: switch in one tap, no password, with an optional passcode.";
+"pro.feature.accounts.detail.tv" = "Every profile stays signed in: switch with a click, no password, with an optional passcode.";
 "pro.feature.admin.title" = "Your server in your pocket";
 "pro.feature.admin.detail" = "Users, devices, tasks and metadata, managed from iPhone or iPad, no computer needed.";
 "pro.feature.admin.detail.tv" = "On iPhone and iPad: your server's users, devices, tasks and metadata, no computer needed.";

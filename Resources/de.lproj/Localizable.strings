@@ -1457,6 +1457,7 @@
 "pro.locked.hint" = "JellyGlass-Pro-Funktion: öffnet das Angebot.";
 "pro.feature.accounts.title" = "Gemerkte Konten";
 "pro.feature.accounts.detail" = "Jedes Profil bleibt angemeldet: Wechsel mit einem Tipp, ohne Passwort, auf Wunsch mit Code.";
+"pro.feature.accounts.detail.tv" = "Jedes Profil bleibt angemeldet: Wechsel mit einem Klick, ohne Passwort, auf Wunsch mit Code.";
 "pro.feature.admin.title" = "Dein Server in der Tasche";
 "pro.feature.admin.detail" = "Benutzer, Geräte, Aufgaben und Metadaten – vom iPhone oder iPad aus verwaltet, ganz ohne Computer.";
 "pro.feature.admin.detail.tv" = "Auf iPhone und iPad: Benutzer, Geräte, Aufgaben und Metadaten deines Servers – ganz ohne Computer.";

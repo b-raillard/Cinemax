@@ -122,10 +122,12 @@ struct AccountDetailView: View {
         .background(CinemaColor.surface)
         .navigationTitle(account.username)
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(
+        // An alert, not a `confirmationDialog`: iOS 27 shows the dialog as a
+        // popover that hides its « Annuler » button (user decision 2026-10-23,
+        // same as the account switcher's choices).
+        .alert(
             loc.localized("accounts.detail.remove.confirm.title", account.username),
-            isPresented: $showRemoveConfirm,
-            titleVisibility: .visible
+            isPresented: $showRemoveConfirm
         ) {
             Button(loc.localized("accounts.detail.remove"), role: .destructive) { remove() }
             Button(loc.localized("action.cancel"), role: .cancel) {}

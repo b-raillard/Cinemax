@@ -35,7 +35,8 @@ nonisolated enum ProFeatureCatalogue {
     }
 
     static let features: [Feature] = [
-        Feature(id: .memorizedAccounts, titleKey: "pro.feature.accounts.title", detailKey: "pro.feature.accounts.detail", icon: "person.2.circle", isGated: true),
+        Feature(id: .memorizedAccounts, titleKey: "pro.feature.accounts.title", detailKey: "pro.feature.accounts.detail", icon: "person.2.circle", isGated: true,
+                tvDetailKey: "pro.feature.accounts.detail.tv"),
         // Sold on the Apple TV too (the purchase covers the iPhone / iPad
         // through iCloud), whose wording says where it lives (Q-PROTV).
         Feature(id: .administration, titleKey: "pro.feature.admin.title", detailKey: "pro.feature.admin.detail", icon: "shield.lefthalf.filled", isGated: true,

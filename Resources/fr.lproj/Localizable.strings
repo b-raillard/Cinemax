@@ -1459,6 +1459,7 @@
 "pro.locked.hint" = "Fonction JellyGlass Pro : ouvre l'offre.";
 "pro.feature.accounts.title" = "Comptes mémorisés";
 "pro.feature.accounts.detail" = "Chaque profil reste connecté : on passe de l'un à l'autre d'un geste, sans mot de passe, protégé par un code si besoin.";
+"pro.feature.accounts.detail.tv" = "Chaque profil reste connecté : on passe de l'un à l'autre d'un clic, sans mot de passe, protégé par un code si besoin.";
 "pro.feature.admin.title" = "Votre serveur dans la poche";
 "pro.feature.admin.detail" = "Utilisateurs, appareils, tâches et métadonnées, gérés depuis l'iPhone ou l'iPad, sans ordinateur.";
 "pro.feature.admin.detail.tv" = "Sur iPhone et iPad : utilisateurs, appareils, tâches et métadonnées de votre serveur, sans ordinateur.";
