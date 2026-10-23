@@ -30,6 +30,7 @@ struct ProPurchaseBlock: View {
                     Task { await proStore.purchase() }
                 }
                 .disabled(proStore.isPurchasing)
+                .fixedSize(horizontal: false, vertical: true)
                 .alignmentGuide(.proAction) { $0[VerticalAlignment.center] }
                 Text(loc.localized("pro.buy.footnote"))
                     .font(CinemaFont.dynamicLabel(.small))
@@ -44,6 +45,7 @@ struct ProPurchaseBlock: View {
                 CinemaButton(title: loc.localized("pro.price.retry"), style: .ghost) {
                     Task { await proStore.loadProduct() }
                 }
+                .fixedSize(horizontal: false, vertical: true)
                 .alignmentGuide(.proAction) { $0[VerticalAlignment.center] }
             } else {
                 ProgressView()
