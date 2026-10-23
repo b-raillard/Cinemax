@@ -345,6 +345,12 @@ struct SettingsScreen: View {
     /// The « Votre niveau » chip stays out of focus until a category pill has
     /// had it — see `tvBrandPanel`. Reset each time the landing comes back.
     @State var tierChipFocusable = false
+    /// How far the landing has scrolled (tvOS) — the brand panel moves back
+    /// down by as much, so the logo stays put while the menu scrolls.
+    @State var tvLandingScrollY: CGFloat = 0
+    /// The landing's visible height, below the tab bar (tvOS): the brand
+    /// panel's height, so the logo is centred on the screen.
+    @State var tvLandingVisibleHeight: CGFloat = 0
     @State var serverUsers: [UserDto] = []
     /// Idempotency guard for `loadServerUsers`. tvOS `.task` re-fires every
     /// time SwiftUI re-enters the view hierarchy (which happens whenever

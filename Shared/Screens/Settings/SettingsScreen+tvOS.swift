@@ -5,6 +5,12 @@ import JellyfinAPI
 // MARK: - tvOS Layout
 
 #if os(tvOS)
+/// What the landing's brand panel follows of the page's scroll view.
+struct TVLandingScrollMetrics: Equatable {
+    var offset: CGFloat
+    var visibleHeight: CGFloat
+}
+
 extension SettingsScreen {
 
     var tvOSLayout: some View {
@@ -43,6 +49,20 @@ extension SettingsScreen {
                 .frame(maxWidth: .infinity, minHeight: tvLandingMinHeight, maxHeight: .infinity)
             }
             .scrollClipDisabled()
+            // Only the landing reads it (`tvBrandPanel`): written there alone,
+            // so scrolling a detail page never re-renders the screen.
+            .onScrollGeometryChange(for: TVLandingScrollMetrics.self) { geometry in
+                TVLandingScrollMetrics(
+                    offset: (geometry.contentOffset.y + geometry.contentInsets.top).rounded(),
+                    visibleHeight: (geometry.containerSize.height - geometry.contentInsets.top
+                                    - geometry.contentInsets.bottom).rounded()
+                )
+            } action: { _, metrics in
+                let onLanding = selectedCategory == nil && selectedInterfaceSub == nil && !showsAppIconPage
+                let offset = onLanding ? max(0, metrics.offset) : 0
+                if offset != tvLandingScrollY { tvLandingScrollY = offset }
+                if metrics.visibleHeight != tvLandingVisibleHeight { tvLandingVisibleHeight = metrics.visibleHeight }
+            }
             .onChange(of: selectedCategory) { _, newValue in
                 // When a category is closed (newValue == nil), bring the page
                 // back to the top so the tab bar resurfaces naturally.
@@ -115,10 +135,16 @@ extension SettingsScreen {
     // MARK: tvOS Landing Page
 
     var tvLandingPage: some View {
-        HStack(spacing: 0) {
-            // Left Side: Identity & Logo (40%)
+        HStack(alignment: .top, spacing: 0) {
+            // Left Side: Identity & Logo (40%). One screen tall and pinned:
+            // centred on the SCREEN, never on the menu column — which grew
+            // taller than the screen (Debug, the footer) and dragged the logo
+            // down with it (user report 2026-10-23) — and held in place while
+            // the menu scrolls.
             tvBrandPanel
                 .frame(maxWidth: .infinity)
+                .frame(height: max(tvLandingVisibleHeight, tvLandingMinHeight))
+                .offset(y: tvLandingScrollY)
 
             // Right Side: Navigation Categories (60%)
             tvNavigationPanel
