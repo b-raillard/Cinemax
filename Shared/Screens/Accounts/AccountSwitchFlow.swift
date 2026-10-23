@@ -178,3 +178,29 @@ extension AppState {
         account.userId != currentUserId && (!keepsAccountSessions || !account.hasSession || isExpired(account))
     }
 }
+
+/// Which protected accounts « Gérer les comptes » has opened during ONE visit
+/// of the screen (iOS `AccountDetailView`, tvOS `TVAccountManageScreen`).
+/// Another account carrying a code shows its settings (code, age cap,
+/// removal) only once THAT code has been typed here (security review
+/// 2026-10-12).
+struct AccountCodeVisit: Equatable {
+    private(set) var openedKeys: Set<String> = []
+
+    /// Whether `key`'s settings must first ask for its code.
+    func mustUnlock(key: String, hasCode: Bool, isCurrent: Bool) -> Bool {
+        hasCode && !isCurrent && !openedKeys.contains(key)
+    }
+
+    /// The account's code was typed: its settings stay open for the visit.
+    mutating func unlocked(_ key: String) {
+        openedKeys.insert(key)
+    }
+
+    /// A code chosen and confirmed in this screen opens it too: whoever just
+    /// typed it twice was not asked for it a third time (recette 2026-10-23,
+    /// DEF-IOS1 — the screen re-locked the moment the code was saved).
+    mutating func enrolled(_ key: String) {
+        openedKeys.insert(key)
+    }
+}

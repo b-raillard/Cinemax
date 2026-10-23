@@ -84,7 +84,8 @@ struct AccountDetailView: View {
 
     private enum CodeStage: Equatable { case choose, confirm(String) }
 
-    @State private var unlocked = false
+    /// The account's code typed — or chosen — during this visit.
+    @State private var visit = AccountCodeVisit()
     @State private var codeStage: CodeStage?
     @State private var entry = ""
     @State private var message: String?
@@ -96,7 +97,7 @@ struct AccountDetailView: View {
     /// period) keeps guarding in free, and can be removed there (security
     /// review 2026-10-20).
     private var showsCodeRows: Bool { appState.keepsAccountSessions || locks.hasLock(key) }
-    private var mustUnlock: Bool { !isCurrent && locks.hasLock(key) && !unlocked }
+    private var mustUnlock: Bool { visit.mustUnlock(key: key, hasCode: locks.hasLock(key), isCurrent: isCurrent) }
 
     var body: some View {
         // Pushed in the stack, hence OUTSIDE the list's gate: without its own,
@@ -313,7 +314,7 @@ struct AccountDetailView: View {
         switch await locks.verify(key: key, pin: pin) {
         case .unlocked:
             message = nil
-            unlocked = true
+            visit.unlocked(key)
         case .wrong:
             message = loc.localized("accounts.pin.wrong")
             Haptics.error()
@@ -338,6 +339,7 @@ struct AccountDetailView: View {
                 return
             }
             if await locks.enroll(key: key, pin: pin, useBiometrics: false) {
+                visit.enrolled(key)
                 codeStage = nil
                 message = nil
                 Haptics.success()

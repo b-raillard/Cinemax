@@ -914,3 +914,31 @@ struct ReconnectionOutcomeTests {
         #expect(!AccountSwitchFlow.reconnectionOpened(before: "A", after: nil))
     }
 }
+
+@Suite("Gérer les comptes : quand redemander le code")
+struct AccountCodeVisitTests {
+
+    @Test("Un autre compte protégé demande son code, le compte courant jamais")
+    func asksForAnotherProtectedAccount() {
+        let visit = AccountCodeVisit()
+        #expect(visit.mustUnlock(key: "s|b", hasCode: true, isCurrent: false))
+        #expect(!visit.mustUnlock(key: "s|a", hasCode: true, isCurrent: true))
+        #expect(!visit.mustUnlock(key: "s|b", hasCode: false, isCurrent: false))
+    }
+
+    @Test("Le code tapé ouvre les réglages de CE compte pour la visite, pas ceux d'un autre")
+    func unlockOpensThatAccountOnly() {
+        var visit = AccountCodeVisit()
+        visit.unlocked("s|b")
+        #expect(!visit.mustUnlock(key: "s|b", hasCode: true, isCurrent: false))
+        #expect(visit.mustUnlock(key: "s|c", hasCode: true, isCurrent: false))
+    }
+
+    @Test("Un code qu'on vient de choisir et de confirmer ici n'est pas redemandé (recette 2026-10-23, DEF-IOS1)")
+    func enrolmentKeepsTheScreenOpen() {
+        var visit = AccountCodeVisit()
+        visit.enrolled("s|b")
+        #expect(!visit.mustUnlock(key: "s|b", hasCode: true, isCurrent: false))
+        #expect(visit.mustUnlock(key: "s|c", hasCode: true, isCurrent: false))
+    }
+}

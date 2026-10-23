@@ -345,9 +345,10 @@ struct TVAccountManageScreen: View {
     @State private var entry = ""
     @State private var message: String?
     @State private var removing: SavedAccount?
-    /// Protected accounts (other than the current one) whose code was typed in
-    /// this screen: their rows unlock, as on iOS (`AccountDetailView`).
-    @State private var openedKeys: Set<String> = []
+    /// Protected accounts (other than the current one) whose code was typed —
+    /// or chosen — in this screen: their rows unlock, as on iOS
+    /// (`AccountDetailView`).
+    @State private var visit = AccountCodeVisit()
     @FocusState private var focused: String?
 
     var body: some View {
@@ -433,7 +434,7 @@ struct TVAccountManageScreen: View {
         let option = ParentalAgeOption(rawValue: age) ?? .all
         // Same rule as iOS: another account's protected settings (its code,
         // age cap, removal) open only with ITS code (security review parity).
-        let mustOpen = hasCode && account.userId != appState.currentUserId && !openedKeys.contains(key)
+        let mustOpen = visit.mustUnlock(key: key, hasCode: hasCode, isCurrent: account.userId == appState.currentUserId)
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             HStack(spacing: CinemaSpacing.spacing3) {
                 UserAvatar(userId: account.userId, name: account.username, primaryImageTag: nil, size: 60)
@@ -540,7 +541,7 @@ struct TVAccountManageScreen: View {
             guard let key = appState.accountKey(for: account) else { return }
             switch await locks.verify(key: key, pin: pin) {
             case .unlocked:
-                openedKeys.insert(key)
+                visit.unlocked(key)
                 begin(.list)
             case .wrong:
                 message = loc.localized("accounts.pin.wrong")
@@ -558,6 +559,7 @@ struct TVAccountManageScreen: View {
             }
             guard let key = appState.accountKey(for: account) else { return }
             if await locks.enroll(key: key, pin: pin, useBiometrics: false) {
+                visit.enrolled(key)
                 begin(.list)
             } else {
                 message = loc.localized("error.generic")
