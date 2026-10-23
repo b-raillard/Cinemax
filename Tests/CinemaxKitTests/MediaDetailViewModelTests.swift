@@ -220,7 +220,9 @@ struct MediaDetailViewModelTests {
     /// Une demande par id (« Lire sur… », file Regarder ensemble, Siri) pour un
     /// épisode de la saison 3 cherchait l'épisode dans `episodes` (saison 1
     /// seulement), ne le trouvait pas et lançait le « À suivre » de la série.
-    @Test("A fiche opened for an episode of an unloaded season keeps that episode")
+    /// L'épisode tel que récupéré reste porté par `requestedEpisode`, même si sa
+    /// saison n'est pas celle qu'affiche la fiche.
+    @Test("A fiche opened for an episode keeps that episode as fetched")
     func requestedEpisodeOutsideLoadedSeasons() async {
         let api = MockAPIClient()
         api.getItemHandler = { id in
@@ -246,8 +248,103 @@ struct MediaDetailViewModelTests {
         await vm.load(using: appState, loc: LocalizationManager())
 
         #expect(vm.item?.id == "series-1", "the fiche shows the series")
-        #expect(!vm.episodes.contains { $0.id == "ep-s3e4" }, "pré-condition : saison non chargée")
         #expect(vm.requestedEpisode?.id == "ep-s3e4")
+    }
+
+    // MARK: - Saison initiale d'une fiche ouverte par un épisode (recette 2026-10-20)
+
+    /// `cinemax://item/<épisode S03>` (widget, Top Shelf) — et toute carte qui
+    /// pousse l'id d'un épisode (recherche, favoris, historique) — ouvrait la
+    /// fiche de la série sur la SAISON 1 : `loadSeriesDetail` prenait
+    /// `seasons.first` sans regarder l'élément demandé.
+    private func makeThreeSeasonAPI() -> MockAPIClient {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in
+            switch id {
+            case "ep-s3e4":
+                var ep = makeEpisodeInSeason(id: id, name: "S3E4", seasonId: "season-3")
+                ep.type = .episode
+                ep.seriesID = "series-1"
+                return ep
+            case "season-2":
+                var season = BaseItemDto()
+                season.id = id
+                season.type = .season
+                season.seriesID = "series-1"
+                return season
+            default:
+                return makeSeries(id: id, played: false)
+            }
+        }
+        api.getSeasonsHandler = { _ in
+            ["season-1", "season-2", "season-3"].map { id in
+                var season = BaseItemDto(); season.id = id; return season
+            }
+        }
+        api.getEpisodesHandler = { seasonId in
+            switch seasonId {
+            case "season-3":
+                return (1...6).map { makeEpisodeInSeason(id: "ep-s3e\($0)", name: "S3E\($0)", seasonId: seasonId) }
+            case "season-2":
+                return [makeEpisodeInSeason(id: "ep-s2e1", name: "S2E1", seasonId: seasonId)]
+            default:
+                return [makeEpisodeInSeason(id: "ep-s1e1", name: "S1E1", seasonId: seasonId)]
+            }
+        }
+        return api
+    }
+
+    @Test("A fiche opened for an episode lands on that episode's season")
+    func episodeFicheOpensOnEpisodeSeason() async {
+        let api = makeThreeSeasonAPI()
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "ep-s3e4", itemType: .episode)
+
+        await vm.load(using: appState, loc: LocalizationManager())
+
+        #expect(vm.item?.id == "series-1")
+        #expect(vm.selectedSeasonId == "season-3")
+        #expect(vm.episodes.contains { $0.id == "ep-s3e4" })
+        let nav = vm.episodeNavigationMap["ep-s3e4"]
+        #expect(nav?.previous?.id == "ep-s3e3", "prev/next viennent de la saison de l'épisode")
+        #expect(nav?.next?.id == "ep-s3e5")
+    }
+
+    @Test("A fiche opened for a season lands on that season")
+    func seasonFicheOpensOnThatSeason() async {
+        let api = makeThreeSeasonAPI()
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "season-2", itemType: .season)
+
+        await vm.load(using: appState, loc: LocalizationManager())
+
+        #expect(vm.item?.id == "series-1")
+        #expect(vm.selectedSeasonId == "season-2")
+        #expect(vm.episodes.map(\.id) == ["ep-s2e1"])
+    }
+
+    @Test("A fiche opened for the series itself still lands on the first season")
+    func seriesFicheOpensOnFirstSeason() async {
+        let api = makeThreeSeasonAPI()
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+
+        await vm.load(using: appState, loc: LocalizationManager())
+
+        #expect(vm.selectedSeasonId == "season-1")
+        #expect(vm.episodes.map(\.id) == ["ep-s1e1"])
+    }
+
+    @Test("Initial season: the preferred one when listed, else the first")
+    func initialSeasonChoice() {
+        let seasons = ["season-1", "season-2", "season-3"].map { id in
+            var season = BaseItemDto(); season.id = id; return season
+        }
+        #expect(MediaDetailViewModel.initialSeasonId(in: seasons, preferring: "season-3") == "season-3")
+        #expect(MediaDetailViewModel.initialSeasonId(in: seasons, preferring: "season-9") == "season-1",
+                "une saison absente de la liste (spéciaux masqués…) retombe sur la première")
+        #expect(MediaDetailViewModel.initialSeasonId(in: seasons, preferring: nil) == "season-1")
+        #expect(MediaDetailViewModel.initialSeasonId(in: [], preferring: "season-3") == nil)
     }
 
     @Test("A fiche opened for the series itself names no requested episode")

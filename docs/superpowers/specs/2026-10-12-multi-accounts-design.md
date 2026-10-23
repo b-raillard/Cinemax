@@ -16,7 +16,7 @@ Le but est de **mémoriser** plusieurs comptes d'un même serveur et de basculer
 
 | Sujet | Décision |
 |---|---|
-| Palier | Mémoriser plusieurs comptes = **Pro**. Changer de compte avec mot de passe ou Quick Connect reste **gratuit**. |
+| Palier | Mémoriser plusieurs comptes = **Pro**. Changer de compte avec mot de passe ou Quick Connect reste **gratuit**. *Révisé le 20/10* : en gratuit les comptes déjà connectés restent listés, chaque bascule redemande la connexion ; le Pro garde les sessions — voir `2026-10-20-free-remembered-accounts-design.md`, qui remplace cette ligne et les mentions « gratuit » des §9 et §11. |
 | Avant le lancement de Pro | Livré en 2.x derrière la porte « Pro **ou** fondateur ». Tant que le pivot fondateurs n'est pas fixé, tout le monde passe (§6). |
 | Protection | Code à 4 chiffres **facultatif par compte**, Face ID en option sur iOS, jamais sur tvOS. |
 | Lancement | « Qui regarde ? » à l'ouverture sur **Apple TV seulement**, avec au moins 2 comptes mémorisés. Désactivable, actif par défaut. iOS rouvre le dernier compte. |
@@ -124,7 +124,7 @@ Raison : `EarlyAdopterService` ne reconnaît un fondateur que sur une transactio
   - En gratuit après le lancement : `UserSwitchSheet` directement, comme aujourd'hui.
 - **tvOS** :
   - **Au lancement**, `WhoIsWatchingScreen` en `fullScreenCover` racine (quand authentifié, au moins 2 comptes, réglage actif), présenté **avant** « Quoi de neuf ». Menu y passe `nil` : l'app passe en arrière-plan.
-  - **Dans l'app**, un onglet de tête **« Profil »** (le nom du compte, icône personne) affiche le même écran dans la barre. Choisir un profil bascule puis sélectionne l'onglet d'accueil. L'onglet n'existe qu'avec la porte Pro ouverte. Il est exclu du repli « accueil » de `TVBackPolicy` (`displayedTabs.first`) et de `tvTabRoot`. Menu y suit la règle de la barre d'onglets.
+  - **Dans l'app**, l'avatar du compte à GAUCHE de la barre d'onglets (on l'atteint par la gauche depuis le premier onglet) ouvre le même écran en plein écran ; Menu le referme. Offert à tous depuis le 20/10. *Révisé le 14/10 (recette TV-10)* : c'était un onglet de tête « Profil », mais six onglets débordaient la barre native, qui coupait le premier et le dernier.
   - La section profil de Réglages (`SettingsTVProfileSection`) ouvre aussi cet écran.
 - **Gérer les comptes** (deux plateformes) : liste, puis détail avec :
   - le code (et Face ID) ;

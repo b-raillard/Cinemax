@@ -34,6 +34,10 @@ FILES = [
     f"{TV}/App Icon - Large.imagestack/Back.imagestacklayer/Content.imageset/back_appstore.png",
     f"{TV}/App Icon - Small.imagestack/Back.imagestacklayer/Content.imageset/back_1x.png",
     f"{TV}/App Icon - Small.imagestack/Back.imagestacklayer/Content.imageset/back_2x.png",
+    # The « Classique » thumbnail of Réglages → Apparence → Icône de l'app shows
+    # the primary icon: it moves with it (recolor.py --alternates writes them).
+    "AppIconPreview.imageset/app_icon_preview.png",
+    "AppIconPreview.imageset/app_icon_preview_tv.png",
 ]
 LOGO = "AppLogo.imageset/app_logo.png"
 

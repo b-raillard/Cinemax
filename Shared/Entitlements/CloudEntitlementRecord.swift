@@ -23,6 +23,13 @@ struct CloudEntitlementRecord: Codable, Sendable, Equatable {
     /// `com.cinemax.tvos`) — tells a reader whether it is looking at its own
     /// purchase or the other platform's.
     let writerBundleID: String
+    /// The StoreKit environment of the purchase (`AppTransactionSnapshot.Environment`
+    /// raw value: `production` / `sandbox` / `xcode`). OPTIONAL, so version 1
+    /// stays readable both ways (wire-format RULE); `nil` = written before the
+    /// field existed, read as production. A test purchase (sandbox, TestFlight,
+    /// Xcode) is never mirrored, and a reader ignores one found in iCloud —
+    /// the key-value store has no test / production split.
+    let environment: String?
 
     init(
         version: Int = Self.currentVersion,
@@ -30,7 +37,8 @@ struct CloudEntitlementRecord: Codable, Sendable, Equatable {
         originalTransactionID: String,
         purchaseDate: Date,
         signedTransaction: String? = nil,
-        writerBundleID: String
+        writerBundleID: String,
+        environment: String? = nil
     ) {
         self.version = version
         self.productID = productID
@@ -38,6 +46,12 @@ struct CloudEntitlementRecord: Codable, Sendable, Equatable {
         self.purchaseDate = purchaseDate
         self.signedTransaction = signedTransaction
         self.writerBundleID = writerBundleID
+        self.environment = environment
+    }
+
+    /// Bought for real — what the iCloud mirror may carry to the other app.
+    var isProduction: Bool {
+        environment == nil || environment == AppTransactionSnapshot.Environment.production.rawValue
     }
 
     /// Only the version, read first so a record from a newer build is

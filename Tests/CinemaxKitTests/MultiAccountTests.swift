@@ -125,6 +125,66 @@ struct SavedAccountRegistryTests {
     func accountKey() {
         #expect(ServerRegistry.accountKey(serverId: "S1", userId: "A") == "S1|A")
     }
+
+    // MARK: Session closed, account kept (free switch, 2026-10-20)
+
+    @Test("droppingSession garde le compte inactif, sans jeton, et laisse l'actif intact")
+    func droppingSessionKeepsAccount() {
+        let base = ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: t0, in: server())
+        let after = ServerRegistry.droppingSession(userId: "B", in: base)
+        let bob = ServerRegistry.accounts(of: after).first { $0.userId == "B" }
+        #expect(bob?.hasSession == false)
+        #expect(bob?.username == "Bob")
+        #expect(after.userId == "A")
+        #expect(after.accessToken == "tokA")
+    }
+
+    @Test("droppingSession du compte présent seulement dans le triplet le garde listé, sans jeton")
+    func droppingSessionOfTripleOnlyAccount() {
+        let after = ServerRegistry.droppingSession(userId: "A", in: server())
+        let accounts = ServerRegistry.accounts(of: after)
+        #expect(accounts.map(\.userId) == ["A"])
+        #expect(accounts.first?.hasSession == false)
+        #expect(after.accessToken == nil)
+        #expect(after.userId == nil)
+    }
+
+    @Test("droppingSession d'un compte inconnu ne change rien")
+    func droppingSessionOfUnknownIsNoOp() {
+        let base = server()
+        #expect(ServerRegistry.droppingSession(userId: "Z", in: base) == base)
+    }
+
+    @Test("activating d'un compte sans session rend un triplet sans jeton (AppState refuse)")
+    func activatingSessionlessAccount() throws {
+        let base = ServerRegistry.droppingSession(
+            userId: "B",
+            in: ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: t0, in: server())
+        )
+        let switched = try #require(ServerRegistry.activating(userId: "B", in: base))
+        #expect(switched.accessToken == "")
+    }
+
+    @Test("upsert d'une connexion de A ne redonne pas de jeton à B déconnecté")
+    func upsertKeepsSessionlessAccount() {
+        let stored = ServerRegistry.droppingSession(
+            userId: "B",
+            in: ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: t0, in: server())
+        )
+        let incoming = ServerEntry(name: "Maison", url: ServerURLNormalizer.normalize("https://maison.local")!,
+                                   accessToken: "tokA2", userId: "A", username: "Alice", lastUsedAt: t0.addingTimeInterval(30))
+        let merged = ServerRegistry.upsert(incoming, into: [stored])
+        let bob = ServerRegistry.accounts(of: merged[0]).first { $0.userId == "B" }
+        #expect(bob?.hasSession == false)
+    }
+
+    @Test("nextAccount préfère un compte qui a encore une session")
+    func nextAccountPrefersSession() {
+        var entry = ServerRegistry.remembering(userId: "B", username: "Bob", accessToken: "tokB", at: t0.addingTimeInterval(10), in: server())
+        entry = ServerRegistry.remembering(userId: "C", username: "Carl", accessToken: "tokC", at: t0.addingTimeInterval(20), in: entry)
+        entry = ServerRegistry.droppingSession(userId: "C", in: entry)
+        #expect(ServerRegistry.nextAccount(after: "A", in: entry)?.userId == "B")
+    }
 }
 
 // MARK: - Revocation of ONE token
@@ -278,17 +338,65 @@ struct MultiAccountAppStateTests {
         #expect(await revoked.tokens.isEmpty)
     }
 
-    @Test("Ajout en gratuit : l'ancien compte est oublié et son jeton révoqué")
-    func addFree() async {
+    @Test("Connexion en gratuit : l'ancien compte reste listé, sans session, son jeton révoqué, ses réglages gardés")
+    func freeSignInKeepsOthersListed() async throws {
         let api = MockAPIClient()
         let revoked = RevokedTokens()
         let app = makeState(api: api, servers: [household(rememberBob: false)], multiAccount: false, revoked: revoked)
+        app.settingsDefaults = .isolatedForTesting()
 
         await app.addAccount(session: UserSession(userID: "C", username: "Carl", accessToken: "tokC", serverID: "srv"))
 
         #expect(app.currentUserId == "C")
-        #expect(app.activeAccounts.map(\.userId) == ["C"])
+        #expect(Set(app.activeAccounts.map(\.userId)) == ["A", "C"])
+        let alice = try #require(app.activeAccounts.first { $0.userId == "A" })
+        #expect(alice.hasSession == false)
         #expect(await eventually { await revoked.tokens == ["tokA"] })
+        #expect(AccountSettingsStore.load(for: "S1|A", defaults: app.settingsDefaults) != nil)
+    }
+
+    @Test("Connexion en gratuit : un jeton resté d'une période Pro est révoqué aussi")
+    func freeSignInDropsLeftoverTokens() async throws {
+        let api = MockAPIClient()
+        let revoked = RevokedTokens()
+        let app = makeState(api: api, servers: [household()], multiAccount: false, revoked: revoked)
+
+        await app.addAccount(session: UserSession(userID: "A", username: "Alice", accessToken: "tokA2", serverID: "srv"))
+
+        let bob = try #require(app.activeAccounts.first { $0.userId == "B" })
+        #expect(bob.hasSession == false)
+        #expect(await eventually { await revoked.tokens.contains("tokB") })
+        #expect(app.currentUserId == "A")
+    }
+
+    @Test("Bascule en gratuit : toujours une connexion, même avec un jeton valide, sans appel serveur")
+    func freeSwitchNeedsSignIn() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let app = makeState(api: api, servers: [household()], multiAccount: false)
+
+        #expect(await app.switchAccount(to: "B") == .needsLogin)
+        #expect(app.currentUserId == "A")
+        #expect(api.validateSessionCallCount == 0)
+    }
+
+    @Test("Bascule en gratuit hors ligne : hors ligne, pas de connexion vouée à l'échec")
+    func freeSwitchOffline() async {
+        let api = MockAPIClient()
+        let app = makeState(api: api, servers: [household()], multiAccount: false)
+        app.isOnlineProvider = { false }
+
+        #expect(await app.switchAccount(to: "B") == .offline)
+    }
+
+    @Test("Bascule en Pro vers un compte sans session : connexion, sans appel serveur")
+    func proSwitchSessionlessNeedsLogin() async {
+        let api = MockAPIClient()
+        let entry = ServerRegistry.droppingSession(userId: "B", in: household())
+        let app = makeState(api: api, servers: [entry])
+
+        #expect(await app.switchAccount(to: "B") == .needsLogin)
+        #expect(api.validateSessionCallCount == 0)
     }
 
     @Test("Retirer un compte non actif : révoqué et oublié, la session active intacte")
@@ -401,6 +509,7 @@ struct AccountSettingsTests {
         let app = AppState(apiClient: api, keychain: kc)
         app.settingsDefaults = defaults
         app.sessionValidator = { _, _ in .valid }
+        app.multiAccountProvider = { true }   // a one-tap switch is Pro
         app.loadServersFromKeychain()
         app.currentUserId = "A"
         app.isAuthenticated = true
@@ -476,8 +585,9 @@ struct AccountLockTests {
         #expect(enrolment.fired)
     }
 
-    @Test("AppState refuse de basculer vers un compte protégé sans code vérifié")
-    func switchRequiresUnlock() async {
+    @Test("AppState refuse de basculer vers un compte protégé sans code vérifié, en Pro comme en gratuit (où la connexion suit le code)",
+          arguments: [true, false])
+    func switchRequiresUnlock(multiAccount: Bool) async {
         let api = MockAPIClient()
         api.stubbedValidity = .valid
         let kc = MockKeychain()
@@ -490,14 +600,22 @@ struct AccountLockTests {
         app.settingsDefaults = .isolatedForTesting()
         app.sessionValidator = { _, _ in .valid }
         app.accountLockProvider = { $0 == "S1|B" }
+        app.multiAccountProvider = { multiAccount }
         app.loadServersFromKeychain()
         app.currentUserId = "A"
         app.isAuthenticated = true
 
+        // Both tiers: a code already set keeps guarding (a Jellyfin account
+        // may have no password); past it, free signs in, Pro switches.
         #expect(await app.switchAccount(to: "B") == .locked)
         #expect(app.currentUserId == "A")
-        #expect(await app.switchAccount(to: "B", unlocked: true) == .switched)
-        #expect(app.currentUserId == "B")
+        if multiAccount {
+            #expect(await app.switchAccount(to: "B", unlocked: true) == .switched)
+            #expect(app.currentUserId == "B")
+        } else {
+            #expect(await app.switchAccount(to: "B", unlocked: true) == .needsLogin)
+            #expect(app.currentUserId == "A")
+        }
     }
 }
 
@@ -507,7 +625,7 @@ struct AccountLockTests {
 @Suite("Contrôle parental et bascule de compte")
 struct AccountSwitchParentalTests {
 
-    private func makeApp(defaults: UserDefaults, parentalLock: Bool, bobAge: Int?) -> AppState {
+    private func makeApp(defaults: UserDefaults, parentalLock: Bool, bobAge: Int?, multiAccount: Bool = true) -> AppState {
         if let bobAge {
             AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: bobAge, accentColor: "green", darkMode: true),
                                       for: "S1|B", defaults: defaults)
@@ -524,10 +642,71 @@ struct AccountSwitchParentalTests {
         app.settingsDefaults = defaults
         app.sessionValidator = { _, _ in .valid }
         app.parentalLockProvider = { parentalLock }
+        app.multiAccountProvider = { multiAccount }
+        app.sessionRevoker = { _, _ in }
         app.loadServersFromKeychain()
         app.currentUserId = "A"
         app.isAuthenticated = true
         return app
+    }
+
+    @Test("Gratuit, code parental actif : le code parental d'abord, puis la connexion, sans brider la limite du compte")
+    func freeParentalGateThenSignIn() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        let app = makeApp(defaults: defaults, parentalLock: true, bobAge: 0, multiAccount: false)
+
+        #expect(await app.switchAccount(to: "B") == .locked)
+        #expect(await app.switchAccount(to: "B", unlocked: true) == .needsLogin)
+        await app.addAccount(session: UserSession(userID: "B", username: "Bob", accessToken: "tokB2", serverID: "srv"))
+
+        #expect(app.currentUserId == "B")
+        #expect(app.ageCap(forAccountKey: "S1|B") == 0)
+    }
+
+    @Test("Gratuit : une connexion annulée ne laisse pas sauter la limite à un « Ajouter » ultérieur")
+    func cancelledSignInStillClampsLater() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        let app = makeApp(defaults: defaults, parentalLock: true, bobAge: 0, multiAccount: false)
+
+        #expect(await app.switchAccount(to: "B", unlocked: true) == .needsLogin)
+        app.clearPendingSignIn()
+        await app.addAccount(session: UserSession(userID: "B", username: "Bob", accessToken: "tokB2", serverID: "srv"))
+
+        #expect(app.ageCap(forAccountKey: "S1|B") == 10)
+    }
+
+    @Test("Gratuit : une déconnexion ne laisse pas de marqueur qui ferait sauter la limite d'un « Ajouter » ultérieur")
+    func logoutLeavesNoPendingSignIn() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(18, forKey: SettingsKey.privacyMaxContentAge)
+        let app = makeApp(defaults: defaults, parentalLock: true, bobAge: 18, multiAccount: false)
+
+        // The sign-out tries the next remembered account (free: a sign-in it
+        // never completes), then lands on server setup; the server is re-added
+        // and a child signs in from LoginScreen, then « Ajouter » brings Bob.
+        _ = await app.logout(reason: .userInitiated)
+        app.serverURL = ServerURLNormalizer.normalize("https://maison.local")
+        app.hasServer = true
+        app.upsertActiveEntry(session: UserSession(userID: "A", username: "Enfants", accessToken: "tokA2", serverID: "srv"))
+        app.currentUserId = "A"
+        app.isAuthenticated = true
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        await app.addAccount(session: UserSession(userID: "B", username: "Bob", accessToken: "tokB2", serverID: "srv"))
+
+        #expect(app.ageCap(forAccountKey: "S1|B") == 10)
+    }
+
+    @Test("« Ajouter » sans passer par une bascule : un compte moins bridé reste bridé")
+    func addAccountStillClampsWithoutGate() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+        let app = makeApp(defaults: defaults, parentalLock: true, bobAge: 0, multiAccount: false)
+
+        await app.addAccount(session: UserSession(userID: "B", username: "Bob", accessToken: "tokB2", serverID: "srv"))
+
+        #expect(app.ageCap(forAccountKey: "S1|B") == 10)
     }
 
     @Test("Code parental actif : un compte moins bridé exige un code")
@@ -655,7 +834,7 @@ struct MultiAccountSignInTests {
 @Suite("Changement de serveur et codes")
 struct ServerSwitchLockTests {
 
-    private func makeApp(defaults: UserDefaults, locked: Set<String>, parental: Bool) -> (AppState, ServerEntry) {
+    private func makeApp(defaults: UserDefaults, locked: Set<String>, parental: Bool, multiAccount: Bool = true) -> (AppState, ServerEntry) {
         let api = MockAPIClient()
         api.stubbedValidity = .valid
         let a = ServerEntry(id: "S1", name: "Maison", url: ServerURLNormalizer.normalize("https://maison.local")!,
@@ -670,15 +849,18 @@ struct ServerSwitchLockTests {
         app.sessionValidator = { _, _ in .valid }
         app.accountLockProvider = { locked.contains($0) }
         app.parentalLockProvider = { parental }
+        app.multiAccountProvider = { multiAccount }
         app.loadServersFromKeychain()
         app.currentUserId = "kid"
         app.isAuthenticated = true
         return (app, b)
     }
 
-    @Test("Un compte protégé sur un autre serveur exige son code")
-    func protectedAccountOnOtherServer() async {
-        let (app, b) = makeApp(defaults: .isolatedForTesting(), locked: ["S2|parent"], parental: false)
+    /// Free included: a server switch stays one-tap in free, so a code set on
+    /// the other server's account (during a Pro period) must still be asked.
+    @Test("Un compte protégé sur un autre serveur exige son code, Pro comme gratuit", arguments: [true, false])
+    func protectedAccountOnOtherServer(multiAccount: Bool) async {
+        let (app, b) = makeApp(defaults: .isolatedForTesting(), locked: ["S2|parent"], parental: false, multiAccount: multiAccount)
         #expect(await app.switchTo(b) == .locked)
         #expect(app.activeServerId == "S1")
         #expect(await app.switchTo(b, unlocked: true) == .commit)
@@ -694,5 +876,69 @@ struct ServerSwitchLockTests {
         let (app, b) = makeApp(defaults: defaults, locked: [], parental: true)
         #expect(await app.switchTo(b) == .locked)
         #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 10)
+    }
+}
+
+@Suite("Mention d'une tuile de compte")
+struct AccountTileStatusTests {
+
+    @Test("Ordre : en cours, puis expirée (Pro), puis code requis (demandé en premier), puis mot de passe requis")
+    func precedence() {
+        #expect(AccountTileStatus.resolve(isCurrent: true, isExpired: true, needsSignIn: true, isLocked: true, keepsSessions: true) == .current)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: true, needsSignIn: true, isLocked: true, keepsSessions: true) == .expired)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: false, needsSignIn: true, isLocked: true, keepsSessions: true) == .codeRequired)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: false, needsSignIn: true, isLocked: false, keepsSessions: true) == .signedOut)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: false, needsSignIn: false, isLocked: true, keepsSessions: true) == .codeRequired)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: false, needsSignIn: false, isLocked: false, keepsSessions: true) == nil)
+    }
+
+    @Test("Gratuit : une expiration restée d'une période Pro n'est jamais affichée en rouge")
+    func freeNeverShowsExpired() {
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: true, needsSignIn: true, isLocked: false, keepsSessions: false) == .signedOut)
+        #expect(AccountTileStatus.resolve(isCurrent: false, isExpired: true, needsSignIn: true, isLocked: true, keepsSessions: false) == .codeRequired)
+    }
+}
+
+@Suite("Reconnexion : quand fermer le sélecteur")
+struct ReconnectionOutcomeTests {
+
+    @Test("Le sélecteur se ferme dès que le compte actif a changé, même pour un autre que le compte visé")
+    func closesOnAnySwitch() {
+        #expect(AccountSwitchFlow.reconnectionOpened(before: "A", after: "B"))
+        #expect(AccountSwitchFlow.reconnectionOpened(before: "A", after: "C"))
+    }
+
+    @Test("Rien n'a changé (annulé, échec) : le sélecteur reste ouvert")
+    func staysOpenWithoutSwitch() {
+        #expect(!AccountSwitchFlow.reconnectionOpened(before: "A", after: "A"))
+        #expect(!AccountSwitchFlow.reconnectionOpened(before: "A", after: nil))
+    }
+}
+
+@Suite("Gérer les comptes : quand redemander le code")
+struct AccountCodeVisitTests {
+
+    @Test("Un autre compte protégé demande son code, le compte courant jamais")
+    func asksForAnotherProtectedAccount() {
+        let visit = AccountCodeVisit()
+        #expect(visit.mustUnlock(key: "s|b", hasCode: true, isCurrent: false))
+        #expect(!visit.mustUnlock(key: "s|a", hasCode: true, isCurrent: true))
+        #expect(!visit.mustUnlock(key: "s|b", hasCode: false, isCurrent: false))
+    }
+
+    @Test("Le code tapé ouvre les réglages de CE compte pour la visite, pas ceux d'un autre")
+    func unlockOpensThatAccountOnly() {
+        var visit = AccountCodeVisit()
+        visit.unlocked("s|b")
+        #expect(!visit.mustUnlock(key: "s|b", hasCode: true, isCurrent: false))
+        #expect(visit.mustUnlock(key: "s|c", hasCode: true, isCurrent: false))
+    }
+
+    @Test("Un code qu'on vient de choisir et de confirmer ici n'est pas redemandé (recette 2026-10-23, DEF-IOS1)")
+    func enrolmentKeepsTheScreenOpen() {
+        var visit = AccountCodeVisit()
+        visit.enrolled("s|b")
+        #expect(!visit.mustUnlock(key: "s|b", hasCode: true, isCurrent: false))
+        #expect(visit.mustUnlock(key: "s|c", hasCode: true, isCurrent: false))
     }
 }

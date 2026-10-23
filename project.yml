@@ -35,8 +35,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "2.4.3"
-    CURRENT_PROJECT_VERSION: "2.4.3"
+    MARKETING_VERSION: "2.4.4"
+    CURRENT_PROJECT_VERSION: "2.4.4"
     # Distribution signing: Xcode auto-creates an "iOS App Store" / "tvOS App
     # Store" provisioning profile on first archive once DEVELOPMENT_TEAM is set.
     # It is deliberately NOT set here: set it per machine (Xcode › Signing &
@@ -202,6 +202,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.ios
         PRODUCT_NAME: Cinemax
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Alternate icons of Réglages → Apparence → « Icône de l'app » (Pro):
+        # actool writes them into CFBundleIcons → CFBundleAlternateIcons. Same
+        # names on tvOS; the list is `AppIconCatalogue` + recolor.py ALTERNATES.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink"
         # Lets a file shared by SOURCE with the widget extension reach app-only
         # symbols in the APP's copy while still compiling in the extension's —
         # see `ResumeControl.swift`. `$(inherited)` keeps DEBUG.
@@ -217,6 +221,10 @@ targets:
     scheme:
       testTargets:
         - CinemaxTests
+      # Local StoreKit for runs launched from Xcode: the two JellyGlass Pro
+      # products, without App Store Connect. The same file the tests load
+      # (`ProStoreKitTests`). Archives and `simctl` launches ignore it.
+      storeKitConfiguration: Tests/CinemaxKitTests/Fixtures/JellyGlassPro.storekit
 
   CinemaxTV:
     type: application
@@ -298,12 +306,15 @@ targets:
         PRODUCT_NAME: CinemaxTV
         ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
+        # A full parallax stack (Front + Back), never a Top Shelf. See iOS.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink"
         ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME: ""
         SWIFT_EMIT_LOC_STRINGS: YES
         SWIFT_STRICT_CONCURRENCY: complete
     scheme:
       testTargets:
         - CinemaxTVTests
+      storeKitConfiguration: Tests/CinemaxKitTests/Fixtures/JellyGlassPro.storekit
 
   # Continue-Watching home-screen widget. Dependency-free by design (no
   # CinemaxKit — widget memory budgets are tight): reads the session snapshot

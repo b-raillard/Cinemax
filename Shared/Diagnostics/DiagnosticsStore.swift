@@ -6,7 +6,7 @@ import MetricKit
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Diagnostics")
 
-/// Counts shown in Settings → Lecture → Débogage and written into the export
+/// Counts shown in Settings → Debug and written into the export
 /// header. `crashes` / `hangs` are summed over every stored diagnostic payload
 /// (one payload can carry several of each).
 struct MetricKitSummary: Sendable, Equatable {

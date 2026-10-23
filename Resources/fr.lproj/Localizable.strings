@@ -292,7 +292,7 @@
 
 // MARK: - Debug
 
-"settings.debug" = "Débogage";
+"settings.debug" = "Debug";
 "settings.debug.fastSleepTimer" = "Veille rapide (15 s)";
 "settings.debug.skipToEnd" = "Bouton aller à la fin";
 "settings.debug.simulateTabletop" = "Simuler le mode table (iPhone Duo)";
@@ -542,12 +542,10 @@
 // MARK: - Admin — Landings
 
 "admin.landing.title" = "Administration";
-"admin.advanced.title" = "Admin avancée";
 "admin.landing.section.server" = "Serveur";
-"admin.landing.section.metadata" = "Métadonnées";
-"admin.landing.section.users" = "Utilisateurs et appareils";
-"admin.landing.section.extensions" = "Extensions et tâches";
-"admin.landing.section.advanced" = "Avancé";
+"admin.landing.section.users" = "Utilisateurs";
+"admin.landing.section.library" = "Bibliothèque";
+"admin.landing.section.configuration" = "Configuration";
 "admin.dashboard.subtitle" = "Sessions actives et état du serveur.";
 "admin.metadata.title" = "Gestionnaire de métadonnées";
 "admin.metadata.subtitle" = "Éditer titres, casting, images et rafraîchir les métadonnées.";
@@ -1095,14 +1093,16 @@
 "accounts.add" = "Ajouter";
 "accounts.add.title" = "Ajouter un profil";
 "accounts.add.subtitle" = "Quick Connect évite de taper un mot de passe à la télécommande : approuvez le code depuis un appareil où le compte est connecté.";
+"accounts.add.subtitle.phone" = "Quick Connect évite de saisir un mot de passe : approuvez le code depuis un appareil où le compte est déjà connecté.";
 "accounts.add.quickConnect" = "Quick Connect";
-"accounts.add.password" = "Identifiant et mot de passe";
+"accounts.add.password" = "Mot de passe";
 "accounts.manage" = "Gérer les comptes";
 "accounts.current" = "En cours";
 "accounts.expired" = "Session expirée";
+"accounts.signedOut" = "Mot de passe requis";
+"accounts.reconnect.title" = "Se reconnecter à %@";
+"pro.reconnect.hint" = "Avec Pro, plus besoin de mot de passe pour changer de compte";
 "accounts.codeRequired" = "Code requis";
-"accounts.switch" = "Changer de compte";
-"accounts.switch.freeHint" = "Le mot de passe du compte choisi est demandé à chaque changement.";
 "accounts.pin.title" = "Code de %@";
 "accounts.pin.parental.title" = "Code parental";
 "accounts.pin.parental.subtitle" = "Le profil %@ est moins restreint que celui-ci.";
@@ -1193,6 +1193,7 @@
 "intent.error.nothingToResume" = "Aucune lecture en cours à reprendre.";
 "intent.error.itemUnavailable" = "Ce titre est introuvable sur le serveur actif.";
 "intent.error.notEpisodic" = "Ce titre n'est pas une série.";
+"intent.error.proRequired" = "Siri et les Raccourcis font partie de JellyGlass Pro : découvrez-le dans l'app.";
 
 // MARK: - Remote control ("Play on…")
 
@@ -1372,6 +1373,31 @@
 "settings.seasonal.ambiance" = "Animations d'ambiance";
 "settings.seasonal.row" = "Propositions sur l'accueil";
 "settings.seasonal.accentNote" = "Pendant « %@ », la couleur du thème remplace la vôtre.";
+"settings.seasonal.choice.automatic" = "Automatique";
+"settings.seasonal.choice.off" = "Désactivé";
+"settings.seasonal.choice.halloween" = "Halloween";
+"settings.seasonal.choice.halloween.detail" = "Toute l'année";
+"settings.appIcon.title" = "Icône de l'app";
+"settings.appIcon.classic" = "Classique";
+"settings.appIcon.halloween" = "Aubergine";
+"settings.appIcon.halloweenPumpkin" = "Citrouille";
+"settings.appIcon.halloweenPotion" = "Potion";
+"settings.appIcon.locked" = "Réservée à JellyGlass Pro";
+"settings.appIcon.error" = "Impossible de changer l'icône";
+"settings.appIcon.caption.current" = "Icône actuelle";
+"settings.appIcon.caption.preview" = "Aperçu";
+"settings.appIcon.apply" = "Utiliser cette icône";
+"settings.appIcon.unlock" = "Débloquer avec JellyGlass Pro";
+"settings.appIcon.proBanner" = "%d icônes de plus avec JellyGlass Pro";
+"settings.appIcon.proBanner.one" = "%d icône de plus avec JellyGlass Pro";
+"settings.appIcon.section.classic" = "Classique";
+"settings.appIcon.section.halloween" = "Halloween";
+"settings.appIcon.section.colors" = "Couleurs";
+"settings.appIcon.section.editions" = "Éditions";
+"settings.appIcon.family.classic" = "Icône d'origine";
+"settings.appIcon.family.halloween" = "Halloween";
+"settings.appIcon.family.accent" = "Couleur";
+"settings.appIcon.status.available" = "Appuyez pour l'utiliser";
 "settings.debug.forceSeason" = "Forcer « %@ »";
 "settings.debug.entitlement" = "Droits";
 "settings.debug.entitlement.free" = "Gratuit";
@@ -1397,3 +1423,76 @@
 "settings.debug.earlyAdopter.env.production" = "production";
 "settings.debug.earlyAdopter.env.sandbox" = "sandbox / TestFlight";
 "settings.debug.earlyAdopter.env.xcode" = "Xcode";
+
+// Pro purchase (lot 2)
+"settings.debug.proTier.launched" = "Lancé (%@)";
+"settings.pro" = "JellyGlass Pro";
+"pro.badge" = "PRO";
+"pro.subline.free" = "Tout le confort de JellyGlass en un seul achat : sans abonnement, sans publicité, sans pistage. Et la lecture reste gratuite, pour toujours.";
+"pro.subline.unlocked" = "Toutes les fonctions ci-dessous sont débloquées sur vos appareils.";
+"pro.founder.card" = "Vous utilisiez JellyGlass avant le lancement de Pro : tout ce que Pro contient vous est offert, pour toujours, sur iPhone, iPad et Apple TV.";
+"pro.alwaysFree.title" = "Toujours gratuit";
+"pro.alwaysFree.body" = "Regarder sur vos appareils : bibliothèque, recherche, lecteur complet (pistes, sous-titres, PiP, sauts), reprise, widgets, Top Shelf. Lancer ou rejoindre une séance « Regarder ensemble », composer votre menu, choisir votre couleur d'accent.";
+"pro.alwaysFree.tv" = "Toujours gratuit : bibliothèque, recherche, lecteur complet, reprise, Top Shelf, « Regarder ensemble », votre menu, votre couleur d'accent.";
+"pro.buy" = "Débloquer — %@";
+"pro.buy.footnote" = "Achat unique, sans abonnement. Partagé avec votre groupe Partage familial. Débloque aussi l'iPad et l'Apple TV qui utilisent le même compte iCloud.";
+"pro.price.unavailable" = "Le prix n'est pas disponible pour le moment.";
+"pro.price.retry" = "Réessayer";
+"pro.pending" = "Demande envoyée à l'organisateur du Partage familial. Pro s'activera tout seul dès son accord, même si l'app est fermée.";
+"pro.restore" = "Restaurer les achats";
+"pro.restore.found" = "Achat restauré : Pro est actif";
+"pro.restore.none" = "Aucun achat Pro trouvé pour ce compte Apple";
+"pro.restore.failed" = "Restauration impossible. Réessayez plus tard.";
+"pro.terms" = "Conditions d'utilisation";
+"pro.privacy" = "Confidentialité";
+"pro.result.success.title" = "Merci !";
+"pro.result.success.message" = "Pro est actif. Il le sera aussi sur votre iPad et votre Apple TV à leur prochaine ouverture, avec le même compte iCloud.";
+"pro.result.pending.title" = "Demande envoyée";
+"pro.result.pending.message" = "L'organisateur du Partage familial doit approuver l'achat. Pro s'activera tout seul ensuite.";
+"pro.result.failed.title" = "Achat impossible";
+"pro.result.failed.message" = "L'App Store n'a pas pu finaliser l'achat. Rien n'a été débité. Réessayez plus tard.";
+"pro.tv.storeNote" = "Déjà acheté sur l'iPhone ? Pro s'active ici tout seul avec le même compte iCloud.";
+"pro.tv.legal" = "Conditions : licence d'utilisation standard d'Apple. Confidentialité : b-raillard.github.io/Cinemax/privacy.html";
+"pro.upsell.partOf" = "Inclus dans JellyGlass Pro, avec bien d'autres avantages, en un seul achat.";
+"pro.upsell.seeAll" = "Voir tout ce que Pro inclut";
+"pro.upsell.notNow" = "Pas maintenant";
+"pro.locked.hint" = "Fonction JellyGlass Pro : ouvre l'offre.";
+"pro.feature.accounts.title" = "Comptes mémorisés";
+"pro.feature.accounts.detail" = "Chaque profil reste connecté : on passe de l'un à l'autre d'un geste, sans mot de passe, protégé par un code si besoin.";
+"pro.feature.accounts.detail.tv" = "Chaque profil reste connecté : on passe de l'un à l'autre d'un clic, sans mot de passe, protégé par un code si besoin.";
+"pro.feature.admin.title" = "Votre serveur dans la poche";
+"pro.feature.admin.detail" = "Utilisateurs, appareils, tâches et métadonnées, gérés depuis l'iPhone ou l'iPad, sans ordinateur.";
+"pro.feature.admin.detail.tv" = "Sur iPhone et iPad : utilisateurs, appareils, tâches et métadonnées de votre serveur, sans ordinateur.";
+"pro.feature.playOn.title" = "« Lire sur… » l'Apple TV";
+"pro.feature.playOn.detail" = "Choisissez un film sur l'iPhone, il démarre sur la télé du salon.";
+"pro.feature.playOn.title.tv" = "« Lire sur… » un autre écran";
+"pro.feature.playOn.detail.tv" = "Depuis l'Apple TV, envoyez un film vers une autre télé ou un autre appareil de la maison.";
+"pro.feature.icons.title" = "Icônes de l'app";
+"pro.feature.icons.detail" = "Habillez JellyGlass sur l'écran d'accueil : 3 éditions Halloween et 9 couleurs. L'icône d'origine reste gratuite.";
+"pro.feature.seasonal.title" = "Les thèmes saisonniers, toute l'année";
+"pro.feature.seasonal.detail" = "Halloween en avril ? Gardez votre thème préféré aussi longtemps que vous voulez.";
+"pro.feature.shortcuts.title" = "Siri et Raccourcis";
+"pro.feature.shortcuts.detail" = "« Reprendre » depuis le Centre de contrôle, Siri et vos raccourcis.";
+"pro.feature.shortcuts.detail.tv" = "Sur iPhone et iPad : « Reprendre » depuis Siri, vos raccourcis et le Centre de contrôle.";
+"pro.tier.title" = "Votre niveau";
+"pro.tier.founder" = "Fondateur";
+"pro.tier.pro" = "Pro";
+"pro.tier.free" = "Gratuit";
+"pro.chip.founder" = "Fondateur · tout est inclus";
+"pro.chip.pro" = "Pro actif";
+"pro.chip.free" = "Découvrir JellyGlass Pro";
+"pro.chip.accessibility" = "Votre niveau : %@";
+"pro.card.wordmark" = "JELLYGLASS";
+"pro.card.line.founder" = "Tout est inclus, pour toujours";
+"pro.card.line.pro" = "Merci de soutenir JellyGlass";
+"pro.card.line.free" = "Lecture complète, sans limite";
+"pro.card.since.founder" = "Membre depuis %@";
+"pro.card.since.pro" = "Actif depuis %@";
+"pro.list.included" = "Inclus pour vous";
+"pro.list.withPro" = "Avec Pro";
+"pro.feature.accounts.short" = "Comptes";
+"pro.feature.admin.short" = "Administration";
+"pro.feature.playOn.short" = "Lire sur…";
+"pro.feature.icons.short" = "Icônes";
+"pro.feature.seasonal.short" = "Saisons";
+"pro.feature.shortcuts.short" = "Siri";

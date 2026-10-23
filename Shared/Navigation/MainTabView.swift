@@ -51,6 +51,16 @@ struct MainTabView: View {
     /// `NavigationStack`'s own pop included.
     @State private var tvBack = TVBackCoordinator()
 
+    /// Focus is in the top tab bar (or on the avatar beside it) — see
+    /// `TVTopBarFocus`. Starts false: a tvOS app opens with focus in a page.
+    @State private var topBarHasFocus = false
+    @State private var showWhoIsWatching = false
+    @Environment(\.motionEffectsEnabled) private var motionEffects
+    @Environment(ToastCenter.self) private var toasts
+    @Environment(AccountLockStore.self) private var accountLocks
+    @Environment(ParentalLockController.self) private var parentalLock
+    @Environment(ProStore.self) private var proStore
+
     /// True only while the user is editing the menu on the Main Menu
     /// sub-page. Drives whether the bar snapshot keeps pace with the live
     /// store or stays frozen until they back out.
@@ -62,9 +72,6 @@ struct MainTabView: View {
     /// drop it, and then the first tab plays that role — the user still needs
     /// one screen the Menu button converges on before it gives up and suspends
     /// the app.
-    /// Value of the leading « Profil » tab (multi-account).
-    static let profileTabID = "accounts.profile"
-
     private var tvHomeTabID: String? {
         displayedTabs.first(where: { $0.id == MenuEntry.homeID })?.id ?? displayedTabs.first?.id
     }
@@ -268,21 +275,6 @@ struct MainTabView: View {
     @ViewBuilder
     private func tvTabLayout(tabs: [ResolvedTab]) -> some View {
         TabView(selection: $selectedTabID) {
-            // Multi-account: the leading « Profil » tab IS « Qui regarde ? ».
-            // Outside `displayedTabs` on purpose: it is neither the Menu
-            // button's home fallback (`tvHomeTabID`) nor a tab root that
-            // registers with `TVBackCoordinator`; Menu there goes to Accueil
-            // through the single handler below.
-            if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
-                Tab(value: Self.profileTabID) {
-                    WhoIsWatchingScreen(mode: .tab) {
-                        selectedTabID = tvHomeTabID ?? selectedTabID
-                    }
-                } label: {
-                    Label(appState.currentUser?.name ?? loc.localized("accounts.title"), systemImage: "person.crop.circle")
-                        .layoutBoundDynamicType()
-                }
-            }
             ForEach(tabs) { tab in
                 Tab(value: tab.id) {
                     NavigationStack {
@@ -305,11 +297,46 @@ struct MainTabView: View {
                 }
             }
         }
+        // Multi-account: the account avatar left of the bar (TV-10). Always
+        // shown (recette 2026-10-21), but focusable only while focus is in the
+        // bar: a left press from the first tab reaches it, and a page never
+        // sees it — a focusable control at the top-leading corner would take
+        // every page's initial focus (the TV-06 / TV-09 trap).
+        .overlay(alignment: .topLeading) {
+            if showsTVAccountAvatar {
+                TVAccountAvatarButton(isReachable: topBarHasFocus) { showWhoIsWatching = true }
+                    .padding(.leading, CinemaTVLayout.pagePadding)
+                    .padding(.top, CinemaTVLayout.accountAvatarTop)
+                    .ignoresSafeArea()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIFocusSystem.didUpdateNotification)) { note in
+            guard let inBar = TVTopBarFocus.isInTopBar(note), inBar != topBarHasFocus else { return }
+            withAnimation(motionEffects ? .easeInOut(duration: 0.2) : nil) { topBarHasFocus = inBar }
+        }
+        .fullScreenCover(isPresented: $showWhoIsWatching) {
+            WhoIsWatchingScreen(mode: .cover) { showWhoIsWatching = false }
+                .environment(appState)
+                .environment(themeManager)
+                .environment(loc)
+                .environment(toasts)
+                .environment(accountLocks)
+                .environment(parentalLock)
+                .environment(entitlements)
+                .environment(earlyAdopter)
+                .environment(proStore)
+        }
         // One handler for the whole layout — see `tvExitCommand`. It is
         // deliberately the ONLY `.onExitCommand` inside the tab content: an
         // ancestor handler wins over a descendant one on tvOS, so a second one
         // further down would simply never run.
         .onExitCommand(perform: tvExitCommand)
+    }
+
+    /// The avatar is offered to every tier (spec 2026-10-20): free lists the
+    /// remembered accounts too, each asking for a sign-in.
+    private var showsTVAccountAvatar: Bool {
+        appState.isAuthenticated
     }
     #endif
 

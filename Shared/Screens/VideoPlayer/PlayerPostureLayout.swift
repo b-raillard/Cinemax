@@ -30,7 +30,7 @@ enum PlayerPostureLayout {
         update ?? previous
     }
 
-    /// Settings → Lecture → Débogage « Simuler le mode table »: any iPhone held
+    /// Settings → Debug « Simuler le mode table »: any iPhone held
     /// in portrait gets the Duo's table layout, to see and test it without one.
     static func effectiveHinge(_ reading: HingeReading, simulateTabletop: Bool) -> HingeReading {
         simulateTabletop ? .partiallyOpen : reading

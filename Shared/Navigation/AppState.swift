@@ -488,6 +488,9 @@ final class AppState {
     /// Makes `entry` the active server end to end: mirror, registry, API
     /// client, observable state, extensions, catalogue refresh.
     func applyActiveServer(_ entry: ServerEntry) async {
+        // Any transition ends a pending reconnection (`pendingSignInKey`): a
+        // marker must never outlive the switch that set it.
+        pendingSignInKey = nil
         // A usable session needs BOTH a token and a user id. A token-without-user
         // entry is reachable (a migrated install whose `access_token` survived but
         // whose `user_session` didn't) and applying it would persist a
@@ -735,6 +738,8 @@ final class AppState {
     /// Does NOT write the legacy mirror — those call sites already saved it,
     /// which is exactly why they needed no other change.
     func upsertActiveEntry(session: UserSession) {
+        // A sign-in from the login screen never completes a gated switch.
+        pendingSignInKey = nil
         guard let url = serverURL else { return }
         let normalized = ServerURLNormalizer.normalize(url) ?? url
         let existing = ServerRegistry.contains(url: normalized, in: servers)
@@ -804,6 +809,9 @@ final class AppState {
         // that library's queries on the device.
         SearchHistoryStore.clearServer(serverId: entry.id)
         AccountSettingsStore.removeServer(serverId: entry.id, defaults: settingsDefaults)
+        // So does its Home snapshot (`HomeSnapshot`): the cached rails of a
+        // library nothing can sign into any more.
+        HomeSnapshotStore.standard.clear(serverId: entry.id)
         // Its certificate approval goes with it: a pin outliving its server
         // would silently pre-approve whatever answers on that host:port later.
         if let key = ServerCertificateTrust.trustKey(for: entry.url) {
@@ -827,7 +835,12 @@ final class AppState {
         // Keep the entry, drop its credentials: the card stays in the list ready
         // for a re-login. ONLY the active entry is touched, so a confirmed-invalid
         // session can never reach another server's token.
-        if let active { clearSession(of: active) }
+        if let active {
+            clearSession(of: active)
+            // A signed-out server's Home must not paint from disk on the next
+            // sign-in — possibly someone else's (`HomeSnapshot`).
+            HomeSnapshotStore.standard.clear(serverId: active.id)
+        }
 
         keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
         ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)
@@ -842,18 +855,24 @@ final class AppState {
         // server you came from" affordance toward a session that no longer exists.
         pendingRollbackServer = nil
         isAddingServer = false
+        // …and any pending reconnection (`pendingSignInKey`).
+        pendingSignInKey = nil
 
         switch reason {
         case .userInitiated:
             // Another account remembered on THIS server comes first: the
             // household member signing out of the living-room TV expects the
             // next profile, not another server.
-            if let active, let signedOutUserId,
+            // Only an account that still holds a session can take over — in
+            // free none does, and trying one would leave a pending sign-in
+            // marker behind (cleared below anyway).
+            if keepsAccountSessions, let active, let signedOutUserId,
                let stored = servers.first(where: { $0.id == active.id }),
-               let next = ServerRegistry.nextAccount(after: signedOutUserId, in: stored),
+               let next = ServerRegistry.nextAccount(after: signedOutUserId, in: stored), next.hasSession,
                await switchAccount(to: next.userId) == .switched {
                 return .switchedAccount(name: next.username)
             }
+            pendingSignInKey = nil
             if let active, let candidate = ServerRegistry.nextCandidate(after: active.id, in: servers) {
                 if await switchTo(candidate) == .commit {
                     return .switchedTo(candidate)
@@ -933,6 +952,11 @@ final class AppState {
     /// account and the server switch, here rather than in a screen.
     func requiresCode(forAccountKey key: String) -> Bool {
         if accountLockProvider(key) { return true }
+        return requiresParentalCode(forAccountKey: key)
+    }
+
+    /// The parental half of `requiresCode`.
+    private func requiresParentalCode(forAccountKey key: String) -> Bool {
         guard parentalLockProvider() else { return false }
         return AccountSettingsStore.isLessRestrictive(
             AccountSettingsStore.ageCap(for: key, defaults: settingsDefaults),
@@ -995,20 +1019,46 @@ final class AppState {
         return ServerRegistry.accounts(of: entry)
     }
 
-    /// Switches to another account remembered on the active server. The token
-    /// is validated OFF the shared client first (same rule as `switchTo`); a
-    /// switch NEVER revokes anything.
+    /// Whether this device keeps the session of every remembered account (Pro
+    /// or founder) — a one-tap switch — or only the active one (free: every
+    /// switch is a sign-in, spec 2026-10-20). THE free / Pro question of the
+    /// account screens.
+    var keepsAccountSessions: Bool { multiAccountProvider() }
+
+    /// The account a sign-in is expected for, once a switch has passed the
+    /// gate (`switchAccount` → `.needsLogin`): that sign-in completes a switch
+    /// the parental check already allowed, so it keeps the account's own age
+    /// cap instead of clamping it. Cleared by the sign-in, or by the screen
+    /// when the sign-in is abandoned (`clearPendingSignIn`) — else a later
+    /// plain « Ajouter » of that account would skip the clamp.
+    private var pendingSignInKey: String?
+
+    func clearPendingSignIn() { pendingSignInKey = nil }
+
+    /// Switches to another account remembered on the active server. Pro: the
+    /// token is validated OFF the shared client first (same rule as
+    /// `switchTo`); free: past the gate (parental code, being online) the
+    /// switch is a sign-in — `.needsLogin` — whatever token the account may
+    /// still hold. A switch NEVER revokes anything.
     @discardableResult
     func switchAccount(to userId: String, unlocked: Bool = false) async -> AccountSwitchResult {
         guard let entry = activeEntryIfAny else { return .needsLogin }
         if userId == currentUserId, isAuthenticated { return .switched }
-        if !unlocked, requiresCode(forAccountKey: ServerRegistry.accountKey(serverId: entry.id, userId: userId)) {
+        let key = ServerRegistry.accountKey(serverId: entry.id, userId: userId)
+        // Both tiers: a code already set (during a Pro period) keeps guarding
+        // the account even in free — a Jellyfin account may have no password,
+        // so the sign-in that follows is not always a check (security review
+        // 2026-10-20). Only SETTING a code is Pro.
+        if !unlocked, requiresCode(forAccountKey: key) {
             return .locked
         }
         guard isOnlineProvider() else { return .offline }
-        guard let target = ServerRegistry.activating(userId: userId, in: entry),
-              let token = target.accessToken else { return .needsLogin }
-        let key = ServerRegistry.accountKey(serverId: entry.id, userId: userId)
+        guard keepsAccountSessions,
+              let target = ServerRegistry.activating(userId: userId, in: entry),
+              let token = target.accessToken, !token.isEmpty else {
+            pendingSignInKey = key
+            return .needsLogin
+        }
         switch await sessionValidator(entry.url, token) {
         case .valid:
             expiredAccountIds.remove(key)
@@ -1016,6 +1066,7 @@ final class AppState {
             return .switched
         case .invalid:
             expiredAccountIds.insert(key)
+            pendingSignInKey = key
             return .needsLogin
         case .indeterminate:
             return .unreachable
@@ -1026,9 +1077,11 @@ final class AppState {
     /// it active, through the same tail as every other transition
     /// (`applyActiveServer`: mirror, client, age cap, extensions, tier-1 reload).
     ///
-    /// Pro (or founder): the previous account stays remembered. Free: signing
-    /// in as someone else REPLACES the previous account — forgotten and its
-    /// token revoked, so a free device never accumulates sessions silently.
+    /// Pro (or founder): the previous account stays remembered with its
+    /// session. Free: every OTHER account of the server keeps its place in the
+    /// list but loses its session — token revoked and emptied
+    /// (`droppingSession`), its settings kept — so a free device holds one
+    /// session per server and never accumulates them (spec 2026-10-20).
     func addAccount(session: UserSession) async {
         guard let index = servers.firstIndex(where: { $0.id == activeServerId }) else {
             // No registered server to attach to (should not happen once signed
@@ -1036,12 +1089,21 @@ final class AppState {
             upsertActiveEntry(session: session)
             return
         }
-        if !multiAccountProvider(), let previous = servers[index].userId, previous != session.userID {
-            for account in ServerRegistry.accounts(of: servers[index]) where account.userId != session.userID {
-                revokeTokenInBackground(account.accessToken, on: servers[index].url)
-                servers[index] = ServerRegistry.forgetting(userId: account.userId, in: servers[index])
-                forgetAccountData(ServerRegistry.accountKey(serverId: servers[index].id, userId: account.userId))
+        if !keepsAccountSessions {
+            // Fold the active triple into the list, THEN make the incoming
+            // account the triple before dropping the others: `upsert` (via
+            // `applyActiveServer`) rebuilds the list from the stored triple,
+            // and a stored old triple would bring its token back.
+            var entry = servers[index]
+            entry.savedAccounts = ServerRegistry.accounts(of: entry)
+            entry.accessToken = session.accessToken
+            entry.userId = session.userID
+            entry.username = session.username
+            for account in ServerRegistry.accounts(of: entry) where account.userId != session.userID && account.hasSession {
+                revokeTokenInBackground(account.accessToken, on: entry.url)
+                entry = ServerRegistry.droppingSession(userId: account.userId, in: entry)
             }
+            servers[index] = entry
             persistRegistry()
         }
         var entry = servers[index]
@@ -1051,7 +1113,8 @@ final class AppState {
         if !session.serverID.isEmpty { entry.serverID = session.serverID }
         let key = ServerRegistry.accountKey(serverId: entry.id, userId: session.userID)
         expiredAccountIds.remove(key)
-        clampSignInAgeCap(forAccountKey: key)
+        if pendingSignInKey != key { clampSignInAgeCap(forAccountKey: key) }
+        pendingSignInKey = nil
         await applyActiveServer(entry)
     }
 

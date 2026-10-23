@@ -735,10 +735,10 @@ struct MediaLibraryScreen: View {
     /// synchronously before spawning, so redundant onAppears are free.
     private func maybeLoadMore(triggerId: String?) {
         let loader = viewModel.filteredLoader
-        guard !loader.isLoadingMore,
-              !loader.hasLoadedAll,
-              let triggerId,
-              triggerId == loader.items.last?.id else { return }
+        // Half a page before the end, not on the last card — see
+        // `PaginatedLoader.shouldLoadMore(onAppearOf:)`. It also checks
+        // `isLoadingMore` / `hasLoadedAll`, so redundant onAppears stay free.
+        guard loader.shouldLoadMore(onAppearOf: triggerId) else { return }
         Task { await viewModel.loadMoreFiltered(using: appState) }
     }
 

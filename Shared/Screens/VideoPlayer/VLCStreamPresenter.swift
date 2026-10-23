@@ -582,8 +582,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // Held weakly so a late-arriving successful open can tear down the failure
     // alert (libVLC's connection can complete after the watchdog gave up).
     private weak var errorAlert: UIAlertController?
-    // Wall-clock of the first play() of this session, so the watchdog/error
-    // logs can report the user-perceived open delay.
+    // Wall-clock of the first open of this session — the fallback reference of
+    // `elapsedSincePlay()` while no `play()` has been issued yet.
     private var firstPlayStart = Date.distantPast
     // Whether the current media is being fetched through the in-app loopback
     // proxy (broken-IPv6 servers). Lets the error fallback avoid re-proxying.
@@ -1279,12 +1279,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             readBytes: readBytes,
             sourceSizeBytes: info.sourceSizeBytes,
             isPlaying: enginePlaying,
-            isAdaptiveStream: isAdaptiveStream,
-            seekSettling: seeks.isSettling,
+            feed: isAdaptiveStream ? .adaptive : (usingProxy ? .relay : .direct),
+            // A rebuild negotiating runs on the old engine, whose feed is the
+            // one that died: judging it fired a second cure into the first
+            // (2026-10-21, a re-anchor 6 s into the negotiation, then « escalation
+            // refused »). Same gate as `checkPictureStall`.
+            seekSettling: seeks.isSettling || reResolve.isNegotiating,
             mediaConfirmedOpen: mediaConfirmedOpen
         ) {
         case .healthy:
             break
+        case .failoverToRelay:
+            failOverToRelayAfterFeedStall()
         case .stalling(let seconds):
             // Once per episode of silence, at the threshold — past it the
             // budget is spent and the counter climbs for the rest of the film.
@@ -1299,14 +1305,43 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
     }
 
-    /// Forces libVLC to open a FRESH connection at the position on screen.
+    /// The DIRECT route's cure for a cut feed: rebuild through the loopback
+    /// relay at once, and keep the relay for the rest of the session.
     ///
-    /// A seek is the one thing that re-opens the input without rebuilding the
-    /// player, which is why it is the right cure here and the wrong one for a
-    /// wedged decoder (`PictureStallPolicy` owns that, and a seek was measured
-    /// not to fix it). It runs while the picture is still playing out of the
-    /// buffer, so the viewer pays a short re-buffer instead of a frozen frame.
-    /// One second back rather than the exact position: a seek to where the
+    /// A re-anchor seek was measured to bring back nothing on a direct cut
+    /// (Apple TV behind Cloudflare, 2026-10-08 and 2026-10-21: `read=` frozen
+    /// across both seeks, ~16 s lost before the rebuild, which then re-opened
+    /// direct onto the same edge — see `FeedStallPolicy`). The relay owns the
+    /// one reconnect that works mid-stream (`CinemaxStreamProxy.UpstreamHandler`),
+    /// so after this the next cut is invisible. Pinning the session first is
+    /// what routes the rebuild: `reResolveAndResume` opens through the relay
+    /// when `shouldRouteThroughProxy`, which reads that pin. The give-up branch
+    /// still releases it if the relay fails too (`noteProxiedPlaybackFailed`).
+    private func failOverToRelayAfterFeedStall() {
+        let stats = player.statistics
+        logger.notice("""
+            feed-stall direct → relay pos=\(Int(self.currentMs / 1000), privacy: .public)s \
+            read=\(stats?.readBytes ?? 0, privacy: .public) \
+            inputBitrate=\(stats?.inputBitrate ?? 0, format: .fixed(precision: 1), privacy: .public) \
+            displayed=\(stats?.displayedPictures ?? 0, privacy: .public) \
+            modules=\(VLCEngineFacts.shared.summary ?? "?", privacy: .public)
+            """)
+        // Before the rebuild, which resets the counters the document describes.
+        DiagnosticsUploader.send(reason: "feed-stall-relay", engine: "vlc")
+        StreamTransportPolicy.shared.noteDirectPlaybackFailed()
+        if !rebuildSpendingRecovery(from: currentMs) {
+            logger.error("feed-stall relay failover refused (no recovery left, or a rebuild is running)")
+        }
+    }
+
+    /// The RELAY route's cure: forces libVLC to open a FRESH loopback
+    /// connection — hence a fresh upstream request — at the position on screen.
+    ///
+    /// A seek re-opens the input without rebuilding the player, and runs while
+    /// the picture is still playing out of the buffer. It is the wrong cure for
+    /// a wedged decoder (`PictureStallPolicy` owns that) and was measured to be
+    /// the wrong one for a DIRECT cut, which fails over instead (above). One
+    /// second back rather than the exact position: a seek to where the
     /// playhead already is can be answered as a no-op, and a second of replay
     /// is imperceptible.
     private func reanchorAfterFeedStall() {
@@ -5770,6 +5805,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                subtitle: player.selectedSubtitleTrack.flatMap { player.subtitleTracks.firstIndex(of: $0) })
             : nil
         logger.notice("VLC wake re-resolve for \(resumeItemId, privacy: .public) @ \(Int(resumeSeconds))s")
+        let negotiationStart = Date()
         Task { [weak self] in
             guard let self else { return }
             defer { self.reResolve.end() }
@@ -5780,6 +5816,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate,
                 engine: .vlc, mediaSourceId: keptSourceId
             ) else {
+                logger.error("VLC re-resolve negotiation failed after \(Self.secondsSince(negotiationStart), privacy: .public)")
                 // …and make sure there IS one: this re-resolve may have superseded
                 // an error retry (its token was cleared above), which had already
                 // cancelled the watchdog. Without re-arming it, nothing would ever
@@ -5811,6 +5848,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 }
                 return
             }
+            // How long the rebuild sat on the old picture, and whether the POST
+            // answered at all: a PlaybackInfo POST that times out (its own 20 s)
+            // is swallowed by `_getPlaybackInfo` into a session-less direct
+            // URL. 2026-10-21 lost 20.7 s here, between « wake re-resolve » and
+            // the re-open, with nothing in the log to say which.
+            logger.notice("""
+                VLC re-resolve negotiated in \(Self.secondsSince(negotiationStart), privacy: .public) \
+                session=\(fresh.playSessionId == nil ? "none (direct-stream fallback)" : "new", privacy: .public)
+                """)
             // Closed (or superseded) during the negotiation: the session just
             // negotiated is nobody's, and no stop report will ever name it —
             // on a transcode, an orphan ffmpeg (recette 2026-10-08, M6-09).
@@ -5866,10 +5912,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         return true
     }
 
-    /// Seconds elapsed since the first play() of this session — the
-    /// user-perceived "time to open". Surfaced in the watchdog/error logs.
+    /// Seconds elapsed since the `play()` of the open being judged — what the
+    /// watchdog and error logs report. Measured from `lastPlayStart`, which
+    /// every open (first play, retry, rebuild, episode) moves; `firstPlayStart`
+    /// is set by `startPlayback` only, so a rebuild's watchdog printed the age
+    /// of the whole playback — « never became ready after 4522.2s » on
+    /// 2026-10-21, for a 15 s watchdog armed 15 s earlier.
     private func elapsedSincePlay() -> String {
-        String(format: "%.1fs", Date().timeIntervalSince(firstPlayStart))
+        Self.secondsSince(lastPlayStart ?? firstPlayStart)
+    }
+
+    private static func secondsSince(_ start: Date) -> String {
+        String(format: "%.1fs", Date().timeIntervalSince(start))
     }
 
     private func onEngineTimeChanged() {

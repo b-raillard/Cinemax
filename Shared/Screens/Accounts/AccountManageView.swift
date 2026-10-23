@@ -84,7 +84,8 @@ struct AccountDetailView: View {
 
     private enum CodeStage: Equatable { case choose, confirm(String) }
 
-    @State private var unlocked = false
+    /// The account's code typed — or chosen — during this visit.
+    @State private var visit = AccountCodeVisit()
     @State private var codeStage: CodeStage?
     @State private var entry = ""
     @State private var message: String?
@@ -92,7 +93,11 @@ struct AccountDetailView: View {
 
     private var key: String { appState.accountKey(for: account) ?? "" }
     private var isCurrent: Bool { account.userId == appState.currentUserId }
-    private var mustUnlock: Bool { !isCurrent && locks.hasLock(key) && !unlocked }
+    /// SETTING an account's own code is Pro; a code already set (during a Pro
+    /// period) keeps guarding in free, and can be removed there (security
+    /// review 2026-10-20).
+    private var showsCodeRows: Bool { appState.keepsAccountSessions || locks.hasLock(key) }
+    private var mustUnlock: Bool { visit.mustUnlock(key: key, hasCode: locks.hasLock(key), isCurrent: isCurrent) }
 
     var body: some View {
         // Pushed in the stack, hence OUTSIDE the list's gate: without its own,
@@ -117,10 +122,12 @@ struct AccountDetailView: View {
         .background(CinemaColor.surface)
         .navigationTitle(account.username)
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(
+        // An alert, not a `confirmationDialog`: iOS 27 shows the dialog as a
+        // popover that hides its « Annuler » button (user decision 2026-10-23,
+        // same as the account switcher's choices).
+        .alert(
             loc.localized("accounts.detail.remove.confirm.title", account.username),
-            isPresented: $showRemoveConfirm,
-            titleVisibility: .visible
+            isPresented: $showRemoveConfirm
         ) {
             Button(loc.localized("accounts.detail.remove"), role: .destructive) { remove() }
             Button(loc.localized("action.cancel"), role: .cancel) {}
@@ -189,6 +196,7 @@ struct AccountDetailView: View {
                     .foregroundStyle(CinemaColor.onSurface)
             }
 
+            if showsCodeRows {
             sectionHeader(loc.localized("accounts.detail.access"))
             VStack(spacing: 0) {
                 toggleRow(
@@ -204,7 +212,9 @@ struct AccountDetailView: View {
                         codeStage = .choose
                     }
                 }
-                if locks.hasLock(key), AccountLockStore.biometricsAvailable {
+                // Free shows the code row only to remove a code set while Pro:
+                // no Face ID enrolment there (spec 2026-10-20).
+                if appState.keepsAccountSessions, locks.hasLock(key), AccountLockStore.biometricsAvailable {
                     toggleRow(
                         title: loc.localized("accounts.detail.faceID"),
                         subtitle: loc.localized("accounts.detail.faceID.subtitle"),
@@ -215,6 +225,7 @@ struct AccountDetailView: View {
                 }
             }
             .background(RoundedRectangle(cornerRadius: CinemaRadius.large).fill(CinemaColor.surfaceContainerHigh))
+            }
 
             sectionHeader(loc.localized("accounts.detail.own"))
             ageMenu
@@ -305,7 +316,7 @@ struct AccountDetailView: View {
         switch await locks.verify(key: key, pin: pin) {
         case .unlocked:
             message = nil
-            unlocked = true
+            visit.unlocked(key)
         case .wrong:
             message = loc.localized("accounts.pin.wrong")
             Haptics.error()
@@ -330,6 +341,7 @@ struct AccountDetailView: View {
                 return
             }
             if await locks.enroll(key: key, pin: pin, useBiometrics: false) {
+                visit.enrolled(key)
                 codeStage = nil
                 message = nil
                 Haptics.success()

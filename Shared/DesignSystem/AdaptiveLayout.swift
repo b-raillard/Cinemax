@@ -150,6 +150,12 @@ enum CinemaTVLayout {
     /// in-scroll titles, and the header of any rail that sits among them.
     static let pagePadding: CGFloat = CinemaSpacing.spacing20
 
+    /// The account avatar left of the top tab bar (`TVAccountAvatarButton`):
+    /// its diameter, and the top inset that centres it on the native bar
+    /// (measured on the Apple TV 4K simulator, tvOS 27).
+    static let accountAvatarSize: CGFloat = 64
+    static let accountAvatarTop: CGFloat = 47
+
     // MARK: Heroes
 
     /// Full-bleed hero on Home and the library browse layout.

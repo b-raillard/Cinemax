@@ -64,6 +64,9 @@ struct MediaDetailScreen: View {
     /// (`MediaCardContextMenu`), so the presentation itself now lives on
     /// `AppNavigation` — same optionality rationale as `playlists` above.
     @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
+    /// The Pro gate of the admin menu (lot B): a free admin's per-item admin
+    /// shortcuts are hidden, the Settings row being the one door.
+    @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
     /// Read through `@AppStorage`, not `SyncPlayController.isEngineSupported`,
     /// so flipping « Lecteur natif » re-renders the action row.
     @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
@@ -459,8 +462,10 @@ struct MediaDetailScreen: View {
         #if os(iOS)
         // Admin-gated 3-dot menu (Identifier / Edit metadata / Refresh /
         // Delete). Server enforces authorization on every endpoint; client
-        // gating is UX only.
-        if appState.isAdministrator {
+        // gating is UX only. The admin tools are Pro (lot B): a free admin
+        // sees the pill with a lock, whose tap raises the Pro sheet
+        // (`AdminShortcutPresence`, inside `AdminItemMenu`).
+        if AdminShortcutPresence.resolve(isAdmin: appState.isAdministrator, access: proAccess) != .hidden {
             adminMenuPill(for: item)
         }
         #endif
@@ -1128,7 +1133,8 @@ struct MediaDetailScreen: View {
         // screen itself shows the restricted state). An episode is checked on
         // its own rating too: the series' may be absent or milder.
         // The episode as fetched when the fiche was opened for it — not looked
-        // up in `episodes`, which holds only the first and next-up seasons.
+        // up in `episodes`, which holds only the season ON SCREEN (the user
+        // may have switched) and the next-up one.
         let requestedEpisode = viewModel.requestedEpisode
             ?? viewModel.episodes.first(where: { $0.id == viewModel.itemId })
         guard !viewModel.isAgeRestricted,

@@ -2,9 +2,13 @@ import Foundation
 import JellyfinAPI
 
 enum SeasonalThemePolicy {
-    /// A non-empty `forcedID` naming a catalogue season wins (Debug page);
-    /// otherwise `.off` means none, and `.automatic` the season whose window
-    /// contains `date`.
+    /// The season on screen — choice × date; the tier enters BEFORE, through
+    /// `effectiveSetting` (`SeasonalThemeController.reevaluate` composes the
+    /// two). A non-empty `forcedID` naming a catalogue season wins over
+    /// everything, the choice and the tier included (the Debug page's recette
+    /// tool); otherwise `.off` means none, a forced choice (Halloween) its
+    /// season at any date, and `.automatic` the season whose window contains
+    /// `date`.
     static func activeTheme(
         on date: Date, calendar: Calendar, setting: SeasonalSetting,
         forcedID: String, catalogue: [SeasonalTheme]
@@ -12,8 +16,24 @@ enum SeasonalThemePolicy {
         if !forcedID.isEmpty, let forced = catalogue.first(where: { $0.id == forcedID }) {
             return forced
         }
-        guard setting == .automatic else { return nil }
-        return catalogue.first { $0.window.contains(date, calendar: calendar) }
+        switch setting {
+        case .off:
+            return nil
+        case .automatic:
+            return catalogue.first { $0.window.contains(date, calendar: calendar) }
+        case let forced:
+            return catalogue.first { $0.id == forced.forcedSeasonID }
+        }
+    }
+
+    /// What the choice amounts to for this tier — what Réglages shows as
+    /// selected. A forced season the tier refuses (a Pro user back to free:
+    /// refund, end of family sharing) reads as `.automatic`: the stored value
+    /// is KEPT (a transient « free » reading at launch must not wipe a Pro's
+    /// choice, and the Pro coming back brings it back without a tap), and
+    /// nothing is taken away in season — Automatique shows that season too.
+    static func effectiveSetting(_ setting: SeasonalSetting, allowsForced: Bool) -> SeasonalSetting {
+        setting.forcedSeasonID != nil && !allowsForced ? .automatic : setting
     }
 }
 
