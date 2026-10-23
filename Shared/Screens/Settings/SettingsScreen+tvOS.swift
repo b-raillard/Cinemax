@@ -194,6 +194,17 @@ extension SettingsScreen {
                 if let look = headerTierLook {
                     ProTierChip(tier: look.tier) { selectedCategory = .pro }
                         .focused($focusedItem, equals: .tierChip)
+                        // Right from the chip opens the menu at its TOP
+                        // (« Apparence »), the way the landing opens — never
+                        // at the nearest row (« Licences open source », at the
+                        // chip's height; recette 2026-10-23, Q-PUCE). The chip
+                        // has nothing to its right (the menu is NOT a focus
+                        // section), so this handler is the only mover: a
+                        // user-initiated write, no automatic pick to lose to.
+                        .onMoveCommand { direction in
+                            guard direction == .right, let first = tvLandingCategories.first else { return }
+                            focusedItem = .category(first.rawValue)
+                        }
                         .padding(.top, CinemaSpacing.spacing4)
                         .disabled(!tierChipFocusable)
                 }
@@ -211,11 +222,7 @@ extension SettingsScreen {
             Spacer()
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                // tvOS explicitly hides admin entries — admin workflows are
-                // iOS/iPadOS-only. `isAdmin: false` is safe because the filter
-                // short-circuits on `isTVOS: true` regardless of admin flag.
-                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true,
-                                                      showsDebug: showsDebugCategory)) { category in
+                ForEach(tvLandingCategories) { category in
                     tvCategoryButton(category)
                 }
 
@@ -236,11 +243,17 @@ extension SettingsScreen {
                 .padding(.horizontal, CinemaTVLayout.pagePadding)
                 .padding(.bottom, CinemaSpacing.spacing8)
         }
-        // The chip sits lower than every pill, with nothing opposite it: a
-        // right press from it found no candidate in its row and did nothing
-        // (recette 2026-10-23, DEF-TV1). As a section the whole half answers,
-        // and hands focus to its nearest pill.
-        .focusSection()
+        // Deliberately NOT a `.focusSection()`: as one, it answered a right
+        // press from the chip with its NEAREST row, « Licences open source »
+        // (DEF-TV1's first fix, refused 2026-10-23, Q-PUCE). The chip's own
+        // `onMoveCommand` sends Right to the first pill instead.
+    }
+
+    /// The landing's category pills, top to bottom — admin entries are
+    /// iOS-only. `isAdmin: false` is safe because the filter short-circuits
+    /// on `isTVOS: true` regardless of the admin flag.
+    var tvLandingCategories: [SettingsCategory] {
+        SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsDebug: showsDebugCategory)
     }
 
     @ViewBuilder
