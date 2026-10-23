@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- iPhone screenshot planks 1–6: a literal port of the App Store redesign canvas
+     (artifact S5cJ7tWFU3f3zX3HaCtCHG, iPhone-N.dc.html — 440 × 956 board, Instrument
+     Sans, bloom + grain, device 302 × 654 tilted −3°, ghost device behind on 2–6),
+     rendered at device scale 3 by render.sh → 1320 × 2868.
+     Query: n=1..6, lang=fr|en|de, shot=<capture file in $ASSETS>. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+html,body{margin:0;background:#07070A;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+.panel{position:relative;overflow:hidden;background:#07070A;width:440px;height:956px}
+.bloom{position:absolute;inset:0;background:
+ radial-gradient(115% 65% at 16% -6%,rgba(76,175,130,.26),rgba(76,175,130,0) 58%),
+ radial-gradient(85% 55% at 102% 8%,rgba(91,200,232,.14),rgba(91,200,232,0) 60%),
+ radial-gradient(120% 90% at 50% 120%,rgba(0,0,0,.65),rgba(0,0,0,0) 55%)}
+.grain{position:absolute;inset:0;opacity:.05;pointer-events:none;
+ background-image:radial-gradient(rgba(255,255,255,.7) .5px,transparent .6px);background-size:3px 3px}
+.dev{position:absolute;background:#000;overflow:hidden;
+ box-shadow:0 2px 0 rgba(255,255,255,.10) inset,0 40px 90px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.10)}
+.scr{position:absolute;inset:0;overflow:hidden;background:#0E0E0E}
+.eyebrow{font-weight:700;text-transform:uppercase;color:#4CAF82}
+.head{margin:0;font-weight:700;color:#F5F4F1;letter-spacing:-.028em}
+.sub{margin:0;color:#8C8C8A;font-weight:400}
+</style></head>
+<body><div id="stage"></div>
+<script>
+const q = new URLSearchParams(location.search);
+const lang = q.get('lang') || 'en', n = +(q.get('n') || 1);
+// e = eyebrow, h = headline (two lines), s = sub. FR is the canvas text verbatim;
+// EN is the shipped English series; DE follows the app's own German (du, « Schlaftimer »…).
+const TXT = {
+  fr: [
+    ['Accueil', 'Un accès facile<br>et performant.', 'À toute votre médiathèque Jellyfin, dans une interface écrite pour iPhone.'],
+    ['Moteur VLC intégré', 'Des flux optimisés<br>pour vos contenus.', 'MKV, Dolby Vision, HDR10+, Atmos : le fichier part de votre serveur tel quel. Votre NAS ne chauffe plus.'],
+    ['La médiathèque', 'Toute la collection,<br>d\'un coup d\'œil.', 'Tri, filtres par genre, décennie et non-vus, saut alphabétique, collections et playlists.'],
+    ['Le lecteur', 'Chapitres, pistes,<br>sous-titres.', 'Chapitres illustrés, pistes audio, sous-titres, vitesse et Picture-in-Picture. Plus « Passer l\'intro », épisode suivant et minuteur d\'arrêt.'],
+    ['Recherche', 'Films, séries,<br>acteurs.', 'Une seule recherche pour toute la médiathèque — à l\'écrit ou à la voix. Plus les filtres par genre, décennie et non-vus.'],
+    ['Widgets et Siri', 'À suivre, en cours,<br>sur l\'écran d\'accueil.', 'Quatre widgets — En cours, À suivre, Récemment ajoutés, Favoris — plus le Centre de contrôle, le bouton Action et Siri.'],
+  ],
+  en: [
+    ['Home', 'Fast, easy access<br>to everything.', 'Your whole Jellyfin library, in an interface written for iPhone.'],
+    ['Built-in VLC engine', 'Streams tuned<br>for your media.', 'MKV, Dolby Vision, HDR10+, Atmos: your server sends the file as it is. Your NAS stays cool.'],
+    ['The library', 'Every title,<br>at a glance.', 'Sorting, filters by genre, decade and unwatched, A-Z jump, collections and playlists.'],
+    ['The player', 'Chapters, tracks,<br>subtitles.', 'Illustrated chapters, audio tracks, subtitles, speed and Picture in Picture. Plus Skip Intro, next episode and a sleep timer.'],
+    ['Search', 'Movies, shows,<br>actors.', 'One search for the whole library, typed or spoken. Plus filters by genre, decade and unwatched.'],
+    ['Widgets and Siri', 'Widgets for<br>your Home Screen.', 'Four widgets — Continue Watching, Next Up, Recently Added, Favorites — plus Control Center, the Action button and Siri.'],
+  ],
+  de: [
+    ['Startseite', 'Schneller Zugriff<br>auf alles.', 'Deine ganze Jellyfin-Mediathek, in einer Oberfläche, die fürs iPhone gemacht ist.'],
+    ['Integrierte VLC-Engine', 'Streams, passend<br>zu deinen Medien.', 'MKV, Dolby Vision, HDR10+, Atmos: Dein Server schickt die Datei, wie sie ist. Dein NAS bleibt kühl.'],
+    ['Die Mediathek', 'Jeder Titel<br>auf einen Blick.', 'Sortierung, Filter nach Genre, Jahrzehnt und Ungesehenem, A–Z-Sprung, Sammlungen und Playlists.'],
+    ['Der Player', 'Kapitel, Tonspuren,<br>Untertitel.', 'Kapitel mit Vorschaubildern, Tonspuren, Untertitel, Tempo und Bild-in-Bild. Dazu „Intro überspringen“, nächste Folge und Schlaftimer.'],
+    ['Suche', 'Filme, Serien,<br>Schauspieler.', 'Eine Suche für die ganze Mediathek – getippt oder gesprochen. Dazu Filter nach Genre, Jahrzehnt und Ungesehenem.'],
+    ['Widgets und Siri', 'Widgets für deinen<br>Home-Bildschirm.', 'Vier Widgets – Weiterschauen, Als Nächstes, Neu hinzugefügt, Favoriten – dazu Kontrollzentrum, Aktionstaste und Siri.'],
+  ],
+};
+const [e, h, s] = TXT[lang][n - 1];
+const shot = q.get('shot') ? `<img src="${q.get('dir')}/${q.get('shot')}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top">` : '';
+document.getElementById('stage').innerHTML = `
+<div class="panel">
+ <div class="bloom"></div>
+ <div style="position:absolute;left:36px;right:36px;top:52px;z-index:4">
+   <div class="eyebrow" style="font-size:11px;letter-spacing:.22em">${e}</div>
+   <h2 class="head" style="font-size:40px;line-height:1.02;margin-top:14px">${h}</h2>
+   <p class="sub" style="font-size:14.5px;line-height:1.42;margin-top:14px;max-width:330px">${s}</p>
+ </div>
+ ${n > 1 ? `<div class="dev" style="width:272px;height:590px;border-radius:34px;left:238px;top:430px;transform:rotate(8deg);opacity:.42;filter:saturate(.7)"><div class="scr" style="background:linear-gradient(170deg,#182028,#0E0E0E)"></div></div>` : ''}
+ <div class="dev" style="width:302px;height:654px;border-radius:38px;left:69px;top:300px;transform:rotate(-3deg)">
+  <div class="scr">${shot}</div>
+ </div>
+ <div class="grain"></div>
+</div>`;
+</script></body></html>
