@@ -182,6 +182,8 @@ enum SettingsFocus: Hashable {
     case accentColor(String)
     case language(String)
     case rateApp
+    /// The landing's « Votre niveau » chip.
+    case tierChip
 }
 #endif
 

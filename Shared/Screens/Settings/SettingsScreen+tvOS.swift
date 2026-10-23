@@ -53,6 +53,13 @@ extension SettingsScreen {
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
             }
+            // « Licences open source » sits low enough that focusing it
+            // scrolls the landing a little, which hides the tab bar: from the
+            // chip — nothing above it in its column — Up then found nothing
+            // at all. The chip brings the page back to its top.
+            .onChange(of: focusedItem) { _, item in
+                if item == .tierChip { proxy.scrollTo("settings.top", anchor: .top) }
+            }
             .onChange(of: selectedInterfaceSub) { _, newValue in
                 if newValue == nil {
                     proxy.scrollTo("settings.top", anchor: .top)
@@ -131,6 +138,14 @@ extension SettingsScreen {
         // Another tab, or a category: the landing will pick a first focus
         // again when it comes back, which must be a pill again.
         .onDisappear { tierChipFocusable = false }
+        // Up into the tab bar: Select on « Réglages » brings focus back with
+        // the same top-leading pick, and the armed chip won it (recette
+        // 2026-10-23, DEF-TV2) — re-selecting the current tab never fires
+        // `onDisappear`. Not `focusedItem == nil`: « Licences open source »
+        // has no focus value either, and Left from it must reach the chip.
+        .onReceive(NotificationCenter.default.publisher(for: UIFocusSystem.didUpdateNotification)) { note in
+            if TVTopBarFocus.isInTopBar(note) == true { tierChipFocusable = false }
+        }
     }
 
     var tvBrandPanel: some View {
@@ -178,6 +193,7 @@ extension SettingsScreen {
                 // (recette 2026-10-14, TV-06; same pick as TV-09).
                 if let look = headerTierLook {
                     ProTierChip(tier: look.tier) { selectedCategory = .pro }
+                        .focused($focusedItem, equals: .tierChip)
                         .padding(.top, CinemaSpacing.spacing4)
                         .disabled(!tierChipFocusable)
                 }
@@ -220,6 +236,11 @@ extension SettingsScreen {
                 .padding(.horizontal, CinemaTVLayout.pagePadding)
                 .padding(.bottom, CinemaSpacing.spacing8)
         }
+        // The chip sits lower than every pill, with nothing opposite it: a
+        // right press from it found no candidate in its row and did nothing
+        // (recette 2026-10-23, DEF-TV1). As a section the whole half answers,
+        // and hands focus to its nearest pill.
+        .focusSection()
     }
 
     @ViewBuilder
