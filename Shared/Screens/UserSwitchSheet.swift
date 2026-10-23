@@ -29,6 +29,13 @@ struct UserSwitchSheet: View {
     @State private var authError: String?
     @State private var showManualEntry = false
     @State private var manualUsername: String = ""
+    #if os(iOS)
+    /// The manual step's Return chain: « Suivant » on the username moves to
+    /// the password, as on the login screen (recette 2026-10-23, DEF-IOS2 —
+    /// the key read « Suivant » and did nothing).
+    private enum ManualField: Hashable { case username, password }
+    @FocusState private var manualField: ManualField?
+    #endif
     /// Opens straight on the manual step with this username — reconnecting a
     /// remembered account whose session expired (multi-account).
     var prefilledUsername: String?
@@ -172,6 +179,14 @@ struct UserSwitchSheet: View {
                 enterManualMode()
             }
             .padding(.bottom, CinemaSpacing.spacing4)
+            #if os(tvOS)
+            // Centred under a LEFT-aligned grid, it overlapped no tile's
+            // column: down, left and right from a lone tile found nothing and
+            // it could never take focus (recette 2026-10-23, DEF-TV3). A
+            // full-width section answers a down press from any tile.
+            .frame(maxWidth: .infinity)
+            .focusSection()
+            #endif
         }
         #if os(tvOS)
         // The tiles carry `CinemaTVCardButtonStyle`, which grows on focus —
@@ -370,6 +385,8 @@ struct UserSwitchSheet: View {
                 #if os(iOS)
                 .textContentType(.username)
                 .submitLabel(.next)
+                .focused($manualField, equals: .username)
+                .onSubmit { manualField = .password }
                 #endif
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.vertical, CinemaSpacing.spacing3)
@@ -381,6 +398,7 @@ struct UserSwitchSheet: View {
                 .textContentType(.password)
                 #if os(iOS)
                 .submitLabel(.go)
+                .focused($manualField, equals: .password)
                 #endif
                 .onSubmit {
                     guard !isAuthenticating,
