@@ -1459,6 +1459,7 @@
 "pro.feature.accounts.detail" = "Jedes Profil bleibt angemeldet: Wechsel mit einem Tipp, ohne Passwort, auf Wunsch mit Code.";
 "pro.feature.admin.title" = "Dein Server in der Tasche";
 "pro.feature.admin.detail" = "Benutzer, Geräte, Aufgaben und Metadaten – vom iPhone oder iPad aus verwaltet, ganz ohne Computer.";
+"pro.feature.admin.detail.tv" = "Auf iPhone und iPad: Benutzer, Geräte, Aufgaben und Metadaten deines Servers – ganz ohne Computer.";
 "pro.feature.playOn.title" = "„Abspielen auf …“ dem Apple TV";
 "pro.feature.playOn.detail" = "Wähle einen Film auf dem iPhone, er startet auf dem Fernseher im Wohnzimmer.";
 "pro.feature.playOn.title.tv" = "„Abspielen auf …“ einem anderen Bildschirm";
@@ -1469,6 +1470,7 @@
 "pro.feature.seasonal.detail" = "Halloween im April? Behalte dein Lieblingsthema, so lange du willst.";
 "pro.feature.shortcuts.title" = "Siri und Kurzbefehle";
 "pro.feature.shortcuts.detail" = "„Fortsetzen“ aus dem Kontrollzentrum, mit Siri und deinen Kurzbefehlen.";
+"pro.feature.shortcuts.detail.tv" = "Auf iPhone und iPad: „Fortsetzen“ mit Siri, deinen Kurzbefehlen und aus dem Kontrollzentrum.";
 "pro.tier.title" = "Deine Stufe";
 "pro.tier.founder" = "Gründer";
 "pro.tier.pro" = "Pro";

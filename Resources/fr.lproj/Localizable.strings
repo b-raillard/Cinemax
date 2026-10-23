@@ -1461,6 +1461,7 @@
 "pro.feature.accounts.detail" = "Chaque profil reste connecté : on passe de l'un à l'autre d'un geste, sans mot de passe, protégé par un code si besoin.";
 "pro.feature.admin.title" = "Votre serveur dans la poche";
 "pro.feature.admin.detail" = "Utilisateurs, appareils, tâches et métadonnées, gérés depuis l'iPhone ou l'iPad, sans ordinateur.";
+"pro.feature.admin.detail.tv" = "Sur iPhone et iPad : utilisateurs, appareils, tâches et métadonnées de votre serveur, sans ordinateur.";
 "pro.feature.playOn.title" = "« Lire sur… » l'Apple TV";
 "pro.feature.playOn.detail" = "Choisissez un film sur l'iPhone, il démarre sur la télé du salon.";
 "pro.feature.playOn.title.tv" = "« Lire sur… » un autre écran";
@@ -1471,6 +1472,7 @@
 "pro.feature.seasonal.detail" = "Halloween en avril ? Gardez votre thème préféré aussi longtemps que vous voulez.";
 "pro.feature.shortcuts.title" = "Siri et Raccourcis";
 "pro.feature.shortcuts.detail" = "« Reprendre » depuis le Centre de contrôle, Siri et vos raccourcis.";
+"pro.feature.shortcuts.detail.tv" = "Sur iPhone et iPad : « Reprendre » depuis Siri, vos raccourcis et le Centre de contrôle.";
 "pro.tier.title" = "Votre niveau";
 "pro.tier.founder" = "Fondateur";
 "pro.tier.pro" = "Pro";
