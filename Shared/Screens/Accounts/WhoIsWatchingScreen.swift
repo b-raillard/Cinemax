@@ -269,7 +269,8 @@ struct WhoIsWatchingScreen: View {
                 }
                 CinemaButton(title: loc.localized("action.cancel"), style: .ghost) { cancelReconnection() }
                 if !appState.keepsAccountSessions, entitlements != nil {
-                    CinemaButton(title: loc.localized("pro.reconnect.hint"), style: .ghost, icon: "sparkles") {
+                    CinemaButton(title: loc.localized("pro.reconnect.hint"), style: .ghost, icon: "sparkles",
+                                 wrapsTitle: true) {
                         showUpsell = true
                     }
                 }

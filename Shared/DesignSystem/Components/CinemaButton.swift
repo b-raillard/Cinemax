@@ -21,6 +21,10 @@ struct CinemaButton: View {
     var style: CinemaButtonStyle = .primary
     var icon: String? = nil
     var isLoading: Bool = false
+    /// Opt-in: a sentence-long title wraps (centred) instead of shrinking
+    /// then truncating on one line — the free reconnection's Pro hint on
+    /// tvOS (recette 2026-10-23, DEF-TV4). Every CTA keeps one line.
+    var wrapsTitle: Bool = false
     let action: () -> Void
 
     /// Bumped on every tap so `.sensoryFeedback` fires once per press without
@@ -41,8 +45,10 @@ struct CinemaButton: View {
                     Text(title)
                         .font(.system(size: fontSize, weight: .bold))
                         .tracking(-0.3)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                        .lineLimit(wrapsTitle ? nil : 1)
+                        .minimumScaleFactor(wrapsTitle ? 1 : 0.7)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: wrapsTitle)
 
                     if let icon {
                         Image(systemName: icon)
