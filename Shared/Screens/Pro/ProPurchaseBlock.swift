@@ -10,10 +10,20 @@ struct ProPurchaseBlock: View {
     @Environment(ProStore.self) private var proStore
     @Environment(LocalizationManager.self) private var loc
 
-    /// Centred in the contextual sheet (both platforms); `.leading` on the
-    /// Apple TV Pro page, where the block is a left column beside
-    /// « Restaurer les achats », over a left-aligned note.
+    /// How the block reads its price.
+    enum Style {
+        /// « Débloquer — 7,99 € » over the footnote: the contextual sheet.
+        case cta
+        /// The price on its own line (« 7,99 € une seule fois »), then
+        /// « Débloquer »: the Pro page's purchase panel (design C), whose
+        /// promises replace the footnote.
+        case panel(price: Font, note: Font)
+    }
+
+    /// Centred in the contextual sheet (both platforms); `.leading` in the
+    /// Pro page's panel.
     var alignment: HorizontalAlignment = .center
+    var style: Style = .cta
 
     private var textAlignment: TextAlignment { alignment == .leading ? .leading : .center }
 
@@ -21,6 +31,27 @@ struct ProPurchaseBlock: View {
         VStack(alignment: alignment, spacing: CinemaSpacing.spacing3) {
             if proStore.isPending {
                 ProNoticeCard(text: loc.localized("pro.pending"), systemImage: "hourglass")
+            } else if let product = proStore.product, case let .panel(priceFont, noteFont) = style {
+                HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
+                    Text(product.displayPrice)
+                        .font(priceFont)
+                        .tracking(-1)
+                        .foregroundStyle(CinemaColor.onTitanium)
+                    Text(loc.localized("pro.price.once"))
+                        .font(noteFont)
+                        .foregroundStyle(CinemaColor.onTitaniumVariant)
+                }
+                .accessibilityElement(children: .combine)
+                CinemaButton(
+                    title: loc.localized("pro.buy.short"),
+                    style: .accent,
+                    isLoading: proStore.isPurchasing
+                ) {
+                    Task { await proStore.purchase() }
+                }
+                .disabled(proStore.isPurchasing)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(loc.localized("pro.buy", product.displayPrice))
             } else if let product = proStore.product {
                 CinemaButton(
                     title: loc.localized("pro.buy", product.displayPrice),

@@ -182,6 +182,14 @@ enum CinemaTVLayout {
     /// The square poster-stack cover heading a playlist's own page.
     static let playlistCoverSide: CGFloat = 320
 
+    // MARK: Pro page (design C, 2026-10-24)
+
+    /// The Gratuit and Pro columns of the comparison table.
+    static let proCompareColumnWidth: CGFloat = 190
+    /// The purchase panel right of the table, and the gap between them.
+    static let proPanelWidth: CGFloat = 560
+    static let proPanelGap: CGFloat = 64
+
     // MARK: Grids
 
     /// Every 2:3 poster grid in the app: library, search, favourites, watch

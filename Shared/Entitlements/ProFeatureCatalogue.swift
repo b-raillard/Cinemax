@@ -22,6 +22,9 @@ nonisolated enum ProFeatureCatalogue {
         /// Siri / Raccourcis exist on iPhone / iPad only). Nil = same text on both.
         var tvTitleKey: String?
         var tvDetailKey: String?
+        /// The Apple TV's own table line (`.row.tv`), where the iPhone's
+        /// would be wrong there — the same features as `tvDetailKey`.
+        var tvRowKey: String?
 
         func displayTitleKey(onTV: Bool) -> String { onTV ? (tvTitleKey ?? titleKey) : titleKey }
         func displayDetailKey(onTV: Bool) -> String { onTV ? (tvDetailKey ?? detailKey) : detailKey }
@@ -29,9 +32,11 @@ nonisolated enum ProFeatureCatalogue {
         var shownTitleKey: String { displayTitleKey(onTV: ProFeatureCatalogue.isTV) }
         var shownDetailKey: String { displayDetailKey(onTV: ProFeatureCatalogue.isTV) }
 
-        /// The one- or two-word label of the Apple TV pills (« Comptes »,
-        /// « Lire sur… ») — `pro.feature.<name>.short`.
-        var shortKey: String { titleKey.replacingOccurrences(of: ".title", with: ".short") }
+        /// The one-line detail of the Pro page's Gratuit / Pro table (design C,
+        /// 2026-10-24) — `pro.feature.<name>.row`, a short `detailKey`.
+        var rowKey: String { titleKey.replacingOccurrences(of: ".title", with: ".row") }
+        func displayRowKey(onTV: Bool) -> String { onTV ? (tvRowKey ?? rowKey) : rowKey }
+        var shownRowKey: String { displayRowKey(onTV: ProFeatureCatalogue.isTV) }
     }
 
     static let features: [Feature] = [
@@ -40,9 +45,10 @@ nonisolated enum ProFeatureCatalogue {
         // Sold on the Apple TV too (the purchase covers the iPhone / iPad
         // through iCloud), whose wording says where it lives (Q-PROTV).
         Feature(id: .administration, titleKey: "pro.feature.admin.title", detailKey: "pro.feature.admin.detail", icon: "shield.lefthalf.filled", isGated: true,
-                tvDetailKey: "pro.feature.admin.detail.tv"),
+                tvDetailKey: "pro.feature.admin.detail.tv", tvRowKey: "pro.feature.admin.row.tv"),
         Feature(id: .playOn, titleKey: "pro.feature.playOn.title", detailKey: "pro.feature.playOn.detail", icon: "tv.badge.wifi", isGated: true,
-                tvTitleKey: "pro.feature.playOn.title.tv", tvDetailKey: "pro.feature.playOn.detail.tv"),
+                tvTitleKey: "pro.feature.playOn.title.tv", tvDetailKey: "pro.feature.playOn.detail.tv",
+                tvRowKey: "pro.feature.playOn.row.tv"),
         // Lot D: the picker of Réglages → Apparence → « Icône de l'app »,
         // through `ProFeatureGate.mayChooseAppIcon` (the default icon is free).
         Feature(id: .appIcons, titleKey: "pro.feature.icons.title", detailKey: "pro.feature.icons.detail", icon: "app.badge", isGated: true),
@@ -50,7 +56,28 @@ nonisolated enum ProFeatureCatalogue {
         // keeps Automatique (Halloween in season) and Désactivé.
         Feature(id: .seasonalAllYear, titleKey: "pro.feature.seasonal.title", detailKey: "pro.feature.seasonal.detail", icon: "leaf", isGated: true),
         Feature(id: .shortcuts, titleKey: "pro.feature.shortcuts.title", detailKey: "pro.feature.shortcuts.detail", icon: "square.stack.3d.up", isGated: true,
-                tvDetailKey: "pro.feature.shortcuts.detail.tv")
+                tvDetailKey: "pro.feature.shortcuts.detail.tv", tvRowKey: "pro.feature.shortcuts.row.tv")
+    ]
+
+    /// A « Toujours gratuit » line of the Pro page's table: what the free tier
+    /// keeps, said before what Pro adds — playback is never sold.
+    struct FreeRow: Identifiable, Sendable, Equatable {
+        let id: String
+        let titleKey: String
+        let rowKey: String
+        /// The Apple TV has a Top Shelf and no widgets, no PiP.
+        let tvRowKey: String
+        let icon: String
+
+        func displayRowKey(onTV: Bool) -> String { onTV ? tvRowKey : rowKey }
+        var shownRowKey: String { displayRowKey(onTV: ProFeatureCatalogue.isTV) }
+    }
+
+    static let alwaysFree: [FreeRow] = [
+        FreeRow(id: "playback", titleKey: "pro.free.playback.title", rowKey: "pro.free.playback.row",
+                tvRowKey: "pro.free.playback.row.tv", icon: "play.rectangle"),
+        FreeRow(id: "library", titleKey: "pro.free.library.title", rowKey: "pro.free.library.row",
+                tvRowKey: "pro.free.library.row.tv", icon: "square.grid.2x2")
     ]
 
     static let isTV: Bool = {

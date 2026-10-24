@@ -426,13 +426,14 @@ struct ProFeatureCatalogueTests {
         #expect(gated == [.memorizedAccounts, .administration, .playOn, .appIcons, .seasonalAllYear, .shortcuts])
     }
 
-    @Test("Chaque fonction a son titre, son détail et son nom court, dans chaque langue")
+    @Test("Chaque fonction a son titre, son détail et sa ligne de tableau, dans chaque langue")
     func keysExistInEveryLanguage() throws {
         for lang in AppLanguage.supported {
             let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
             let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
             for feature in ProFeatureCatalogue.features {
-                for key in [feature.titleKey, feature.detailKey, feature.shortKey,
+                for key in [feature.titleKey, feature.detailKey,
+                            feature.displayRowKey(onTV: false), feature.displayRowKey(onTV: true),
                             feature.displayTitleKey(onTV: true), feature.displayDetailKey(onTV: true)] {
                     #expect(table[key] != nil, "\(lang): \(key)")
                 }
@@ -480,6 +481,48 @@ struct ProFeatureCatalogueTests {
                 let tvKey = feature.displayDetailKey(onTV: true)
                 #expect(table[tvKey] != nil, "\(lang): \(tvKey)")
                 #expect(table[tvKey] != table[feature.detailKey], "\(lang): \(id)")
+            }
+        }
+    }
+
+    /// Design C of the Pro page (chosen 2026-10-24): a Gratuit / Pro table.
+    /// Its « Toujours gratuit » rows say what playback keeps for free, in the
+    /// page's order, each with a title and a one-line detail.
+    @Test("Le tableau Gratuit / Pro commence par ce qui reste gratuit")
+    func alwaysFreeRows() {
+        #expect(ProFeatureCatalogue.alwaysFree.map(\.id) == ["playback", "library"])
+        for row in ProFeatureCatalogue.alwaysFree {
+            #expect(row.displayRowKey(onTV: false) != row.displayRowKey(onTV: true), "\(row.id): the TV has a Top Shelf, not widgets")
+        }
+    }
+
+    /// The table's one-line details: short versions of `detailKey`, so a row
+    /// holds on one or two lines beside the two columns. Where the long detail
+    /// already speaks from the Apple TV, the row does too.
+    @Test("Les lignes du tableau parlent depuis l'Apple TV là où le détail le fait")
+    func rowKeysFollowTheTV() {
+        let tvRows: [ProFeatureID: String] = [
+            .administration: "pro.feature.admin.row.tv",
+            .playOn: "pro.feature.playOn.row.tv",
+            .shortcuts: "pro.feature.shortcuts.row.tv"
+        ]
+        for feature in ProFeatureCatalogue.features {
+            #expect(feature.displayRowKey(onTV: false) == feature.titleKey.replacingOccurrences(of: ".title", with: ".row"))
+            #expect(feature.displayRowKey(onTV: true) == (tvRows[feature.id] ?? feature.displayRowKey(onTV: false)), "\(feature.id)")
+        }
+    }
+
+    @Test("Chaque texte de la page Pro existe dans chaque langue")
+    func pageKeysExistInEveryLanguage() throws {
+        var keys = ProScreenText.keys
+        for row in ProFeatureCatalogue.alwaysFree {
+            keys += [row.titleKey, row.displayRowKey(onTV: false), row.displayRowKey(onTV: true)]
+        }
+        for lang in AppLanguage.supported {
+            let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
+            let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
+            for key in keys {
+                #expect(table[key] != nil, "\(lang): \(key)")
             }
         }
     }

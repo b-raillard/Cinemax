@@ -189,7 +189,7 @@ struct ProTierChip: View {
 }
 
 /// The inks of a tier's material (`ProTierMaterial`): the metallic name, the
-/// wordmark, the secondary text and the emblem. The material is dark in both
+/// eyebrow, the secondary text of the Pro page's panel. The material is dark in both
 /// modes, so none of these follow light / dark.
 @MainActor
 struct ProTierInks {
@@ -222,44 +222,16 @@ struct ProTierInks {
     var secondaryInk: Color {
         tier == .founder ? CinemaColor.onFounderCard.opacity(0.8) : CinemaColor.onTitaniumVariant
     }
-
-    var emblemFill: AnyShapeStyle {
-        switch tier {
-        case .founder:
-            AnyShapeStyle(LinearGradient(colors: [CinemaColor.founderGoldPale, CinemaColor.founderGoldLight], startPoint: .topLeading, endPoint: .bottomTrailing))
-        case .pro:
-            AnyShapeStyle(LinearGradient(colors: [accentLight, accent], startPoint: .topLeading, endPoint: .bottomTrailing))
-        case .free:
-            AnyShapeStyle(accent.opacity(0.2))
-        }
-    }
-
-    var emblemInk: Color {
-        switch tier {
-        case .founder: CinemaColor.founderGoldDeep
-        case .pro: CinemaColor.onMetalEmblem
-        case .free: accent
-        }
-    }
-
-    /// SF Symbol of the emblem — the medal's glyph, a play mark for free.
-    var emblemGlyph: String {
-        switch tier {
-        case .founder: "star.fill"
-        case .pro: "checkmark"
-        case .free: "play.fill"
-        }
-    }
 }
 
 /// A tier's material, the same in light and dark mode: a near-black ground
 /// carrying the tier's colour, brushed hairlines, a faint corner light, and
 /// the colour itself kept for the metallic name and the emblem — gold for a
 /// founder, the accent for Pro, neutral graphite for free. The founder's quiet
-/// recipe (recette 2026-10-13), worn edge to edge by the Apple TV « Votre
-/// niveau » page (design D) and by the iPhone / iPad membership card (design C,
-/// 2026-10-14). The earlier bright metal read as a wall of yellow, a muddy grey
-/// and two smudges.
+/// recipe (recette 2026-10-13), worn edge to edge behind the Apple TV « Votre
+/// niveau » page and by the Pro page's purchase panel on every platform
+/// (design C, 2026-10-24). The earlier bright metal read as a wall of yellow,
+/// a muddy grey and two smudges.
 struct ProTierMaterial: View {
     let tier: ProTier
     let accent: Color
@@ -325,22 +297,6 @@ struct ProTierMaterial: View {
     }
 }
 
-/// The emblem disc of a tier (star, check, play) on its material.
-struct ProTierEmblem: View {
-    let inks: ProTierInks
-    let size: CGFloat
-
-    var body: some View {
-        Image(systemName: inks.emblemGlyph)
-            .font(.system(size: size * 0.47, weight: .black))
-            .foregroundStyle(inks.emblemInk)
-            .frame(width: size, height: size)
-            .background(inks.emblemFill, in: Circle())
-            // No glow: it smeared the mark (recette 2026-10-13).
-            .accessibilityHidden(true)
-    }
-}
-
 extension ProTier {
     /// « Tout est inclus, pour toujours » / « Merci de soutenir JellyGlass » /
     /// « Lecture complète, sans limite ».
@@ -350,65 +306,5 @@ extension ProTier {
         case .pro: loc.localized("pro.card.line.pro")
         case .free: loc.localized("pro.card.line.free")
         }
-    }
-}
-
-/// The membership card — the head of the Pro page on iPhone and iPad (design C
-/// of the card study, 2026-10-14): the Apple TV page's material at card size,
-/// plus a fine edge in the tier's colour to set it off the page. No coloured
-/// shadow or halo; on a light page, a neutral shadow lifts the dark card.
-struct ProMembershipCard: View {
-    @Environment(LocalizationManager.self) private var loc
-    @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.colorScheme) private var colorScheme
-
-    let tier: ProTier
-    /// « Membre depuis juin 2026 » — `nil` when the date is not known (a
-    /// Debug-forced tier, no App Store answer yet).
-    let since: String?
-
-    private var inks: ProTierInks { ProTierInks(tier: tier, accent: themeManager.accent) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top) {
-                Text(loc.localized("pro.card.wordmark"))
-                    .font(CinemaFont.dynamicLabel(.medium))
-                    .fontWeight(.black)
-                    .tracking(3)
-                    .foregroundStyle(inks.wordmarkInk)
-                Spacer()
-                ProTierEmblem(inks: inks, size: 38)
-            }
-            Spacer(minLength: CinemaSpacing.spacing4)
-            Text(tier.name(loc))
-                .font(CinemaFont.dynamicSystem(32, weight: .black, relativeTo: .title1))
-                .foregroundStyle(inks.nameStyle)
-            Text(tier.cardLine(loc))
-                .font(CinemaFont.dynamicLabel(.medium))
-                .foregroundStyle(inks.secondaryInk)
-                .padding(.top, 2)
-            if let since {
-                Text(since)
-                    .font(CinemaFont.dynamicLabel(.small))
-                    .fontWeight(.bold)
-                    .tracking(1)
-                    .textCase(.uppercase)
-                    .foregroundStyle(inks.secondaryInk)
-                    .padding(.top, CinemaSpacing.spacing3)
-            }
-        }
-        .padding(CinemaSpacing.spacing4)
-        .frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading)
-        .background(ProTierMaterial(tier: tier, accent: themeManager.accent))
-        .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
-        // The edge: a fine filet in the tier's colour (gold, the accent), a
-        // faint light one on free's neutral graphite.
-        .overlay {
-            RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
-                .strokeBorder(tier == .free ? CinemaColor.metalLight.opacity(0.16) : inks.tint.opacity(0.45), lineWidth: 1)
-        }
-        .shadow(color: colorScheme == .light ? CinemaColor.metalShade.opacity(0.18) : .clear, radius: 18, y: 6)
-        .accessibilityElement(children: .combine)
     }
 }
