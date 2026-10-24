@@ -18,6 +18,8 @@ Sends an item's playback to **another** Jellyfin session (typically the Apple TV
 - Glyph is `tv.badge.wifi`, deliberately **not** the AirPlay glyph — using it would misrepresent both the mechanism and what the phone keeps.
 - **`activeWithinSeconds: 300`** bounds staleness explicitly instead of trusting the server's own notion of "active"; a stale entry costs only a no-op command the server drops. The call is deliberately **uncached** — the whole point is which devices are awake right now.
 
+- **« Reprendre ici » (2026-10-24) is the one place this app SENDS a Playstate**: `RemoteControlAPI.stopSession(sessionId:)` (`POST /Sessions/{id}/Playing/Stop`), after a `sendMessage`, only to another session of the SAME user that declared remote control — see the RULE in `docs/rules/home.md`. The receiver closes its player through `RemotePlaystateRouter` as for any close. The message carries THIS device's name, `JellyfinAPIClient.sessionDeviceName` (the `DeviceName` the session announces).
+
 #### Receiving side — being a target (`RemoteControlListener.swift`, `JellyfinSocket.swift`)
 
 Until this was added the app could only **send**: it never declared its capabilities, so `SessionInfoDto.supportsRemoteControl` was false on every Cinemax session and `RemotePlayTarget.resolve` (which requires that flag) filtered it out of every picker — including this app's own. « Lire sur… » therefore could not target Cinemax on the Apple TV, its main use case.

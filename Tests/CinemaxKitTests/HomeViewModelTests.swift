@@ -860,3 +860,75 @@ struct HomeSnapshotTests {
         #expect(files.isEmpty)
     }
 }
+
+// MARK: - « Reprendre ici » (spec 2026-10-24)
+
+@MainActor
+@Suite("Accueil — Reprendre ici")
+struct HomeResumeHereTests {
+    private func tvSession(canStop: Bool = true) -> SessionInfoDto {
+        var session = SessionInfoDto()
+        session.id = "s-tv"
+        session.userID = "user1"
+        session.deviceID = "device-tv"
+        session.deviceName = "Apple TV"
+        session.isSupportsRemoteControl = canStop
+        session.nowPlayingItem = BaseItemDto(id: "movie-1")
+        var state = PlayerStateInfo()
+        state.positionTicks = 25_330_000_000
+        state.isPaused = true
+        session.playState = state
+        return session
+    }
+
+    private func setup(allowed: Bool, canStop: Bool = true) -> (HomeViewModel, AppState, MockAPIClient) {
+        let api = MockAPIClient()
+        api.stubbedControllableSessions = [tvSession(canStop: canStop)]
+        let appState = AppState(apiClient: api, keychain: MockKeychain())
+        appState.currentUserId = "user1"
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        vm.allowsElsewhere = { allowed }
+        return (vm, appState, api)
+    }
+
+    @Test("Pro: the item playing on the Apple TV is known; free: nothing is asked")
+    func gate() async {
+        let (pro, proState, proAPI) = setup(allowed: true)
+        await pro.refreshElsewhere(using: proState)
+        #expect(pro.elsewhere["movie-1"]?.deviceName == "Apple TV")
+        #expect(proAPI.controllableSessionsCallCount == 1)
+
+        let (free, freeState, freeAPI) = setup(allowed: false)
+        await free.refreshElsewhere(using: freeState)
+        #expect(free.elsewhere.isEmpty)
+        #expect(freeAPI.controllableSessionsCallCount == 0)
+    }
+
+    @Test("Handing off tells the source, then stops it — once — and the pill does not come back")
+    func handOff() async throws {
+        let (vm, appState, api) = setup(allowed: true)
+        await vm.refreshElsewhere(using: appState)
+        let entry = try #require(vm.elsewhere["movie-1"])
+
+        vm.handOff(entry, using: appState, message: "Lecture reprise sur iPhone")
+        vm.handOff(entry, using: appState, message: "Lecture reprise sur iPhone")
+        #expect(vm.elsewhere.isEmpty)
+        await eventually { api.handoffCalls.count == 2 }
+        #expect(api.handoffCalls == ["message:s-tv:Lecture reprise sur iPhone", "stop:s-tv"])
+
+        // The cached probe still lists the source: it stays hidden.
+        await vm.refreshElsewhere(using: appState)
+        #expect(vm.elsewhere.isEmpty)
+    }
+
+    @Test("A source that cannot be driven is never sent anything")
+    func cannotStop() async throws {
+        let (vm, appState, api) = setup(allowed: true, canStop: false)
+        await vm.refreshElsewhere(using: appState)
+        let entry = try #require(vm.elsewhere["movie-1"])
+        // `handOff` returns before creating any task for such a source.
+        vm.handOff(entry, using: appState, message: "x")
+        #expect(api.handoffCalls.isEmpty)
+        #expect(vm.elsewhere.isEmpty)
+    }
+}

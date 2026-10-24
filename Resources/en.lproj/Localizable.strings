@@ -1506,6 +1506,19 @@
 "pro.feature.playOn.row" = "Start a film here, it plays on the TV";
 "pro.feature.playOn.row.tv" = "Send a film to another TV at home";
 "pro.feature.icons.row" = "3 Halloween editions and 9 colours";
+
+/* « Reprendre ici » (spec 2026-10-24) */
+"pro.feature.resumeHere.title" = "Resume here";
+"pro.feature.resumeHere.detail" = "Paused on the Apple TV? Pick it up on your iPhone at the same second; the TV stops.";
+"pro.feature.resumeHere.detail.tv" = "Playing on your iPhone? Pick it up on the TV at the same second; the iPhone stops.";
+"pro.feature.resumeHere.row" = "Pick up here what's playing on the TV";
+"pro.feature.resumeHere.row.tv" = "Pick up on the TV what's playing on your iPhone";
+"elsewhere.badge" = "ON %@";
+"elsewhere.unknownDevice" = "another device";
+"elsewhere.playing" = "Playing on %@";
+"elsewhere.paused" = "Paused on %@";
+"elsewhere.resumeHere" = "Resume here";
+"elsewhere.sourceMessage" = "Playback moved to %@";
 "pro.feature.seasonal.row" = "Keep Halloween as long as you like";
 "pro.feature.shortcuts.row" = "“Resume” from Siri and Control Center";
 "pro.feature.shortcuts.row.tv" = "On iPhone and iPad: “Resume” from Siri";

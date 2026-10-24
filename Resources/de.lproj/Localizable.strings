@@ -1506,6 +1506,19 @@
 "pro.feature.playOn.row" = "Film hier starten, er läuft auf dem Fernseher";
 "pro.feature.playOn.row.tv" = "Einen Film an einen anderen Fernseher im Haus schicken";
 "pro.feature.icons.row" = "3 Halloween-Editionen und 9 Farben";
+
+/* « Reprendre ici » (spec 2026-10-24) */
+"pro.feature.resumeHere.title" = "Hier fortsetzen";
+"pro.feature.resumeHere.detail" = "Auf dem Apple TV pausiert? Setze den Film auf dem iPhone an derselben Sekunde fort, der Fernseher stoppt.";
+"pro.feature.resumeHere.detail.tv" = "Läuft auf dem iPhone? Setze den Film auf dem Fernseher an derselben Sekunde fort, das iPhone stoppt.";
+"pro.feature.resumeHere.row" = "Hier fortsetzen, was auf dem Fernseher läuft";
+"pro.feature.resumeHere.row.tv" = "Auf dem Fernseher fortsetzen, was auf dem iPhone läuft";
+"elsewhere.badge" = "AUF %@";
+"elsewhere.unknownDevice" = "einem anderen Gerät";
+"elsewhere.playing" = "Läuft auf %@";
+"elsewhere.paused" = "Pausiert auf %@";
+"elsewhere.resumeHere" = "Hier fortsetzen";
+"elsewhere.sourceMessage" = "Wiedergabe auf %@ fortgesetzt";
 "pro.feature.seasonal.row" = "Behalte Halloween, so lange du willst";
 "pro.feature.shortcuts.row" = "„Fortsetzen“ mit Siri und aus dem Kontrollzentrum";
 "pro.feature.shortcuts.row.tv" = "Auf iPhone und iPad: „Fortsetzen“ mit Siri";

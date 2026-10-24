@@ -121,6 +121,10 @@ struct PlayLink<Label: View>: View {
     /// the detail screen's version row. `nil` lets `MediaSourceQuality` rank
     /// and choose, which is the default for every other entry point.
     var mediaSourceId: String? = nil
+    /// Runs as the player opens — « Reprendre ici » stops the other device
+    /// there (iOS: when the player appears, tvOS: on the press). Never decides
+    /// whether something plays.
+    var onStart: (@MainActor () -> Void)?
     @ViewBuilder let label: () -> Label
 
     #if os(tvOS)
@@ -131,6 +135,7 @@ struct PlayLink<Label: View>: View {
     var body: some View {
         #if os(tvOS)
         Button {
+            onStart?()
             coordinator.play(
                 itemId: itemId, title: title, startTime: startTime,
                 previousEpisode: previousEpisode, nextEpisode: nextEpisode,
@@ -147,6 +152,7 @@ struct PlayLink<Label: View>: View {
                 previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                 episodeNavigator: episodeNavigator, mediaSourceId: mediaSourceId
             )
+            .onAppear { onStart?() }
         } label: {
             label()
         }

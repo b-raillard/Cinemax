@@ -49,6 +49,12 @@ nonisolated enum ProFeatureCatalogue {
         Feature(id: .playOn, titleKey: "pro.feature.playOn.title", detailKey: "pro.feature.playOn.detail", icon: "tv.badge.wifi", isGated: true,
                 tvTitleKey: "pro.feature.playOn.title.tv", tvDetailKey: "pro.feature.playOn.detail.tv",
                 tvRowKey: "pro.feature.playOn.row.tv"),
+        // « Reprendre ici » (spec 2026-10-24): the Continue Watching card and
+        // the hero say what plays on another of the user's devices, and take
+        // it over (that device stops). Gated in `HomeScreen` — what is SHOWN,
+        // never whether something plays.
+        Feature(id: .resumeHere, titleKey: "pro.feature.resumeHere.title", detailKey: "pro.feature.resumeHere.detail", icon: "arrow.left.arrow.right", isGated: true,
+                tvDetailKey: "pro.feature.resumeHere.detail.tv", tvRowKey: "pro.feature.resumeHere.row.tv"),
         // Lot D: the picker of Réglages → Apparence → « Icône de l'app »,
         // through `ProFeatureGate.mayChooseAppIcon` (the default icon is free).
         Feature(id: .appIcons, titleKey: "pro.feature.icons.title", detailKey: "pro.feature.icons.detail", icon: "app.badge", isGated: true),
@@ -97,6 +103,7 @@ nonisolated enum ProFeatureID: String, Sendable, CaseIterable, Identifiable {
     case memorizedAccounts
     case administration
     case playOn
+    case resumeHere
     case appIcons
     case seasonalAllYear
     case shortcuts

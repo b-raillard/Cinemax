@@ -1508,6 +1508,19 @@
 "pro.feature.playOn.row" = "Lancez un film ici, il démarre sur la télé";
 "pro.feature.playOn.row.tv" = "Envoyez un film vers une autre télé de la maison";
 "pro.feature.icons.row" = "3 éditions Halloween et 9 couleurs";
+
+/* « Reprendre ici » (spec 2026-10-24) */
+"pro.feature.resumeHere.title" = "Reprendre ici";
+"pro.feature.resumeHere.detail" = "Le film en pause sur l'Apple TV ? Reprenez-le sur l'iPhone à la même seconde, la télé s'arrête.";
+"pro.feature.resumeHere.detail.tv" = "Le film en cours sur l'iPhone ? Reprenez-le sur la télé à la même seconde, l'iPhone s'arrête.";
+"pro.feature.resumeHere.row" = "Reprenez ici ce qui joue sur la télé";
+"pro.feature.resumeHere.row.tv" = "Reprenez sur la télé ce qui joue sur l'iPhone";
+"elsewhere.badge" = "SUR %@";
+"elsewhere.unknownDevice" = "un autre appareil";
+"elsewhere.playing" = "En cours sur %@";
+"elsewhere.paused" = "En pause sur %@";
+"elsewhere.resumeHere" = "Reprendre ici";
+"elsewhere.sourceMessage" = "Lecture reprise sur %@";
 "pro.feature.seasonal.row" = "Gardez Halloween aussi longtemps que vous voulez";
 "pro.feature.shortcuts.row" = "« Reprendre » depuis Siri et le Centre de contrôle";
 "pro.feature.shortcuts.row.tv" = "Sur iPhone et iPad : « Reprendre » depuis Siri";

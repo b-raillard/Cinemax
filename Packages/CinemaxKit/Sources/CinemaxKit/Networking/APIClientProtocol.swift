@@ -635,6 +635,11 @@ public protocol RemoteControlAPI: RealtimeSocketAPI {
     /// including its own. Pass `false` to withdraw (the user's opt-out).
     func publishCapabilities(supportsMediaControl: Bool) async throws
 
+    /// Tells another of this user's sessions to stop playing
+    /// (`POST /Sessions/{id}/Playing/Stop`) — « Reprendre ici » takes the
+    /// playback over. The receiver closes its player as for any close.
+    func stopSession(sessionId: String) async throws
+
 }
 
 public extension RemoteControlAPI {
@@ -654,6 +659,7 @@ public extension RemoteControlAPI {
     ) async throws {}
     func publishCapabilities(supportsMediaControl: Bool) async throws {}
     func sendMessage(sessionId: String, header: String, text: String, timeoutMs: Int?) async throws {}
+    func stopSession(sessionId: String) async throws {}
 }
 
 // MARK: - Playlists

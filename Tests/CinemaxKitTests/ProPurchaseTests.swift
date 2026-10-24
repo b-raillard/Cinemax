@@ -410,7 +410,8 @@ struct ProFeatureCatalogueTests {
     @Test("Le périmètre Pro arrêté le 2026-10-22, dans l'ordre de la page")
     func scope() {
         #expect(ProFeatureCatalogue.features.map(\.id) == [
-            .memorizedAccounts, .administration, .playOn, .appIcons, .seasonalAllYear, .shortcuts,
+            // « Reprendre ici » joined on 2026-10-24, beside « Lire sur… ».
+            .memorizedAccounts, .administration, .playOn, .resumeHere, .appIcons, .seasonalAllYear, .shortcuts,
         ])
         #expect(ProFeatureID.allCases.count == ProFeatureCatalogue.features.count)
     }
@@ -423,7 +424,7 @@ struct ProFeatureCatalogueTests {
     @Test("Les fonctions réellement verrouillées après le lot D")
     func gatedSet() {
         let gated = Set(ProFeatureCatalogue.features.filter(\.isGated).map(\.id))
-        #expect(gated == [.memorizedAccounts, .administration, .playOn, .appIcons, .seasonalAllYear, .shortcuts])
+        #expect(gated == [.memorizedAccounts, .administration, .playOn, .resumeHere, .appIcons, .seasonalAllYear, .shortcuts])
     }
 
     @Test("Chaque fonction a son titre, son détail et sa ligne de tableau, dans chaque langue")
@@ -459,7 +460,9 @@ struct ProFeatureCatalogueTests {
         let iPhoneOnly: [ProFeatureID: String] = [
             .administration: "pro.feature.admin.detail.tv",
             .shortcuts: "pro.feature.shortcuts.detail.tv",
-            .memorizedAccounts: "pro.feature.accounts.detail.tv"
+            .memorizedAccounts: "pro.feature.accounts.detail.tv",
+            // « Reprendre ici » takes over what plays on the iPhone, from the TV.
+            .resumeHere: "pro.feature.resumeHere.detail.tv"
         ]
         for (id, tvDetail) in iPhoneOnly {
             let feature = try #require(ProFeatureCatalogue.feature(id))
@@ -504,6 +507,7 @@ struct ProFeatureCatalogueTests {
         let tvRows: [ProFeatureID: String] = [
             .administration: "pro.feature.admin.row.tv",
             .playOn: "pro.feature.playOn.row.tv",
+            .resumeHere: "pro.feature.resumeHere.row.tv",
             .shortcuts: "pro.feature.shortcuts.row.tv"
         ]
         for feature in ProFeatureCatalogue.features {

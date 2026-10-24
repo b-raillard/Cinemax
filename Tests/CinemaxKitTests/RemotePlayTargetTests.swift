@@ -151,3 +151,98 @@ struct RemotePlayTargetTests {
         #expect(out.map(\.id) == ["a", "b", "c"])
     }
 }
+
+// MARK: - « Reprendre ici » (spec 2026-10-24)
+
+private func playingSession(
+    id: String? = "s-tv",
+    userId: String? = "user-1",
+    deviceId: String? = "device-tv",
+    deviceName: String? = "Apple TV",
+    itemId: String? = "movie-1",
+    positionTicks: Int? = 25_330_000_000,
+    isPaused: Bool? = true,
+    checkIn: Date? = Date(timeIntervalSince1970: 2_000_000_000),
+    supportsRemoteControl: Bool? = true
+) -> SessionInfoDto {
+    var session = makeSession(
+        id: id, userId: userId, deviceId: deviceId, deviceName: deviceName,
+        supportsRemoteControl: supportsRemoteControl,
+        nowPlaying: itemId.map { BaseItemDto(id: $0, name: "Sprite Fright") }
+    )
+    var state = PlayerStateInfo()
+    state.positionTicks = positionTicks
+    state.isPaused = isPaused
+    session.playState = state
+    session.lastPlaybackCheckIn = checkIn
+    return session
+}
+
+@Suite("Lecture en cours ailleurs")
+struct ElsewherePlaybackTests {
+    let now = Date(timeIntervalSince1970: 2_000_000_060)
+
+    func resolve(_ sessions: [SessionInfoDto]) -> [String: ElsewherePlayback] {
+        ElsewherePlayback.resolve(
+            sessions: sessions, currentUserId: "user-1",
+            excludingDeviceId: "device-phone", now: now
+        )
+    }
+
+    @Test("my item paused on my Apple TV is keyed by its item id")
+    func keepsOwnOtherDevice() {
+        let entry = resolve([playingSession()])["movie-1"]
+        #expect(entry?.sessionId == "s-tv")
+        #expect(entry?.deviceName == "Apple TV")
+        #expect(entry?.isPaused == true)
+        #expect(entry?.positionTicks == 25_330_000_000)
+        #expect(entry?.canStop == true)
+    }
+
+    @Test("our own device, another user, no user, no id, nothing playing are dropped")
+    func dropsWhatIsNotElsewhere() {
+        let out = resolve([
+            playingSession(id: "a", deviceId: "device-phone"),
+            playingSession(id: "b", userId: "user-2"),
+            playingSession(id: "c", userId: nil),
+            playingSession(id: nil),
+            playingSession(id: "e", itemId: nil)
+        ])
+        #expect(out.isEmpty)
+    }
+
+    @Test("a check-in older than ten minutes is stale; a missing or sentinel one is unknown and kept")
+    func staleness() {
+        #expect(resolve([playingSession(checkIn: now.addingTimeInterval(-601))]).isEmpty)
+        #expect(resolve([playingSession(checkIn: now.addingTimeInterval(-599))]).count == 1)
+        #expect(resolve([playingSession(checkIn: nil)]).count == 1)
+        // .NET's DateTime.MinValue, as a server that never saw a check-in sends it.
+        #expect(resolve([playingSession(checkIn: Date(timeIntervalSinceReferenceDate: -63_113_904_000))]).count == 1)
+    }
+
+    @Test("two devices on the same item: the latest check-in wins")
+    func latestCheckInWins() {
+        let out = resolve([
+            playingSession(id: "old", deviceId: "d-ipad", deviceName: "iPad", checkIn: now.addingTimeInterval(-120)),
+            playingSession(id: "new", deviceName: "Apple TV", checkIn: now.addingTimeInterval(-5))
+        ])
+        #expect(out["movie-1"]?.sessionId == "new")
+    }
+
+    @Test("a session that cannot be driven is shown but never stopped")
+    func cannotStop() {
+        #expect(resolve([playingSession(supportsRemoteControl: false)])["movie-1"]?.canStop == false)
+    }
+
+    @Test("no device name stays empty, for the view to localize")
+    func emptyName() {
+        #expect(resolve([playingSession(deviceName: nil)])["movie-1"]?.deviceName == "")
+    }
+
+    @Test("start seconds come from the reported position, nil when there is none")
+    func startSeconds() {
+        #expect(resolve([playingSession()])["movie-1"]?.startSeconds == 2533)
+        #expect(resolve([playingSession(positionTicks: nil)])["movie-1"]?.startSeconds == nil)
+        #expect(resolve([playingSession(positionTicks: 0)])["movie-1"]?.startSeconds == nil)
+    }
+}

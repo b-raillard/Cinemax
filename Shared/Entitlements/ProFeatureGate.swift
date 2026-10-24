@@ -131,7 +131,7 @@ extension ProFeatureGate {
     /// its own rule (a lower tier, a trial) changes this line, not the sites.
     static func allows(_ feature: ProFeatureID, tier: ProTier) -> Bool {
         switch feature {
-        case .memorizedAccounts, .administration, .playOn, .appIcons, .seasonalAllYear, .shortcuts:
+        case .memorizedAccounts, .administration, .playOn, .resumeHere, .appIcons, .seasonalAllYear, .shortcuts:
             tier.unlocksProFeatures
         }
     }
