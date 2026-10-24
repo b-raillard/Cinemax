@@ -923,7 +923,8 @@ struct HomeScreen: View {
                                 startTime: heroStart,
                                 previousEpisode: heroNav?.previous, nextEpisode: heroNav?.next,
                                 episodeNavigator: heroNav?.navigator,
-                                onStart: elsewhere.map { entry in { startHandOff(entry) } }
+                                onStart: elsewhere.map { entry in { startHandOff(entry) } },
+                                startTimeAtOpen: elsewhere.map { entry in { entry.startSeconds(at: Date()) } }
                             ) {
                                 HStack(spacing: CinemaSpacing.spacing2) {
                                     Text(playTitle)
@@ -1365,7 +1366,8 @@ struct HomeScreen: View {
                 startTime: startSeconds,
                 previousEpisode: nav?.previous, nextEpisode: nav?.next,
                 episodeNavigator: nav?.navigator,
-                onStart: elsewhere.map { entry in { startHandOff(entry) } }
+                onStart: elsewhere.map { entry in { startHandOff(entry) } },
+                startTimeAtOpen: elsewhere.map { entry in { entry.startSeconds(at: Date()) } }
             ) {
                 continueWatchingCard(item)
                     // Decorative: no new focusable on tvOS, said by the
@@ -1419,9 +1421,11 @@ struct HomeScreen: View {
     /// « En pause sur Apple TV · 42:13 » — the position the other device
     /// reported. On this line, not in the button: « Reprendre ici · 42:13 »
     /// pushed « Plus d'infos » off an iPhone's screen (bench, 2026-10-24).
+    /// Paused only: a playing source's position keeps moving, and the probe
+    /// behind this line can be ~50 s old — « En cours sur Apple TV » alone.
     private func elsewhereStateLine(_ entry: ElsewherePlayback) -> String {
         let state = loc.localized(entry.isPaused ? "elsewhere.paused" : "elsewhere.playing", elsewhereDeviceName(entry))
-        guard let seconds = entry.startSeconds else { return state }
+        guard entry.isPaused, let seconds = entry.startSeconds else { return state }
         return "\(state) · \(PlayerTimeFormat.ms(Int32(clamping: Int(seconds) * 1000)))"
     }
 

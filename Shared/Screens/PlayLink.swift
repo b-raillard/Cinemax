@@ -125,6 +125,10 @@ struct PlayLink<Label: View>: View {
     /// there (iOS: when the player appears, tvOS: on the press). Never decides
     /// whether something plays.
     var onStart: (@MainActor () -> Void)?
+    /// Asked when the player OPENS, in place of `startTime` — « Reprendre ici »
+    /// carries a playing source's position forward to that moment. A value
+    /// computed when the card was drawn could be ~50 s old.
+    var startTimeAtOpen: (@MainActor () -> Double?)?
     @ViewBuilder let label: () -> Label
 
     #if os(tvOS)
@@ -137,7 +141,7 @@ struct PlayLink<Label: View>: View {
         Button {
             onStart?()
             coordinator.play(
-                itemId: itemId, title: title, startTime: startTime,
+                itemId: itemId, title: title, startTime: startTimeAtOpen?() ?? startTime,
                 previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                 episodeNavigator: episodeNavigator, mediaSourceId: mediaSourceId,
                 using: appState
@@ -147,11 +151,15 @@ struct PlayLink<Label: View>: View {
         }
         #else
         NavigationLink {
-            VideoPlayerView(
-                itemId: itemId, title: title, startTime: startTime,
-                previousEpisode: previousEpisode, nextEpisode: nextEpisode,
-                episodeNavigator: episodeNavigator, mediaSourceId: mediaSourceId
-            )
+            // The destination VALUE is built with the link; its body only when
+            // pushed — where `startTimeAtOpen` is asked, once.
+            OpenTimeStart(fallback: startTime, provider: startTimeAtOpen) { start in
+                VideoPlayerView(
+                    itemId: itemId, title: title, startTime: start,
+                    previousEpisode: previousEpisode, nextEpisode: nextEpisode,
+                    episodeNavigator: episodeNavigator, mediaSourceId: mediaSourceId
+                )
+            }
             .onAppear { onStart?() }
         } label: {
             label()
@@ -159,3 +167,25 @@ struct PlayLink<Label: View>: View {
         #endif
     }
 }
+
+#if os(iOS)
+/// Freezes a start time the first time its body runs — at the push, not when
+/// the link was drawn — so a re-render can never move the player's start.
+private struct OpenTimeStart<Content: View>: View {
+    private final class Box {
+        var start: Double??
+    }
+
+    let fallback: Double?
+    let provider: (@MainActor () -> Double?)?
+    @ViewBuilder let content: (Double?) -> Content
+    @State private var box = Box()
+
+    var body: some View {
+        if box.start == nil {
+            box.start = .some(provider?() ?? fallback)
+        }
+        return content(box.start ?? fallback)
+    }
+}
+#endif

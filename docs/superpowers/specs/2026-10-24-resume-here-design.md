@@ -17,7 +17,7 @@ On Home (iPhone, iPad, Apple TV), for every Continue Watching item that is open 
 
 - the card carries a pill « SUR <DEVICE> » (« SUR APPLE TV », « SUR IPHONE », « SUR IPAD »; another client prints its own device name; no name ⇒ « SUR UN AUTRE APPAREIL »). Decorative: no new focusable on tvOS.
 - the hero, when it shows that item: the same pill, a line « En cours sur Apple TV · 42:13 » / « En pause sur Apple TV · 42:13 » (the position the other device reported), and its Play button becomes « Reprendre ici ».
-- a tap on that card or that button plays HERE from the other device's position, and — as the player opens — sends the source a message « Lecture reprise sur <this device> » then `Stop`. Fire-and-forget: a failure is logged, never shown; the local playback is never held back by it.
+- a tap on that card or that button plays HERE from the other device's position — paused OR playing (product owner, 2026-10-24: no pause required); a playing source's position is carried forward to the tap (reported position + time since its last report, capped at 2 min), and the line prints the time only for a paused one — and — as the player opens — sends the source a message « Lecture reprise sur <this device> » then `Stop`. Fire-and-forget: a failure is logged, never shown; the local playback is never held back by it.
 
 When the other device stops, the pill goes away at the next refresh (Home's existing 20 s poll while Accueil is visible, and every Home load).
 

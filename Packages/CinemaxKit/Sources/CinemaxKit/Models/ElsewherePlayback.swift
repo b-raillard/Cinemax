@@ -15,21 +15,41 @@ public struct ElsewherePlayback: Sendable, Equatable {
     public let positionTicks: Int?
     /// Only a session that declared remote control can be told to stop.
     public let canStop: Bool
+    /// When the source last reported `positionTicks` — what lets a PLAYING
+    /// source's position be carried forward to the moment of the tap.
+    public let checkIn: Date?
 
     public init(sessionId: String, itemId: String, deviceName: String,
-                isPaused: Bool, positionTicks: Int?, canStop: Bool) {
+                isPaused: Bool, positionTicks: Int?, canStop: Bool, checkIn: Date? = nil) {
         self.sessionId = sessionId
         self.itemId = itemId
         self.deviceName = deviceName
         self.isPaused = isPaused
         self.positionTicks = positionTicks
         self.canStop = canStop
+        self.checkIn = checkIn
     }
 
-    /// Where « Reprendre ici » starts, in seconds; `nil` = nothing reported.
+    /// The position the source REPORTED, in seconds; `nil` = nothing reported.
     public var startSeconds: Double? {
         guard let positionTicks, positionTicks > 0 else { return nil }
         return Double(positionTicks / 10_000_000)
+    }
+
+    /// The longest a playing source's position is carried forward: past it,
+    /// the report is too old to trust (the source may have stopped, sought…).
+    public static let maxCarryForward: TimeInterval = 120
+
+    /// Where « Reprendre ici » starts when tapped at `now`. Paused: the
+    /// reported position. Playing: the reported position plus the time since
+    /// that report (capped at `maxCarryForward`) — the probe can be up to
+    /// ~50 s old (20 s poll × 30 s cache), which used to send the viewer back
+    /// that far. No check-in date: the reported position as is.
+    public func startSeconds(at now: Date) -> Double? {
+        guard let base = startSeconds else { return nil }
+        guard !isPaused, let checkIn else { return base }
+        let elapsed = min(max(0, now.timeIntervalSince(checkIn)), Self.maxCarryForward)
+        return (base + elapsed).rounded(.down)
     }
 
     /// A check-in older than this is a session that stopped reporting.
@@ -66,7 +86,8 @@ public struct ElsewherePlayback: Sendable, Equatable {
                 deviceName: session.deviceName ?? "",
                 isPaused: session.playState?.isPaused ?? false,
                 positionTicks: session.playState?.positionTicks,
-                canStop: session.isSupportsRemoteControl == true
+                canStop: session.isSupportsRemoteControl == true,
+                checkIn: checkIn
             )
             let rank = checkIn ?? .distantPast
             if let current = best[itemId] {

@@ -245,4 +245,20 @@ struct ElsewherePlaybackTests {
         #expect(resolve([playingSession(positionTicks: nil)])["movie-1"]?.startSeconds == nil)
         #expect(resolve([playingSession(positionTicks: 0)])["movie-1"]?.startSeconds == nil)
     }
+
+    @Test("a PLAYING source is carried forward to the tap, capped; a paused one is not")
+    func carriedForward() throws {
+        // Reported 2533 s at `now - 60`.
+        let checkIn = now.addingTimeInterval(-60)
+        let playing = try #require(resolve([playingSession(isPaused: false, checkIn: checkIn)])["movie-1"])
+        #expect(playing.startSeconds(at: now) == 2593)
+        #expect(playing.startSeconds(at: now.addingTimeInterval(500)) == 2653)   // 2533 + the 120 s cap
+        #expect(playing.startSeconds(at: checkIn.addingTimeInterval(-5)) == 2533)
+
+        let paused = try #require(resolve([playingSession(isPaused: true, checkIn: checkIn)])["movie-1"])
+        #expect(paused.startSeconds(at: now) == 2533)
+
+        let undated = try #require(resolve([playingSession(isPaused: false, checkIn: nil)])["movie-1"])
+        #expect(undated.startSeconds(at: now) == 2533)
+    }
 }
