@@ -39,15 +39,15 @@ struct ProPageMetrics {
     #if os(tvOS)
     static let tv = Self(
         columnWidth: CinemaTVLayout.proCompareColumnWidth,
-        rowMinHeight: 54, rowPadding: 4, gap: 20, iconBox: 40, radius: 22,
+        rowMinHeight: 47, rowPadding: 3, gap: 20, iconBox: 38, radius: 22,
         eyebrowFont: .system(size: CinemaScale.pt(13), weight: .black),
         titleFont: .system(size: CinemaScale.pt(34), weight: .black),
         subtitleFont: .system(size: CinemaScale.pt(16), weight: .regular),
         headerFont: .system(size: CinemaScale.pt(17), weight: .heavy),
         pillFont: .system(size: CinemaScale.pt(10), weight: .black),
         groupFont: .system(size: CinemaScale.pt(12), weight: .black),
-        rowTitleFont: .system(size: CinemaScale.pt(15.5), weight: .bold),
-        rowDetailFont: .system(size: CinemaScale.pt(12.5), weight: .regular),
+        rowTitleFont: .system(size: CinemaScale.pt(15), weight: .bold),
+        rowDetailFont: .system(size: CinemaScale.pt(12), weight: .regular),
         iconFont: .system(size: CinemaScale.pt(16), weight: .semibold),
         markFont: .system(size: CinemaScale.pt(19), weight: .bold),
         lockFont: .system(size: CinemaScale.pt(14), weight: .semibold),
@@ -109,11 +109,16 @@ struct ProCompareHeading: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: metrics.gap / 2) {
+            // Not on the Apple TV: the panel beside it already wears the same
+            // eyebrow, and the page must hold on one screen with seven sold
+            // rows (« Reprendre ici », 2026-10-24).
+            #if !os(tvOS)
             Text(loc.localized("pro.compare.eyebrow"))
                 .font(metrics.eyebrowFont)
                 .tracking(3)
                 .textCase(.uppercase)
                 .foregroundStyle(ProPageInk(tier: tier, themeManager: themeManager).ink)
+            #endif
             Text(loc.localized("pro.compare.title"))
                 .font(metrics.titleFont)
                 .tracking(-0.6)

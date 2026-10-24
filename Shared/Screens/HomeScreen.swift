@@ -868,7 +868,11 @@ struct HomeScreen: View {
                 VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
                     let elsewhere = elsewhereEntry(for: item)
                     if let elsewhere {
+                        #if os(tvOS)
+                        elsewherePill(elsewhere, scale: 1.6)
+                        #else
                         elsewherePill(elsewhere)
+                        #endif
                     }
                     HStack(spacing: 8) {
                         if let rating = item.officialRating {
@@ -925,6 +929,7 @@ struct HomeScreen: View {
                                     Text(playTitle)
                                         .font(.system(size: heroButtonFontSize, weight: .bold))
                                         .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
                                     Image(systemName: "play.fill")
                                         .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                                 }
@@ -942,7 +947,7 @@ struct HomeScreen: View {
                             #else
                             .buttonStyle(.plain)
                             #endif
-                            // « Reprendre ici · 42:13 » is wider than « Lecture »:
+                            // « Reprendre ici » is wider than « Lecture »:
                             // it takes its own width instead of the fixed one.
                             .frame(width: elsewhere == nil ? playButtonWidth : nil)
                             .fixedSize(horizontal: elsewhere != nil, vertical: false)
@@ -1411,31 +1416,33 @@ struct HomeScreen: View {
         entry.deviceName.isEmpty ? loc.localized("elsewhere.unknownDevice") : entry.deviceName
     }
 
-    /// « En pause sur Apple TV » / « En cours sur iPhone ».
+    /// « En pause sur Apple TV · 42:13 » — the position the other device
+    /// reported. On this line, not in the button: « Reprendre ici · 42:13 »
+    /// pushed « Plus d'infos » off an iPhone's screen (bench, 2026-10-24).
     private func elsewhereStateLine(_ entry: ElsewherePlayback) -> String {
-        loc.localized(entry.isPaused ? "elsewhere.paused" : "elsewhere.playing", elsewhereDeviceName(entry))
+        let state = loc.localized(entry.isPaused ? "elsewhere.paused" : "elsewhere.playing", elsewhereDeviceName(entry))
+        guard let seconds = entry.startSeconds else { return state }
+        return "\(state) · \(PlayerTimeFormat.ms(Int32(clamping: Int(seconds) * 1000)))"
     }
 
-    /// « Reprendre ici · 42:13 » — the position the other device reported.
     private func resumeHereTitle(_ entry: ElsewherePlayback) -> String {
-        let base = loc.localized("elsewhere.resumeHere")
-        guard let seconds = entry.startSeconds else { return base }
-        return "\(base) · \(PlayerTimeFormat.ms(Int32(clamping: Int(seconds) * 1000)))"
+        loc.localized("elsewhere.resumeHere")
     }
 
     /// « SUR APPLE TV » — same chrome as the « En direct » pill, in the accent.
-    private func elsewherePill(_ entry: ElsewherePlayback) -> some View {
+    /// `scale` enlarges it on the Apple TV hero, where the card size read tiny.
+    private func elsewherePill(_ entry: ElsewherePlayback, scale: CGFloat = 1) -> some View {
         HStack(spacing: CinemaSpacing.spacing1) {
             Image(systemName: entry.isPaused ? "pause.fill" : "play.fill")
-                .font(.system(size: CinemaScale.pt(8), weight: .bold))
+                .font(.system(size: CinemaScale.pt(8) * scale, weight: .bold))
             Text(loc.localized("elsewhere.badge", elsewhereDeviceName(entry)).uppercased(with: loc.locale))
-                .font(.system(size: CinemaScale.pt(10), weight: .bold))
+                .font(.system(size: CinemaScale.pt(10) * scale, weight: .bold))
                 .tracking(0.5)
                 .lineLimit(1)
         }
         .foregroundStyle(themeManager.accent)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
+        .padding(.horizontal, 6 * scale)
+        .padding(.vertical, 3 * scale)
         .background(.ultraThinMaterial, in: Capsule())
         .accessibilityHidden(true)
     }

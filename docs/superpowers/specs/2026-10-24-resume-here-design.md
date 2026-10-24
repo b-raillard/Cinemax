@@ -6,7 +6,7 @@ Decided with the product owner on 2026-10-24 (four answers, then « Vas y »), f
 
 | Question | Answer |
 |---|---|
-| Where | **Variant B**: a pill « SUR APPLE TV » on the Continue Watching card; when that title is also the hero, the hero gets the pill, a state line and the CTA « Reprendre ici · 42:13 ». No new surface. |
+| Where | **Variant B**: a pill « SUR APPLE TV » on the Continue Watching card; when that title is also the hero, the hero gets the pill, a state line « En pause sur Apple TV · 42:13 » and the CTA « Reprendre ici ». No new surface. |
 | The other device | **Stops**: it receives a message « Lecture reprise sur iPhone » and a Playstate `Stop`. |
 | Tier | **Pro.** Resuming through the ordinary Continue Watching row stays free. |
 | « Continuer sur… » in the iPhone player (push) | **Later**, not in this delivery. |
@@ -16,7 +16,7 @@ Decided with the product owner on 2026-10-24 (four answers, then « Vas y »), f
 On Home (iPhone, iPad, Apple TV), for every Continue Watching item that is open right now on ANOTHER of their devices (same Jellyfin user, other device id):
 
 - the card carries a pill « SUR <DEVICE> » (« SUR APPLE TV », « SUR IPHONE », « SUR IPAD »; another client prints its own device name; no name ⇒ « SUR UN AUTRE APPAREIL »). Decorative: no new focusable on tvOS.
-- the hero, when it shows that item: the same pill, a line « En cours sur Apple TV » / « En pause sur Apple TV », and its Play button becomes « Reprendre ici · 42:13 » (the position the other device reported).
+- the hero, when it shows that item: the same pill, a line « En cours sur Apple TV · 42:13 » / « En pause sur Apple TV · 42:13 » (the position the other device reported), and its Play button becomes « Reprendre ici ».
 - a tap on that card or that button plays HERE from the other device's position, and — as the player opens — sends the source a message « Lecture reprise sur <this device> » then `Stop`. Fire-and-forget: a failure is logged, never shown; the local playback is never held back by it.
 
 When the other device stops, the pill goes away at the next refresh (Home's existing 20 s poll while Accueil is visible, and every Home load).
