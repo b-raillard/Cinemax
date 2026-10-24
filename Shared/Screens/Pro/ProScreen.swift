@@ -158,7 +158,7 @@ struct ProScreen: View {
         // The panel starts level with the heading: under the table it ran off
         // the bottom of the screen.
         return HStack(alignment: .top, spacing: CinemaTVLayout.proPanelGap) {
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                 ProCompareHeading(tier: tier, metrics: metrics)
                 ProComparisonTable(tier: tier, metrics: metrics)
             }

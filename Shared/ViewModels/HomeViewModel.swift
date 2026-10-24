@@ -1215,8 +1215,9 @@ final class HomeViewModel {
         let api = appState.apiClient
         Task {
             do {
-                // No header: the receiver titles it « Message d'un autre appareil » itself.
-                try await api.sendMessage(sessionId: entry.sessionId, header: "", text: message, timeoutMs: 6000)
+                // Never an empty header: Jellyfin then sends its own English
+                // « Message from Server » (bench, 2026-10-24).
+                try await api.sendMessage(sessionId: entry.sessionId, header: "JellyGlass", text: message, timeoutMs: 6000)
             } catch {
                 logger.warning("Resume here: message to the source failed: \(error.localizedDescription, privacy: .public)")
             }

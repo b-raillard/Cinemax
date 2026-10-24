@@ -39,7 +39,7 @@ struct ProPageMetrics {
     #if os(tvOS)
     static let tv = Self(
         columnWidth: CinemaTVLayout.proCompareColumnWidth,
-        rowMinHeight: 47, rowPadding: 3, gap: 20, iconBox: 38, radius: 22,
+        rowMinHeight: 46, rowPadding: 1, gap: 20, iconBox: 38, radius: 22,
         eyebrowFont: .system(size: CinemaScale.pt(13), weight: .black),
         titleFont: .system(size: CinemaScale.pt(34), weight: .black),
         subtitleFont: .system(size: CinemaScale.pt(16), weight: .regular),
