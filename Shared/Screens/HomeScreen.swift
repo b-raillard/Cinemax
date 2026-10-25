@@ -12,6 +12,7 @@ struct HomeScreen: View {
     /// « Reprendre ici » (Pro): what plays on another device is shown only
     /// when `allows(.resumeHere)` — never whether something plays.
     @Environment(ProFeatureAccess.self) private var proAccess
+    @Environment(\.scenePhase) private var scenePhase
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -118,6 +119,12 @@ struct HomeScreen: View {
         }
         // A purchase, a refund or the Debug tier: the pills follow at once.
         .onChange(of: proAccess.allows(.resumeHere)) {
+            Task { await viewModel.refreshElsewhere(using: appState) }
+        }
+        // Back to the app (the remote picked up, the phone unlocked): what
+        // plays elsewhere is asked at once, not at the next 20 s tick.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, isVisible else { return }
             Task { await viewModel.refreshElsewhere(using: appState) }
         }
         // `initial` hands the row to the view model before its first load

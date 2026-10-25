@@ -680,7 +680,14 @@ struct AppNavigation: View {
                 // Drop the remote-control socket: a backgrounded app can't act
                 // on a play command anyway, and holding a WebSocket open is a
                 // standing battery / radio-wake cost. Re-established on `.active`.
-                remoteControl.stop()
+                // EXCEPT while a player is still running (Picture in Picture,
+                // background audio): that session must stay drivable, or
+                // another device's « Reprendre ici » neither sees it (the
+                // server lists only sessions with a live socket) nor can stop
+                // it — the film then played on both (user report 2026-10-25).
+                if !RemotePlaystateRouter.shared.hasActivePlayer {
+                    remoteControl.stop()
+                }
                 // Close the parental gate. `.background` and NOT `.inactive`:
                 // the latter also fires for an app-switcher peek, a Control
                 // Center swipe or a notification banner, and re-asking for the

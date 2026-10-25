@@ -43,7 +43,7 @@ public struct ElsewherePlayback: Sendable, Equatable {
     /// Where « Reprendre ici » starts when tapped at `now`. Paused: the
     /// reported position. Playing: the reported position plus the time since
     /// that report (capped at `maxCarryForward`) — the probe can be up to
-    /// ~50 s old (20 s poll × 30 s cache), which used to send the viewer back
+    /// ~20 s old (one poll) plus the source's ~10 s report gap, which sent the viewer back
     /// that far. No check-in date: the reported position as is.
     public func startSeconds(at now: Date) -> Double? {
         guard let base = startSeconds else { return nil }

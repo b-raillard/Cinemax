@@ -1176,21 +1176,25 @@ final class HomeViewModel {
     /// `HomeScreen` before the first load. `false` by default so tests and
     /// previews never reach the entitlement singletons.
     @ObservationIgnored var allowsElsewhere: @MainActor () -> Bool = { false }
-    /// Sessions just handed off (`sessionId|itemId` → when): the probe is cached
-    /// 30 s and the source takes a moment to stop, so without this the pill
+    /// Sessions just handed off (`sessionId|itemId` → when): the source takes
+    /// a moment to stop and to report it, so without this the pill
     /// would come back on the next poll for a film already playing here.
     @ObservationIgnored private var handedOff: [String: Date] = [:]
     private static let handOffMemory: TimeInterval = 60
 
-    /// One probe through the « Lire sur… » query (30 s cache), at every Home
-    /// load and on the screen's 20 s poll. A failure keeps what is on screen.
+    /// One probe through the « Lire sur… » query, at every Home load (pull to
+    /// refresh included), on the screen's 20 s poll, on arriving on Accueil and
+    /// on coming back to the foreground. UNCACHED: the 30 s cache made a pull
+    /// to refresh show a stale answer (user report 2026-10-25), and the request
+    /// is one small JSON while Accueil is on screen. A failure keeps what is
+    /// on screen.
     func refreshElsewhere(using appState: AppState) async {
         guard allowsElsewhere(), let userId = appState.currentUserId else {
             if !elsewhere.isEmpty { elsewhere = [:] }
             return
         }
         let generation = loadGeneration
-        guard let sessions = try? await appState.apiClient.getControllableSessions(userId: userId, cached: true),
+        guard let sessions = try? await appState.apiClient.getControllableSessions(userId: userId, cached: false),
               isCurrent(generation) else { return }
         let now = Date()
         handedOff = handedOff.filter { now.timeIntervalSince($0.value) < Self.handOffMemory }
