@@ -1481,6 +1481,8 @@
 "pro.card.since.founder" = "Membre depuis %@";
 "pro.card.since.pro" = "Actif depuis %@";
 "pro.list.withPro" = "Avec Pro";
+"pro.tv.browse" = "Haut et Bas pour parcourir";
+"pro.tv.position" = "%1$d / %2$d";
 "pro.compare.eyebrow" = "JellyGlass Pro";
 "pro.compare.title" = "Ce que Pro ajoute";
 "pro.compare.subtitle" = "La lecture reste gratuite. Pro ajoute le confort, en un seul achat.";

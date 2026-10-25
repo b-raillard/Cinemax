@@ -185,7 +185,11 @@ enum CinemaTVLayout {
     // MARK: Pro page (design C, 2026-10-24)
 
     /// The Gratuit and Pro columns of the comparison table.
-    static let proCompareColumnWidth: CGFloat = 190
+    static let proCompareColumnWidth: CGFloat = 150
+    /// The window the table's lines scroll in (design E, 2026-10-25), and
+    /// the fade at its foot while lines are left below.
+    static let proTableWindowHeight: CGFloat = 480
+    static let proTableFadeHeight: CGFloat = 170
     /// The purchase panel right of the table, and the gap between them.
     static let proPanelWidth: CGFloat = 560
     static let proPanelGap: CGFloat = 64

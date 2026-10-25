@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Design C of the Pro page (chosen by the product owner 2026-10-24, canvas
 /// « Page JellyGlass Pro — 3 pistes »): a Gratuit / Pro table that shows, at a
-/// glance and without scrolling on the Apple TV, what playback keeps for free
+/// glance, what playback keeps for free
 /// and what the purchase adds — then a purchase panel. The same two pieces on
 /// iPhone, iPad and Apple TV; only `ProPageMetrics` differs.
 
@@ -37,20 +37,22 @@ struct ProPageMetrics {
     var legalFont: Font
 
     #if os(tvOS)
+    /// Design E (chosen 2026-10-25): rows big enough to read from the couch,
+    /// in a window that scrolls with focus (`ProComparisonTable.tvBody`).
     static let tv = Self(
         columnWidth: CinemaTVLayout.proCompareColumnWidth,
-        rowMinHeight: 46, rowPadding: 1, gap: 20, iconBox: 38, radius: 22,
+        rowMinHeight: 100, rowPadding: 12, gap: 22, iconBox: 52, radius: 22,
         eyebrowFont: .system(size: CinemaScale.pt(13), weight: .black),
-        titleFont: .system(size: CinemaScale.pt(34), weight: .black),
+        titleFont: .system(size: CinemaScale.pt(36), weight: .black),
         subtitleFont: .system(size: CinemaScale.pt(16), weight: .regular),
-        headerFont: .system(size: CinemaScale.pt(17), weight: .heavy),
+        headerFont: .system(size: CinemaScale.pt(19), weight: .heavy),
         pillFont: .system(size: CinemaScale.pt(10), weight: .black),
-        groupFont: .system(size: CinemaScale.pt(12), weight: .black),
-        rowTitleFont: .system(size: CinemaScale.pt(15), weight: .bold),
-        rowDetailFont: .system(size: CinemaScale.pt(12), weight: .regular),
-        iconFont: .system(size: CinemaScale.pt(16), weight: .semibold),
-        markFont: .system(size: CinemaScale.pt(19), weight: .bold),
-        lockFont: .system(size: CinemaScale.pt(14), weight: .semibold),
+        groupFont: .system(size: CinemaScale.pt(14), weight: .black),
+        rowTitleFont: .system(size: CinemaScale.pt(22), weight: .bold),
+        rowDetailFont: .system(size: CinemaScale.pt(16), weight: .regular),
+        iconFont: .system(size: CinemaScale.pt(20), weight: .semibold),
+        markFont: .system(size: CinemaScale.pt(24), weight: .bold),
+        lockFont: .system(size: CinemaScale.pt(19), weight: .semibold),
         panelPadding: 36, panelSpacing: 12, panelRadius: 36,
         panelTitleFont: .system(size: CinemaScale.pt(36), weight: .black),
         panelLineFont: .system(size: CinemaScale.pt(17), weight: .bold),
@@ -124,10 +126,14 @@ struct ProCompareHeading: View {
                 .tracking(-0.6)
                 .foregroundStyle(CinemaColor.onSurface)
                 .accessibilityAddTraits(.isHeader)
+            // Not on the Apple TV either: « Toujours gratuit » says it, and the
+            // table's window needs the height (design E, 2026-10-25).
+            #if !os(tvOS)
             Text(loc.localized("pro.compare.subtitle"))
                 .font(metrics.subtitleFont)
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .fixedSize(horizontal: false, vertical: true)
+            #endif
         }
     }
 }
@@ -140,24 +146,112 @@ struct ProComparisonTable: View {
     @Environment(ThemeManager.self) private var themeManager
     let tier: ProTier
     let metrics: ProPageMetrics
+    /// Apple TV: Right from a line (the purchase panel beside the table).
+    var onMoveRight: (() -> Void)?
+
+    #if os(tvOS)
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The focused line, as its index in the table (free lines first).
+    @FocusState private var focusedLine: Int?
+    /// Lines left under the window's bottom edge: the fade says so.
+    @State private var moreBelow = true
+    #endif
 
     private var palette: ProPageInk { ProPageInk(tier: tier, themeManager: themeManager) }
     private var features: [ProFeatureCatalogue.Feature] { ProFeatureCatalogue.features }
 
+    /// One line of the table: the free rows, then the sold features.
+    private struct Line {
+        let icon: String
+        let titleKey: String
+        let detailKey: String
+        let freeIncluded: Bool
+    }
+
+    private var freeLines: [Line] {
+        ProFeatureCatalogue.alwaysFree.map {
+            Line(icon: $0.icon, titleKey: $0.titleKey, detailKey: $0.shownRowKey, freeIncluded: true)
+        }
+    }
+
+    private var proLines: [Line] {
+        features.map {
+            Line(icon: $0.icon, titleKey: $0.shownTitleKey, detailKey: $0.shownRowKey, freeIncluded: false)
+        }
+    }
+
     var body: some View {
+        #if os(tvOS)
+        tvBody
+        #else
         VStack(spacing: 0) {
             headerRow
+            rows
+        }
+        #endif
+    }
+
+    private var rows: some View {
+        let free = freeLines
+        let sold = proLines
+        return VStack(spacing: 0) {
             groupRow(loc.localized("pro.compare.alwaysFree"), color: CinemaColor.onSurfaceMuted)
-            ForEach(ProFeatureCatalogue.alwaysFree) { row in
-                line(icon: row.icon, titleKey: row.titleKey, detailKey: row.shownRowKey, freeIncluded: true, isLast: false)
+            ForEach(free.indices, id: \.self) { index in
+                line(free[index], index: index, isLast: false)
             }
             groupRow(loc.localized("pro.list.withPro"), color: palette.ink)
-            ForEach(features) { feature in
-                line(icon: feature.icon, titleKey: feature.shownTitleKey, detailKey: feature.shownRowKey,
-                     freeIncluded: false, isLast: feature.id == features.last?.id)
+            ForEach(sold.indices, id: \.self) { index in
+                line(sold[index], index: free.count + index, isLast: index == sold.count - 1)
             }
         }
     }
+
+    #if os(tvOS)
+    /// Design E: the header stays put, the lines scroll in a window under it
+    /// as focus moves, and a fade at the window's foot — as long as lines are
+    /// left below — says there is more. The fade is a MASK, not a gradient
+    /// to a colour: the page's ground is the tier's material.
+    private var tvBody: some View {
+        let count = freeLines.count + proLines.count
+        let fade = CinemaTVLayout.proTableFadeHeight
+        return VStack(alignment: .leading, spacing: 0) {
+            headerRow
+            ScrollView(.vertical, showsIndicators: false) {
+                rows
+                    // Room for the focused line's stroke at the window's edges.
+                    .padding(.vertical, CinemaTVFocus.strokeWidth)
+            }
+            // Focus scrolling keeps the focused line above the fade.
+            .safeAreaPadding(.bottom, moreBelow ? fade * 0.6 : 0)
+            .frame(height: CinemaTVLayout.proTableWindowHeight)
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.containerSize.height < geometry.contentSize.height - 4
+            } action: { _, isMore in
+                moreBelow = isMore
+            }
+            .mask {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: moreBelow ? fade : 0)
+                }
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: moreBelow)
+            }
+            Text(browseHint(count: count))
+                .font(metrics.groupFont)
+                .foregroundStyle(CinemaColor.onSurfaceMuted)
+                .padding(.top, CinemaSpacing.spacing2)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// « 3 / 9 · Haut et Bas pour parcourir » while a line holds focus.
+    private func browseHint(count: Int) -> String {
+        let hint = loc.localized("pro.tv.browse")
+        guard let focusedLine else { return hint }
+        return "\(loc.localized("pro.tv.position", focusedLine + 1, count)) · \(hint)"
+    }
+    #endif
 
     // MARK: Rows
 
@@ -226,10 +320,12 @@ struct ProComparisonTable: View {
         .overlay(alignment: .bottom) { separator }
     }
 
-    private func line(icon: String, titleKey: String, detailKey: String, freeIncluded: Bool, isLast: Bool) -> some View {
-        let title = loc.localized(titleKey)
-        let detail = loc.localized(detailKey)
-        return HStack(spacing: 0) {
+    private func line(_ line: Line, index: Int, isLast: Bool) -> some View {
+        let icon = line.icon
+        let freeIncluded = line.freeIncluded
+        let title = loc.localized(line.titleKey)
+        let detail = loc.localized(line.detailKey)
+        let row = HStack(spacing: 0) {
             HStack(spacing: metrics.gap) {
                 Image(systemName: icon)
                     .font(metrics.iconFont)
@@ -272,6 +368,27 @@ struct ProComparisonTable: View {
             loc.localized("pro.compare.column.accessibility", loc.localized("pro.tier.pro"),
                           loc.localized("pro.compare.included"))
         ].joined(separator: ". "))
+        #if os(tvOS)
+        // Row-level focus (`CinemaTVFocus`): accent stroke + brightness, no growth.
+        let isFocused = focusedLine == index
+        return row
+            .brightness(isFocused ? CinemaTVFocus.rowBrightness : 0)
+            .overlay {
+                RoundedRectangle(cornerRadius: metrics.radius)
+                    .strokeBorder(themeManager.accent.opacity(isFocused ? CinemaTVFocus.strokeOpacity : 0),
+                                  lineWidth: CinemaTVFocus.strokeWidth)
+            }
+            .focusable()
+            .focused($focusedLine, equals: index)
+            .onMoveCommand { direction in
+                if direction == .right { onMoveRight?() }
+            }
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+            .animation(reduceMotion ? nil : .easeOut(duration: CinemaTVFocus.rowDuration), value: isFocused)
+        #else
+        return row
+        #endif
     }
 
     @ViewBuilder

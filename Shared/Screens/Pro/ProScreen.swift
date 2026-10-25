@@ -5,7 +5,7 @@ enum ProScreenText {
     static let keys = [
         "pro.compare.eyebrow", "pro.compare.title", "pro.compare.subtitle", "pro.compare.you",
         "pro.compare.alwaysFree", "pro.compare.included", "pro.compare.notIncluded",
-        "pro.compare.column.accessibility", "pro.list.withPro",
+        "pro.compare.column.accessibility", "pro.list.withPro", "pro.tv.browse", "pro.tv.position",
         "pro.panel.title.free", "pro.panel.line.free", "pro.price.once", "pro.buy.short", "pro.buy",
         "pro.perk.noSubscription", "pro.perk.family", "pro.perk.devices",
         "pro.restore", "pro.terms", "pro.privacy", "pro.tv.legal",
@@ -30,7 +30,10 @@ struct ProScreen: View {
     @Environment(ProStore.self) private var proStore
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
-    #if !os(tvOS)
+    #if os(tvOS)
+    /// The purchase panel holds focus (Right from a table line, design E).
+    @FocusState private var panelFocused: Bool
+    #else
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
 
@@ -149,10 +152,9 @@ struct ProScreen: View {
     // MARK: - tvOS
 
     #if os(tvOS)
-    /// The heading and the table, the panel beside them, on one screen. The
-    /// row is ONE focus section the width of the page: the table holds
-    /// nothing focusable, so a press down from the back button (top-leading)
-    /// must be handed to the panel's buttons on the right.
+    /// The heading and the table, the panel beside them, on one screen
+    /// (design E, 2026-10-25): the table's lines take focus and scroll in
+    /// their window; Down from the back button lands on the first line.
     private var tvBody: some View {
         let metrics = ProPageMetrics.tv
         // The panel starts level with the heading: under the table it ran off
@@ -160,14 +162,17 @@ struct ProScreen: View {
         return HStack(alignment: .top, spacing: CinemaTVLayout.proPanelGap) {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                 ProCompareHeading(tier: tier, metrics: metrics)
-                ProComparisonTable(tier: tier, metrics: metrics)
+                // Right from a line below the panel's buttons finds nothing in
+                // its beam (a `.focusSection()` on the panel's column did not
+                // catch it, measured 2026-10-25): the line hands focus over.
+                ProComparisonTable(tier: tier, metrics: metrics, onMoveRight: { panelFocused = true })
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             panel(metrics)
                 .frame(width: CinemaTVLayout.proPanelWidth)
+                .focused($panelFocused)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .focusSection()
         .environment(\.colorScheme, .dark)
     }
     #endif
