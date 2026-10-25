@@ -140,7 +140,11 @@ final class AccountSwitchFlow {
         switch result {
         case .switched:
             step = .pick
+            // Not on the Apple TV: picking a profile there lands on its Home
+            // at once, which says it better than a toast (user, 2026-10-25).
+            #if !os(tvOS)
             toasts.success(loc.localized("accounts.switchedTo", account.username))
+            #endif
             return true
         case .locked:
             step = .code(account, parental: !hasOwnCode)
