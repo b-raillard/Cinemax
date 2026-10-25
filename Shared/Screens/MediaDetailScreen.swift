@@ -124,20 +124,6 @@ struct MediaDetailScreen: View {
     /// The season pill holding focus: entering the season row lands on the
     /// selected season (`defaultFocus`, user-initiated).
     @FocusState private var focusedSeasonId: String?
-    /// The section under the synopsis that Down from the action row focuses
-    /// (`firstBelowActionsTarget`) — one section, never the whole column: a
-    /// binding on the column pulled focus back to its first control on every
-    /// move inside it.
-    @FocusState private var belowActionsFocus: BelowActionsTarget?
-    /// Bumped by Down on the action row: the page scrolls those sections into
-    /// view, THEN focuses them — a focus write on a view off screen is ignored.
-    @State private var belowActionsRequest = 0
-    /// The way back up: Up from the first section focuses the action row
-    /// (its first control, « Lecture ») once it is scrolled back into view.
-    @FocusState private var actionRowFocused: Bool
-    @State private var actionRowRequest = 0
-    @State private var belowActionsFocusChangedAt = Date.distantPast
-    @Environment(\.motionEffectsEnabled) private var motionEffects
     #endif
 
     /// Mirrors the ceiling the players hand `getPlaybackInfo`, so the version
@@ -406,53 +392,18 @@ struct MediaDetailScreen: View {
     // MARK: - Detail Content
 
     private func detailContent(_ item: BaseItemDto) -> some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    // Backdrop hero
-                    backdropSection(item)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                // Backdrop hero
+                backdropSection(item)
 
-                    belowHeroContent(item)
-                }
+                belowHeroContent(item)
             }
-            #if os(tvOS)
-            .scrollClipDisabled()
-            .onChange(of: belowActionsRequest) {
-                withAnimation(motionEffects ? .easeInOut(duration: 0.25) : nil) {
-                    // The first section's top at ~60 % of the screen: it shows
-                    // in full, and the action row usually stays on screen
-                    // above it, so Up comes back in one press too.
-                    proxy.scrollTo(Self.belowActionsAnchor, anchor: UnitPoint(x: 0, y: 0.6))
-                }
-                let target = firstBelowActionsTarget(item)
-                // After the scroll has landed: a focus write on a view still
-                // off screen is ignored.
-                let settle = motionEffects ? 320 : 60
-                Task {
-                    try? await Task.sleep(for: .milliseconds(settle))
-                    belowActionsFocus = target
-                }
-            }
-            // The way back: Up from that first section lands on « Lecture »,
-            // even when the row has scrolled off the top (user, 2026-10-25).
-            .onChange(of: actionRowRequest) {
-                withAnimation(motionEffects ? .easeInOut(duration: 0.25) : nil) {
-                    proxy.scrollTo(Self.actionRowAnchor, anchor: UnitPoint(x: 0, y: 0.4))
-                }
-                let settle = motionEffects ? 320 : 60
-                Task {
-                    try? await Task.sleep(for: .milliseconds(settle))
-                    actionRowFocused = true
-                }
-            }
-            #endif
         }
+        #if os(tvOS)
+        .scrollClipDisabled()
+        #endif
     }
-
-    #if os(tvOS)
-    private static let belowActionsAnchor = "detail.belowActions"
-    private static let actionRowAnchor = "detail.actionRow"
-    #endif
 
     /// Content below the backdrop hero. iPhone + tvOS stack every section
     /// vertically; iPad (regular width) splits it into a metadata column
@@ -495,28 +446,7 @@ struct MediaDetailScreen: View {
     private func stackedBelowHeroContent(_ item: BaseItemDto) -> some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
             primaryColumnSections(item)
-            #if os(tvOS)
-            // One container the action row can hand Down to (see
-            // `belowActionsFocused`): focusing it lands on its first control.
-            VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
-                // Scroll anchor at the TOP of these sections (the container's
-                // own id centred its middle — the episode list — on screen).
-                Color.clear.frame(height: 0).id(Self.belowActionsAnchor)
-                secondaryColumnSections(item)
-            }
-            // Runs AFTER the engine's own move: when that move just brought
-            // focus into this first section (Up from the seasons), it is the
-            // answer; only a press the engine could not serve (focus still
-            // here, the row off screen) goes on to the action row.
-            .onMoveCommand { direction in
-                guard direction == .up, let first = firstBelowActionsTarget(item), belowActionsFocus == first,
-                      Date().timeIntervalSince(belowActionsFocusChangedAt) > 0.15 else { return }
-                actionRowRequest += 1
-            }
-            .onChange(of: belowActionsFocus) { belowActionsFocusChangedAt = Date() }
-            #else
             secondaryColumnSections(item)
-            #endif
             Spacer(minLength: 80)
         }
         .padding(.top, CinemaSpacing.spacing4)
@@ -528,21 +458,6 @@ struct MediaDetailScreen: View {
     private func primaryColumnSections(_ item: BaseItemDto) -> some View {
         // Action buttons
         actionButtons(item)
-            #if os(tvOS)
-            // Down from the row reaches the next control in ONE press. When the
-            // cast sits wholly below the screen (a long synopsis — « Silo »),
-            // the engine found nothing on screen and only scrolled the page,
-            // leaving focus on a button scrolled out of view (user, 2026-10-25).
-            // A version row, when there is one, sits right under and is left to
-            // the engine.
-            .onMoveCommand { direction in
-                if direction == .down, versionSources(item).isEmpty {
-                    belowActionsRequest += 1
-                }
-            }
-            .focused($actionRowFocused)
-            .id(Self.actionRowAnchor)
-            #endif
 
         #if os(iOS)
         // Admin-gated 3-dot menu (Identifier / Edit metadata / Refresh /
@@ -567,10 +482,16 @@ struct MediaDetailScreen: View {
         if let overview = item.overview {
             Text(overview)
                 .font(CinemaFont.dynamicBody)
+                #if os(tvOS)
+                // Four lines, as the Apple TV app does: the focus engine only
+                // looks ~500 pt below « Lecture » for the next control, so a
+                // longer synopsis left Down scrolling the page without moving
+                // focus to the cast (user, 2026-10-25, « Silo »).
+                .lineLimit(4)
+                #endif
                 .frame(maxWidth: readingMaxWidth, alignment: .leading)
-                // Not focusable on tvOS: the whole synopsis is on screen, so a
-                // stop on it only left a focus nobody could see between Play
-                // and the cast (user, 2026-10-25).
+                // Not focusable on tvOS: a stop on it only left a focus nobody
+                // could see between Play and the cast (user, 2026-10-25).
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .padding(.horizontal, contentPadding)
         }
@@ -587,12 +508,12 @@ struct MediaDetailScreen: View {
     private func secondaryColumnSections(_ item: BaseItemDto) -> some View {
         // Cast
         if let people = item.people, !people.isEmpty {
-            belowActionsTarget(MediaDetailCastSection(people: people).equatable(), .cast)
+            MediaDetailCastSection(people: people).equatable()
         }
 
         // Seasons & Episodes (for series)
         if viewModel.resolvedType == .series, !viewModel.seasons.isEmpty {
-            belowActionsTarget(seasonsSection(item), .seasons)
+            seasonsSection(item)
         }
 
         // Collection ("Part of: …") — movies that share a BoxSet
@@ -606,7 +527,6 @@ struct MediaDetailScreen: View {
                 )
             ).equatable()
             .cardZoomScope(zoomNamespace, surface: "detail.partOf")
-            .modifier(BelowActionsTargetModifier(target: .collection, focus: belowActionsBinding))
         }
 
         // What a collection CONTAINS — the section a BoxSet's fiche exists for,
@@ -620,37 +540,14 @@ struct MediaDetailScreen: View {
                 titleOverride: loc.localized("detail.collection.contents")
             ).equatable()
             .cardZoomScope(zoomNamespace, surface: "detail.contents")
-            .modifier(BelowActionsTargetModifier(target: .children, focus: belowActionsBinding))
         }
 
         // Similar items
         if !viewModel.similarItems.isEmpty {
             MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
                 .cardZoomScope(zoomNamespace, surface: "detail.similar")
-                .modifier(BelowActionsTargetModifier(target: .similar, focus: belowActionsBinding))
         }
     }
-
-    /// The first section under the synopsis that holds a control — where Down
-    /// from the action row goes (tvOS).
-    private func firstBelowActionsTarget(_ item: BaseItemDto) -> BelowActionsTarget? {
-        if let people = item.people, !people.isEmpty { return .cast }
-        if viewModel.resolvedType == .series, !viewModel.seasons.isEmpty { return .seasons }
-        if !viewModel.collectionItems.isEmpty { return .collection }
-        if !viewModel.collectionChildren.isEmpty { return .children }
-        if !viewModel.similarItems.isEmpty { return .similar }
-        return nil
-    }
-
-    private func belowActionsTarget<V: View>(_ view: V, _ target: BelowActionsTarget) -> some View {
-        view.modifier(BelowActionsTargetModifier(target: target, focus: belowActionsBinding))
-    }
-
-    #if os(tvOS)
-    private var belowActionsBinding: FocusState<BelowActionsTarget?>.Binding { $belowActionsFocus }
-    #else
-    private var belowActionsBinding: Void { () }
-    #endif
 
     #if os(iOS)
     /// iPad (regular horizontal size class) shows the two-column detail layout.
@@ -2394,27 +2291,3 @@ private struct EqualWidthRow: Layout {
     }
 }
 #endif
-
-/// The sections under the fiche's synopsis that can take the focus Down from
-/// the action row hands them (tvOS, see `MediaDetailScreen.belowActionsFocus`).
-enum BelowActionsTarget: Hashable {
-    case cast, seasons, collection, children, similar
-}
-
-/// Binds a section to `belowActionsFocus` on tvOS; nothing elsewhere.
-private struct BelowActionsTargetModifier: ViewModifier {
-    let target: BelowActionsTarget
-    #if os(tvOS)
-    let focus: FocusState<BelowActionsTarget?>.Binding
-    #else
-    let focus: Void
-    #endif
-
-    func body(content: Content) -> some View {
-        #if os(tvOS)
-        content.focused(focus, equals: target)
-        #else
-        content
-        #endif
-    }
-}
