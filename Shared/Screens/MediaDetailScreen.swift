@@ -751,8 +751,9 @@ struct MediaDetailScreen: View {
     private func ratingsRow(_ item: BaseItemDto) -> some View {
         let hasCommunity = item.communityRating != nil
         let hasCritic = item.criticRating != nil
+        let network = networkLogo(item)
 
-        if hasCommunity || hasCritic {
+        if hasCommunity || hasCritic || network != nil {
             HStack(spacing: CinemaSpacing.spacing4) {
                 if let rating = item.communityRating {
                     HStack(spacing: 4) {
@@ -779,8 +780,38 @@ struct MediaDetailScreen: View {
                     .foregroundStyle(CinemaColor.onSurface)
                     .accessibilityLabel(loc.localized("accessibility.criticRating", Int(critic.rounded())))
                 }
+
+                if let network {
+                    networkPill(network)
+                }
             }
         }
+    }
+
+    /// The channel / studio logo of the item, when the app carries one
+    /// (`NetworkLogoCatalogue`). It replaces the « Chaîne » / « Studio » line.
+    private func networkLogo(_ item: BaseItemDto) -> (name: String, asset: String)? {
+        NetworkLogoCatalogue.logo(forStudios: (item.studios ?? []).compactMap(\.name))
+    }
+
+    /// A monochrome template logo in a discreet pill — ink of the theme, so it
+    /// reads on the dark and on the light appearance alike (user, 2026-10-25).
+    private func networkPill(_ network: (name: String, asset: String)) -> some View {
+        // Sized from the image's own proportions: a flexible frame would
+        // stretch the pill to its width cap around a narrow logo.
+        let height = ratingFontSize * 1.1
+        let aspect = UIImage(named: network.asset).map { $0.size.width / max($0.size.height, 1) } ?? 2
+        return Image(network.asset)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: min(height * aspect, ratingFontSize * 6), height: height)
+            .foregroundStyle(CinemaColor.onSurface)
+            .padding(.horizontal, ratingFontSize * 0.5)
+            .padding(.vertical, ratingFontSize * 0.3)
+            .background(CinemaColor.onSurface.opacity(0.08), in: RoundedRectangle(cornerRadius: ratingFontSize * 0.35))
+            .accessibilityElement()
+            .accessibilityLabel("\(loc.localized(viewModel.resolvedType == .series ? "detail.network" : "detail.studio")) \(network.name)")
     }
 
     // MARK: - Studio / Network
@@ -790,7 +821,8 @@ struct MediaDetailScreen: View {
     @ViewBuilder
     private func studioLine(_ item: BaseItemDto) -> some View {
         let names = (item.studios ?? []).compactMap { $0.name }.filter { !$0.isEmpty }
-        if !names.isEmpty {
+        // A logo in the hero says it already.
+        if !names.isEmpty, networkLogo(item) == nil {
             let isSeries = viewModel.resolvedType == .series
             let labelKey = isSeries ? "detail.network" : "detail.studio"
             HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
