@@ -116,9 +116,12 @@ struct ProScreen: View {
         return ScrollView {
             // Side by side when both fit (iPad landscape), the panel beside
             // the heading and the table; stacked otherwise, the table first,
-            // so what the purchase contains is what the user sees.
+            // so what the purchase contains is what the user sees. Side by
+            // side, the panel is centred on the column's height: pinned to
+            // the top, it left an empty column under it beside the table
+            // (iPad portrait, user report 2026-10-25).
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 28) {
+                HStack(alignment: .center, spacing: 28) {
                     VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
                         ProCompareHeading(tier: tier, metrics: metrics)
                         ProComparisonTable(tier: tier, metrics: metrics)
