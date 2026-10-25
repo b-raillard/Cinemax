@@ -124,6 +124,9 @@ struct MediaDetailScreen: View {
     /// The season pill holding focus: entering the season row lands on the
     /// selected season (`defaultFocus`, user-initiated).
     @FocusState private var focusedSeasonId: String?
+    /// The first cast card: entering the section under the action row lands
+    /// on it (`defaultFocus`), not on whichever card tvOS finds nearest.
+    @FocusState private var belowActionsFocused: Bool
     #endif
 
     /// Mirrors the ceiling the players hand `getPlaybackInfo`, so the version
@@ -445,8 +448,24 @@ struct MediaDetailScreen: View {
     @ViewBuilder
     private func stackedBelowHeroContent(_ item: BaseItemDto) -> some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+            #if os(tvOS)
+            actionSections(item)
+            // One focus section from the synopsis down: it starts right under
+            // the action row, so Down from « Lecture » always finds it and
+            // lands on its first control — the first cast card — even when
+            // the cast itself is still below the screen. Without it the engine
+            // sometimes only scrolled the page (« Silo », user 2026-10-25).
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                readingSections(item)
+                secondaryColumnSections(item)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .defaultFocus($belowActionsFocused, true, priority: .userInitiated)
+            .focusSection()
+            #else
             primaryColumnSections(item)
             secondaryColumnSections(item)
+            #endif
             Spacer(minLength: 80)
         }
         .padding(.top, CinemaSpacing.spacing4)
@@ -456,6 +475,13 @@ struct MediaDetailScreen: View {
     /// overview, studio line. The iPad left column.
     @ViewBuilder
     private func primaryColumnSections(_ item: BaseItemDto) -> some View {
+        actionSections(item)
+        readingSections(item)
+    }
+
+    /// The controls of the primary column: actions, admin menu (iOS), versions.
+    @ViewBuilder
+    private func actionSections(_ item: BaseItemDto) -> some View {
         // Action buttons
         actionButtons(item)
 
@@ -470,7 +496,11 @@ struct MediaDetailScreen: View {
 
         // Version picker — only for multi-source items (see `versionSources`).
         versionRow(item)
+    }
 
+    /// The reading part of the primary column: badges, synopsis, studio.
+    @ViewBuilder
+    private func readingSections(_ item: BaseItemDto) -> some View {
         // Quality badges — described for the version that will actually play,
         // not `mediaSources.first`, so the row and the picker never disagree.
         if showQualityBadges {
@@ -482,13 +512,6 @@ struct MediaDetailScreen: View {
         if let overview = item.overview {
             Text(overview)
                 .font(CinemaFont.dynamicBody)
-                #if os(tvOS)
-                // Four lines, as the Apple TV app does: the focus engine only
-                // looks ~500 pt below « Lecture » for the next control, so a
-                // longer synopsis left Down scrolling the page without moving
-                // focus to the cast (user, 2026-10-25, « Silo »).
-                .lineLimit(4)
-                #endif
                 .frame(maxWidth: readingMaxWidth, alignment: .leading)
                 // Not focusable on tvOS: a stop on it only left a focus nobody
                 // could see between Play and the cast (user, 2026-10-25).
@@ -508,7 +531,11 @@ struct MediaDetailScreen: View {
     private func secondaryColumnSections(_ item: BaseItemDto) -> some View {
         // Cast
         if let people = item.people, !people.isEmpty {
+            #if os(tvOS)
+            MediaDetailCastSection(people: people, firstCardFocus: $belowActionsFocused).equatable()
+            #else
             MediaDetailCastSection(people: people).equatable()
+            #endif
         }
 
         // Seasons & Episodes (for series)
