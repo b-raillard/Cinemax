@@ -9,6 +9,12 @@ import JellyfinAPI
 /// row when the people array hasn't actually changed.
 struct MediaDetailCastSection: View, Equatable {
     let people: [BaseItemPerson]
+    #if os(tvOS)
+    /// Bound to the FIRST card, so the fiche's `defaultFocus` lands there when
+    /// Down leaves the action row — tvOS otherwise picks a card with a photo,
+    /// which stands a little taller.
+    var firstCardFocus: FocusState<Bool>.Binding?
+    #endif
 
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
@@ -50,6 +56,7 @@ struct MediaDetailCastSection: View, Equatable {
             }
             #if os(tvOS)
             .buttonStyle(CinemaTVCardButtonStyle())
+            .modifier(FirstCardFocus(binding: person.id == people.first?.id ? firstCardFocus : nil))
             #else
             .buttonStyle(.plain)
             #endif
@@ -57,3 +64,18 @@ struct MediaDetailCastSection: View, Equatable {
         }
     }
 }
+
+#if os(tvOS)
+/// `.focused` only when a binding is given — the first card of the row.
+private struct FirstCardFocus: ViewModifier {
+    let binding: FocusState<Bool>.Binding?
+
+    func body(content: Content) -> some View {
+        if let binding {
+            content.focused(binding)
+        } else {
+            content
+        }
+    }
+}
+#endif
