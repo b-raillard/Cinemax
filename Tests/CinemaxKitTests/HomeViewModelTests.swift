@@ -921,6 +921,22 @@ struct HomeResumeHereTests {
         #expect(vm.elsewhere.isEmpty)
     }
 
+    @Test("A film playing elsewhere but not yet in « Reprendre » reloads that row, and only then")
+    func missingFromResumeReloadsTheRow() async {
+        // Jellyfin lists a film in Resume only past 5 % of it: one started on
+        // the TV moments ago was playing with no card to carry its pill
+        // (integration report 2026-10-25, OBS-1).
+        let (vm, appState, api) = setup(allowed: true)
+        api.stubbedResumeItems = [BaseItemDto(id: "movie-1")]
+        await vm.refreshElsewhere(using: appState)
+        #expect(api.getResumeItemsCallCount == 1)
+        #expect(vm.resumeItems.map(\.id) == ["movie-1"])
+
+        // Already in the row: the probe asks nothing more.
+        await vm.refreshElsewhere(using: appState)
+        #expect(api.getResumeItemsCallCount == 1)
+    }
+
     @Test("A source that cannot be driven is never sent anything")
     func cannotStop() async throws {
         let (vm, appState, api) = setup(allowed: true, canStop: false)

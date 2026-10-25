@@ -1205,6 +1205,14 @@ final class HomeViewModel {
         // Equality-guarded: the poll runs every 20 s and tvOS pulls focus off
         // a card whose row is invalidated (see `loadActiveSessions`).
         if fresh != elsewhere { elsewhere = fresh }
+        // The pill rides a « Reprendre » card, and Jellyfin lists a film there
+        // only past 5 % of it: one started elsewhere moments ago had no card
+        // until the next Home load (integration report 2026-10-25, OBS-1).
+        // Re-read that row — only while such a film is missing from it.
+        let resumeIds = Set(resumeItems.compactMap(\.id))
+        if fresh.keys.contains(where: { !resumeIds.contains($0) }) {
+            await refreshResume(using: appState)
+        }
     }
 
     /// The playback is now HERE: tell the source, then stop it. Fire-and-
