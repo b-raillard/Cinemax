@@ -334,9 +334,12 @@ struct MainTabView: View {
     }
 
     /// The avatar is offered to every tier (spec 2026-10-20): free lists the
-    /// remembered accounts too, each asking for a sign-in.
+    /// remembered accounts too, each asking for a sign-in. On a tab ROOT only,
+    /// like iOS: a pushed page (a fiche) hides the tab bar, so the avatar was
+    /// drawn there with nothing that could reach it (user, 2026-10-25) — Menu
+    /// goes back to the root, where it is.
     private var showsTVAccountAvatar: Bool {
-        appState.isAuthenticated
+        appState.isAuthenticated && !tvBack.canGoBack(in: selectedTabID)
     }
     #endif
 

@@ -1215,6 +1215,15 @@ final class HomeViewModel {
         }
     }
 
+    /// A playback here has ended: the hand-off memory has done its job (it
+    /// only covers the moments the source takes to stop). Kept, it hid for
+    /// up to 60 s a film taken BACK by the other device — the round trip
+    /// phone → TV → phone left the TV without its pill for ~40 s (user test
+    /// 2026-10-25, YOU-2).
+    func forgetHandOffs() {
+        handedOff = [:]
+    }
+
     /// The playback is now HERE: tell the source, then stop it. Fire-and-
     /// forget — a failure is logged, never shown, and never holds the local
     /// player back (it is already opening). Idempotent per session + item.

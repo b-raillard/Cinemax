@@ -158,8 +158,15 @@ struct HomeScreen: View {
             // Tier-2: targeted rail refresh while visible, otherwise defer. This
             // also handles Home's own Continue Watching mutations (posted by
             // `mutateResumeItem`), so the resume rail is fetched exactly once.
+            // A playback that ended here (the stop report posts this) also
+            // ends the hand-off memory, and « Reprendre ici » is asked at once:
+            // the other device may just have taken the film back (YOU-2).
+            viewModel.forgetHandOffs()
             if isVisible {
-                Task { await viewModel.refreshUserDataRails(using: appState) }
+                Task {
+                    await viewModel.refreshUserDataRails(using: appState)
+                    await viewModel.refreshElsewhere(using: appState)
+                }
             } else {
                 pendingUserDataRefresh = true
             }
@@ -1005,6 +1012,10 @@ struct HomeScreen: View {
                     // bar instead of getting trapped inside the hero bounds.
                     // Entering it (Down from the tab bar) lands on the main
                     // button, whichever button sits under the focused tab.
+                    // Full width, so Up from ANY « Reprendre » card reaches it:
+                    // only the first card sat under the buttons, the others'
+                    // beam found nothing and Up did nothing (user, 2026-10-25).
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .defaultFocus($heroPlayFocused, true, priority: .userInitiated)
                     .focusSection()
                     #endif
@@ -1685,6 +1696,7 @@ struct HomeScreen: View {
             title: loc.localized("home.playlists"),
             showViewAll: true,
             onViewAll: { playlistsDestination = PlaylistsDestination() },
+            viewAllAspectRatio: 1,
             data: viewModel.playlists,
             id: \.id
         ) { playlist in

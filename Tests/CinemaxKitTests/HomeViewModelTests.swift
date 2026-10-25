@@ -921,6 +921,22 @@ struct HomeResumeHereTests {
         #expect(vm.elsewhere.isEmpty)
     }
 
+    @Test("Once playback ends here, a film taken back by the other device shows its pill at once")
+    func takenBackShowsAtOnce() async throws {
+        // Phone → TV → phone within a minute: the TV, back on Accueil, kept
+        // hiding the pill for the rest of its 60 s memory (YOU-2, 2026-10-25).
+        let (vm, appState, _) = setup(allowed: true)
+        await vm.refreshElsewhere(using: appState)
+        let entry = try #require(vm.elsewhere["movie-1"])
+        vm.handOff(entry, using: appState, message: "x")
+        await vm.refreshElsewhere(using: appState)
+        #expect(vm.elsewhere.isEmpty)
+
+        vm.forgetHandOffs()
+        await vm.refreshElsewhere(using: appState)
+        #expect(vm.elsewhere["movie-1"] != nil)
+    }
+
     @Test("A film playing elsewhere but not yet in « Reprendre » reloads that row, and only then")
     func missingFromResumeReloadsTheRow() async {
         // Jellyfin lists a film in Resume only past 5 % of it: one started on
