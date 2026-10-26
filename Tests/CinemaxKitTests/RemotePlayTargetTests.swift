@@ -246,13 +246,15 @@ struct ElsewherePlaybackTests {
         #expect(resolve([playingSession(positionTicks: 0)])["movie-1"]?.startSeconds == nil)
     }
 
-    @Test("a PLAYING source is carried forward to the tap, capped; a paused one is not")
+    @Test("a PLAYING source is carried forward to the tap while its report is fresh; an old report, or a paused source, is not")
     func carriedForward() throws {
-        // Reported 2533 s at `now - 60`.
+        // Reported 2533 s at `checkIn`, 60 s before `now`.
         let checkIn = now.addingTimeInterval(-60)
         let playing = try #require(resolve([playingSession(isPaused: false, checkIn: checkIn)])["movie-1"])
-        #expect(playing.startSeconds(at: now) == 2593)
-        #expect(playing.startSeconds(at: now.addingTimeInterval(500)) == 2653)   // 2533 + the 120 s cap
+        #expect(playing.startSeconds(at: checkIn.addingTimeInterval(25)) == 2558)  // normal cadence: + 25 s
+        #expect(playing.startSeconds(at: checkIn.addingTimeInterval(30)) == 2563)  // still fresh at the threshold
+        #expect(playing.startSeconds(at: checkIn.addingTimeInterval(31)) == 2533)  // older: the last point as is
+        #expect(playing.startSeconds(at: now) == 2533)
         #expect(playing.startSeconds(at: checkIn.addingTimeInterval(-5)) == 2533)
 
         let paused = try #require(resolve([playingSession(isPaused: true, checkIn: checkIn)])["movie-1"])

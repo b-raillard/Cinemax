@@ -36,19 +36,23 @@ public struct ElsewherePlayback: Sendable, Equatable {
         return Double(positionTicks / 10_000_000)
     }
 
-    /// The longest a playing source's position is carried forward: past it,
-    /// the report is too old to trust (the source may have stopped, sought…).
-    public static let maxCarryForward: TimeInterval = 120
+    /// How old a playing source's report may be and still be carried forward:
+    /// the source reports every ~10 s and the probe behind the card can be up
+    /// to ~20 s old (one poll). Older, the source has stopped reporting at its
+    /// normal pace (stopped, sought, lost its network…), so the last reported
+    /// point is used as is (user, 2026-10-26).
+    public static let carryForwardWindow: TimeInterval = 30
 
     /// Where « Reprendre ici » starts when tapped at `now`. Paused: the
-    /// reported position. Playing: the reported position plus the time since
-    /// that report (capped at `maxCarryForward`) — the probe can be up to
-    /// ~20 s old (one poll) plus the source's ~10 s report gap, which sent the viewer back
-    /// that far. No check-in date: the reported position as is.
+    /// reported position. Playing with a report at most `carryForwardWindow`
+    /// old: the reported position plus the time since that report — without
+    /// it the viewer went back up to ~30 s. Older report, or no check-in date:
+    /// the reported position as is.
     public func startSeconds(at now: Date) -> Double? {
         guard let base = startSeconds else { return nil }
         guard !isPaused, let checkIn else { return base }
-        let elapsed = min(max(0, now.timeIntervalSince(checkIn)), Self.maxCarryForward)
+        let elapsed = max(0, now.timeIntervalSince(checkIn))
+        guard elapsed <= Self.carryForwardWindow else { return base }
         return (base + elapsed).rounded(.down)
     }
 
