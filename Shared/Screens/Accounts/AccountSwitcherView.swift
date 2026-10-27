@@ -420,6 +420,10 @@ struct AccountAvatarToolbarButton: View {
                 .environment(earlyAdopter)
                 .environment(proStore)
                 .environment(network)
+                // The popover inherits the toolbar's `.large` symbol scale:
+                // its icons stood ~1.3× those of the same switcher opened from
+                // Réglages (recette 2026-10-26, ACC-12-A1).
+                .imageScale(.medium)
                 .preferredColorScheme(themeManager.colorScheme)
         }
     }

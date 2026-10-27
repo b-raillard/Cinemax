@@ -34,6 +34,8 @@ struct WhoIsWatchingScreen: View {
     @State private var flow = AccountSwitchFlow()
     @State private var showAddChoice = false
     @State private var showSignIn = false
+    /// The « Ajouter » password step signed someone in (`finishAdd`).
+    @State private var addSucceeded = false
     @State private var showQuickConnect = false
     @State private var quickConnect = LoginViewModel()
     @State private var showManage = false
@@ -68,9 +70,16 @@ struct WhoIsWatchingScreen: View {
                 }
             }
         }
+        // A cover does not inherit the root's `.preferredColorScheme`: in
+        // light mode the screen stayed dark under tiles drawn light — names
+        // dark on dark (recette 2026-10-27, ACC-13).
+        .preferredColorScheme(themeManager.colorScheme)
         .onExitCommand(perform: exit)
-        .fullScreenCover(isPresented: $showSignIn) {
-            UserSwitchSheet()
+        // « Ajouter » → « Mot de passe »: a success opens the account, so the
+        // screen closes like after Quick Connect — it went back to « Ajouter
+        // un profil » (recette 2026-10-26, ACC-01).
+        .fullScreenCover(isPresented: $showSignIn, onDismiss: finishAdd) {
+            UserSwitchSheet(onSignedIn: { addSucceeded = true })
                 .environment(appState)
                 .environment(themeManager)
                 .environment(loc)
@@ -296,6 +305,15 @@ struct WhoIsWatchingScreen: View {
         if succeeded { onFinished() }
     }
 
+    /// The « Ajouter » password step closed: after a success the account is
+    /// open and the host moves on; a cancel stays on the add choice.
+    private func finishAdd() {
+        guard addSucceeded else { return }
+        addSucceeded = false
+        showAddChoice = false
+        onFinished()
+    }
+
     private func exit() {
         if case .code = flow.step { flow.back(); return }
         if flow.reconnect != nil { cancelReconnection(); return }
@@ -374,6 +392,9 @@ struct TVAccountManageScreen: View {
                 }
             }
         }
+        // Same as « Qui regarde ? »: a cover follows the app's light / dark
+        // choice only when told (ACC-13).
+        .preferredColorScheme(themeManager.colorScheme)
         .onExitCommand {
             if stage != .list { stage = .list; entry = ""; message = nil } else { dismiss() }
         }

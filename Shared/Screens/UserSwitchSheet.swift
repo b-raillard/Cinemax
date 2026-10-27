@@ -44,6 +44,10 @@ struct UserSwitchSheet: View {
     /// the contextual Pro sheet. The presenter then injects the entitlement
     /// stores and `ProStore`.
     var showsProReconnectHint = false
+    /// Called once a sign-in succeeded, just before the sheet closes — so a
+    /// presenter can tell a success from a cancel in its `onDismiss` (a
+    /// re-signed CURRENT account leaves the user id unchanged).
+    var onSignedIn: (() -> Void)?
     @State private var showUpsell = false
     // OPTIONAL reads: only a presenter that shows the Pro hint injects them.
     @Environment(EntitlementStore.self) private var entitlements: EntitlementStore?
@@ -503,6 +507,7 @@ struct UserSwitchSheet: View {
             toasts.success(String(format: loc.localized("switchAccount.success"), trimmed))
             password = ""
             manualUsername = ""
+            onSignedIn?()
             dismiss()
         } catch {
             authError = loc.localized("switchAccount.authFailed")
