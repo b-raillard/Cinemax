@@ -91,6 +91,21 @@ final class VLCStreamPresenter: NSObject {
             onDismiss?()
             return
         }
+        // UIKit refuses to present from a controller whose view has left the
+        // window (a popover on its way out) — but only AFTER loading the
+        // player's view, i.e. after `startPlayback` told the server
+        // « playing », with nothing left to ever stop it: the other device
+        // kept offering « Reprendre ici » towards a player nobody saw
+        // (recette 2026-10-27, NEW-1). Checked BEFORE presenting, so nothing
+        // starts. Never judged after `present`: during another transition
+        // UIKit DEFERS the presentation, and an after-check read that as a
+        // refusal and killed every normal « Lire sur… » (measured).
+        guard PlayerPresentation.canPresent(from: topVC) else {
+            logger.error("VLC stream present: \(String(describing: type(of: topVC)), privacy: .public) is off-window — session released")
+            PlayerPresentation.releaseServerSession(info, client: apiClient)
+            onDismiss?()
+            return
+        }
         let vc = VLCStreamViewController(
             itemId: _initialItemId, info: info, title: title, startTime: startTime,
             previousEpisode: previousEpisode, nextEpisode: nextEpisode,
