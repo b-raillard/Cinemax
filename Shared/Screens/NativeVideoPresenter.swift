@@ -258,6 +258,14 @@ final class NativeVideoPresenter {
             logger.error("NativeVideoPresenter: no root view controller")
             return
         }
+        // Same check as the VLC presenter (NEW-1): a presenter off-window
+        // refuses, and the player would then play headless.
+        guard PlayerPresentation.canPresent(from: topVC) else {
+            logger.error("NativeVideoPresenter: \(String(describing: type(of: topVC)), privacy: .public) is off-window — session released")
+            PlayerPresentation.releaseServerSession(info, client: apiClient)
+            onDismiss()
+            return
+        }
 
         // Store track state
         self.audioTracks = info.audioTracks
