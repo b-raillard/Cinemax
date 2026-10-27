@@ -33,10 +33,42 @@ struct MediaDetailCastSection: View, Equatable {
         }
     }
 
+    /// One card per person, at most 20. Jellyfin lists a person once per
+    /// credit, so two roles (or directing and acting) gave the same id twice —
+    /// `ForEach` then drew one view for both: a hole in the row and a role
+    /// that changed between launches (recette 2026-10-26). The first credit
+    /// keeps its place; an acting credit wins over another kind, and an
+    /// actor's distinct roles are joined. A credit with no id has no fiche to
+    /// open and no stable identity: dropped.
+    nonisolated static func cards(from people: [BaseItemPerson]) -> [BaseItemPerson] {
+        var cards: [BaseItemPerson] = []
+        var index: [String: Int] = [:]
+        for person in people {
+            guard let id = person.id, !id.isEmpty else { continue }
+            guard let at = index[id] else {
+                index[id] = cards.count
+                cards.append(person)
+                continue
+            }
+            var card = cards[at]
+            if card.type != .actor, person.type == .actor {
+                card.role = person.role
+                card.type = .actor
+            } else if card.type == .actor, person.type == .actor,
+                      let role = person.role, !role.isEmpty {
+                let roles = (card.role ?? "").components(separatedBy: " / ").filter { !$0.isEmpty }
+                if !roles.contains(role) { card.role = (roles + [role]).joined(separator: " / ") }
+            }
+            cards[at] = card
+        }
+        return Array(cards.prefix(20))
+    }
+
     var body: some View {
+        let cards = Self.cards(from: people)
         ContentRow(
             title: loc.localized("detail.castCrew"),
-            data: Array(people.prefix(20)),
+            data: cards,
             id: \.id
         ) { person in
             // Plain `NavigationLink` (not `navigationDestination(item:)`) —
@@ -56,7 +88,7 @@ struct MediaDetailCastSection: View, Equatable {
             }
             #if os(tvOS)
             .buttonStyle(CinemaTVCardButtonStyle())
-            .modifier(FirstCardFocus(binding: person.id == people.first?.id ? firstCardFocus : nil))
+            .modifier(FirstCardFocus(binding: person.id == cards.first?.id ? firstCardFocus : nil))
             #else
             .buttonStyle(.plain)
             #endif
