@@ -18,9 +18,14 @@ public struct ElsewherePlayback: Sendable, Equatable {
     /// When the source last reported `positionTicks` — what lets a PLAYING
     /// source's position be carried forward to the moment of the tap.
     public let checkIn: Date?
+    /// When `positionTicks` was READ from the server — a playing source only
+    /// (`nil` when paused, so a paused source reads the same on every poll and
+    /// Home's equality guard keeps holding).
+    public let fetchedAt: Date?
 
     public init(sessionId: String, itemId: String, deviceName: String,
-                isPaused: Bool, positionTicks: Int?, canStop: Bool, checkIn: Date? = nil) {
+                isPaused: Bool, positionTicks: Int?, canStop: Bool, checkIn: Date? = nil,
+                fetchedAt: Date? = nil) {
         self.sessionId = sessionId
         self.itemId = itemId
         self.deviceName = deviceName
@@ -28,6 +33,7 @@ public struct ElsewherePlayback: Sendable, Equatable {
         self.positionTicks = positionTicks
         self.canStop = canStop
         self.checkIn = checkIn
+        self.fetchedAt = fetchedAt
     }
 
     /// The position the source REPORTED, in seconds; `nil` = nothing reported.
@@ -44,15 +50,21 @@ public struct ElsewherePlayback: Sendable, Equatable {
     public static let carryForwardWindow: TimeInterval = 30
 
     /// Where « Reprendre ici » starts when tapped at `now`. Paused: the
-    /// reported position. Playing with a report at most `carryForwardWindow`
-    /// old: the reported position plus the time since that report — without
-    /// it the viewer went back up to ~30 s. Older report, or no check-in date:
-    /// the reported position as is.
+    /// position read. Playing: the position read plus the time since it was
+    /// READ (`fetchedAt`), never since the source's check-in — Jellyfin
+    /// advances a playing session's `PositionTicks` every second on its own
+    /// without touching `LastPlaybackCheckIn`, so counting from the check-in
+    /// added that time twice and started 5 to 9 s ahead (recette 2026-10-26,
+    /// FIC-04). A server that did not advance it makes this start up to one
+    /// report interval behind, the safe direction. Carried forward only when
+    /// the source had reported at most `carryForwardWindow` before the read
+    /// and the read is at most that old; otherwise the position as read.
     public func startSeconds(at now: Date) -> Double? {
         guard let base = startSeconds else { return nil }
-        guard !isPaused, let checkIn else { return base }
-        let elapsed = max(0, now.timeIntervalSince(checkIn))
-        guard elapsed <= Self.carryForwardWindow else { return base }
+        guard !isPaused, let checkIn, let fetchedAt,
+              fetchedAt.timeIntervalSince(checkIn) <= Self.carryForwardWindow else { return base }
+        let elapsed = now.timeIntervalSince(fetchedAt)
+        guard elapsed >= 0, elapsed <= Self.carryForwardWindow else { return base }
         return (base + elapsed).rounded(.down)
     }
 
@@ -84,14 +96,16 @@ public struct ElsewherePlayback: Sendable, Equatable {
             if let excludingDeviceId, session.deviceID == excludingDeviceId { continue }
             let checkIn = session.lastPlaybackCheckIn.flatMap { $0 > Date(timeIntervalSinceReferenceDate: 0) ? $0 : nil }
             if let checkIn, now.timeIntervalSince(checkIn) > staleAfter { continue }
+            let isPaused = session.playState?.isPaused ?? false
             let entry = Self(
                 sessionId: sessionId,
                 itemId: itemId,
                 deviceName: session.deviceName ?? "",
-                isPaused: session.playState?.isPaused ?? false,
+                isPaused: isPaused,
                 positionTicks: session.playState?.positionTicks,
                 canStop: session.isSupportsRemoteControl == true,
-                checkIn: checkIn
+                checkIn: checkIn,
+                fetchedAt: isPaused ? nil : now
             )
             let rank = checkIn ?? .distantPast
             if let current = best[itemId] {

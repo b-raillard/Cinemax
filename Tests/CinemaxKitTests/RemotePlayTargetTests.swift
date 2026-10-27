@@ -246,21 +246,44 @@ struct ElsewherePlaybackTests {
         #expect(resolve([playingSession(positionTicks: 0)])["movie-1"]?.startSeconds == nil)
     }
 
-    @Test("a PLAYING source is carried forward to the tap while its report is fresh; an old report, or a paused source, is not")
-    func carriedForward() throws {
-        // Reported 2533 s at `checkIn`, 60 s before `now`.
-        let checkIn = now.addingTimeInterval(-60)
+    // Jellyfin advances a playing session's `PositionTicks` every second on its
+    // own, without touching `LastPlaybackCheckIn`: the position read at the
+    // FETCH is already the position at the fetch. Measured 2026-10-26 on the
+    // bench: counting from the check-in started the TV 5 to 9 s ahead.
+    @Test("a PLAYING source is carried forward from the FETCH, not from its check-in")
+    func carriedForwardFromFetch() throws {
+        // Checked in at T, fetched at T + 8 with the server's position 2533 s.
+        let checkIn = now.addingTimeInterval(-8)
         let playing = try #require(resolve([playingSession(isPaused: false, checkIn: checkIn)])["movie-1"])
-        #expect(playing.startSeconds(at: checkIn.addingTimeInterval(25)) == 2558)  // normal cadence: + 25 s
-        #expect(playing.startSeconds(at: checkIn.addingTimeInterval(30)) == 2563)  // still fresh at the threshold
-        #expect(playing.startSeconds(at: checkIn.addingTimeInterval(31)) == 2533)  // older: the last point as is
-        #expect(playing.startSeconds(at: now) == 2533)
-        #expect(playing.startSeconds(at: checkIn.addingTimeInterval(-5)) == 2533)
+        #expect(playing.fetchedAt == now)
+        #expect(playing.startSeconds(at: now.addingTimeInterval(5)) == 2538)   // tap 5 s after the fetch
+        #expect(playing.startSeconds(at: now) == 2533)                         // tap at the fetch
+        #expect(playing.startSeconds(at: now.addingTimeInterval(30)) == 2563)  // still fresh at the threshold
+        #expect(playing.startSeconds(at: now.addingTimeInterval(31)) == 2533)  // older fetch: the point as read
+        #expect(playing.startSeconds(at: now.addingTimeInterval(-5)) == 2533)  // clock went back: as read
+    }
 
-        let paused = try #require(resolve([playingSession(isPaused: true, checkIn: checkIn)])["movie-1"])
-        #expect(paused.startSeconds(at: now) == 2533)
+    @Test("a source silent for over 30 s at the fetch, a paused one or an undated one is not carried forward")
+    func notCarriedForward() throws {
+        let stale = try #require(resolve([playingSession(isPaused: false, checkIn: now.addingTimeInterval(-31))])["movie-1"])
+        #expect(stale.startSeconds(at: now.addingTimeInterval(5)) == 2533)
+
+        let paused = try #require(resolve([playingSession(isPaused: true, checkIn: now.addingTimeInterval(-8))])["movie-1"])
+        #expect(paused.fetchedAt == nil)
+        #expect(paused.startSeconds(at: now.addingTimeInterval(5)) == 2533)
 
         let undated = try #require(resolve([playingSession(isPaused: false, checkIn: nil)])["movie-1"])
-        #expect(undated.startSeconds(at: now) == 2533)
+        #expect(undated.startSeconds(at: now.addingTimeInterval(5)) == 2533)
+    }
+
+    // Home equality-guards the poll's write; a paused source must not look
+    // new on every poll because of its fetch date.
+    @Test("a paused source reads the same on two polls")
+    func pausedSourceIsStableAcrossPolls() {
+        let session = playingSession(isPaused: true, checkIn: now.addingTimeInterval(-8))
+        let first = ElsewherePlayback.resolve(sessions: [session], currentUserId: "user-1", excludingDeviceId: nil, now: now)
+        let second = ElsewherePlayback.resolve(sessions: [session], currentUserId: "user-1", excludingDeviceId: nil,
+                                               now: now.addingTimeInterval(20))
+        #expect(first == second)
     }
 }

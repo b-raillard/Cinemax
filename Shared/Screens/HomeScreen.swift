@@ -982,12 +982,20 @@ struct HomeScreen: View {
                                     MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
                                 }
                             } label: {
-                                HStack(spacing: CinemaSpacing.spacing2) {
-                                    Text(loc.localized("action.moreInfo"))
-                                        .font(.system(size: heroButtonFontSize, weight: .bold))
-                                        .lineLimit(1)
+                                // « Plus d'infos », or the ⓘ alone when it does
+                                // not fit (« Reprendre ici » at 130 % text) —
+                                // a truncated « Plus… » said nothing (user,
+                                // 2026-10-27). The link keeps its label.
+                                ViewThatFits(in: .horizontal) {
+                                    HStack(spacing: CinemaSpacing.spacing2) {
+                                        Text(loc.localized("action.moreInfo"))
+                                            .font(.system(size: heroButtonFontSize, weight: .bold))
+                                            .lineLimit(1)
+                                        Image(systemName: "info.circle")
+                                            .font(.system(size: heroButtonFontSize - 2, weight: .bold))
+                                    }
                                     Image(systemName: "info.circle")
-                                        .font(.system(size: heroButtonFontSize - 2, weight: .bold))
+                                        .font(.system(size: heroButtonFontSize, weight: .bold))
                                 }
                                 .foregroundStyle(CinemaColor.onSurface)
                                 .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
@@ -999,10 +1007,14 @@ struct HomeScreen: View {
                             }
                             #if os(tvOS)
                             .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+                            .fixedSize()
                             #else
                             .buttonStyle(.plain)
+                            // Next to « Reprendre ici » at 130 % text, a fixed
+                            // width ran off the right edge (recette
+                            // 2026-10-26, FIC-14-A1): the label gives way.
+                            .fixedSize(horizontal: false, vertical: true)
                             #endif
-                            .fixedSize()
                             .accessibilityLabel(String(format: loc.localized("accessibility.moreInfoAbout"), item.name ?? ""))
                         }
                     }

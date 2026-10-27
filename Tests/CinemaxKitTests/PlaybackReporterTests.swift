@@ -286,6 +286,75 @@ struct PlaybackReporterTests {
         #expect(mock.pingCount == 0)
     }
 
+    // Jellyfin keeps advancing a session's position every second until it
+    // hears `IsPaused`, and other devices read that position (« Reprendre
+    // ici »). On the 10 s cadence alone a pause reached the server up to 10 s
+    // late, its position still running meanwhile (recette 2026-10-26).
+    @Test("a play/pause flip is reported at once, and the 10 s cadence restarts from it")
+    func pauseFlipReportsImmediately() async throws {
+        let mock = CountingPlaybackAPI()
+        nonisolated(unsafe) var paused = false
+        let reporter = PlaybackReporter(
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: paused) }
+        )
+
+        for _ in 0..<3 { reporter.onTick() }
+        await reporter.drain()
+        #expect(mock.progressCount == 0)
+
+        paused = true
+        reporter.onTick()
+        await reporter.drain()
+        #expect(mock.progressCount == 1)
+        #expect(mock.lastProgressPaused == true)
+
+        // The flip restarted the cadence: nine more ticks stay silent, the
+        // tenth reports.
+        for _ in 0..<9 { reporter.onTick() }
+        await reporter.drain()
+        #expect(mock.progressCount == 1)
+        reporter.onTick()
+        await reporter.drain()
+        #expect(mock.progressCount == 2)
+
+        paused = false
+        reporter.onTick()
+        await reporter.drain()
+        #expect(mock.progressCount == 3)
+        #expect(mock.lastProgressPaused == false)
+    }
+
+    @Test("a steady state adds no report: one per ten ticks")
+    func steadyStateAddsNoReport() async throws {
+        let mock = CountingPlaybackAPI()
+        let reporter = PlaybackReporter(
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: true) }
+        )
+
+        for _ in 0..<30 { reporter.onTick() }
+        await reporter.drain()
+        #expect(mock.progressCount == 3)
+    }
+
+    @Test("a pause right after the start is reported at once")
+    func pauseAfterStartReportsImmediately() async throws {
+        let mock = CountingPlaybackAPI()
+        nonisolated(unsafe) var paused = false
+        let reporter = PlaybackReporter(
+            apiClient: mock, context: { .init(itemId: "item1", info: .stubbed(), player: nil) },
+            timeSource: { (seconds: 42, isPaused: paused) }
+        )
+
+        reporter.reportStart(startTime: 40)
+        paused = true
+        reporter.onTick()
+        await reporter.drain()
+        #expect(mock.progressCount == 1)
+        #expect(mock.lastProgressPaused == true)
+    }
+
     @Test("a finite time source still reports the real position")
     func finiteTimeSourceReportsPosition() async throws {
         let mock = CountingPlaybackAPI()
@@ -679,6 +748,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         var stop = 0
         var lastStartTicks: Int?
         var lastProgressTicks: Int?
+        var lastProgressPaused: Bool?
         var lastStopTicks: Int?
         var lastStopLiveStreamId: String?
         var stopEncoding = 0
@@ -704,6 +774,7 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
     var stopCount: Int { state.withLock { $0.stop } }
     var lastStartTicks: Int? { state.withLock { $0.lastStartTicks } }
     var lastProgressTicks: Int? { state.withLock { $0.lastProgressTicks } }
+    var lastProgressPaused: Bool? { state.withLock { $0.lastProgressPaused } }
     var lastStopTicks: Int? { state.withLock { $0.lastStopTicks } }
     var lastStopLiveStreamId: String? { state.withLock { $0.lastStopLiveStreamId } }
     var stopEncodingCount: Int { state.withLock { $0.stopEncoding } }
@@ -727,7 +798,12 @@ private final class CountingPlaybackAPI: PlaybackAPI, Sendable {
         if progressDelay > .zero {
             do { try await Task.sleep(for: progressDelay) } catch { return }
         }
-        state.withLock { $0.progress += 1; $0.lastProgressTicks = positionTicks; $0.order.append("progress") }
+        state.withLock {
+            $0.progress += 1
+            $0.lastProgressTicks = positionTicks
+            $0.lastProgressPaused = isPaused
+            $0.order.append("progress")
+        }
     }
 
     func reportPlaybackStopped(
