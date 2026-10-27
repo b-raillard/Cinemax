@@ -172,6 +172,8 @@
 "settings.appearance" = "Apparence";
 "settings.darkMode" = "Mode sombre";
 "settings.lightMode" = "Mode clair";
+"settings.darkMode.short" = "Sombre";
+"settings.lightMode.short" = "Clair";
 "settings.accentColor" = "Couleur d'accentuation";
 "accent.name.red" = "Rouge";
 "accent.name.orange" = "Orange";
@@ -1440,7 +1442,7 @@
 "pro.terms" = "Conditions d'utilisation";
 "pro.privacy" = "Confidentialité";
 "pro.result.success.title" = "Merci !";
-"pro.result.success.message" = "Pro est actif. Il le sera aussi sur votre iPad et votre Apple TV à leur prochaine ouverture, avec le même compte iCloud.";
+"pro.result.success.message" = "Pro est actif. Il le sera aussi sur vos autres appareils avec le même compte iCloud, à leur prochaine ouverture.";
 "pro.result.pending.title" = "Demande envoyée";
 "pro.result.pending.message" = "L'organisateur du Partage familial doit approuver l'achat. Pro s'activera tout seul ensuite.";
 "pro.result.failed.title" = "Achat impossible";

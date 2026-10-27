@@ -302,18 +302,33 @@ extension SettingsScreen {
                 }
 
                 // Label
+                // One line, never cut mid-word: at 130 % the focused pill's
+                // subtitle squeezed « Apparence » onto two lines (recette
+                // 2026-10-26, PRO-07-B). The title keeps its room first.
                 Text(category.localizedName(loc))
                     .font(.system(size: CinemaScale.pt(28), weight: .semibold))
                     .tracking(-0.3)
                     .foregroundStyle(isFocused ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .layoutPriority(1)
 
                 Spacer()
 
                 // Subtitle + chevron
                 if let subtitle = category.subtitle(loc, themeManager: themeManager), isFocused {
-                    Text(subtitle)
-                        .font(.system(size: CinemaScale.pt(18), weight: .regular))
-                        .foregroundStyle(themeManager.onAccentContainer.opacity(0.8))
+                    // « Mode sombre » when it fits, else « Sombre » (user,
+                    // 2026-10-27): « Mode… » at 130 % said nothing.
+                    ViewThatFits(in: .horizontal) {
+                        Text(subtitle)
+                        Text(category.shortSubtitle(loc, themeManager: themeManager) ?? subtitle)
+                    }
+                    .font(.system(size: CinemaScale.pt(18), weight: .regular))
+                    .foregroundStyle(themeManager.onAccentContainer.opacity(0.8))
+                    .lineLimit(1)
+                    // Served after the title but before the Spacer, which
+                    // would otherwise split the room with it.
+                    .layoutPriority(0.5)
                 }
 
                 if isFocused {

@@ -77,6 +77,17 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The same, in one word (« Sombre » / « Clair »): what the tvOS pill
+    /// shows when `subtitle` does not fit (130 % text) — « Mode… » said nothing.
+    @MainActor func shortSubtitle(_ loc: LocalizationManager, themeManager: ThemeManager) -> String? {
+        switch self {
+        case .appearance:
+            loc.localized(themeManager.darkModeEnabled ? "settings.darkMode.short" : "settings.lightMode.short")
+        default:
+            nil
+        }
+    }
+
     /// The Pro feature behind this category, if any (lot B): Administration
     /// stays LISTED for a free admin, with a PRO badge, and its tap opens the
     /// Pro sheet (`ProFeatureAccess.admit`) instead of the page.

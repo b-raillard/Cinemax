@@ -74,7 +74,19 @@ extension SettingsScreen {
         let previewed = focusedChoice ?? AppIconCatalogue.choice(alternateName: appIconName) ?? AppIconCatalogue.primary
 
         return VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+            // A full-width section: the grid sits right of the back button, so
+            // Up from it found nothing above and went to the tab bar (recette
+            // 2026-10-26, PRO-10-UP). The section leaves Right from the button
+            // with no candidate, so the button hands it to the first tile —
+            // the only mover, as with the « Votre niveau » chip (measured).
             tvAppIconBackButton
+                .onMoveCommand { direction in
+                    guard direction == .right,
+                          let first = AppIconCatalogue.tvSections.first?.choices.first else { return }
+                    focusedItem = .appIcon(first.id)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .focusSection()
 
             HStack(alignment: .top, spacing: CinemaSpacing.spacing10) {
                 tvAppIconPreview(previewed, tier: tier)

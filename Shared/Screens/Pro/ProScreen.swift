@@ -50,7 +50,16 @@ struct ProScreen: View {
 
     var body: some View {
         if hostsResultAlert {
-            platformBody.proPurchaseResultAlert()
+            // tvOS: the purchase removes « Débloquer », the button that held
+            // focus, so OK on « Merci ! » left the engine to pick — it chose
+            // the « Réglages » tab (recette 2026-10-26, PRO-01-A). Focus goes
+            // back to the panel (« Restaurer les achats »), one turn later so
+            // the alert's own focus restoration cannot override it.
+            platformBody.proPurchaseResultAlert(onPurchased: {
+                #if os(tvOS)
+                Task { @MainActor in panelFocused = true }
+                #endif
+            })
         } else {
             platformBody
         }

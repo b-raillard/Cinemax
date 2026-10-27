@@ -172,6 +172,8 @@
 "settings.appearance" = "Darstellung";
 "settings.darkMode" = "Dunkelmodus";
 "settings.lightMode" = "Hellmodus";
+"settings.darkMode.short" = "Dunkel";
+"settings.lightMode.short" = "Hell";
 "settings.accentColor" = "Akzentfarbe";
 "accent.name.red" = "Rot";
 "accent.name.orange" = "Orange";
@@ -1438,7 +1440,7 @@
 "pro.terms" = "Nutzungsbedingungen";
 "pro.privacy" = "Datenschutz";
 "pro.result.success.title" = "Danke!";
-"pro.result.success.message" = "Pro ist aktiv. Auf iPad und Apple TV mit demselben iCloud-Account ab dem nächsten Öffnen ebenfalls.";
+"pro.result.success.message" = "Pro ist aktiv. Auf deinen anderen Geräten mit demselben iCloud-Account ab dem nächsten Öffnen ebenfalls.";
 "pro.result.pending.title" = "Anfrage gesendet";
 "pro.result.pending.message" = "Der Organisator der Familienfreigabe muss den Kauf bestätigen. Pro wird danach automatisch aktiviert.";
 "pro.result.failed.title" = "Kauf nicht möglich";

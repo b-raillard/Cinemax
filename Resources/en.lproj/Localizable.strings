@@ -172,6 +172,8 @@
 "settings.appearance" = "Appearance";
 "settings.darkMode" = "Dark Mode";
 "settings.lightMode" = "Light Mode";
+"settings.darkMode.short" = "Dark";
+"settings.lightMode.short" = "Light";
 "settings.accentColor" = "Accent Color";
 "accent.name.red" = "Red";
 "accent.name.orange" = "Orange";
@@ -1438,7 +1440,7 @@
 "pro.terms" = "Terms of Use";
 "pro.privacy" = "Privacy";
 "pro.result.success.title" = "Thank you!";
-"pro.result.success.message" = "Pro is active. It will be on your iPad and Apple TV too the next time they open, with the same iCloud account.";
+"pro.result.success.message" = "Pro is active. It will be on your other devices with the same iCloud account too, the next time they open.";
 "pro.result.pending.title" = "Request sent";
 "pro.result.pending.message" = "Your Family Sharing organizer needs to approve the purchase. Pro will turn on by itself afterwards.";
 "pro.result.failed.title" = "Purchase failed";
