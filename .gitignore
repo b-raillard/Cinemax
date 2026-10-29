@@ -29,3 +29,6 @@ __pycache__/
 
 # Network logo originals (re-fetched by design/network-logos/fetch_networks.py)
 design/network-logos/_originals/
+
+# Vidéos de présentation générées par le plugin brag
+brag-output/
