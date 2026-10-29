@@ -79,9 +79,12 @@ func proTierText(_ entitlements: EntitlementStore, earlyAdopter: EarlyAdopterSer
     case .pro: loc.localized("settings.debug.proTier.pro")
     case .founder: loc.localized("settings.debug.proTier.founder")
     }
-    #if DEBUG
+    #if DEBUG || PRO_PREVIEW
     if entitlements.proTierOverride == .automatic {
         return loc.localized("settings.debug.proTier.automatic", tierText)
+    }
+    if entitlements.proTierOverride == .launched {
+        return loc.localized("settings.debug.proTier.launched", tierText)
     }
     #endif
     return tierText
@@ -100,11 +103,11 @@ func earlyAdopterRowAction(_ service: EarlyAdopterService) {
 }
 
 #if os(iOS)
-/// Settings → Lecture → Débogage (iOS): the read-only « Droits » row, the
+/// Settings → Debug (iOS): the read-only « Droits » row, the
 /// « Simuler Pro » switch in DEBUG builds, then the « Early adopter » row.
 ///
 /// A standalone `View` with its own `@Environment`, like `DiagnosticsExportRows`:
-/// the Playback page is pushed through `navigationDestination`, where only a
+/// the Debug page is pushed through `navigationDestination`, where only a
 /// standalone view re-renders on an `@Observable` change (root iOS
 /// `NavigationStack` RULE) — the switch would otherwise look dead.
 struct EntitlementDebugRows: View {
@@ -137,14 +140,14 @@ struct EntitlementDebugRows: View {
             #endif
             iOSSettingsDivider
             earlyAdopterRow
-            #if DEBUG
+            #if DEBUG || PRO_PREVIEW
             iOSSettingsDivider
             proTierRow
             #endif
         }
     }
 
-    #if DEBUG
+    #if DEBUG || PRO_PREVIEW
     /// Free / Pro / founder, forced — what the Pro features (multi-account)
     /// see. A press cycles automatic → free → Pro → founder.
     private var proTierRow: some View {

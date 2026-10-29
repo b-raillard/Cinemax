@@ -540,15 +540,7 @@ public final class JellyfinAPIClient: Sendable {
         return c
     }
 
-    private var deviceName: String {
-        #if os(tvOS)
-        "Apple TV"
-        #elseif os(iOS)
-        Self.iOSDeviceName
-        #else
-        "Apple Device"
-        #endif
-    }
+    private var deviceName: String { Self.sessionDeviceName }
 
     #if os(iOS)
     /// « iPad » or « iPhone », from the hardware model — every iOS device was
@@ -557,7 +549,7 @@ public final class JellyfinAPIClient: Sendable {
     /// reports its host, hence `SIMULATOR_MODEL_IDENTIFIER`), not `UIDevice`,
     /// which is main-actor-isolated and absent from this package's imports;
     /// `UIDevice.name` (the user's own) needs an entitlement since iOS 16.
-    private static let iOSDeviceName: String = {
+    static let iOSDeviceName: String = {
         var info = utsname()
         uname(&info)
         let machine = withUnsafeBytes(of: &info.machine) { raw in

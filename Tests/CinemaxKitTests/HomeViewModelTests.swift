@@ -713,3 +713,254 @@ struct HomeResumeRemovalTests {
         } == false)
     }
 }
+
+// MARK: - Cold-start snapshot
+
+/// Free so the `@Sendable` mock handlers could call it too.
+private func makeSnapshotItem(_ id: String) -> BaseItemDto {
+    var item = BaseItemDto()
+    item.id = id
+    item.name = id
+    return item
+}
+
+@MainActor
+@Suite("Home snapshot (cold-start first paint)")
+struct HomeSnapshotTests {
+
+    /// A private directory per test: suites run in parallel, and the real
+    /// Caches directory must never be touched by a test.
+    private func makeStore() -> HomeSnapshotStore {
+        HomeSnapshotStore(directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("HomeSnapshotTests-\(UUID().uuidString)", isDirectory: true))
+    }
+
+    /// The snapshot is keyed by the ACTIVE server, which only a hydrated
+    /// registry provides — same construction as `SearchViewModelHistoryTests`.
+    private func makeAppState(api: MockAPIClient, serverId: String = "srv") -> AppState {
+        let keychain = MockKeychain()
+        keychain.savedServers = [
+            ServerEntry(id: serverId, name: "NAS", url: URL(string: "https://a.local")!,
+                        accessToken: "tok", userId: "user1")
+        ]
+        keychain.savedActiveServerId = serverId
+        let appState = AppState(apiClient: api, keychain: keychain)
+        appState.loadServersFromKeychain()
+        appState.currentUserId = "user1"
+        return appState
+    }
+
+    @Test("A snapshot round-trips, per server + user + content-age cap")
+    func storeRoundTrips() {
+        let store = makeStore()
+        let snapshot = HomeSnapshot(resumeItems: [makeSnapshotItem("r")], latestItems: [makeSnapshotItem("l")])
+        store.save(snapshot, serverId: "srv", userId: "user1", maxContentAge: 0)
+
+        #expect(store.load(serverId: "srv", userId: "user1", maxContentAge: 0) == snapshot)
+        #expect(store.load(serverId: "srv", userId: "user2", maxContentAge: 0) == nil)
+        #expect(store.load(serverId: "srv", userId: "user1", maxContentAge: 12) == nil,
+                "a different cap must never read another cap's rails")
+        #expect(store.load(serverId: "other", userId: "user1", maxContentAge: 0) == nil)
+    }
+
+    @Test("A snapshot of another format version is ignored")
+    func otherVersionIgnored() {
+        let store = makeStore()
+        var snapshot = HomeSnapshot(resumeItems: [makeSnapshotItem("r")])
+        snapshot.version = HomeSnapshot.currentVersion + 1
+        store.save(snapshot, serverId: "srv", userId: "user1", maxContentAge: 0)
+
+        #expect(store.load(serverId: "srv", userId: "user1", maxContentAge: 0) == nil)
+    }
+
+    @Test("Clearing a server removes its files only")
+    func clearIsPerServer() {
+        let store = makeStore()
+        let snapshot = HomeSnapshot(resumeItems: [makeSnapshotItem("r")])
+        store.save(snapshot, serverId: "A", userId: "user1", maxContentAge: 0)
+        store.save(snapshot, serverId: "A", userId: "user2", maxContentAge: 12)
+        store.save(snapshot, serverId: "AB", userId: "user1", maxContentAge: 0)
+
+        store.clear(serverId: "A")
+
+        #expect(store.load(serverId: "A", userId: "user1", maxContentAge: 0) == nil)
+        #expect(store.load(serverId: "A", userId: "user2", maxContentAge: 12) == nil)
+        #expect(store.load(serverId: "AB", userId: "user1", maxContentAge: 0) == snapshot,
+                "a server whose id merely STARTS with the cleared one is untouched")
+    }
+
+    @Test("A cold load paints the snapshot while phase 1 is in flight, then phase 1 replaces it")
+    func coldLoadPaintsSnapshotThenReplacesIt() async {
+        let store = makeStore()
+        store.save(HomeSnapshot(resumeItems: [makeSnapshotItem("old")], favoriteItems: [makeSnapshotItem("fav-old")]),
+                   serverId: "srv", userId: "user1", maxContentAge: 0)
+        let api = MockAPIClient()
+        api.stubbedResumeItems = [makeSnapshotItem("new")]
+        let gate = TestLatch()
+        api.resumeGate = gate
+        let vm = HomeViewModel(defaults: .isolatedForTesting(), snapshotStore: store)
+
+        let load = Task { await vm.load(using: makeAppState(api: api)) }
+
+        let painted = await eventually { vm.resumeItems.map(\.id) == ["old"] }
+        #expect(painted, "the snapshot must paint before phase 1 answers")
+        #expect(vm.isShowingSnapshot)
+        #expect(vm.isLoading == false, "the skeleton drops on the snapshot")
+        #expect(vm.heroItem?.id == "old")
+
+        gate.open()
+        await load.value
+
+        #expect(vm.resumeItems.map(\.id) == ["new"])
+        #expect(vm.favoriteItems.isEmpty, "nothing read from disk outlives phase 1")
+        #expect(vm.isShowingSnapshot == false)
+        let saved = await eventually {
+            store.load(serverId: "srv", userId: "user1", maxContentAge: 0)?.resumeItems.map(\.id) == ["new"]
+        }
+        #expect(saved, "a clean phase 1 becomes the next cold start's snapshot")
+    }
+
+    @Test("A phase 1 failing everywhere drops the snapshot for the error state")
+    func totalFailureDropsSnapshot() async {
+        let store = makeStore()
+        store.save(HomeSnapshot(resumeItems: [makeSnapshotItem("old")]),
+                   serverId: "srv", userId: "user1", maxContentAge: 0)
+        let api = MockAPIClient()
+        api.shouldThrow = true
+        api.seriesWithRecentEpisodesShouldThrow = true
+        let gate = TestLatch()
+        api.resumeGate = gate
+        let vm = HomeViewModel(defaults: .isolatedForTesting(), snapshotStore: store)
+
+        let load = Task { await vm.load(using: makeAppState(api: api)) }
+        let painted = await eventually { vm.isShowingSnapshot }
+        #expect(painted)
+
+        gate.open()
+        await load.value
+
+        #expect(vm.resumeItems.isEmpty)
+        #expect(vm.heroItem == nil)
+        #expect(vm.loadFailure != nil, "an unreachable server shows the error, not yesterday's Home")
+    }
+
+    @Test("No active server, no snapshot: the test-host path never touches the disk")
+    func noActiveServerNoSnapshot() async {
+        let store = makeStore()
+        let api = MockAPIClient()
+        api.stubbedResumeItems = [makeSnapshotItem("new")]
+        let appState = AppState(apiClient: api, keychain: MockKeychain())
+        appState.currentUserId = "user1"
+        let vm = HomeViewModel(defaults: .isolatedForTesting(), snapshotStore: store)
+
+        await vm.load(using: appState)
+
+        #expect(vm.resumeItems.map(\.id) == ["new"])
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: store.directory?.path ?? "")) ?? []
+        #expect(files.isEmpty)
+    }
+}
+
+// MARK: - « Reprendre ici » (spec 2026-10-24)
+
+@MainActor
+@Suite("Accueil — Reprendre ici")
+struct HomeResumeHereTests {
+    private func tvSession(canStop: Bool = true) -> SessionInfoDto {
+        var session = SessionInfoDto()
+        session.id = "s-tv"
+        session.userID = "user1"
+        session.deviceID = "device-tv"
+        session.deviceName = "Apple TV"
+        session.isSupportsRemoteControl = canStop
+        session.nowPlayingItem = BaseItemDto(id: "movie-1")
+        var state = PlayerStateInfo()
+        state.positionTicks = 25_330_000_000
+        state.isPaused = true
+        session.playState = state
+        return session
+    }
+
+    private func setup(allowed: Bool, canStop: Bool = true) -> (HomeViewModel, AppState, MockAPIClient) {
+        let api = MockAPIClient()
+        api.stubbedControllableSessions = [tvSession(canStop: canStop)]
+        let appState = AppState(apiClient: api, keychain: MockKeychain())
+        appState.currentUserId = "user1"
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        vm.allowsElsewhere = { allowed }
+        return (vm, appState, api)
+    }
+
+    @Test("Pro: the item playing on the Apple TV is known; free: nothing is asked")
+    func gate() async {
+        let (pro, proState, proAPI) = setup(allowed: true)
+        await pro.refreshElsewhere(using: proState)
+        #expect(pro.elsewhere["movie-1"]?.deviceName == "Apple TV")
+        #expect(proAPI.controllableSessionsCallCount == 1)
+
+        let (free, freeState, freeAPI) = setup(allowed: false)
+        await free.refreshElsewhere(using: freeState)
+        #expect(free.elsewhere.isEmpty)
+        #expect(freeAPI.controllableSessionsCallCount == 0)
+    }
+
+    @Test("Handing off tells the source, then stops it — once — and the pill does not come back")
+    func handOff() async throws {
+        let (vm, appState, api) = setup(allowed: true)
+        await vm.refreshElsewhere(using: appState)
+        let entry = try #require(vm.elsewhere["movie-1"])
+
+        vm.handOff(entry, using: appState, message: "Lecture reprise sur iPhone")
+        vm.handOff(entry, using: appState, message: "Lecture reprise sur iPhone")
+        #expect(vm.elsewhere.isEmpty)
+        await eventually { api.handoffCalls.count == 2 }
+        #expect(api.handoffCalls == ["message:s-tv:Lecture reprise sur iPhone", "stop:s-tv"])
+
+        // The cached probe still lists the source: it stays hidden.
+        await vm.refreshElsewhere(using: appState)
+        #expect(vm.elsewhere.isEmpty)
+    }
+
+    @Test("Once playback ends here, a film taken back by the other device shows its pill at once")
+    func takenBackShowsAtOnce() async throws {
+        // Phone → TV → phone within a minute: the TV, back on Accueil, kept
+        // hiding the pill for the rest of its 60 s memory (YOU-2, 2026-10-25).
+        let (vm, appState, _) = setup(allowed: true)
+        await vm.refreshElsewhere(using: appState)
+        let entry = try #require(vm.elsewhere["movie-1"])
+        vm.handOff(entry, using: appState, message: "x")
+        await vm.refreshElsewhere(using: appState)
+        #expect(vm.elsewhere.isEmpty)
+
+        vm.forgetHandOffs()
+        await vm.refreshElsewhere(using: appState)
+        #expect(vm.elsewhere["movie-1"] != nil)
+    }
+
+    @Test("A film playing elsewhere but not yet in « Reprendre » reloads that row, and only then")
+    func missingFromResumeReloadsTheRow() async {
+        // Jellyfin lists a film in Resume only past 5 % of it: one started on
+        // the TV moments ago was playing with no card to carry its pill
+        // (integration report 2026-10-25, OBS-1).
+        let (vm, appState, api) = setup(allowed: true)
+        api.stubbedResumeItems = [BaseItemDto(id: "movie-1")]
+        await vm.refreshElsewhere(using: appState)
+        #expect(api.getResumeItemsCallCount == 1)
+        #expect(vm.resumeItems.map(\.id) == ["movie-1"])
+
+        // Already in the row: the probe asks nothing more.
+        await vm.refreshElsewhere(using: appState)
+        #expect(api.getResumeItemsCallCount == 1)
+    }
+
+    @Test("A source that cannot be driven is never sent anything")
+    func cannotStop() async throws {
+        let (vm, appState, api) = setup(allowed: true, canStop: false)
+        await vm.refreshElsewhere(using: appState)
+        let entry = try #require(vm.elsewhere["movie-1"])
+        // `handOff` returns before creating any task for such a source.
+        vm.handOff(entry, using: appState, message: "x")
+        #expect(api.handoffCalls.isEmpty)
+        #expect(vm.elsewhere.isEmpty)
+    }
+}

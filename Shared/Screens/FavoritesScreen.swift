@@ -39,8 +39,8 @@ final class FavoritesViewModel {
         isLoading = false
     }
 
-    /// Pagination continuation — called from the grid's last-card `.onAppear`
-    /// trigger.
+    /// Pagination continuation — called from the grid's `.onAppear` trigger,
+    /// half a page before the last card.
     func loadMore(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         await fetchNextPage(using: appState, userId: userId)
@@ -64,7 +64,7 @@ final class FavoritesViewModel {
 
     private func fetchNextPage(using appState: AppState, userId: String) async {
         await loader.loadMore { startIndex in
-            try await self.page(using: appState, userId: userId, startIndex: startIndex, limit: 40)
+            try await self.page(using: appState, userId: userId, startIndex: startIndex, limit: self.loader.pageSize)
         }
     }
 
@@ -82,6 +82,8 @@ final class FavoritesViewModel {
                 isFavorite: true,
                 limit: limit,
                 startIndex: startIndex,
+                // Count once, on the first page — see `PaginatedLoader.loadMore`.
+                enableTotalRecordCount: startIndex == 0,
                 fieldSet: .card
             )
             self.loadFailed = false
@@ -280,10 +282,10 @@ struct FavoritesScreen: View {
     /// the same card. Mirrors `MovieLibraryScreen.maybeLoadMore`.
     private func maybeLoadMore(triggerId: String?) {
         let loader = viewModel.loader
-        guard !loader.isLoadingMore,
-              !loader.hasLoadedAll,
-              let triggerId,
-              triggerId == loader.items.last?.id else { return }
+        // Half a page before the end, not on the last card — see
+        // `PaginatedLoader.shouldLoadMore(onAppearOf:)`. It also checks
+        // `isLoadingMore` / `hasLoadedAll`, so redundant onAppears stay free.
+        guard loader.shouldLoadMore(onAppearOf: triggerId) else { return }
         Task { await viewModel.loadMore(using: appState) }
     }
 

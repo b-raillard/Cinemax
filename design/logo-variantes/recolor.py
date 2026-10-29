@@ -9,6 +9,9 @@ aubergine » variant).
     python3 design/logo-variantes/recolor.py                    # regenerates everything here
     python3 design/logo-variantes/recolor.py --install-corners  # + writes the corner-filled
                                                                 #   icons into Resources/
+    python3 design/logo-variantes/recolor.py --alternates       # ONLY installs the shipped
+                                                                #   alternate icons (ALTERNATES)
+                                                                #   + the picker's previews
 
 Needs Pillow + numpy.
 
@@ -86,6 +89,35 @@ AUBERGINE = [0x0C0A10, 0x15111C, 0x1D1726, 0x262033]
 HALLOWEEN_A = "halloween_cloche-citrouille_tentacules-potion"
 HALLOWEEN_B = "halloween_cloche-potion_tentacules-citrouille"
 HALLOWEEN_A_AUBERGINE = "halloween_cloche-citrouille_tentacules-potion_fond-aubergine"
+
+# Alternate app icons SHIPPED in the app (Réglages → Apparence → « Icône de
+# l'app », 2026-10-22): asset name — the `setAlternateIconName` argument, the
+# same string on iOS (an .appiconset) and tvOS (an .imagestack) — → variant.
+# `--alternates` installs them into Resources/ AS-IS from declinaisons/. ORDER =
+# the picker's (`AppIconCatalogue`): the three Halloween ones, then the accents
+# in `AccentOption` order. Every declined variant ships (decision 2026-10-22).
+# The accent variants have no back layer of their own: the « classique » one.
+ACCENT_ICON_NAMES = {  # declinaisons/<accent> → AppIcon<AccentOption, capitalised>
+    "rouge": "Red", "orange": "Orange", "jaune": "Yellow", "vert": "Green", "cyan": "Cyan",
+    "bleu": "Blue", "indigo": "Indigo", "violet": "Purple", "rose": "Pink",
+}
+ALTERNATES = {
+    "AppIconHalloweenPumpkin": HALLOWEEN_A,
+    "AppIconHalloweenPotion": HALLOWEEN_B,
+    "AppIconHalloween": HALLOWEEN_A_AUBERGINE,
+    **{f"AppIcon{english}": accent for accent, english in ACCENT_ICON_NAMES.items()},
+}
+assert list(ACCENT_ICON_NAMES) == list(ACCENTS), "one icon per accent, in the accent order"
+# The picker's thumbnails: `UIImage(named:)` cannot read an app icon set, so
+# each choice has a small imageset — iOS 180 px (60 pt @3x), tvOS the
+# back + front composite at 400 × 240 (200 × 120 pt @2x).
+PREVIEW = "AppIconPreview.imageset"
+PREVIEW_IOS, PREVIEW_TV = "app_icon_preview.png", "app_icon_preview_tv.png"
+PREVIEW_SIDE, PREVIEW_TV_SIZE = 180, (400, 240)
+# The variants that can be the PRIMARY icon (scripts/seasonal-icon.py), plus the
+# alternates: each gets its previews under declinaisons/<variant>/AppIconPreview.imageset/,
+# so the seasonal swap carries the « Classique » (`nil`) thumbnail along.
+PREVIEWED = list(dict.fromkeys(["classique", HALLOWEEN_A] + list(ALTERNATES.values())))
 
 CORNER_BOX = 260       # px (at 1024) searched for the painted white corner
 CORNER_GROW = 14       # px added around the white so the curved bevel goes too
@@ -228,8 +260,119 @@ def variants(rgb):
     return out
 
 
+def write_json(path, payload):
+    import json
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2)
+        f.write("\n")
+
+
+XCODE_INFO = {"author": "xcode", "version": 1}
+
+
+def declined(variant, rel):
+    """A variant's file AS-IS; a file the variant does not change is the « classique » one."""
+    path = os.path.join(OUT, variant, rel)
+    return path if os.path.exists(path) else os.path.join(OUT, "classique", rel)
+
+
+def previews(icon_path, back_path, front_path):
+    """→ (iOS tile, tvOS tile) of one icon, as the picker shows them."""
+    ios = Image.open(icon_path).convert("RGB").resize((PREVIEW_SIDE, PREVIEW_SIDE), Image.LANCZOS)
+    tv = Image.open(back_path).convert("RGBA")
+    tv.alpha_composite(Image.open(front_path).convert("RGBA"))
+    return ios, tv.convert("RGB").resize(PREVIEW_TV_SIZE, Image.LANCZOS)
+
+
+def write_preview_set(folder, tiles, contents=True):
+    os.makedirs(folder, exist_ok=True)
+    tiles[0].save(os.path.join(folder, PREVIEW_IOS), optimize=True)
+    tiles[1].save(os.path.join(folder, PREVIEW_TV), optimize=True)
+    if contents:
+        write_json(os.path.join(folder, "Contents.json"), {"images": [
+            {"filename": PREVIEW_IOS, "idiom": "universal", "scale": "3x"},
+            {"filename": PREVIEW_TV, "idiom": "tv", "scale": "2x"}], "info": XCODE_INFO})
+
+
+# The Small stack's @2x layers feed the tvOS thumbnail (800 × 480 → 400 × 240).
+TV_SMALL_BACK_2X, TV_SMALL_FRONT_2X = TV_BACKS[2], TV_FRONTS[2]
+
+
+def install_alternates():
+    """`--alternates`: no recolouring — the declined files are copied AS-IS.
+
+    - previews of every PREVIEWED variant into declinaisons/<variant>/AppIconPreview.imageset/
+      (scripts/seasonal-icon.py copies the primary's along with it);
+    - Resources/AppIconPreview.imageset = the CURRENT primary's thumbnails (« Classique »);
+    - per ALTERNATES entry: <name>.appiconset (iOS light + dark from the variant, the
+      tinted one is the primary's — greyscale, no variant), <name>.imagestack (tvOS,
+      Front + Back only: the Middle layers are empty; never a Top Shelf — an
+      alternate icon does not swap it) and <name>Preview.imageset."""
+    import shutil
+    for variant in PREVIEWED:
+        tiles = previews(declined(variant, ICON), declined(variant, TV_SMALL_BACK_2X),
+                         declined(variant, TV_SMALL_FRONT_2X))
+        write_preview_set(os.path.join(OUT, variant, PREVIEW), tiles, contents=False)
+
+    primary = previews(os.path.join(ASSETS, ICON), os.path.join(ASSETS, TV_SMALL_BACK_2X),
+                       os.path.join(ASSETS, TV_SMALL_FRONT_2X))
+    write_preview_set(os.path.join(ASSETS, PREVIEW), primary)
+
+    for name, variant in ALTERNATES.items():
+        iconset = os.path.join(ASSETS, f"{name}.appiconset")
+        os.makedirs(iconset, exist_ok=True)
+        shutil.copyfile(declined(variant, ICON), os.path.join(iconset, "app_icon_1024.png"))
+        shutil.copyfile(declined(variant, ICON_DARK), os.path.join(iconset, "app_icon_1024_dark.png"))
+        shutil.copyfile(os.path.join(ASSETS, ICON_TINTED), os.path.join(iconset, "app_icon_1024_tinted.png"))
+        write_json(os.path.join(iconset, "Contents.json"), {"images": [
+            {"filename": "app_icon_1024.png", "idiom": "universal", "platform": "ios", "size": "1024x1024"},
+            {"filename": "app_icon_1024_dark.png", "idiom": "universal", "platform": "ios", "size": "1024x1024",
+             "appearances": [{"appearance": "luminosity", "value": "dark"}]},
+            {"filename": "app_icon_1024_tinted.png", "idiom": "universal", "platform": "ios", "size": "1024x1024",
+             "appearances": [{"appearance": "luminosity", "value": "tinted"}]}], "info": XCODE_INFO})
+
+        # tvOS: a TOP-LEVEL image stack carrying the alternate's name, Small size
+        # (400 × 240, 1x + 2x). Measured with actool (Xcode 27.0) on 2026-10-22:
+        # a second .brandassets — stacks named « App Icon - … » or after the
+        # alternate — never reaches CFBundleAlternateIcons (« No applicable image
+        # stack found for alternate app icon name »); the bare stack does. The
+        # Large stack (1280 × 768) only serves the App Store: not needed here.
+        stack = os.path.join(ASSETS, f"{name}.imagestack")
+        for layer, sources in (("Front", TV_FRONTS), ("Back", TV_BACKS)):
+            folder = os.path.join(stack, f"{layer}.imagestacklayer", "Content.imageset")
+            os.makedirs(folder, exist_ok=True)
+            images = []
+            for scale, k in (("1x", 1), ("2x", 2)):
+                filename = os.path.basename(sources[k])
+                shutil.copyfile(declined(variant, sources[k]), os.path.join(folder, filename))
+                images.append({"filename": filename, "idiom": "tv", "scale": scale})
+            write_json(os.path.join(folder, "Contents.json"), {"images": images, "info": XCODE_INFO})
+            write_json(os.path.join(stack, f"{layer}.imagestacklayer", "Contents.json"), {"info": XCODE_INFO})
+        write_json(os.path.join(stack, "Contents.json"),
+                   {"layers": [{"filename": "Front.imagestacklayer"}, {"filename": "Back.imagestacklayer"}],
+                    "info": XCODE_INFO})
+
+        preview = os.path.join(ASSETS, f"{name}{PREVIEW.replace('AppIcon', '')}")  # AppIconHalloweenPreview.imageset
+        write_preview_set(preview, previews(declined(variant, ICON), declined(variant, TV_SMALL_BACK_2X),
+                                            declined(variant, TV_SMALL_FRONT_2X)))
+    print(f"{len(ALTERNATES)} alternate icon(s) + previews installed in {ASSETS}")
+
+
 def main():
+    if "--alternates" in sys.argv[1:]:
+        install_alternates()
+        return
     install = "--install-corners" in sys.argv[1:]
+
+    # The tvOS fronts are read from Resources/: once scripts/seasonal-icon.py has
+    # made a variant the PRIMARY icon, recolouring them would decline a declination
+    # (measured 2026-10-22: every tvOS front of every variant drifted).
+    live = np.array(Image.open(os.path.join(ASSETS, TV_FRONTS[0])).convert("RGBA"))
+    classic = np.array(Image.open(os.path.join(OUT, "classique", TV_FRONTS[0])).convert("RGBA"))
+    if not (live == classic).all():
+        sys.exit("The primary icon in Resources/ is a seasonal variant: run "
+                 "`python3 scripts/seasonal-icon.py classique` first (or only `--alternates`).")
 
     # 1. Corner-filled sources — and, on request, into the app.
     sources = {rel: load(rel) for rel in dict.fromkeys(CORNERED + RECOLOURED)}

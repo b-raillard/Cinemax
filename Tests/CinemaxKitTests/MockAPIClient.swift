@@ -187,6 +187,20 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if let playOnSessionError { throw playOnSessionError }
     }
 
+    /// « Reprendre ici »: the stop and the message sent to the source, in order
+    /// (`"message:<session>:<text>"`, `"stop:<session>"`).
+    private(set) var handoffCalls: [String] = []
+    var stopSessionError: Error?
+
+    func stopSession(sessionId: String) async throws {
+        recordLock.withLock { handoffCalls.append("stop:\(sessionId)") }
+        if let stopSessionError { throw stopSessionError }
+    }
+
+    func sendMessage(sessionId: String, header: String, text: String, timeoutMs: Int?) async throws {
+        recordLock.withLock { handoffCalls.append("message:\(sessionId):\(text)") }
+    }
+
     // MARK: - Admin
 
     var stubbedUserByID: UserDto = UserDto()
@@ -434,8 +448,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// `enableTotalRecordCount` of every `searchItems` call, in order.
     private(set) var searchCountFlags: [Bool] = []
 
+    /// Holds `getResumeItems` open until opened — keeps Home's phase 1 in
+    /// flight so a test can observe what is on screen meanwhile.
+    var resumeGate: TestLatch?
+
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto] {
         recordLock.withLock { getResumeItemsCallCount += 1 }
+        if let resumeGate { await resumeGate.wait() }
         if shouldThrow { throw stubbedError }
         return stubbedResumeItems
     }

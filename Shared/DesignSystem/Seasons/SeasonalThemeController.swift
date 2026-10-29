@@ -20,17 +20,26 @@ final class SeasonalThemeController {
     @ObservationIgnored private let catalogue: [SeasonalTheme]
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private let now: @Sendable () -> Date
+    /// « May this user force a season at any date? » — the Pro's « Halloween
+    /// toute l'année » (`ProFeatureAccess.allows(.seasonalAllYear)` in the app,
+    /// built at init like `ProFeatureAccess`'s own tier closure). Reading it in
+    /// a `body` (through `effectiveSetting`) reads the tier's observable
+    /// stores, so the Réglages choice redraws on a tier change; the ROOT
+    /// re-evaluates the season on that change (`AppNavigation`).
+    @ObservationIgnored private let allowsForcedSeason: @MainActor () -> Bool
 
     init(
         defaults: UserDefaults = .standard,
         catalogue: [SeasonalTheme] = SeasonalThemeCatalogue.all,
         calendar: Calendar = .autoupdatingCurrent,
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        allowsForcedSeason: @escaping @MainActor () -> Bool
     ) {
         self.defaults = defaults
         self.catalogue = catalogue
         self.calendar = calendar
         self.now = now
+        self.allowsForcedSeason = allowsForcedSeason
         setting = SeasonalSetting(rawValue: defaults.string(forKey: SettingsKey.seasonalTheme) ?? SettingsKey.Default.seasonalTheme) ?? .off
         ambianceEnabled = defaults.object(forKey: SettingsKey.seasonalAmbiance) as? Bool ?? SettingsKey.Default.seasonalAmbiance
         rowEnabled = defaults.object(forKey: SettingsKey.seasonalRow) as? Bool ?? SettingsKey.Default.seasonalRow
@@ -43,12 +52,18 @@ final class SeasonalThemeController {
     @discardableResult
     func reevaluate() -> Bool {
         let theme = SeasonalThemePolicy.activeTheme(
-            on: now(), calendar: calendar, setting: setting,
+            on: now(), calendar: calendar, setting: effectiveSetting,
             forcedID: forcedSeasonID, catalogue: catalogue
         )
         guard theme != activeTheme else { return false }
         activeTheme = theme
         return true
+    }
+
+    /// The choice as Réglages shows it selected: a forced season the tier
+    /// refuses reads as Automatique (`SeasonalThemePolicy.effectiveSetting`).
+    var effectiveSetting: SeasonalSetting {
+        SeasonalThemePolicy.effectiveSetting(setting, allowsForced: allowsForcedSeason())
     }
 
     func setSetting(_ value: SeasonalSetting) {

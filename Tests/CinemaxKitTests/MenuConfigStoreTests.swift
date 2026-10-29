@@ -684,22 +684,89 @@ struct MenuConfigStoreTests {
 /// Verrouille la structure du landing Réglages après la réorganisation
 /// (Lecture promue au 1er niveau) : l'ordre de déclaration = l'ordre
 /// d'affichage, et `.playback` doit rester visible sur les deux plateformes
-/// pour tout utilisateur — ni admin-gated, ni platform-gated.
+/// pour tout utilisateur — ni admin-gated, ni platform-gated. Depuis le
+/// 2026-10-22 (lot A) : une seule catégorie Administration, et Debug en
+/// dernier, montrée hors App Store (`showsDebug(environment:isDebugBuild:)`).
 @Suite("SettingsCategory")
 struct SettingsCategoryTests {
-    @Test("le landing non-admin résout les 5 catégories canoniques, dans l'ordre, sur les deux plateformes")
+    @Test("le landing non-admin résout les 5 catégories canoniques puis Debug, dans l'ordre, sur les deux plateformes")
     @MainActor func nonAdminOrder() {
-        let expected: [SettingsCategory] = [.appearance, .interface, .playback, .account, .server]
-        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: false) == expected)
-        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true) == expected)
+        let expected: [SettingsCategory] = [.appearance, .interface, .playback, .account, .server, .debug]
+        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: false, showsDebug: true) == expected)
+        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsDebug: true) == expected)
     }
 
-    @Test("l'admin iOS ajoute les deux catégories admin ; tvOS ne les montre jamais")
+    @Test("l'admin iOS ajoute UNE catégorie Administration, avant Debug ; tvOS ne la montre jamais")
     @MainActor func adminGating() {
-        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: false)
-                == [.appearance, .interface, .playback, .account, .server, .administration, .advancedAdmin])
-        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: true)
-                == [.appearance, .interface, .playback, .account, .server])
+        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: false, showsDebug: true)
+                == [.appearance, .interface, .playback, .account, .server, .administration, .debug])
+        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: true, showsDebug: true)
+                == [.appearance, .interface, .playback, .account, .server, .debug])
+    }
+
+    @Test("Debug est la DERNIÈRE ligne quand elle est montrée, et absente sinon, quels que soient admin et plateforme")
+    @MainActor func debugLastOrAbsent() {
+        for isTVOS in [false, true] {
+            for isAdmin in [false, true] {
+                let shown = SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS, showsDebug: true)
+                #expect(shown.last == .debug)
+                let hidden = SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS, showsDebug: false)
+                #expect(!hidden.contains(.debug))
+                #expect(hidden == shown.filter { $0 != .debug })
+            }
+        }
+    }
+
+    /// Toujours visible dans une build Debug (Xcode : elle ne demande jamais
+    /// l'`AppTransaction`, et un vieil enregistrement `.production` du
+    /// Trousseau ne doit pas la cacher) ; ailleurs, seulement quand l'App
+    /// Store a CONFIRMÉ un environnement de test (TestFlight = sandbox).
+    /// Inconnu ⇒ cachée : une installation App Store hors ligne au premier
+    /// lancement ne doit jamais l'afficher.
+    @Test("Debug : toujours en build Debug ; en Release seulement si l'environnement confirmé n'est pas la production")
+    func debugVisibilityByEnvironment() {
+        #expect(SettingsCategory.showsDebug(environment: nil, isDebugBuild: true))
+        #expect(SettingsCategory.showsDebug(environment: .production, isDebugBuild: true))
+        #expect(SettingsCategory.showsDebug(environment: .sandbox, isDebugBuild: false))
+        #expect(SettingsCategory.showsDebug(environment: .xcode, isDebugBuild: false))
+        #expect(!SettingsCategory.showsDebug(environment: nil, isDebugBuild: false))
+        #expect(!SettingsCategory.showsDebug(environment: .production, isDebugBuild: false))
+    }
+
+    @Test("l'ancienne catégorie « Admin avancée » ne se décode plus : une valeur brute retombe sur nil, jamais un plantage")
+    func advancedAdminRawValueFallsBack() {
+        #expect(SettingsCategory(rawValue: "advancedAdmin") == nil)
+        #expect(SettingsCategory(rawValue: "administration") == .administration)
+        #expect(SettingsCategory(rawValue: "debug") == .debug)
+    }
+
+    @Test("« Votre niveau » n'est jamais une ligne de la liste : on l'ouvre par la pastille de l'en-tête")
+    @MainActor func proNeverListed() {
+        for isTVOS in [false, true] {
+            for isAdmin in [false, true] {
+                for showsDebug in [false, true] {
+                    #expect(!SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS, showsDebug: showsDebug).contains(.pro))
+                }
+            }
+        }
+    }
+
+    @Test("La page Pro ne se montre qu'une fois le Pro lancé, ou un palier Debug choisi")
+    func proEntryVisibility() {
+        #expect(ProFeatureGate.showsProEntry(proLaunched: true, override: .automatic))
+        #expect(!ProFeatureGate.showsProEntry(proLaunched: false, override: .automatic))
+        for forced in ProTierOverride.allCases where forced != .automatic {
+            #expect(ProFeatureGate.showsProEntry(proLaunched: false, override: forced))
+        }
+    }
+
+    /// Lot B: the Administration row is the one Settings entry behind the Pro
+    /// gate — shown to a free admin with a lock, its tap opening the Pro sheet.
+    @Test("Seule la catégorie Administration est une fonction Pro")
+    func administrationIsTheProCategory() {
+        for category in SettingsCategory.allCases {
+            #expect(category.proFeature == (category == .administration ? .administration : nil), "\(category)")
+        }
     }
 
     @Test("le hub Interface expose exactement les quatre sous-pages écran, dans l'ordre")

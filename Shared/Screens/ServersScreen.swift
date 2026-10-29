@@ -1,6 +1,29 @@
 import SwiftUI
 import CinemaxKit
 
+private extension View {
+    /// The switch / delete confirmations. iOS: an alert — iOS 27 draws a
+    /// `confirmationDialog` as a popover with no « Annuler » (recette
+    /// 2026-10-26, SRV-DLG-01; the account switcher's Q-ANNULER decision).
+    /// tvOS keeps the confirmation dialog: a SwiftUI `.alert` has focus bugs
+    /// there (`docs/design-system/patterns.md`).
+    @ViewBuilder
+    func serverConfirmation<T, A: View, M: View>(
+        _ title: String,
+        isPresented: Binding<Bool>,
+        presenting data: T?,
+        @ViewBuilder actions: @escaping (T) -> A,
+        @ViewBuilder message: @escaping (T) -> M
+    ) -> some View {
+        #if os(iOS)
+        alert(title, isPresented: isPresented, presenting: data, actions: actions, message: message)
+        #else
+        confirmationDialog(title, isPresented: isPresented, titleVisibility: .visible,
+                           presenting: data, actions: actions, message: message)
+        #endif
+    }
+}
+
 // MARK: - View Model
 
 /// Reachability state for the servers list. Lives outside the view so the
@@ -195,13 +218,12 @@ struct ServersScreen: View {
         #else
         .sheet(item: $lockedSwitch) { entry in unlockSheet(for: entry) }
         #endif
-        .confirmationDialog(
+        .serverConfirmation(
             loc.localized("servers.switch.action"),
             isPresented: Binding(
                 get: { pendingSwitchId != nil },
                 set: { if !$0 { pendingSwitchId = nil } }
             ),
-            titleVisibility: .visible,
             presenting: pendingSwitchId
         ) { id in
             Button(loc.localized("servers.switch.action")) {
@@ -211,13 +233,12 @@ struct ServersScreen: View {
         } message: { id in
             Text(loc.localized("servers.switch.confirm", name(for: id)))
         }
-        .confirmationDialog(
+        .serverConfirmation(
             loc.localized("servers.delete"),
             isPresented: Binding(
                 get: { pendingDeleteId != nil },
                 set: { if !$0 { pendingDeleteId = nil } }
             ),
-            titleVisibility: .visible,
             presenting: pendingDeleteId
         ) { id in
             Button(loc.localized("servers.delete"), role: .destructive) {

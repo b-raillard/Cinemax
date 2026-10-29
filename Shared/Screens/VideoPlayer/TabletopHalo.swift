@@ -23,6 +23,12 @@ enum TabletopHalo {
         (viewHeight + pictureHeight) / 2 + gapBelowFold
     }
 
+    /// The flip about the centre plus `offset`: y′ = −y + offset. Its own
+    /// inverse, which is what `MirroringVideoView.setMirror` relies on.
+    static func mirrorTransform(offset: CGFloat) -> CATransform3D {
+        CATransform3DConcat(CATransform3DMakeScale(1, -1, 1), CATransform3DMakeTranslation(0, offset, 0))
+    }
+
     static func qualityLabel(width: Int) -> String {
         switch width {
         case 3200...: "4K"
@@ -71,21 +77,40 @@ enum TabletopHalo {
 final class MirroringVideoView: UIView {
     override static var layerClass: AnyClass { CAReplicatorLayer.self }
 
-    /// Table mode: a second, flipped instance, its picture starting
-    /// `gapBelowFold` pt below the bottom of the view (= the fold).
+    /// Table mode: the reflection, its picture starting `gapBelowFold` pt
+    /// below the bottom of the view (= the fold).
+    ///
+    /// **The REFLECTION is instance 0 and the picture instance 1, never the
+    /// other way round.** With the picture as instance 0, iOS 27.2 on a real
+    /// iPhone (17 Pro, simulated table mode, 2026-10-25 — the published 2.4.4
+    /// too) showed the reflection and a BLACK picture, while a screenshot or a
+    /// screen recording still had the picture: the display drops the FIRST
+    /// replica of the sample-buffer layer. So the content itself is flipped
+    /// (`sublayerTransform = T`, instance 0 = the reflection) and the instance
+    /// transform is the same `T`: a flip and its translation undo themselves
+    /// (y → −y + k → y), so instance 1 lands exactly on the picture, drawn
+    /// last and fully opaque. Same two instances as before, no extra cost.
+    /// Measured against the alternatives on the device: no mirror (picture
+    /// back, no halo), a 0.999 opacity, no veil, no black ground (all still
+    /// black), a third invisible instance (works, one more copy).
     func setMirror(enabled: Bool, pictureHeight: CGFloat, gapBelowFold: CGFloat) {
         guard let replicator = layer as? CAReplicatorLayer else { return }
         replicator.masksToBounds = false
         guard enabled else {
             replicator.instanceCount = 1
+            replicator.sublayerTransform = CATransform3DIdentity
+            replicator.instanceColor = UIColor.white.cgColor
+            replicator.instanceAlphaOffset = 0
             return
         }
         let offset = TabletopHalo.mirrorOffset(viewHeight: bounds.height, pictureHeight: pictureHeight,
                                                gapBelowFold: gapBelowFold)
+        let flip = TabletopHalo.mirrorTransform(offset: offset)
         replicator.instanceCount = 2
-        replicator.instanceTransform = CATransform3DConcat(CATransform3DMakeScale(1, -1, 1),
-                                                           CATransform3DMakeTranslation(0, offset, 0))
-        replicator.instanceAlphaOffset = TabletopHalo.opacity - 1
+        replicator.sublayerTransform = flip
+        replicator.instanceTransform = flip
+        replicator.instanceColor = UIColor(white: 1, alpha: CGFloat(TabletopHalo.opacity)).cgColor
+        replicator.instanceAlphaOffset = 1 - TabletopHalo.opacity
     }
 }
 

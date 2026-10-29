@@ -81,7 +81,8 @@ struct WhatsNewScreen: View {
     /// replace the navigation button. Once on (or on a replay after
     /// accepting), the page reads like any other and wears a « ✓ Activé » chip.
     private var offerPending: Bool {
-        if offeredSeason != nil { return seasonal.setting != .automatic }
+        // A forced Halloween (lot C) has accepted it too: never re-offered.
+        if offeredSeason != nil { return !seasonal.setting.isOptedIn }
         if let code = offeredLanguage { return loc.languageCode != code }
         return false
     }
@@ -368,7 +369,8 @@ struct WhatsNewScreen: View {
             return
         }
         guard let season = offeredSeason else { advance(); return }
-        seasonal.setSetting(.automatic)
+        // Never downgrades a forced Halloween to Automatique (lot C).
+        if !seasonal.setting.isOptedIn { seasonal.setSetting(.automatic) }
         if let start = SeasonalOffer.startsLater(season, on: Date(), calendar: .autoupdatingCurrent) {
             toasts.success(
                 loc.localized("whatsNew.offer.accepted"),

@@ -5,6 +5,12 @@ import JellyfinAPI
 // MARK: - tvOS Layout
 
 #if os(tvOS)
+/// What the landing's brand panel follows of the page's scroll view.
+struct TVLandingScrollMetrics: Equatable {
+    var offset: CGFloat
+    var visibleHeight: CGFloat
+}
+
 extension SettingsScreen {
 
     var tvOSLayout: some View {
@@ -17,7 +23,11 @@ extension SettingsScreen {
                 Color.clear.frame(height: 0).id("settings.top")
 
                 Group {
-                    if let sub = selectedInterfaceSub {
+                    if showsAppIconPage {
+                        // Apparence → « Icône de l'app » (lot D, design B).
+                        tvAppIconPage
+                            .tvBackAction { showsAppIconPage = false }
+                    } else if let sub = selectedInterfaceSub {
                         // Three-level state: pop sub → hub.
                         //
                         // Registered on `TVBackCoordinator` rather than held in
@@ -39,18 +49,44 @@ extension SettingsScreen {
                 .frame(maxWidth: .infinity, minHeight: tvLandingMinHeight, maxHeight: .infinity)
             }
             .scrollClipDisabled()
+            // Only the landing reads it (`tvBrandPanel`): written there alone,
+            // so scrolling a detail page never re-renders the screen.
+            .onScrollGeometryChange(for: TVLandingScrollMetrics.self) { geometry in
+                TVLandingScrollMetrics(
+                    offset: (geometry.contentOffset.y + geometry.contentInsets.top).rounded(),
+                    visibleHeight: (geometry.containerSize.height - geometry.contentInsets.top
+                                    - geometry.contentInsets.bottom).rounded()
+                )
+            } action: { _, metrics in
+                let onLanding = selectedCategory == nil && selectedInterfaceSub == nil && !showsAppIconPage
+                let offset = onLanding ? max(0, metrics.offset) : 0
+                if offset != tvLandingScrollY { tvLandingScrollY = offset }
+                if metrics.visibleHeight != tvLandingVisibleHeight { tvLandingVisibleHeight = metrics.visibleHeight }
+            }
             .onChange(of: selectedCategory) { _, newValue in
                 // When a category is closed (newValue == nil), bring the page
                 // back to the top so the tab bar resurfaces naturally.
                 if newValue == nil {
                     selectedInterfaceSub = nil
+                    showsAppIconPage = false
+                    tierChipFocusable = false
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
+            }
+            // « Licences open source » sits low enough that focusing it
+            // scrolls the landing a little, which hides the tab bar: from the
+            // chip — nothing above it in its column — Up then found nothing
+            // at all. The chip brings the page back to its top.
+            .onChange(of: focusedItem) { _, item in
+                if item == .tierChip { proxy.scrollTo("settings.top", anchor: .top) }
             }
             .onChange(of: selectedInterfaceSub) { _, newValue in
                 if newValue == nil {
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
+            }
+            .onChange(of: showsAppIconPage) { _, _ in
+                proxy.scrollTo("settings.top", anchor: .top)
             }
             // No `.onAppear { scrollTo(top) }` — that fired whenever SwiftUI
             // re-presented this view inside the `TabView` (which happens on
@@ -61,11 +97,24 @@ extension SettingsScreen {
             // starts at the top — no explicit reset needed on first appear.
         }
         .background {
-            // Centered accent bloom — persists across all settings pages
-            Circle()
-                .fill(themeManager.accent.opacity(0.3))
-                .frame(width: CinemaBloom.settingsSize, height: CinemaBloom.settingsSize)
-                .blur(radius: CinemaBloom.settingsBlur)
+            if selectedCategory == .pro {
+                // « Votre niveau » (design D): the tier's material, edge to
+                // edge — the screen is the membership card.
+                ProTierMaterial(tier: entitlements.proTier(earlyAdopter: earlyAdopter),
+                                accent: themeManager.accent, glowRadius: 1400)
+                    // The pills and the small print sit low: shade the foot.
+                    .overlay {
+                        LinearGradient(colors: [.clear, CinemaColor.metalShade.opacity(0.55)],
+                                       startPoint: .center, endPoint: .bottom)
+                    }
+                    .ignoresSafeArea()
+            } else {
+                // Centered accent bloom — persists across all other settings pages
+                Circle()
+                    .fill(themeManager.accent.opacity(0.3))
+                    .frame(width: CinemaBloom.settingsSize, height: CinemaBloom.settingsSize)
+                    .blur(radius: CinemaBloom.settingsBlur)
+            }
         }
         .task { await loadServerUsers() }
         .task { await probeQuickConnect() }
@@ -86,10 +135,16 @@ extension SettingsScreen {
     // MARK: tvOS Landing Page
 
     var tvLandingPage: some View {
-        HStack(spacing: 0) {
-            // Left Side: Identity & Logo (40%)
+        HStack(alignment: .top, spacing: 0) {
+            // Left Side: Identity & Logo (40%). One screen tall and pinned:
+            // centred on the SCREEN, never on the menu column — which grew
+            // taller than the screen (Debug, the footer) and dragged the logo
+            // down with it (user report 2026-10-23) — and held in place while
+            // the menu scrolls.
             tvBrandPanel
                 .frame(maxWidth: .infinity)
+                .frame(height: max(tvLandingVisibleHeight, tvLandingMinHeight))
+                .offset(y: tvLandingScrollY)
 
             // Right Side: Navigation Categories (60%)
             tvNavigationPanel
@@ -98,6 +153,25 @@ extension SettingsScreen {
         // `canOpenURL` is an IPC: re-resolved each time the landing appears
         // (including a pop back from a category), never per render.
         .onAppear { rateAppURL = AppUpdateChecker.rateAppURL() }
+        // Only a landing item arms the chip: on a return from a category the
+        // value still names that page's last focus until tvOS picks anew.
+        .onChange(of: focusedItem) { _, item in
+            switch item {
+            case .category, .rateApp: tierChipFocusable = true
+            default: break
+            }
+        }
+        // Another tab, or a category: the landing will pick a first focus
+        // again when it comes back, which must be a pill again.
+        .onDisappear { tierChipFocusable = false }
+        // Up into the tab bar: Select on « Réglages » brings focus back with
+        // the same top-leading pick, and the armed chip won it (recette
+        // 2026-10-23, DEF-TV2) — re-selecting the current tab never fires
+        // `onDisappear`. Not `focusedItem == nil`: « Licences open source »
+        // has no focus value either, and Left from it must reach the chip.
+        .onReceive(NotificationCenter.default.publisher(for: UIFocusSystem.didUpdateNotification)) { note in
+            if TVTopBarFocus.isInTopBar(note) == true { tierChipFocusable = false }
+        }
     }
 
     var tvBrandPanel: some View {
@@ -108,7 +182,22 @@ extension SettingsScreen {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 400, height: 400)
-                .shadow(color: themeManager.accent.opacity(0.5), radius: 40)
+                .shadow(color: headerTierLook.map { $0.tier == .free ? themeManager.accent.opacity(0.5) : $0.glow } ?? themeManager.accent.opacity(0.5), radius: 40)
+                // « Votre niveau » (design D): the medal. No ring on tvOS —
+                // the parallax logo is transparent, a frame would float.
+                .overlay(alignment: .bottomTrailing) {
+                    if let look = headerTierLook, let glyph = look.glyph {
+                        Image(systemName: glyph)
+                            .font(.system(size: CinemaScale.pt(26), weight: .black))
+                            .foregroundStyle(look.medalInk)
+                            .frame(width: 84, height: 84)
+                            .background(look.medalFill, in: Circle())
+                            .padding(6)
+                            .background(CinemaColor.surface, in: Circle())
+                            .offset(x: -40, y: -40)
+                            .accessibilityHidden(true)
+                    }
+                }
                 .accessibilityHidden(true)
 
             VStack(spacing: CinemaSpacing.spacing2) {
@@ -122,10 +211,36 @@ extension SettingsScreen {
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .opacity(0.8)
                     .tracking(0.5)
+
+                // The door to « Votre niveau ». Disabled until a pill has had
+                // focus: the landing must open (and come back from a
+                // category) on the menu on the right, and tvOS would
+                // otherwise pick this chip, nearer the top-leading corner
+                // (recette 2026-10-14, TV-06; same pick as TV-09).
+                if let look = headerTierLook {
+                    ProTierChip(tier: look.tier) { selectedCategory = .pro }
+                        .focused($focusedItem, equals: .tierChip)
+                        // Right from the chip opens the menu at its TOP
+                        // (« Apparence »), the way the landing opens — never
+                        // at the nearest row (« Licences open source », at the
+                        // chip's height; recette 2026-10-23, Q-PUCE). The chip
+                        // has nothing to its right (the menu is NOT a focus
+                        // section), so this handler is the only mover: a
+                        // user-initiated write, no automatic pick to lose to.
+                        .onMoveCommand { direction in
+                            guard direction == .right, let first = tvLandingCategories.first else { return }
+                            focusedItem = .category(first.rawValue)
+                        }
+                        .padding(.top, CinemaSpacing.spacing4)
+                        .disabled(!tierChipFocusable)
+                }
             }
 
             Spacer()
         }
+        // The whole panel is the section, so a left press from ANY pill —
+        // « Apparence » sits far above the chip — lands on it.
+        .focusSection()
     }
 
     var tvNavigationPanel: some View {
@@ -133,10 +248,7 @@ extension SettingsScreen {
             Spacer()
 
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-                // tvOS explicitly hides admin entries — admin workflows are
-                // iOS/iPadOS-only. `isAdmin: false` is safe because the filter
-                // short-circuits on `isTVOS: true` regardless of admin flag.
-                ForEach(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true)) { category in
+                ForEach(tvLandingCategories) { category in
                     tvCategoryButton(category)
                 }
 
@@ -157,6 +269,17 @@ extension SettingsScreen {
                 .padding(.horizontal, CinemaTVLayout.pagePadding)
                 .padding(.bottom, CinemaSpacing.spacing8)
         }
+        // Deliberately NOT a `.focusSection()`: as one, it answered a right
+        // press from the chip with its NEAREST row, « Licences open source »
+        // (DEF-TV1's first fix, refused 2026-10-23, Q-PUCE). The chip's own
+        // `onMoveCommand` sends Right to the first pill instead.
+    }
+
+    /// The landing's category pills, top to bottom — admin entries are
+    /// iOS-only. `isAdmin: false` is safe because the filter short-circuits
+    /// on `isTVOS: true` regardless of the admin flag.
+    var tvLandingCategories: [SettingsCategory] {
+        SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsDebug: showsDebugCategory)
     }
 
     @ViewBuilder
@@ -179,18 +302,33 @@ extension SettingsScreen {
                 }
 
                 // Label
+                // One line, never cut mid-word: at 130 % the focused pill's
+                // subtitle squeezed « Apparence » onto two lines (recette
+                // 2026-10-26, PRO-07-B). The title keeps its room first.
                 Text(category.localizedName(loc))
                     .font(.system(size: CinemaScale.pt(28), weight: .semibold))
                     .tracking(-0.3)
                     .foregroundStyle(isFocused ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .layoutPriority(1)
 
                 Spacer()
 
                 // Subtitle + chevron
                 if let subtitle = category.subtitle(loc, themeManager: themeManager), isFocused {
-                    Text(subtitle)
-                        .font(.system(size: CinemaScale.pt(18), weight: .regular))
-                        .foregroundStyle(themeManager.onAccentContainer.opacity(0.8))
+                    // « Mode sombre » when it fits, else « Sombre » (user,
+                    // 2026-10-27): « Mode… » at 130 % said nothing.
+                    ViewThatFits(in: .horizontal) {
+                        Text(subtitle)
+                        Text(category.shortSubtitle(loc, themeManager: themeManager) ?? subtitle)
+                    }
+                    .font(.system(size: CinemaScale.pt(18), weight: .regular))
+                    .foregroundStyle(themeManager.onAccentContainer.opacity(0.8))
+                    .lineLimit(1)
+                    // Served after the title but before the Spacer, which
+                    // would otherwise split the room with it.
+                    .layoutPriority(0.5)
                 }
 
                 if isFocused {
@@ -298,7 +436,10 @@ extension SettingsScreen {
                         Text(category.localizedName(loc))
                             .font(CinemaFont.headline(.medium))
                     }
-                    .foregroundStyle(backFocused ? themeManager.accent : CinemaColor.onSurface)
+                    // On the Pro page's material (dark in both modes) the
+                    // resting ink is the material's, not the page's.
+                    .foregroundStyle(backFocused ? themeManager.accent
+                                     : (category == .pro ? CinemaColor.onTitanium : CinemaColor.onSurface))
                     // Row-level focus (`CinemaTVFocus` stroke + brightness) —
                     // text colour alone was the only signal. The stroke BLEEDS
                     // OUTWARD through negative padding on the overlay rather
@@ -323,6 +464,8 @@ extension SettingsScreen {
                 .focused($focusedItem, equals: .back)
 
                 switch category {
+                case .pro:
+                    ProScreen()
                 case .appearance:
                     tvAppearanceDetail
                 case .account:
@@ -333,8 +476,10 @@ extension SettingsScreen {
                     tvInterfaceDetail
                 case .playback:
                     tvPlaybackDetail
-                case .administration, .advancedAdmin:
-                    // Never selected on tvOS — admin categories are filtered
+                case .debug:
+                    tvDebugDetail
+                case .administration:
+                    // Never selected on tvOS — the admin category is filtered
                     // out of the landing pill list. Render nothing as a
                     // safety net.
                     EmptyView()
@@ -361,6 +506,8 @@ extension SettingsScreen {
 
             tvAccentColorPicker
 
+            tvAppIconPicker
+
             tvLanguagePicker
 
             // The row keeps the app's own preference; when the system's Reduce
@@ -374,16 +521,7 @@ extension SettingsScreen {
                 subtitle: systemReduceMotion ? loc.localized("settings.motionEffects.systemOverride") : nil
             )
 
-            tvGlassToggle(
-                icon: "calendar",
-                label: loc.localized("settings.seasonal.toggle"),
-                key: "seasonalTheme",
-                value: Binding(
-                    get: { seasonal.setting == .automatic },
-                    set: { seasonal.setSetting($0 ? .automatic : .off) }
-                ),
-                subtitle: SeasonalSettingsText.catalogueSummary(loc: loc)
-            )
+            tvSeasonalPicker
 
             tvGlassToggle(
                 icon: "sparkles",
@@ -542,15 +680,22 @@ extension SettingsScreen {
 
     // MARK: Playback Detail (tvOS)
 
-    /// Page Lecture top-level : réglages du player + section Débogage (outils
-    /// QA, toujours visibles — pas de gate #if DEBUG, voir CLAUDE.md).
+    /// Page Lecture top-level : réglages du player (la section Débogage est
+    /// devenue la catégorie Debug, 2026-10-22).
     var tvPlaybackDetail: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             tvToggleList(playbackToggleRows)
             tvSleepTimerRow
+        }
+    }
 
-            tvSectionLabel(loc.localized("settings.debug"))
-                .padding(.top, CinemaSpacing.spacing4)
+    // MARK: Debug Detail (tvOS)
+
+    /// Page Debug (dernière catégorie) : les outils QA qui fermaient la page
+    /// Lecture, inchangés. Visible hors App Store — voir
+    /// `SettingsCategory.showsDebug` et `Settings/CLAUDE.md`.
+    var tvDebugDetail: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             tvToggleList(debugToggleRows)
             // Read-only: pressing it only re-reads the stores (local + the
             // iCloud mirror) — a focusable row is the only kind tvOS can reach.
@@ -586,7 +731,7 @@ extension SettingsScreen {
                     .joined(separator: "\n"),
                 action: { earlyAdopterRowAction(earlyAdopter) }
             )
-            #if DEBUG
+            #if DEBUG || PRO_PREVIEW
             // Free / Pro / founder, forced — cycles on each press.
             tvActionRow(
                 id: "proTier",

@@ -64,6 +64,9 @@ struct MediaDetailScreen: View {
     /// (`MediaCardContextMenu`), so the presentation itself now lives on
     /// `AppNavigation` — same optionality rationale as `playlists` above.
     @Environment(CardActionPresenter.self) private var cardActions: CardActionPresenter?
+    /// The Pro gate of the admin menu (lot B): a free admin's per-item admin
+    /// shortcuts are hidden, the Settings row being the one door.
+    @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
     /// Read through `@AppStorage`, not `SyncPlayController.isEngineSupported`,
     /// so flipping « Lecteur natif » re-renders the action row.
     @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
@@ -121,6 +124,12 @@ struct MediaDetailScreen: View {
     /// Drives the row's own accent focus ring — `.focusEffectDisabled()` kills
     /// the system effect, so the indicator has to be drawn from this.
     @FocusState private var versionRowFocused: Bool
+    /// The season pill holding focus: entering the season row lands on the
+    /// selected season (`defaultFocus`, user-initiated).
+    @FocusState private var focusedSeasonId: String?
+    /// The first cast card: entering the section under the action row lands
+    /// on it (`defaultFocus`), not on whichever card tvOS finds nearest.
+    @FocusState private var belowActionsFocused: Bool
     #endif
 
     /// Mirrors the ceiling the players hand `getPlaybackInfo`, so the version
@@ -442,8 +451,24 @@ struct MediaDetailScreen: View {
     @ViewBuilder
     private func stackedBelowHeroContent(_ item: BaseItemDto) -> some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+            #if os(tvOS)
+            actionSections(item)
+            // One focus section from the synopsis down: it starts right under
+            // the action row, so Down from « Lecture » always finds it and
+            // lands on its first control — the first cast card — even when
+            // the cast itself is still below the screen. Without it the engine
+            // sometimes only scrolled the page (« Silo », user 2026-10-25).
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
+                readingSections(item)
+                secondaryColumnSections(item)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .defaultFocus($belowActionsFocused, true, priority: .userInitiated)
+            .focusSection()
+            #else
             primaryColumnSections(item)
             secondaryColumnSections(item)
+            #endif
             Spacer(minLength: 80)
         }
         .padding(.top, CinemaSpacing.spacing4)
@@ -453,21 +478,34 @@ struct MediaDetailScreen: View {
     /// overview, studio line. The iPad left column.
     @ViewBuilder
     private func primaryColumnSections(_ item: BaseItemDto) -> some View {
+        actionSections(item)
+        readingSections(item)
+    }
+
+    /// The controls of the primary column: actions, admin menu (iOS), versions.
+    @ViewBuilder
+    private func actionSections(_ item: BaseItemDto) -> some View {
         // Action buttons
         actionButtons(item)
 
         #if os(iOS)
         // Admin-gated 3-dot menu (Identifier / Edit metadata / Refresh /
         // Delete). Server enforces authorization on every endpoint; client
-        // gating is UX only.
-        if appState.isAdministrator {
+        // gating is UX only. The admin tools are Pro (lot B): a free admin
+        // sees the pill with a lock, whose tap raises the Pro sheet
+        // (`AdminShortcutPresence`, inside `AdminItemMenu`).
+        if AdminShortcutPresence.resolve(isAdmin: appState.isAdministrator, access: proAccess) != .hidden {
             adminMenuPill(for: item)
         }
         #endif
 
         // Version picker — only for multi-source items (see `versionSources`).
         versionRow(item)
+    }
 
+    /// The reading part of the primary column: badges, synopsis, studio.
+    @ViewBuilder
+    private func readingSections(_ item: BaseItemDto) -> some View {
         // Quality badges — described for the version that will actually play,
         // not `mediaSources.first`, so the row and the picker never disagree.
         if showQualityBadges {
@@ -480,17 +518,9 @@ struct MediaDetailScreen: View {
             Text(overview)
                 .font(CinemaFont.dynamicBody)
                 .frame(maxWidth: readingMaxWidth, alignment: .leading)
-                #if os(tvOS)
-                // Focusable so the remote can reach and scroll a long synopsis,
-                // and washed so that focus is VISIBLE when it lands here. The
-                // wash sits inside `.focusable()`: the environment's
-                // `isFocused` reaches the focusable view's content, not the
-                // modifiers wrapped around it.
-                .tvFocusableProse()
-                .focusable()
-                #else
+                // Not focusable on tvOS: a stop on it only left a focus nobody
+                // could see between Play and the cast (user, 2026-10-25).
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
-                #endif
                 .padding(.horizontal, contentPadding)
         }
 
@@ -506,7 +536,11 @@ struct MediaDetailScreen: View {
     private func secondaryColumnSections(_ item: BaseItemDto) -> some View {
         // Cast
         if let people = item.people, !people.isEmpty {
+            #if os(tvOS)
+            MediaDetailCastSection(people: people, firstCardFocus: $belowActionsFocused).equatable()
+            #else
             MediaDetailCastSection(people: people).equatable()
+            #endif
         }
 
         // Seasons & Episodes (for series)
@@ -717,8 +751,9 @@ struct MediaDetailScreen: View {
     private func ratingsRow(_ item: BaseItemDto) -> some View {
         let hasCommunity = item.communityRating != nil
         let hasCritic = item.criticRating != nil
+        let network = networkLogo(item)
 
-        if hasCommunity || hasCritic {
+        if hasCommunity || hasCritic || network != nil {
             HStack(spacing: CinemaSpacing.spacing4) {
                 if let rating = item.communityRating {
                     HStack(spacing: 4) {
@@ -745,8 +780,38 @@ struct MediaDetailScreen: View {
                     .foregroundStyle(CinemaColor.onSurface)
                     .accessibilityLabel(loc.localized("accessibility.criticRating", Int(critic.rounded())))
                 }
+
+                if let network {
+                    networkPill(network)
+                }
             }
         }
+    }
+
+    /// The channel / studio logo of the item, when the app carries one
+    /// (`NetworkLogoCatalogue`). It replaces the « Chaîne » / « Studio » line.
+    private func networkLogo(_ item: BaseItemDto) -> (name: String, asset: String)? {
+        NetworkLogoCatalogue.logo(forStudios: (item.studios ?? []).compactMap(\.name))
+    }
+
+    /// A monochrome template logo in a discreet pill — ink of the theme, so it
+    /// reads on the dark and on the light appearance alike (user, 2026-10-25).
+    private func networkPill(_ network: (name: String, asset: String)) -> some View {
+        // Sized from the image's own proportions: a flexible frame would
+        // stretch the pill to its width cap around a narrow logo.
+        let height = ratingFontSize * 1.1
+        let aspect = UIImage(named: network.asset).map { $0.size.width / max($0.size.height, 1) } ?? 2
+        return Image(network.asset)
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: min(height * aspect, ratingFontSize * 6), height: height)
+            .foregroundStyle(CinemaColor.onSurface)
+            .padding(.horizontal, ratingFontSize * 0.5)
+            .padding(.vertical, ratingFontSize * 0.3)
+            .background(CinemaColor.onSurface.opacity(0.08), in: RoundedRectangle(cornerRadius: ratingFontSize * 0.35))
+            .accessibilityElement()
+            .accessibilityLabel("\(loc.localized(viewModel.resolvedType == .series ? "detail.network" : "detail.studio")) \(network.name)")
     }
 
     // MARK: - Studio / Network
@@ -756,7 +821,8 @@ struct MediaDetailScreen: View {
     @ViewBuilder
     private func studioLine(_ item: BaseItemDto) -> some View {
         let names = (item.studios ?? []).compactMap { $0.name }.filter { !$0.isEmpty }
-        if !names.isEmpty {
+        // A logo in the hero says it already.
+        if !names.isEmpty, networkLogo(item) == nil {
             let isSeries = viewModel.resolvedType == .series
             let labelKey = isSeries ? "detail.network" : "detail.studio"
             HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
@@ -1128,7 +1194,8 @@ struct MediaDetailScreen: View {
         // screen itself shows the restricted state). An episode is checked on
         // its own rating too: the series' may be absent or milder.
         // The episode as fetched when the fiche was opened for it — not looked
-        // up in `episodes`, which holds only the first and next-up seasons.
+        // up in `episodes`, which holds only the season ON SCREEN (the user
+        // may have switched) and the next-up one.
         let requestedEpisode = viewModel.requestedEpisode
             ?? viewModel.episodes.first(where: { $0.id == viewModel.itemId })
         guard !viewModel.isAgeRestricted,
@@ -1662,6 +1729,7 @@ struct MediaDetailScreen: View {
                                     )
                             }
                             .buttonStyle(SeasonTabButtonStyle(isSelected: isSelected, accent: themeManager.accent))
+                            .focused($focusedSeasonId, equals: season.id)
                             .focusEffectDisabled()
                             .hoverEffectDisabled()
                             .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -1672,6 +1740,11 @@ struct MediaDetailScreen: View {
                 // The focus stroke on the first / last pill sits on the row's
                 // edge; without this the scroll view clips it.
                 .scrollClipDisabled()
+                // A full-width section landing on the SELECTED season: Down
+                // from the far right of the cast skipped the pills (all on
+                // the left) for « Marquer la saison comme vue » (2026-10-25).
+                .defaultFocus($focusedSeasonId, viewModel.selectedSeasonId, priority: .userInitiated)
+                .focusSection()
             }
             // Season bulk "mark watched" (F10) — cascades to every episode
             // server-side. Confirmed via the dialog attached below.

@@ -38,6 +38,111 @@ struct BecauseYouWatchedRail: Equatable {
     let items: [BaseItemDto]
 }
 
+/// The phase-1 rails of Home as they last landed, kept on disk so a COLD
+/// launch paints the last known Home at once instead of a skeleton.
+///
+/// Nothing else survives a relaunch: `APICache` is memory-only and
+/// `reconnect` clears it, so every cold start used to wait for the slowest
+/// phase-1 rail before showing anything. Replayed against a 10.11 server with
+/// the app's exact phase-1 queries (6-connection pool, median of 15), that
+/// wait is ~140 ms on the LAN and ~220 ms at 60 ms RTT — before the new
+/// connections' TCP + TLS handshakes, which a cold launch also pays. The
+/// snapshot is shown only while that first load is in flight and is replaced
+/// wholesale by it (`HomeViewModel.load`): it never outlives a successful
+/// phase 1, and a load that fails everywhere drops it for the usual error.
+///
+/// One file per server + user + content-age cap (a lowered cap must never
+/// show a title the new cap hides), in Caches — the system may purge it,
+/// which only costs one skeleton. No token or URL is stored: items only.
+/// Signing out of a server or removing it deletes that server's files.
+struct HomeSnapshot: Codable, Sendable, Equatable {
+    /// Bumped when the shape changes; an older file is ignored, not migrated.
+    static let currentVersion = 1
+
+    var version = Self.currentVersion
+    var resumeItems: [BaseItemDto] = []
+    var latestItems: [BaseItemDto] = []
+    var favoriteItems: [BaseItemDto] = []
+    var nextUpItems: [BaseItemDto] = []
+    var playlists: [BaseItemDto] = []
+    var upcomingItems: [BaseItemDto] = []
+    var collections: [BaseItemDto] = []
+}
+
+struct HomeSnapshotStore: Sendable {
+    /// `nil` disables the store (no directory resolvable).
+    let directory: URL?
+
+    /// Every write and every clear runs here, in order: a clear (sign-out,
+    /// server removal) waits for the saves already queued, so a save can never
+    /// re-create a file the clear has just deleted.
+    private static let queue = DispatchQueue(label: "com.cinemax.home-snapshot", qos: .utility)
+
+    static let standard = Self(
+        directory: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("HomeSnapshots", isDirectory: true)
+    )
+
+    /// File-name safe: server ids are UUIDs and user ids hex, but nothing
+    /// outside `[A-Za-z0-9-]` is ever let into a path component.
+    private static func sanitize(_ value: String) -> String {
+        String(value.map { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") ? $0 : "_" })
+    }
+
+    func fileURL(serverId: String, userId: String, maxContentAge: Int) -> URL? {
+        directory?.appendingPathComponent(
+            "\(Self.sanitize(serverId))_\(Self.sanitize(userId))_\(maxContentAge).json"
+        )
+    }
+
+    func load(serverId: String, userId: String, maxContentAge: Int) -> HomeSnapshot? {
+        guard let url = fileURL(serverId: serverId, userId: userId, maxContentAge: maxContentAge),
+              let data = try? Data(contentsOf: url),
+              let snapshot = try? JSONDecoder().decode(HomeSnapshot.self, from: data),
+              snapshot.version == HomeSnapshot.currentVersion
+        else { return nil }
+        return snapshot
+    }
+
+    /// Queues the write off the caller's thread — see `queue`.
+    func enqueueSave(_ snapshot: HomeSnapshot, serverId: String, userId: String, maxContentAge: Int) {
+        let store = self
+        Self.queue.async {
+            store.write(snapshot, serverId: serverId, userId: userId, maxContentAge: maxContentAge)
+        }
+    }
+
+    /// Synchronous: returns once the file is written.
+    func save(_ snapshot: HomeSnapshot, serverId: String, userId: String, maxContentAge: Int) {
+        let store = self
+        Self.queue.sync {
+            store.write(snapshot, serverId: serverId, userId: userId, maxContentAge: maxContentAge)
+        }
+    }
+
+    private func write(_ snapshot: HomeSnapshot, serverId: String, userId: String, maxContentAge: Int) {
+        guard let directory,
+              let url = fileURL(serverId: serverId, userId: userId, maxContentAge: maxContentAge),
+              let data = try? JSONEncoder().encode(snapshot)
+        else { return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? data.write(to: url, options: .atomic)
+    }
+
+    /// Every file of one server — all its users and caps. Synchronous, and
+    /// ordered after every save already queued.
+    func clear(serverId: String) {
+        guard let directory else { return }
+        let prefix = "\(Self.sanitize(serverId))_"
+        Self.queue.sync {
+            guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return }
+            for name in names where name.hasPrefix(prefix) {
+                try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+            }
+        }
+    }
+}
+
 @MainActor @Observable
 final class HomeViewModel {
     var heroItem: BaseItemDto?
@@ -172,10 +277,16 @@ final class HomeViewModel {
     /// Where the rail switches and genre picks are read. `.standard` in the
     /// app; a test passes its own suite (see `HomeRailPreferences.snapshot`).
     private let defaults: UserDefaults
+    private let snapshotStore: HomeSnapshotStore
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, snapshotStore: HomeSnapshotStore = .standard) {
         self.defaults = defaults
+        self.snapshotStore = snapshotStore
     }
+
+    /// True while the rails on screen came from `HomeSnapshot` rather than
+    /// from this session's phase 1 — see `load`.
+    @ObservationIgnored private(set) var isShowingSnapshot = false
 
     /// Bumped by every `load`. Two loads overlap routinely (a pull-to-refresh
     /// during the first paint, the tier-1 refresh a server switch posts while
@@ -200,7 +311,43 @@ final class HomeViewModel {
         generation == loadGeneration && !Task.isCancelled
     }
 
+    /// Whether no phase-1 rail holds anything — the state in which a cold
+    /// start may paint `HomeSnapshot`.
+    private var isPhaseOneEmpty: Bool {
+        resumeItems.isEmpty && latestItems.isEmpty && favoriteItems.isEmpty
+            && nextUpItems.isEmpty && playlists.isEmpty && upcomingItems.isEmpty
+            && collections.isEmpty
+    }
+
+    private func clearPhaseOneRails() {
+        resumeItems = []
+        latestItems = []
+        favoriteItems = []
+        nextUpItems = []
+        playlists = []
+        upcomingItems = []
+        collections = []
+    }
+
+    /// Paints a disk snapshot and drops the skeleton. Rails switched off
+    /// since it was written stay empty; resume and recently added feed the
+    /// hero and are never gated, as in `load`.
+    private func applySnapshot(_ snapshot: HomeSnapshot, rails: HomeRailPreferences.Snapshot) {
+        resumeItems = snapshot.resumeItems
+        latestItems = snapshot.latestItems
+        if rails.favorites { favoriteItems = snapshot.favoriteItems }
+        if rails.nextUp { nextUpItems = snapshot.nextUpItems }
+        if rails.playlists { playlists = snapshot.playlists }
+        if rails.upcoming { upcomingItems = snapshot.upcomingItems }
+        if rails.collections { collections = snapshot.collections }
+        heroItem = resumeItems.first ?? latestItems.first
+        isShowingSnapshot = true
+        isLoading = false
+    }
+
     private func clearContent() {
+        isShowingSnapshot = false
+        elsewhere = [:]
         heroItem = nil
         resumeItems = []
         latestItems = []
@@ -268,6 +415,27 @@ final class HomeViewModel {
         // Resume and Recently Added are deliberately absent from the gate:
         // they also feed `heroItem` below, and the hero is never gated.
         let rails = HomeRailPreferences.snapshot(in: defaults)
+
+        // Cold start — nothing of this identity on screen yet: paint the last
+        // known Home from disk while phase 1 is in flight (see `HomeSnapshot`).
+        // Read off the main actor, and applied only if phase 1 has not landed
+        // first. Never on a refresh: a Home already on screen stays as it is.
+        let maxContentAge = defaults.integer(forKey: SettingsKey.privacyMaxContentAge)
+        let snapshotServerId = appState.activeServerId
+        var snapshotRead: Task<Void, Never>?
+        // Not after a failed load either: Retry from the error state would
+        // flash yesterday's Home before the same error came back.
+        if let snapshotServerId, isPhaseOneEmpty, loadFailure == nil {
+            let store = snapshotStore
+            snapshotRead = Task { [weak self] in
+                let snapshot = await Task.detached(priority: .userInitiated) {
+                    store.load(serverId: snapshotServerId, userId: userId, maxContentAge: maxContentAge)
+                }.value
+                guard let self, let snapshot, self.isCurrent(generation),
+                      self.isLoading, self.isPhaseOneEmpty else { return }
+                self.applySnapshot(snapshot, rails: rails)
+            }
+        }
 
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {
@@ -407,6 +575,14 @@ final class HomeViewModel {
         // Superseded while phase 1 was in flight: the newer load owns every
         // slice from here on, including the loading flags.
         guard generation == loadGeneration else { return }
+        snapshotRead?.cancel()
+        // Phase 1 replaces the snapshot WHOLESALE: a rail whose fetch failed
+        // goes back to empty, exactly as it would have without a snapshot, so
+        // nothing read from disk outlives the first real answer.
+        if isShowingSnapshot {
+            clearPhaseOneRails()
+            isShowingSnapshot = false
+        }
         for result in sections {
             switch result {
             case .resume(let items): resumeItems = items
@@ -421,6 +597,20 @@ final class HomeViewModel {
         }
 
         heroItem = resumeItems.first ?? latestItems.first
+
+        // A clean phase 1 becomes the next cold start's first paint — only
+        // while that same account is still the one signed in: a load landing
+        // after a sign-out must not re-create the file the sign-out deleted.
+        if firstError == nil, anySucceeded, let snapshotServerId,
+           appState.currentUserId == userId, appState.activeServerId == snapshotServerId {
+            let snapshot = HomeSnapshot(
+                resumeItems: resumeItems, latestItems: latestItems,
+                favoriteItems: favoriteItems, nextUpItems: nextUpItems,
+                playlists: playlists, upcomingItems: upcomingItems,
+                collections: collections
+            )
+            snapshotStore.enqueueSave(snapshot, serverId: snapshotServerId, userId: userId, maxContentAge: maxContentAge)
+        }
 
         // Every source failed: the server is unreachable (or refusing every
         // request). Stop here rather than running phase 2 — its genre fan-out
@@ -460,6 +650,9 @@ final class HomeViewModel {
             : ()
         // The season's row: its own slice, nothing to wait for.
         async let seasonRowDone: Void = loadSeasonRow(userId: userId, appState: appState, generation: generation)
+        // « Reprendre ici »: matched against Continue Watching, which phase 1
+        // has just filled. Asks nothing when the Pro gate says no.
+        async let elsewhereDone: Void = refreshElsewhere(using: appState)
 
         // Build prev/next episode navigation for BOTH episode rails — Continue
         // Watching and Next Up. Fetch every referenced season's episode list
@@ -476,7 +669,7 @@ final class HomeViewModel {
         resumeNavigation = buildNavigationMap(for: resumeEpisodes, seasonEpisodes: seasonEpisodes)
         nextUpNavigation = buildNavigationMap(for: nextUpEpisodes, seasonEpisodes: seasonEpisodes)
 
-        _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone, seasonRowDone)
+        _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone, seasonRowDone, elsewhereDone)
 
         guard generation == loadGeneration else { return }
         isFullyLoaded = true
@@ -971,6 +1164,90 @@ final class HomeViewModel {
     func refreshLiveRow(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         await loadActiveSessions(userId: userId, appState: appState, generation: loadGeneration)
+    }
+
+    // MARK: - « Reprendre ici » (spec 2026-10-24)
+
+    /// What this user is watching on ANOTHER of their devices, keyed by item
+    /// id — matched against `resumeItems` by the screen. Empty when the Pro
+    /// gate says no (`allowsElsewhere`), so a free user sees Home unchanged.
+    var elsewhere: [String: ElsewherePlayback] = [:]
+    /// The Pro gate (`ProFeatureAccess.allows(.resumeHere)`), wired by
+    /// `HomeScreen` before the first load. `false` by default so tests and
+    /// previews never reach the entitlement singletons.
+    @ObservationIgnored var allowsElsewhere: @MainActor () -> Bool = { false }
+    /// Sessions just handed off (`sessionId|itemId` → when): the source takes
+    /// a moment to stop and to report it, so without this the pill
+    /// would come back on the next poll for a film already playing here.
+    @ObservationIgnored private var handedOff: [String: Date] = [:]
+    private static let handOffMemory: TimeInterval = 60
+
+    /// One probe through the « Lire sur… » query, at every Home load (pull to
+    /// refresh included), on the screen's 20 s poll, on arriving on Accueil and
+    /// on coming back to the foreground. UNCACHED: the 30 s cache made a pull
+    /// to refresh show a stale answer (user report 2026-10-25), and the request
+    /// is one small JSON while Accueil is on screen. A failure keeps what is
+    /// on screen.
+    func refreshElsewhere(using appState: AppState) async {
+        guard allowsElsewhere(), let userId = appState.currentUserId else {
+            if !elsewhere.isEmpty { elsewhere = [:] }
+            return
+        }
+        let generation = loadGeneration
+        guard let sessions = try? await appState.apiClient.getControllableSessions(userId: userId, cached: false),
+              isCurrent(generation) else { return }
+        let now = Date()
+        handedOff = handedOff.filter { now.timeIntervalSince($0.value) < Self.handOffMemory }
+        let fresh = ElsewherePlayback.resolve(
+            sessions: sessions, currentUserId: userId,
+            excludingDeviceId: KeychainService.getOrCreateDeviceID(), now: now
+        ).filter { handedOff["\($0.value.sessionId)|\($0.key)"] == nil }
+        // Equality-guarded: the poll runs every 20 s and tvOS pulls focus off
+        // a card whose row is invalidated (see `loadActiveSessions`).
+        if fresh != elsewhere { elsewhere = fresh }
+        // The pill rides a « Reprendre » card, and Jellyfin lists a film there
+        // only past 5 % of it: one started elsewhere moments ago had no card
+        // until the next Home load (integration report 2026-10-25, OBS-1).
+        // Re-read that row — only while such a film is missing from it.
+        let resumeIds = Set(resumeItems.compactMap(\.id))
+        if fresh.keys.contains(where: { !resumeIds.contains($0) }) {
+            await refreshResume(using: appState)
+        }
+    }
+
+    /// A playback here has ended: the hand-off memory has done its job (it
+    /// only covers the moments the source takes to stop). Kept, it hid for
+    /// up to 60 s a film taken BACK by the other device — the round trip
+    /// phone → TV → phone left the TV without its pill for ~40 s (user test
+    /// 2026-10-25, YOU-2).
+    func forgetHandOffs() {
+        handedOff = [:]
+    }
+
+    /// The playback is now HERE: tell the source, then stop it. Fire-and-
+    /// forget — a failure is logged, never shown, and never holds the local
+    /// player back (it is already opening). Idempotent per session + item.
+    func handOff(_ entry: ElsewherePlayback, using appState: AppState, message: String) {
+        let key = "\(entry.sessionId)|\(entry.itemId)"
+        guard handedOff[key] == nil else { return }
+        handedOff[key] = Date()
+        elsewhere[entry.itemId] = nil
+        guard entry.canStop else { return }
+        let api = appState.apiClient
+        Task {
+            do {
+                // Never an empty header: Jellyfin then sends its own English
+                // « Message from Server » (bench, 2026-10-24).
+                try await api.sendMessage(sessionId: entry.sessionId, header: "JellyGlass", text: message, timeoutMs: 6000)
+            } catch {
+                logger.warning("Resume here: message to the source failed: \(error.localizedDescription, privacy: .public)")
+            }
+            do {
+                try await api.stopSession(sessionId: entry.sessionId)
+            } catch {
+                logger.warning("Resume here: stopping the source failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     /// Fetches active sessions and filters down to ones with a currently-playing item,

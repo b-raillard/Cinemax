@@ -29,9 +29,30 @@ struct UserSwitchSheet: View {
     @State private var authError: String?
     @State private var showManualEntry = false
     @State private var manualUsername: String = ""
+    #if os(iOS)
+    /// The manual step's Return chain: « Suivant » on the username moves to
+    /// the password, as on the login screen (recette 2026-10-23, DEF-IOS2 —
+    /// the key read « Suivant » and did nothing).
+    private enum ManualField: Hashable { case username, password }
+    @FocusState private var manualField: ManualField?
+    #endif
     /// Opens straight on the manual step with this username — reconnecting a
     /// remembered account whose session expired (multi-account).
     var prefilledUsername: String?
+    /// Free tier, reconnecting a remembered account (spec 2026-10-20): « Avec
+    /// Pro, plus besoin de mot de passe… » under the sign-in button, opening
+    /// the contextual Pro sheet. The presenter then injects the entitlement
+    /// stores and `ProStore`.
+    var showsProReconnectHint = false
+    /// Called once a sign-in succeeded, just before the sheet closes — so a
+    /// presenter can tell a success from a cancel in its `onDismiss` (a
+    /// re-signed CURRENT account leaves the user id unchanged).
+    var onSignedIn: (() -> Void)?
+    @State private var showUpsell = false
+    // OPTIONAL reads: only a presenter that shows the Pro hint injects them.
+    @Environment(EntitlementStore.self) private var entitlements: EntitlementStore?
+    @Environment(EarlyAdopterService.self) private var earlyAdopter: EarlyAdopterService?
+    @Environment(ProStore.self) private var proStore: ProStore?
 
     var body: some View {
         Group {
@@ -41,6 +62,11 @@ struct UserSwitchSheet: View {
             iOSChrome
             #endif
         }
+        #if os(tvOS)
+        .fullScreenCover(isPresented: $showUpsell) { upsellContent }
+        #else
+        .sheet(isPresented: $showUpsell) { upsellContent }
+        #endif
         .task {
             if let prefilledUsername, !prefilledUsername.isEmpty {
                 manualUsername = prefilledUsername
@@ -64,6 +90,7 @@ struct UserSwitchSheet: View {
             } else if isLoading {
                 LoadingStateView()
             } else if users.isEmpty {
+                // A server that lists no users (Jellyfin's default) lands here.
                 EmptyStateView(
                     systemImage: "person.crop.circle.badge.questionmark",
                     title: loc.localized("switchAccount.noPublicUsers.title"),
@@ -156,12 +183,55 @@ struct UserSwitchSheet: View {
                 enterManualMode()
             }
             .padding(.bottom, CinemaSpacing.spacing4)
+            #if os(tvOS)
+            // Centred under a LEFT-aligned grid, it overlapped no tile's
+            // column: down, left and right from a lone tile found nothing and
+            // it could never take focus (recette 2026-10-23, DEF-TV3). A
+            // full-width section answers a down press from any tile.
+            .frame(maxWidth: .infinity)
+            .focusSection()
+            #endif
         }
         #if os(tvOS)
         // The tiles carry `CinemaTVCardButtonStyle`, which grows on focus —
         // without this the edge tiles' scaled ring is clipped.
         .scrollClipDisabled()
         #endif
+    }
+
+    /// « Avec Pro, plus besoin de mot de passe pour changer de compte » —
+    /// under the sign-in button of a free reconnection (`showsProReconnectHint`).
+    /// Inside the step's 480 pt column, so its leading edge never reaches
+    /// further left than the fields above it: it cannot take the first focus
+    /// on tvOS (the top-leading pick, see `Shared/DesignSystem/CLAUDE.md`).
+    @ViewBuilder
+    private var proReconnectHint: some View {
+        if showsProReconnectHint, let entitlements, let earlyAdopter, let proStore {
+            textActionButton(loc.localized("pro.reconnect.hint"), color: themeManager.accent) {
+                showUpsell = true
+            }
+        }
+    }
+
+    /// The Pro sheet hangs off `body`, not off the hint: the hint leaves the
+    /// hierarchy with the manual step, and a presentation attached to a view
+    /// that disappears is torn down with it.
+    @ViewBuilder
+    private var upsellContent: some View {
+        if let entitlements, let earlyAdopter, let proStore {
+            upsell(entitlements: entitlements, earlyAdopter: earlyAdopter, proStore: proStore)
+        }
+    }
+
+    private func upsell(entitlements: EntitlementStore, earlyAdopter: EarlyAdopterService, proStore: ProStore) -> some View {
+        ProUpsellSheet(feature: .memorizedAccounts)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
+            .environment(loc)
+            .environment(themeManager)
+            .environment(toasts)
+            .preferredColorScheme(themeManager.colorScheme)
     }
 
     /// A text-only secondary action. `.plain` gives it NO focus treatment on
@@ -319,6 +389,8 @@ struct UserSwitchSheet: View {
                 #if os(iOS)
                 .textContentType(.username)
                 .submitLabel(.next)
+                .focused($manualField, equals: .username)
+                .onSubmit { manualField = .password }
                 #endif
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 .padding(.vertical, CinemaSpacing.spacing3)
@@ -330,6 +402,7 @@ struct UserSwitchSheet: View {
                 .textContentType(.password)
                 #if os(iOS)
                 .submitLabel(.go)
+                .focused($manualField, equals: .password)
                 #endif
                 .onSubmit {
                     guard !isAuthenticating,
@@ -368,6 +441,8 @@ struct UserSwitchSheet: View {
             ) {
                 exitManualMode()
             }
+
+            proReconnectHint
 
             Spacer()
         }
@@ -432,6 +507,7 @@ struct UserSwitchSheet: View {
             toasts.success(String(format: loc.localized("switchAccount.success"), trimmed))
             password = ""
             manualUsername = ""
+            onSignedIn?()
             dismiss()
         } catch {
             authError = loc.localized("switchAccount.authFailed")

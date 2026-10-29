@@ -150,6 +150,12 @@ enum CinemaTVLayout {
     /// in-scroll titles, and the header of any rail that sits among them.
     static let pagePadding: CGFloat = CinemaSpacing.spacing20
 
+    /// The account avatar left of the top tab bar (`TVAccountAvatarButton`):
+    /// its diameter, and the top inset that centres it on the native bar
+    /// (measured on the Apple TV 4K simulator, tvOS 27).
+    static let accountAvatarSize: CGFloat = 64
+    static let accountAvatarTop: CGFloat = 47
+
     // MARK: Heroes
 
     /// Full-bleed hero on Home and the library browse layout.
@@ -175,6 +181,18 @@ enum CinemaTVLayout {
     static let episodeThumbnailWidth: CGFloat = 200
     /// The square poster-stack cover heading a playlist's own page.
     static let playlistCoverSide: CGFloat = 320
+
+    // MARK: Pro page (design C, 2026-10-24)
+
+    /// The Gratuit and Pro columns of the comparison table.
+    static let proCompareColumnWidth: CGFloat = 150
+    /// The window the table's lines scroll in (design E, 2026-10-25), and
+    /// the fade at its foot while lines are left below.
+    static let proTableWindowHeight: CGFloat = 480
+    static let proTableFadeHeight: CGFloat = 170
+    /// The purchase panel right of the table, and the gap between them.
+    static let proPanelWidth: CGFloat = 560
+    static let proPanelGap: CGFloat = 64
 
     // MARK: Grids
 

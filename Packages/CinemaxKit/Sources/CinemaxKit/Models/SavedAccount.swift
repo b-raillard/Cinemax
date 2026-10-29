@@ -16,8 +16,13 @@ public struct SavedAccount: Codable, Sendable, Equatable, Identifiable {
     public var id: String { userId }
     public var userId: String
     public var username: String
+    /// Empty = remembered WITHOUT a session (free tier: the account was left,
+    /// its session closed, its name kept — `ServerRegistry.droppingSession`).
     public var accessToken: String
     public var lastUsedAt: Date
+
+    /// Whether this device still holds a session for the account.
+    public var hasSession: Bool { !accessToken.isEmpty }
 
     public init(userId: String, username: String, accessToken: String, lastUsedAt: Date) {
         self.userId = userId

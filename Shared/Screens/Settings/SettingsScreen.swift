@@ -17,40 +17,54 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     // first (its pill is the accented hero on the iOS landing); Lecture
     // sits right after Interface — it hosts the most-consulted playback
     // toggles, promoted out of the Interface hub in the 2026-07 reorg.
+    // « Votre niveau » / JellyGlass Pro (story PRO-01). NOT a row of the
+    // list (`visibleCases` never returns it): reached from the tier chip
+    // under the Settings title (design D), shown only where
+    // `ProFeatureGate.showsProEntry` allows. A case so that both platforms
+    // route it like any category detail.
+    case pro
     case appearance
     case interface
     case playback
     case account
     case server
-    // Admin-only categories — gated by `AppState.isAdministrator` at the
-    // render site so non-admins never see these rows. Server still enforces
-    // authorization on every admin endpoint; client-side gating is UX only.
+    // Admin-only — gated by `AppState.isAdministrator` at the render site so
+    // non-admins never see this row. Server still enforces authorization on
+    // every admin endpoint; client-side gating is UX only. ONE category since
+    // 2026-10-22: « Admin avancée » (raw value `advancedAdmin`) merged into it;
+    // nothing ever persisted a category, and that raw value now decodes to
+    // `nil` (the landing).
     case administration
-    case advancedAdmin
+    // QA tools, LAST of the list, both platforms — shown in Debug builds and
+    // in a confirmed test environment, never in the App Store build
+    // (`showsDebug(environment:isDebugBuild:)`).
+    case debug
 
     var id: String { rawValue }
 
     var icon: String {
         switch self {
+        case .pro:            "star.circle"
         case .appearance:     "paintpalette"
         case .interface:      "tv"
         case .playback:       "play.rectangle"
         case .account:        "person"
         case .server:         "server.rack"
         case .administration: "shield.lefthalf.filled"
-        case .advancedAdmin:  "wrench.and.screwdriver"
+        case .debug:          "ladybug"
         }
     }
 
     @MainActor func localizedName(_ loc: LocalizationManager) -> String {
         switch self {
+        case .pro:            loc.localized("pro.tier.title")
         case .appearance:     loc.localized("settings.appearance")
         case .interface:      loc.localized("settings.interface")
         case .playback:       loc.localized("settings.playback")
         case .account:        loc.localized("settings.account")
         case .server:         loc.localized("settings.server")
         case .administration: loc.localized("admin.landing.title")
-        case .advancedAdmin:  loc.localized("admin.advanced.title")
+        case .debug:          loc.localized("settings.debug")
         }
     }
 
@@ -63,20 +77,66 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The same, in one word (« Sombre » / « Clair »): what the tvOS pill
+    /// shows when `subtitle` does not fit (130 % text) — « Mode… » said nothing.
+    @MainActor func shortSubtitle(_ loc: LocalizationManager, themeManager: ThemeManager) -> String? {
+        switch self {
+        case .appearance:
+            loc.localized(themeManager.darkModeEnabled ? "settings.darkMode.short" : "settings.lightMode.short")
+        default:
+            nil
+        }
+    }
+
+    /// The Pro feature behind this category, if any (lot B): Administration
+    /// stays LISTED for a free admin, with a PRO badge, and its tap opens the
+    /// Pro sheet (`ProFeatureAccess.admit`) instead of the page.
+    var proFeature: ProFeatureID? {
+        switch self {
+        case .administration: .administration
+        default: nil
+        }
+    }
+
     /// Whether this category is admin-gated. Used by the iOS landing to hide
     /// admin rows for non-admin users. tvOS never renders admin entries at
     /// all (admin workflows are mobile-only by product decision).
     var isAdminOnly: Bool {
         switch self {
-        case .administration, .advancedAdmin: true
+        case .administration: true
         default: false
         }
     }
 
-    /// Filters `allCases` by admin visibility and platform. Use this instead
-    /// of raw `allCases` in rendering code — keeps gating in one place.
-    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool) -> [SettingsCategory] {
+    /// Whether the Debug category is listed: always in a Debug build (run from
+    /// Xcode — it never asks the App Store, and a stale `.production` record in
+    /// the Keychain must not hide it), otherwise only once the verified
+    /// `AppTransaction` (`EarlyAdopterService.transaction`) has CONFIRMED a
+    /// test environment (TestFlight answers `.sandbox`). Unknown ⇒ hidden: an
+    /// App Store install offline at its first launch must never show it.
+    /// The build flag only ever ADDS visibility (see `Settings/CLAUDE.md`).
+    nonisolated static func showsDebug(environment: AppTransactionSnapshot.Environment?, isDebugBuild: Bool) -> Bool {
+        if isDebugBuild { return true }
+        return environment == .sandbox || environment == .xcode
+    }
+
+    /// `true` in a Debug build — the one input `showsDebug` takes from the
+    /// compiler.
+    nonisolated static var isDebugBuild: Bool {
+        #if DEBUG
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// Filters `allCases` by admin visibility, platform and the Debug
+    /// decision. Use this instead of raw `allCases` in rendering code — keeps
+    /// gating in one place.
+    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool, showsDebug: Bool) -> [Self] {
         allCases.filter { category in
+            if category == .pro { return false }
+            if category == .debug { return showsDebug }
             if isTVOS && category.isAdminOnly { return false }
             if category.isAdminOnly && !isAdmin { return false }
             return true
@@ -128,9 +188,13 @@ enum SettingsFocus: Hashable {
     case switchAccount
     case refreshConnection
     case toggle(String)
+    /// A tile of the « Icône de l'app » page, keyed by `AppIconChoice.id`.
+    case appIcon(String)
     case accentColor(String)
     case language(String)
     case rateApp
+    /// The landing's « Votre niveau » chip.
+    case tierChip
 }
 #endif
 
@@ -164,15 +228,35 @@ struct SettingsScreen: View {
     /// Forwarded into `privacySecuritySheet` — that sheet is a separate
     /// presentation context and re-injects its environment by hand.
     @Environment(ParentalLockController.self) var parentalLock
-    /// Settings → Lecture → Débogage (tvOS; iOS reads them inside
-    /// `EntitlementDebugRows`, its Playback page being a pushed destination)
+    /// Settings → Debug (tvOS; iOS reads them inside `EntitlementDebugRows`,
+    /// its Debug page being a pushed destination), the Debug category's
+    /// visibility (both platforms)
     /// and the Pro gate of « Changer de compte » (both platforms).
     @Environment(EntitlementStore.self) var entitlements
     @Environment(EarlyAdopterService.self) var earlyAdopter
+    @Environment(ProStore.self) var proStore
     @Environment(AccountLockStore.self) var accountLocks
+    /// The Pro gate of the Administration row (lot B). Optional like the
+    /// presenters above: absent ⇒ ungated.
+    @Environment(ProFeatureAccess.self) var proAccess: ProFeatureAccess?
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false
+
+    /// The tier the Settings header wears (design D) — `nil` = show nothing
+    /// (before the Pro launches, see `ProFeatureGate.showsProEntry`).
+    /// Whether the Debug category is listed (`SettingsCategory.showsDebug`):
+    /// re-read on every render, so it follows the App Store's answer the
+    /// moment `EarlyAdopterService` records it.
+    var showsDebugCategory: Bool {
+        SettingsCategory.showsDebug(environment: earlyAdopter.transaction?.environment,
+                                    isDebugBuild: SettingsCategory.isDebugBuild)
+    }
+
+    var headerTierLook: ProTierLook? {
+        guard entitlements.showsProEntry else { return nil }
+        return ProTierLook(tier: entitlements.proTier(earlyAdopter: earlyAdopter), themeManager: themeManager)
+    }
     @State var showPrivacySecurity = false
     @State var showQuickConnectAuthorize = false
     @State var showWatchedHistory = false
@@ -214,6 +298,10 @@ struct SettingsScreen: View {
     var selectedInterfaceSub: InterfaceSubcategory? {
         get { settingsNav.selectedInterfaceSub }
         nonmutating set { settingsNav.selectedInterfaceSub = newValue }
+    }
+    var showsAppIconPage: Bool {
+        get { settingsNav.showsAppIconPage }
+        nonmutating set { settingsNav.showsAppIconPage = newValue }
     }
 
     // Shared stored properties — keys + defaults live in SettingsKey
@@ -265,6 +353,15 @@ struct SettingsScreen: View {
     // tvOS-only stored properties
     #if os(tvOS)
     @FocusState var focusedItem: SettingsFocus?
+    /// The « Votre niveau » chip stays out of focus until a category pill has
+    /// had it — see `tvBrandPanel`. Reset each time the landing comes back.
+    @State var tierChipFocusable = false
+    /// How far the landing has scrolled (tvOS) — the brand panel moves back
+    /// down by as much, so the logo stays put while the menu scrolls.
+    @State var tvLandingScrollY: CGFloat = 0
+    /// The landing's visible height, below the tab bar (tvOS): the brand
+    /// panel's height, so the logo is centred on the screen.
+    @State var tvLandingVisibleHeight: CGFloat = 0
     @State var serverUsers: [UserDto] = []
     /// Idempotency guard for `loadServerUsers`. tvOS `.task` re-fires every
     /// time SwiftUI re-enters the view hierarchy (which happens whenever
@@ -274,6 +371,9 @@ struct SettingsScreen: View {
     @State var serverUsersLoadAttempted = false
     @State var showSleepTimerPicker = false
     @State var showLibraryLayoutPicker = false
+    /// `UIApplication.alternateIconName` is not observable: a copy for
+    /// `tvAppIconPicker`, refreshed on appear and after each switch (lot D).
+    @State var appIconName: String?
     #endif
 
     // MARK: Shared Computed Properties
@@ -432,8 +532,12 @@ struct SettingsScreen: View {
             #endif
         }
         #if os(iOS)
+        // The bar stays — empty and untitled (the header below is the title)
+        // — so the account avatar `MainTabView` puts on every tab root sits
+        // here as THE SAME toolbar item, same size and place to the pixel. A
+        // hand-placed copy over a hidden bar was always a few points off
+        // (recette 2026-10-13, C-03).
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
         #endif
         // The Debug « Forcer … » switches write `debug.forcedSeason` through
         // `@AppStorage`; the controller, which re-evaluates the season, follows.
@@ -476,46 +580,34 @@ struct SettingsScreen: View {
         LicensesView()
     }
 
-    /// « Changer de compte »: the profile switcher when several accounts may
-    /// be remembered (multi-account, `ProFeatureGate`), else the historical
-    /// password / Quick Connect sheet.
+    /// « Changer de compte »: the profile list, for every tier (spec
+    /// 2026-10-20) — in free, opening another profile asks for its password
+    /// or Quick Connect (`AppState.switchAccount`).
     @ViewBuilder
     private var userSwitchSheet: some View {
         #if os(iOS)
-        if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
-            AccountSwitcherView()
-                .environment(appState)
-                .environment(themeManager)
-                .environment(loc)
-                .environment(toasts)
-                .environment(accountLocks)
-                .environment(parentalLock)
-                .environment(entitlements)
-                .environment(earlyAdopter)
-        } else {
-            plainUserSwitchSheet
-        }
-        #else
-        if entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures {
-            WhoIsWatchingScreen(mode: .cover) { showUserSwitch = false }
-                .environment(appState)
-                .environment(themeManager)
-                .environment(loc)
-                .environment(toasts)
-                .environment(accountLocks)
-                .environment(parentalLock)
-        } else {
-            plainUserSwitchSheet
-        }
-        #endif
-    }
-
-    private var plainUserSwitchSheet: some View {
-        UserSwitchSheet()
+        AccountSwitcherView()
             .environment(appState)
             .environment(themeManager)
             .environment(loc)
             .environment(toasts)
+            .environment(accountLocks)
+            .environment(parentalLock)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
+        #else
+        WhoIsWatchingScreen(mode: .cover) { showUserSwitch = false }
+            .environment(appState)
+            .environment(themeManager)
+            .environment(loc)
+            .environment(toasts)
+            .environment(accountLocks)
+            .environment(parentalLock)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
+        #endif
     }
 
     /// Signs out of the active server and reports what happened. The auto-hop

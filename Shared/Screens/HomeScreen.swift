@@ -9,6 +9,10 @@ struct HomeScreen: View {
     @Environment(\.seasonID) private var seasonID
     @AppStorage(SettingsKey.seasonalRow) private var showSeasonRow: Bool = SettingsKey.Default.seasonalRow
     @Environment(ToastCenter.self) private var toast
+    /// « Reprendre ici » (Pro): what plays on another device is shown only
+    /// when `allows(.resumeHere)` — never whether something plays.
+    @Environment(ProFeatureAccess.self) private var proAccess
+    @Environment(\.scenePhase) private var scenePhase
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -19,6 +23,12 @@ struct HomeScreen: View {
     /// tvOS keeps a single static hero; the focus engine + `.focusSection` rules
     /// make auto-advancing focusable chrome hazardous there).
     @State private var heroIndex = 0
+    #endif
+    #if os(tvOS)
+    /// The hero's main button (« Lecture » / « Reprendre ici »). Down from the
+    /// tab bar lands on it: left to the engine, it picked « Plus d'infos »,
+    /// the button right under « Accueil » (integration report 2026-10-25, OBS-2).
+    @FocusState private var heroPlayFocused: Bool
     #endif
     @State private var viewModel = HomeViewModel()
     @State private var prefetcher = PosterPrefetcher()
@@ -109,8 +119,19 @@ struct HomeScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task {
+            viewModel.allowsElsewhere = { [proAccess] in proAccess.allows(.resumeHere) }
             await viewModel.loadInitial(using: appState)
             prefetchCardImages()
+        }
+        // A purchase, a refund or the Debug tier: the pills follow at once.
+        .onChange(of: proAccess.allows(.resumeHere)) {
+            Task { await viewModel.refreshElsewhere(using: appState) }
+        }
+        // Back to the app (the remote picked up, the phone unlocked): what
+        // plays elsewhere is asked at once, not at the next 20 s tick.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, isVisible else { return }
+            Task { await viewModel.refreshElsewhere(using: appState) }
         }
         // `initial` hands the row to the view model before its first load
         // reads it (that load fetches it); a later change — the season, or
@@ -137,8 +158,15 @@ struct HomeScreen: View {
             // Tier-2: targeted rail refresh while visible, otherwise defer. This
             // also handles Home's own Continue Watching mutations (posted by
             // `mutateResumeItem`), so the resume rail is fetched exactly once.
+            // A playback that ended here (the stop report posts this) also
+            // ends the hand-off memory, and « Reprendre ici » is asked at once:
+            // the other device may just have taken the film back (YOU-2).
+            viewModel.forgetHandOffs()
             if isVisible {
-                Task { await viewModel.refreshUserDataRails(using: appState) }
+                Task {
+                    await viewModel.refreshUserDataRails(using: appState)
+                    await viewModel.refreshElsewhere(using: appState)
+                }
             } else {
                 pendingUserDataRefresh = true
             }
@@ -250,7 +278,8 @@ struct HomeScreen: View {
         // alone — never `reload()`, which would flip `isLoading` and drop the
         // viewer's scroll position every interval.
         .task(id: isVisible) {
-            guard isVisible, showWatchingNow else { return }
+            let polls = showWatchingNow || proAccess.allows(.resumeHere)
+            guard isVisible, polls else { return }
             // Re-ask on ARRIVAL, not a full interval later. The loop used to
             // sleep first, so somebody told « rejoins-moi, la séance est sur ton
             // accueil » walked to Accueil and found the row still empty for up
@@ -258,14 +287,14 @@ struct HomeScreen: View {
             // pull-to-refresh. The very first appearance is left to `load()`,
             // which already fetches the row.
             if liveRowPrimed {
-                await viewModel.refreshLiveRow(using: appState)
+                await refreshPolledRows()
             } else {
                 liveRowPrimed = true
             }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(Self.liveRowPollInterval))
                 guard !Task.isCancelled, isVisible else { return }
-                await viewModel.refreshLiveRow(using: appState)
+                await refreshPolledRows()
             }
         }
     }
@@ -274,6 +303,13 @@ struct HomeScreen: View {
     /// server logs, short enough that someone told « rejoins-moi » finds the
     /// card there by the time they have reached their Accueil.
     private static let liveRowPollInterval: Double = 20
+
+    /// The poll's two passengers: « En direct » (its rail switch) and
+    /// « Reprendre ici » (the Pro gate, read inside the view model).
+    private func refreshPolledRows() async {
+        if showWatchingNow { await viewModel.refreshLiveRow(using: appState) }
+        await viewModel.refreshElsewhere(using: appState)
+    }
 
     /// Full Home reload + poster re-prefetch. Shared by the tier-1 observer and
     /// the deferred-on-appear path.
@@ -850,6 +886,14 @@ struct HomeScreen: View {
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
+                    let elsewhere = elsewhereEntry(for: item)
+                    if let elsewhere {
+                        #if os(tvOS)
+                        elsewherePill(elsewhere, scale: 1.6)
+                        #else
+                        elsewherePill(elsewhere)
+                        #endif
+                    }
                     HStack(spacing: 8) {
                         if let rating = item.officialRating {
                             RatingBadge(rating: rating)
@@ -864,6 +908,13 @@ struct HomeScreen: View {
                         .heroTitleStyle(size: heroTitleSize, uppercase: true)
                         .foregroundStyle(CinemaColor.onSurface)
                         .lineLimit(2)
+
+                    if let elsewhere {
+                        Text(elsewhereStateLine(elsewhere))
+                            .font(.system(size: heroButtonFontSize, weight: .semibold))
+                            .foregroundStyle(themeManager.accent)
+                            .lineLimit(1)
+                    }
 
                     #if os(tvOS)
                     if let overview = item.overview {
@@ -882,18 +933,24 @@ struct HomeScreen: View {
                             // the SSOT of what counts as a resume, and this card's
                             // context menu reads the same rule for its Resume /
                             // Play label.
-                            let heroStart = CardPlayTargetResolver.resumeSeconds(
+                            // « Reprendre ici »: from where the other device is.
+                            let heroStart = elsewhere?.startSeconds ?? CardPlayTargetResolver.resumeSeconds(
                                 positionTicks: item.userData?.playbackPositionTicks ?? 0
                             )
+                            let playTitle = elsewhere.map(resumeHereTitle) ?? loc.localized("action.play")
                             PlayLink(
                                 itemId: id, title: item.name ?? "",
                                 startTime: heroStart,
                                 previousEpisode: heroNav?.previous, nextEpisode: heroNav?.next,
-                                episodeNavigator: heroNav?.navigator
+                                episodeNavigator: heroNav?.navigator,
+                                onStart: elsewhere.map { entry in { startHandOff(entry) } },
+                                startTimeAtOpen: elsewhere.map { entry in { entry.startSeconds(at: Date()) } }
                             ) {
                                 HStack(spacing: CinemaSpacing.spacing2) {
-                                    Text(loc.localized("action.play"))
+                                    Text(playTitle)
                                         .font(.system(size: heroButtonFontSize, weight: .bold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.8)
                                     Image(systemName: "play.fill")
                                         .font(.system(size: heroButtonFontSize - 2, weight: .bold))
                                 }
@@ -908,23 +965,37 @@ struct HomeScreen: View {
                             }
                             #if os(tvOS)
                             .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
+                            .focused($heroPlayFocused)
                             #else
                             .buttonStyle(.plain)
                             #endif
-                            .frame(width: playButtonWidth)
-                            .accessibilityLabel(String(format: loc.localized("accessibility.playItem"), item.name ?? ""))
+                            // « Reprendre ici » is wider than « Lecture »:
+                            // it takes its own width instead of the fixed one.
+                            .frame(width: elsewhere == nil ? playButtonWidth : nil)
+                            .fixedSize(horizontal: elsewhere != nil, vertical: false)
+                            .accessibilityLabel(elsewhere == nil
+                                ? String(format: loc.localized("accessibility.playItem"), item.name ?? "")
+                                : "\(playTitle), \(item.name ?? "")")
 
                             NavigationLink {
                                 DeferredView {
                                     MediaDetailScreen(itemId: id, itemType: item.type ?? .movie)
                                 }
                             } label: {
-                                HStack(spacing: CinemaSpacing.spacing2) {
-                                    Text(loc.localized("action.moreInfo"))
-                                        .font(.system(size: heroButtonFontSize, weight: .bold))
-                                        .lineLimit(1)
+                                // « Plus d'infos », or the ⓘ alone when it does
+                                // not fit (« Reprendre ici » at 130 % text) —
+                                // a truncated « Plus… » said nothing (user,
+                                // 2026-10-27). The link keeps its label.
+                                ViewThatFits(in: .horizontal) {
+                                    HStack(spacing: CinemaSpacing.spacing2) {
+                                        Text(loc.localized("action.moreInfo"))
+                                            .font(.system(size: heroButtonFontSize, weight: .bold))
+                                            .lineLimit(1)
+                                        Image(systemName: "info.circle")
+                                            .font(.system(size: heroButtonFontSize - 2, weight: .bold))
+                                    }
                                     Image(systemName: "info.circle")
-                                        .font(.system(size: heroButtonFontSize - 2, weight: .bold))
+                                        .font(.system(size: heroButtonFontSize, weight: .bold))
                                 }
                                 .foregroundStyle(CinemaColor.onSurface)
                                 .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
@@ -936,10 +1007,14 @@ struct HomeScreen: View {
                             }
                             #if os(tvOS)
                             .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
+                            .fixedSize()
                             #else
                             .buttonStyle(.plain)
+                            // Next to « Reprendre ici » at 130 % text, a fixed
+                            // width ran off the right edge (recette
+                            // 2026-10-26, FIC-14-A1): the label gives way.
+                            .fixedSize(horizontal: false, vertical: true)
                             #endif
-                            .fixedSize()
                             .accessibilityLabel(String(format: loc.localized("accessibility.moreInfoAbout"), item.name ?? ""))
                         }
                     }
@@ -947,6 +1022,13 @@ struct HomeScreen: View {
                     // Discrete focus section so up-presses from Play / More Info
                     // can escape the bottom-aligned overlay and reach the tab
                     // bar instead of getting trapped inside the hero bounds.
+                    // Entering it (Down from the tab bar) lands on the main
+                    // button, whichever button sits under the focused tab.
+                    // Full width, so Up from ANY « Reprendre » card reaches it:
+                    // only the first card sat under the buttons, the others'
+                    // beam found nothing and Up did nothing (user, 2026-10-25).
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .defaultFocus($heroPlayFocused, true, priority: .userInitiated)
                     .focusSection()
                     #endif
                 }
@@ -1307,8 +1389,11 @@ struct HomeScreen: View {
     private func continueWatchingPlayLink(_ item: BaseItemDto) -> some View {
         if let id = item.id {
             let nav = viewModel.resumeNavigation[id]
-            // Same SSOT as the hero above and as this card's own context menu.
-            let startSeconds = CardPlayTargetResolver.resumeSeconds(
+            // Same SSOT as the hero above and as this card's own context menu —
+            // unless the film is open on another device (« Reprendre ici »):
+            // then from where THAT device is, and it stops as the player opens.
+            let elsewhere = elsewhereEntry(for: item)
+            let startSeconds = elsewhere?.startSeconds ?? CardPlayTargetResolver.resumeSeconds(
                 positionTicks: item.userData?.playbackPositionTicks ?? 0
             )
             let resumePercent: Int? = {
@@ -1320,9 +1405,18 @@ struct HomeScreen: View {
                 itemId: id, title: item.name ?? "",
                 startTime: startSeconds,
                 previousEpisode: nav?.previous, nextEpisode: nav?.next,
-                episodeNavigator: nav?.navigator
+                episodeNavigator: nav?.navigator,
+                onStart: elsewhere.map { entry in { startHandOff(entry) } },
+                startTimeAtOpen: elsewhere.map { entry in { entry.startSeconds(at: Date()) } }
             ) {
                 continueWatchingCard(item)
+                    // Decorative: no new focusable on tvOS, said by the
+                    // card's own accessibility value below.
+                    .overlay(alignment: .topLeading) {
+                        if let elsewhere {
+                            elsewherePill(elsewhere).padding(8)
+                        }
+                    }
                     .frame(width: wideCardWidth)
             }
             #if os(tvOS)
@@ -1347,8 +1441,62 @@ struct HomeScreen: View {
                 onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
             )
             .accessibilityLabel(item.spokenCardLabel(localize: loc.localized))
-            .accessibilityValue(resumePercent.map { String(format: loc.localized("accessibility.resumeProgress"), $0) } ?? "")
+            .accessibilityValue(
+                [elsewhere.map(elsewhereStateLine), resumePercent.map { String(format: loc.localized("accessibility.resumeProgress"), $0) }]
+                    .compactMap { $0 }.joined(separator: ", ")
+            )
         }
+    }
+
+    // MARK: - « Reprendre ici » (spec 2026-10-24)
+
+    private func elsewhereEntry(for item: BaseItemDto) -> ElsewherePlayback? {
+        item.id.flatMap { viewModel.elsewhere[$0] }
+    }
+
+    private func elsewhereDeviceName(_ entry: ElsewherePlayback) -> String {
+        entry.deviceName.isEmpty ? loc.localized("elsewhere.unknownDevice") : entry.deviceName
+    }
+
+    /// « En pause sur Apple TV · 42:13 » — the position the other device
+    /// reported. On this line, not in the button: « Reprendre ici · 42:13 »
+    /// pushed « Plus d'infos » off an iPhone's screen (bench, 2026-10-24).
+    /// Paused only: a playing source's position keeps moving, and the probe
+    /// behind this line can be ~50 s old — « En cours sur Apple TV » alone.
+    private func elsewhereStateLine(_ entry: ElsewherePlayback) -> String {
+        let state = loc.localized(entry.isPaused ? "elsewhere.paused" : "elsewhere.playing", elsewhereDeviceName(entry))
+        guard entry.isPaused, let seconds = entry.startSeconds else { return state }
+        return "\(state) · \(PlayerTimeFormat.ms(Int32(clamping: Int(seconds) * 1000)))"
+    }
+
+    private func resumeHereTitle(_ entry: ElsewherePlayback) -> String {
+        loc.localized("elsewhere.resumeHere")
+    }
+
+    /// « SUR APPLE TV » — same chrome as the « En direct » pill, in the accent.
+    /// `scale` enlarges it on the Apple TV hero, where the card size read tiny.
+    private func elsewherePill(_ entry: ElsewherePlayback, scale: CGFloat = 1) -> some View {
+        HStack(spacing: CinemaSpacing.spacing1) {
+            Image(systemName: entry.isPaused ? "pause.fill" : "play.fill")
+                .font(.system(size: CinemaScale.pt(8) * scale, weight: .bold))
+            Text(loc.localized("elsewhere.badge", elsewhereDeviceName(entry)).uppercased(with: loc.locale))
+                .font(.system(size: CinemaScale.pt(10) * scale, weight: .bold))
+                .tracking(0.5)
+                .lineLimit(1)
+        }
+        .foregroundStyle(themeManager.accent)
+        .padding(.horizontal, 6 * scale)
+        .padding(.vertical, 3 * scale)
+        .background(.ultraThinMaterial, in: Capsule())
+        .accessibilityHidden(true)
+    }
+
+    /// The source is told (« Lecture reprise sur iPhone ») and stopped.
+    private func startHandOff(_ entry: ElsewherePlayback) {
+        viewModel.handOff(
+            entry, using: appState,
+            message: loc.localized("elsewhere.sourceMessage", JellyfinAPIClient.sessionDeviceName)
+        )
     }
 
     @ViewBuilder
@@ -1560,6 +1708,7 @@ struct HomeScreen: View {
             title: loc.localized("home.playlists"),
             showViewAll: true,
             onViewAll: { playlistsDestination = PlaylistsDestination() },
+            viewAllAspectRatio: 1,
             data: viewModel.playlists,
             id: \.id
         ) { playlist in

@@ -196,8 +196,8 @@ public protocol LibraryAPI: Sendable {
         limit: Int?,
         startIndex: Int?,
         /// `false` tells the server not to COUNT the full matching set (a
-        /// second query over the whole match) and makes `totalCount` come back
-        /// `0` — "didn't count", never "no results". Only a caller that reads
+        /// second query over the whole match); `totalCount` is then the size of
+        /// the returned page, not of the match. Only a caller that reads
         /// the count needs `true`: `PaginatedLoader` (it derives `hasLoadedAll`
         /// from it) and `MediaLibraryViewModel`'s header. See the
         /// implementation for the rest of the contract.
@@ -635,6 +635,11 @@ public protocol RemoteControlAPI: RealtimeSocketAPI {
     /// including its own. Pass `false` to withdraw (the user's opt-out).
     func publishCapabilities(supportsMediaControl: Bool) async throws
 
+    /// Tells another of this user's sessions to stop playing
+    /// (`POST /Sessions/{id}/Playing/Stop`) — « Reprendre ici » takes the
+    /// playback over. The receiver closes its player as for any close.
+    func stopSession(sessionId: String) async throws
+
 }
 
 public extension RemoteControlAPI {
@@ -654,6 +659,7 @@ public extension RemoteControlAPI {
     ) async throws {}
     func publishCapabilities(supportsMediaControl: Bool) async throws {}
     func sendMessage(sessionId: String, header: String, text: String, timeoutMs: Int?) async throws {}
+    func stopSession(sessionId: String) async throws {}
 }
 
 // MARK: - Playlists

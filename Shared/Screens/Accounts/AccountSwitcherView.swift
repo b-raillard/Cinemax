@@ -11,6 +11,11 @@ struct AccountTile: View {
     let isCurrent: Bool
     let isLocked: Bool
     let isExpired: Bool
+    /// Opening it asks for a sign-in (free tier, or no session on this device)
+    /// — said quietly, unlike a real expiry (`AppState.needsSignIn`).
+    var needsSignIn: Bool = false
+    /// `AppState.keepsAccountSessions`: an expiry is only shown in Pro.
+    var keepsSessions: Bool = true
     let avatarSize: CGFloat
     /// tvOS: the tile has focus — a round portrait draws its own circular
     /// accent ring and grows (card focus level, `CinemaTVFocus`).
@@ -54,17 +59,44 @@ struct AccountTile: View {
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
     }
 
+    private var resolved: AccountTileStatus? {
+        AccountTileStatus.resolve(isCurrent: isCurrent, isExpired: isExpired, needsSignIn: needsSignIn,
+                                  isLocked: isLocked, keepsSessions: keepsSessions)
+    }
+
     private var status: String? {
-        if isCurrent { return loc.localized("accounts.current") }
-        if isExpired { return loc.localized("accounts.expired") }
-        if isLocked { return loc.localized("accounts.codeRequired") }
-        return nil
+        switch resolved {
+        case .current: loc.localized("accounts.current")
+        case .expired: loc.localized("accounts.expired")
+        case .codeRequired: loc.localized("accounts.codeRequired")
+        case .signedOut: loc.localized("accounts.signedOut")
+        case nil: nil
+        }
     }
 
     private var statusColor: Color {
-        if isCurrent { return themeManager.accent }
-        if isExpired { return CinemaColor.error }
-        return CinemaColor.onSurfaceMuted
+        switch resolved {
+        case .current: themeManager.accent
+        case .expired: CinemaColor.error
+        default: CinemaColor.onSurfaceMuted
+        }
+    }
+}
+
+/// What a profile tile says. Whatever is asked FIRST wins: the code comes
+/// before the sign-in (`switchAccount` checks it first). A red expiry is Pro
+/// information — in free every switch signs in anyway, so a flag left over
+/// from a Pro period reads as the quiet « Mot de passe requis ».
+enum AccountTileStatus: Equatable {
+    case current, expired, codeRequired, signedOut
+
+    static func resolve(isCurrent: Bool, isExpired: Bool, needsSignIn: Bool,
+                        isLocked: Bool, keepsSessions: Bool) -> Self? {
+        if isCurrent { return .current }
+        if isExpired, keepsSessions { return .expired }
+        if isLocked { return .codeRequired }
+        if needsSignIn || isExpired { return .signedOut }
+        return nil
     }
 }
 
@@ -127,6 +159,7 @@ struct AccountSwitcherView: View {
     @Environment(ParentalLockController.self) private var parentalLock
     @Environment(EntitlementStore.self) private var entitlements
     @Environment(EarlyAdopterService.self) private var earlyAdopter
+    @Environment(ProStore.self) private var proStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var flow = AccountSwitchFlow()
@@ -134,10 +167,11 @@ struct AccountSwitcherView: View {
     @State private var showAddChoice = false
     @State private var showQuickConnect = false
     @State private var quickConnect = LoginViewModel()
-
-    private var multiAccount: Bool {
-        entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures
-    }
+    /// The remembered account whose password step is open (« Se reconnecter »
+    /// → Mot de passe).
+    @State private var reconnectWithPassword: SavedAccount?
+    /// The active account when the password step opened (`finishReconnection`).
+    @State private var reconnectFrom: String?
 
     var body: some View {
         NavigationStack {
@@ -145,7 +179,7 @@ struct AccountSwitcherView: View {
                 Group {
                     switch flow.step {
                     case .pick:
-                        if multiAccount { pickGrid } else { freeContent }
+                        pickGrid
                     case .code(let account, let parental):
                         AccountCodeStep(flow: flow, account: account, parental: parental, avatarSize: 72) {
                             Task { if await flow.submit(appState: appState, locks: locks, parentalLock: parentalLock, toasts: toasts, loc: loc) { dismiss() } }
@@ -175,12 +209,14 @@ struct AccountSwitcherView: View {
         .sheet(isPresented: $showAddAccount) { signInSheet(prefilled: nil) }
         // « Ajouter »: Quick Connect (approve from a device where the account
         // is signed in — no password typed) or username + password.
-        .confirmationDialog(loc.localized("accounts.add.title"), isPresented: $showAddChoice, titleVisibility: .visible) {
+        // An `.alert`, never a `confirmationDialog`: iOS 27 shows the latter
+        // as a popover with « Annuler » hidden (recette 2026-10-23, Q-ANNULER).
+        .alert(loc.localized("accounts.add.title"), isPresented: $showAddChoice) {
             Button(loc.localized("accounts.add.quickConnect")) { showQuickConnect = true }
             Button(loc.localized("accounts.add.password")) { showAddAccount = true }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
-            Text(loc.localized("accounts.add.subtitle"))
+            Text(loc.localized("accounts.add.subtitle.phone"))
         }
         .sheet(isPresented: $showQuickConnect) {
             QuickConnectSheet(viewModel: quickConnect)
@@ -193,6 +229,9 @@ struct AccountSwitcherView: View {
                 quickConnect.startQuickConnect(using: appState, loc: loc)
             } else {
                 quickConnect.cancelQuickConnect()
+                // A reconnection abandoned here leaves no marker behind
+                // (`AppState.clearPendingSignIn`); after a success it is a no-op.
+                appState.clearPendingSignIn()
             }
         }
         .onChange(of: quickConnect.showSuccess) { _, success in
@@ -201,15 +240,57 @@ struct AccountSwitcherView: View {
             showQuickConnect = false
             dismiss()
         }
-        .sheet(item: $flow.reconnect) { account in signInSheet(prefilled: account.username) }
+        // « Se reconnecter » (free tier, or an account without a session):
+        // Quick Connect or the password, as for « Ajouter » — an `.alert` too.
+        .alert(
+            loc.localized("accounts.reconnect.title", flow.reconnect?.username ?? ""),
+            isPresented: reconnectChoice,
+            presenting: flow.reconnect
+        ) { account in
+            Button(loc.localized("accounts.add.quickConnect")) { showQuickConnect = true }
+            Button(loc.localized("accounts.add.password")) {
+                reconnectFrom = appState.currentUserId
+                reconnectWithPassword = account
+            }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+        }
+        .sheet(item: $reconnectWithPassword, onDismiss: finishReconnection) { account in
+            signInSheet(prefilled: account.username, showsProHint: !appState.keepsAccountSessions)
+        }
+    }
+
+    /// The reconnection choice is up while `flow.reconnect` names an account.
+    /// Closing it without picking a way in drops the pending sign-in marker;
+    /// the check waits a turn, the picked button's action having run first.
+    private var reconnectChoice: Binding<Bool> {
+        Binding(
+            get: { flow.reconnect != nil },
+            set: { presented in
+                guard !presented else { return }
+                flow.reconnect = nil
+                Task { @MainActor in
+                    if reconnectWithPassword == nil && !showQuickConnect { appState.clearPendingSignIn() }
+                }
+            }
+        )
+    }
+
+    /// The password step closed: a sign-in — to that account or to another one
+    /// reached from the same step — closes the switcher too; anything else just
+    /// drops the pending sign-in marker.
+    private func finishReconnection() {
+        appState.clearPendingSignIn()
+        let opened = AccountSwitchFlow.reconnectionOpened(before: reconnectFrom, after: appState.currentUserId)
+        reconnectFrom = nil
+        if opened { dismiss() }
     }
 
     private var title: String {
         if case .code = flow.step { return "" }
-        return multiAccount ? loc.localized("accounts.title") : loc.localized("accounts.switch")
+        return loc.localized("accounts.title")
     }
 
-    // MARK: Pro / founder
+    // MARK: Profiles
 
     private var pickGrid: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
@@ -229,6 +310,8 @@ struct AccountSwitcherView: View {
                             isCurrent: account.userId == appState.currentUserId,
                             isLocked: appState.accountKey(for: account).map(locks.hasLock) ?? false,
                             isExpired: appState.isExpired(account),
+                            needsSignIn: appState.needsSignIn(account),
+                            keepsSessions: appState.keepsAccountSessions,
                             avatarSize: 72
                         )
                         .contentShape(Rectangle())
@@ -274,29 +357,6 @@ struct AccountSwitcherView: View {
         }
     }
 
-    // MARK: Free
-
-    private var freeContent: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
-            HStack(spacing: CinemaSpacing.spacing3) {
-                UserAvatar(userId: appState.currentUserId, name: appState.currentUser?.name,
-                           primaryImageTag: appState.currentUser?.primaryImageTag, size: 56)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(appState.currentUser?.name ?? "")
-                        .font(CinemaFont.dynamicHeadline())
-                        .foregroundStyle(CinemaColor.onSurface)
-                    Text(appState.activeServerDisplayName)
-                        .font(CinemaFont.dynamicLabel(.medium))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                }
-            }
-            CinemaButton(title: loc.localized("accounts.switch"), style: .ghost) { showAddAccount = true }
-            Text(loc.localized("accounts.switch.freeHint"))
-                .font(CinemaFont.dynamicLabel(.small))
-                .foregroundStyle(CinemaColor.onSurfaceMuted)
-        }
-    }
-
     @ViewBuilder
     private func faceIDButton(account: SavedAccount, parental: Bool) -> some View {
         let available = parental
@@ -313,12 +373,15 @@ struct AccountSwitcherView: View {
         }
     }
 
-    private func signInSheet(prefilled: String?) -> some View {
-        UserSwitchSheet(prefilledUsername: prefilled)
+    private func signInSheet(prefilled: String?, showsProHint: Bool = false) -> some View {
+        UserSwitchSheet(prefilledUsername: prefilled, showsProReconnectHint: showsProHint)
             .environment(appState)
             .environment(themeManager)
             .environment(loc)
             .environment(toasts)
+            .environment(entitlements)
+            .environment(earlyAdopter)
+            .environment(proStore)
     }
 }
 
@@ -333,6 +396,7 @@ struct AccountAvatarToolbarButton: View {
     @Environment(ParentalLockController.self) private var parentalLock
     @Environment(EntitlementStore.self) private var entitlements
     @Environment(EarlyAdopterService.self) private var earlyAdopter
+    @Environment(ProStore.self) private var proStore
     @Environment(NetworkMonitor.self) private var network
     @State private var showSwitcher = false
 
@@ -354,7 +418,12 @@ struct AccountAvatarToolbarButton: View {
                 .environment(parentalLock)
                 .environment(entitlements)
                 .environment(earlyAdopter)
+                .environment(proStore)
                 .environment(network)
+                // The popover inherits the toolbar's `.large` symbol scale:
+                // its icons stood ~1.3× those of the same switcher opened from
+                // Réglages (recette 2026-10-26, ACC-12-A1).
+                .imageScale(.medium)
                 .preferredColorScheme(themeManager.colorScheme)
         }
     }

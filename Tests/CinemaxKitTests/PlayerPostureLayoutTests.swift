@@ -144,6 +144,34 @@ struct TabletopHaloTests {
         #expect(-(298.0 / 2) + k == 500.0 / 2 + 24)
     }
 
+    @Test("the mirror transform is its own inverse: instance 1 lands on the picture")
+    func mirrorTransformInvolution() {
+        let t = TabletopHalo.mirrorTransform(offset: 435)
+        #expect(CATransform3DIsIdentity(CATransform3DConcat(t, t)))
+    }
+
+    /// iOS 27.2 shows a black picture when it is the FIRST replica (device,
+    /// 2026-10-25): the reflection must be instance 0, the picture instance 1,
+    /// opaque. Leaving table mode restores a plain single instance.
+    @Test("table mode: reflection first, picture last and opaque; regular: one plain instance")
+    @MainActor
+    func reflectionIsTheFirstInstance() throws {
+        let view = MirroringVideoView(frame: CGRect(x: 0, y: 0, width: 400, height: 500))
+        let replicator = try #require(view.layer as? CAReplicatorLayer)
+        view.setMirror(enabled: true, pictureHeight: 225, gapBelowFold: 24)
+        #expect(replicator.instanceCount == 2)
+        #expect(CATransform3DEqualToTransform(replicator.sublayerTransform, replicator.instanceTransform))
+        #expect(!CATransform3DIsIdentity(replicator.sublayerTransform))
+        let firstAlpha = try #require(replicator.instanceColor?.alpha)
+        #expect(abs(firstAlpha - CGFloat(TabletopHalo.opacity)) < 0.001)
+        #expect(abs(Float(firstAlpha) + replicator.instanceAlphaOffset - 1) < 0.001)
+
+        view.setMirror(enabled: false, pictureHeight: 225, gapBelowFold: 24)
+        #expect(replicator.instanceCount == 1)
+        #expect(CATransform3DIsIdentity(replicator.sublayerTransform))
+        #expect(replicator.instanceColor?.alpha == 1)
+    }
+
     @Test("finds VLC's subtitle view, however deep, by its class name")
     @MainActor
     func findsSubtitleView() {

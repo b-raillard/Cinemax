@@ -62,6 +62,8 @@ extension SettingsScreen {
                     .frame(width: isShortHeader ? 64 : 112, height: isShortHeader ? 64 : 112)
                     .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.extraLarge))
                     .shadow(color: themeManager.accent.opacity(0.4), radius: 15)
+                    // « Votre niveau » (design D): ring + medal on the logo.
+                    .proTierLogo(headerTierLook, cornerRadius: CinemaRadius.extraLarge, medalSize: isShortHeader ? 22 : 34)
                     .accessibilityHidden(true)
             }
 
@@ -71,33 +73,31 @@ extension SettingsScreen {
                     .foregroundStyle(CinemaColor.onSurface)
                     .tracking(-0.5)
 
+                // …and in words, the door to « Votre niveau » (the Pro page).
+                if let look = headerTierLook {
+                    ProTierChip(tier: look.tier) { selectedCategory = .pro }
+                        .padding(.vertical, CinemaSpacing.spacing1)
+                }
+
                 Text(loc.localized("settings.version", appVersion))
                     .font(CinemaFont.dynamicLabel(.medium))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
                     .tracking(0.5)
             }
         }
-        .padding(.top, isShortHeader ? CinemaSpacing.spacing3 : CinemaSpacing.spacing8)
+        // Top padding is small: the (empty) navigation bar above already
+        // gives the logo its air since the avatar moved into it.
+        .padding(.top, isShortHeader ? 0 : CinemaSpacing.spacing2)
         .padding(.bottom, isShortHeader ? CinemaSpacing.spacing4 : CinemaSpacing.spacing6)
         .frame(maxWidth: .infinity)
-        // The account avatar every other tab root carries in its navigation
-        // bar (`MainTabView`), which this landing hides: same place, leading.
-        // Not a toolbar item here, so the glass is drawn by the button style.
-        .overlay(alignment: .topLeading) {
-            AccountAvatarToolbarButton()
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                // Lines up with the bar's leading item on the other tabs
-                // (measured on the iPhone 17 Pro simulator).
-                .padding(.leading, CinemaSpacing.spacing2)
-        }
     }
 
     // MARK: iOS Navigation List
 
     var iOSNavigationList: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
-            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false)) { category in
+            ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false,
+                                                  showsDebug: showsDebugCategory)) { category in
                 iOSCategoryButton(category)
             }
         }
@@ -107,8 +107,12 @@ extension SettingsScreen {
     @ViewBuilder
     func iOSCategoryButton(_ category: SettingsCategory) -> some View {
         let isFirst = category == .appearance
+        // A Pro category (Administration) a free user still sees, badged:
+        // the tap opens the Pro sheet instead of the page.
+        let isLocked = category.proFeature.map { proAccess?.allows($0) == false } ?? false
 
         Button {
+            if let feature = category.proFeature, proAccess?.admit(feature) == false { return }
             selectedCategory = category
         } label: {
             HStack(spacing: CinemaSpacing.spacing3) {
@@ -131,10 +135,14 @@ extension SettingsScreen {
 
                 Spacer()
 
-                // Chevron
-                Image(systemName: "chevron.right")
-                    .font(.system(size: CinemaScale.pt(14), weight: .semibold))
-                    .foregroundStyle(isFirst ? themeManager.onAccentContainer.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
+                if isLocked {
+                    ProBadge()
+                } else {
+                    // Chevron
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                        .foregroundStyle(isFirst ? themeManager.onAccentContainer.opacity(0.85) : CinemaColor.onSurfaceVariant.opacity(0.6))
+                }
             }
             .padding(.horizontal, CinemaSpacing.spacing4)
             .padding(.vertical, CinemaSpacing.spacing3)
@@ -154,6 +162,7 @@ extension SettingsScreen {
             .shadow(color: isFirst ? themeManager.accentContainer.opacity(0.3) : .clear, radius: 20, y: 4)
         }
         .buttonStyle(.plain)
+        .accessibilityHint(isLocked ? loc.localized("pro.locked.hint") : "")
     }
 
     // MARK: iOS Rate App
@@ -255,10 +264,10 @@ extension SettingsScreen {
         // sub-screens aren't fighting the wrapping ScrollView. The remaining
         // static-form categories keep the original wrapper.
         switch category {
+        case .pro:
+            ProScreen()
         case .administration:
             AdminLandingScreen()
-        case .advancedAdmin:
-            AdvancedAdminLandingScreen()
         default:
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
@@ -273,7 +282,9 @@ extension SettingsScreen {
                         iOSInterfaceDetail
                     case .playback:
                         iOSPlaybackDetail
-                    case .administration, .advancedAdmin:
+                    case .debug:
+                        iOSDebugDetail
+                    case .pro, .administration:
                         EmptyView() // handled above
                     }
                 }
@@ -613,8 +624,8 @@ extension SettingsScreen {
         .glassPanel(cornerRadius: CinemaRadius.extraLarge)
     }
 
-    /// Page Lecture top-level : réglages du player + section Débogage (outils
-    /// QA, toujours visibles — pas de gate #if DEBUG, voir CLAUDE.md).
+    /// Page Lecture top-level : réglages du player (la section Débogage est
+    /// devenue la catégorie Debug, 2026-10-22).
     var iOSPlaybackDetail: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             VStack(spacing: 0) {
@@ -623,10 +634,15 @@ extension SettingsScreen {
                 iOSSleepTimerRow
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        }
+    }
 
+    /// Page Debug (dernière catégorie) : les outils QA qui fermaient la page
+    /// Lecture, inchangés. Visible hors App Store — voir
+    /// `SettingsCategory.showsDebug` et `Settings/CLAUDE.md`.
+    var iOSDebugDetail: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
-                iOSSettingsSectionHeader(loc.localized("settings.debug"))
-
                 VStack(spacing: 0) {
                     iOSToggleRowsJoined(debugToggleRows, accent: themeManager.accent, animated: motionEffects, loc: loc)
                     iOSSettingsDivider

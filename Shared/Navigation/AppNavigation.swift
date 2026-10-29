@@ -40,16 +40,29 @@ struct AppNavigation: View {
     /// mid-way through using. See the RULE on `ParentalLockController`.
     static let sharedParentalLock = ParentalLockController()
     /// Seasonal themes — a process singleton like the stores above, so a
-    /// scene-struct recreation never re-reads the defaults.
-    private static let sharedSeasonal = SeasonalThemeController()
+    /// scene-struct recreation never re-reads the defaults. Forcing Halloween
+    /// at any date is the Pro's (lot C): the controller asks the gate itself,
+    /// from init — the root's `onChange` below re-evaluates on a tier change.
+    private static let sharedSeasonal = SeasonalThemeController(
+        allowsForcedSeason: { sharedProAccess.allows(.seasonalAllYear) }
+    )
     /// Free / Pro — a process singleton like the stores above: its `init`
     /// reads the defaults AND the iCloud key-value store and starts listening
     /// for iCloud's external changes, none of which a scene-struct recreation
-    /// may repeat. Nothing gates on it yet (`Shared/Entitlements/CLAUDE.md`).
+    /// may repeat. Read through `ProFeatureGate` (`Shared/Entitlements/CLAUDE.md`).
     private static let sharedEntitlements = EntitlementStore()
     /// Early adopters (installed before the Pro): a process singleton — its
-    /// `init` reads the Keychain cache. Nothing grants on it yet.
+    /// `init` reads the Keychain cache. The founders' grant, via `ProFeatureGate`.
     private static let sharedEarlyAdopter = EarlyAdopterService()
+    /// The gate sites' one entry point and the root's contextual Pro sheet
+    /// (lot B). Not `private`, for the same reason as `sharedAppState`: an App
+    /// Intent has no environment and must ask THIS instance — built from the
+    /// two stores above, so it answers before any view exists.
+    static let sharedProAccess = ProFeatureAccess(entitlements: sharedEntitlements, earlyAdopter: sharedEarlyAdopter)
+    /// The Pro purchase (StoreKit 2): a process singleton — it listens to
+    /// `Transaction.updates` for the life of the process, which a scene-struct
+    /// recreation must not start twice.
+    private static let sharedProStore = ProStore(entitlements: sharedEntitlements)
     /// The per-account codes (multi-account) — a process singleton: it caches
     /// what it has read from the Keychain, per account.
     static let sharedAccountLocks = AccountLockStore()
@@ -64,13 +77,15 @@ struct AppNavigation: View {
     @State private var seasonal = Self.sharedSeasonal
     @State private var entitlements = Self.sharedEntitlements
     @State private var earlyAdopter = Self.sharedEarlyAdopter
+    @State private var proStore = Self.sharedProStore
+    @State private var proAccess = Self.sharedProAccess
     @State private var accountLocks = Self.sharedAccountLocks
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
     private var remoteControl: RemoteControlListener { Self.sharedRemoteControl }
     @State private var playlistPresenter = AddToPlaylistPresenter()
-    @State private var cardActions = CardActionPresenter()
+    @State private var cardActions = CardActionPresenter(access: Self.sharedProAccess)
     @State private var settingsNav = SettingsNavCoordinator()
     @State private var hasCheckedSession = false
     /// tvOS « Qui regarde ? » at launch (multi-account) — decided once, right
@@ -243,6 +258,7 @@ struct AppNavigation: View {
         .environment(seasonal)
         .environment(entitlements)
         .environment(earlyAdopter)
+        .environment(proStore)
         .environment(accountLocks)
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         #if os(iOS)
@@ -253,6 +269,11 @@ struct AppNavigation: View {
         }
         // Midnight: a season can start or end while the app stays open.
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
+            seasonal.reevaluate()
+        }
+        // The tier moved (a purchase, a refund, Debug « Palier simulé »): a
+        // forced Halloween comes or goes with it (lot C).
+        .onChange(of: proAccess.allows(.seasonalAllYear)) { _, _ in
             seasonal.reevaluate()
         }
         .environment(playlistPresenter)
@@ -268,6 +289,7 @@ struct AppNavigation: View {
             toast: toasts
         ))
         .environment(cardActions)
+        .environment(proAccess)
         // Same reason as the playlist sheet: playback is launched from context
         // menus inside lazy grids, where a presentation attached to the cell
         // dies with it. Nothing to host here on tvOS — the menu calls
@@ -291,6 +313,18 @@ struct AppNavigation: View {
             themeManager: themeManager,
             loc: loc,
             toast: toasts
+        ))
+        // The contextual Pro sheet of a refused gate (lot B): raised by a tap
+        // on a Pro entry (« Lire sur… », the Administration row) or by a
+        // Siri / Raccourcis run — hosted once here, like the two above.
+        .modifier(ProUpsellPresentation(
+            feature: $proAccess.upsell,
+            entitlements: entitlements,
+            earlyAdopter: earlyAdopter,
+            proStore: proStore,
+            loc: loc,
+            themeManager: themeManager,
+            toasts: toasts
         ))
         .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
             appToggle: motionEffects,
@@ -372,6 +406,11 @@ struct AppNavigation: View {
             appState.apiClient.setPreferredLanguage(code)
         }
         .task {
+            // The Pro purchase: listen to `Transaction.updates` (an « Ask to
+            // Buy » approval or a refund that arrived while the app was closed
+            // is delivered there) and reconcile with StoreKit's current
+            // entitlements — a local cache, no network, no account prompt.
+            proStore.start()
             // Let the confirm-before-logout coordinator see real connectivity.
             // Captured strongly: `NetworkMonitor` and `AppState` are both process
             // singletons, so there is no lifetime to protect — and a `weak`
@@ -382,8 +421,8 @@ struct AppNavigation: View {
             // (open to everyone until the Pro launches — `ProFeatureGate`); a
             // protected profile, or one less restricted than the current one
             // while a parental code is set, needs a code (`AppState.switchAccount`).
-            appState.multiAccountProvider = { [entitlements, earlyAdopter] in
-                entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures
+            appState.multiAccountProvider = { [proAccess] in
+                proAccess.allows(.memorizedAccounts)
             }
             appState.accountLockProvider = { [accountLocks] key in accountLocks.hasLock(key) }
             appState.parentalLockProvider = { [parentalLock] in parentalLock.isEnabled }
@@ -411,7 +450,7 @@ struct AppNavigation: View {
             // The living-room picker: only with several remembered accounts to
             // choose from, and only when the household asked for it.
             if appState.isAuthenticated, accountsAskOnLaunch,
-               entitlements.proTier(earlyAdopter: earlyAdopter).unlocksProFeatures,
+               proAccess.allows(.memorizedAccounts),
                appState.activeAccounts.count >= 2 {
                 showWhoIsWatching = true
             }
@@ -633,6 +672,7 @@ struct AppNavigation: View {
                 // Synchronize the iCloud key-value store on every return to
                 // the foreground (the launch one is the store's `init`).
                 entitlements.refresh()
+                Task { await proStore.refresh() }
             }
             if newPhase == .background {
                 lastBackgroundedAt = Date()
@@ -640,7 +680,14 @@ struct AppNavigation: View {
                 // Drop the remote-control socket: a backgrounded app can't act
                 // on a play command anyway, and holding a WebSocket open is a
                 // standing battery / radio-wake cost. Re-established on `.active`.
-                remoteControl.stop()
+                // EXCEPT while a player is still running (Picture in Picture,
+                // background audio): that session must stay drivable, or
+                // another device's « Reprendre ici » neither sees it (the
+                // server lists only sessions with a live socket) nor can stop
+                // it — the film then played on both (user report 2026-10-25).
+                if !RemotePlaystateRouter.shared.hasActivePlayer {
+                    remoteControl.stop()
+                }
                 // Close the parental gate. `.background` and NOT `.inactive`:
                 // the latter also fires for an app-switcher peek, a Control
                 // Center swipe or a notification banner, and re-asking for the
