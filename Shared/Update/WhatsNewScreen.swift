@@ -49,7 +49,13 @@ struct WhatsNewScreen: View {
     @State private var pageViewportHeight: CGFloat = 0
     #endif
 
-    private enum Control: Hashable { case primary, back, skip, decline }
+    private enum Control: Hashable { case primary, back, skip, decline, rate }
+    #if os(tvOS)
+    /// The app's page in the Apple TV's App Store (`AppUpdateChecker.rateAppURL`),
+    /// `nil` until a Store lookup has succeeded or when the device cannot open
+    /// it (the simulator) — then the last page has no « Noter » button.
+    @State private var rateURL: URL? = AppUpdateChecker.rateAppURL()
+    #endif
 
     private var page: WhatsNewPage? {
         pages.indices.contains(index) ? pages[index] : pages.first
@@ -282,6 +288,8 @@ struct WhatsNewScreen: View {
                     CinemaButton(title: loc.localized("whatsNew.skip"), style: .ghost) { onFinish() }
                         .frame(maxWidth: ctaWidth)
                         .focused($focusedControl, equals: .skip)
+                } else if let rateURL {
+                    rateButton(rateURL)
                 }
                 #else
                 // The offer's « Non merci » takes the back slot; a swipe still
@@ -333,6 +341,23 @@ struct WhatsNewScreen: View {
             .frame(maxWidth: ctaWidth)
             .focused($focusedControl, equals: .decline)
     }
+
+    #if os(tvOS)
+    /// « Noter JellyGlass » on the LAST page, in the slot « Passer » leaves
+    /// empty there. tvOS has no `requestReview` and guideline 5.6.1 forbids a
+    /// home-made prompt, so the only way to ask is a button the user chooses to
+    /// press — and the end of the reel, right after an update, is when the
+    /// whole active base passes by. Finishes the reel first, so coming back
+    /// from the Store does not show it again.
+    private func rateButton(_ url: URL) -> some View {
+        CinemaButton(title: loc.localized("settings.rateApp"), style: .ghost) {
+            onFinish()
+            UIApplication.shared.open(url)
+        }
+        .frame(maxWidth: ctaWidth)
+        .focused($focusedControl, equals: .rate)
+    }
+    #endif
 
     private var backButton: some View {
         CinemaButton(title: loc.localized("whatsNew.back"), style: .ghost) { goBack() }
