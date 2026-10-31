@@ -1120,6 +1120,7 @@
    ici : elles vivent dans AppShortcuts.strings. */
 "intent.entity.mediaItem" = "Média";
 "intent.param.item" = "Titre";
+"intent.param.item.prompt" = "Quel titre voulez-vous regarder ?";
 "intent.param.series" = "Série";
 "intent.param.query" = "Recherche";
 

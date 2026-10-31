@@ -117,7 +117,11 @@ struct PlayMediaItemIntent: AppIntent {
     static let description = IntentDescription("intent.play.description")
     static let openAppWhenRun = true
 
-    @Parameter(title: "intent.param.item")
+    /// Asked for when the phrase named no title (« Lis quelque chose dans
+    /// JellyGlass »): the answer goes through `MediaItemQuery.entities(matching:)`,
+    /// i.e. the whole library — a title IN the phrase can only be one of the
+    /// suggested entities.
+    @Parameter(title: "intent.param.item", requestValueDialog: IntentDialog("intent.param.item.prompt"))
     var item: MediaItemEntity
 
     @MainActor
@@ -209,8 +213,17 @@ struct CinemaxShortcuts: AppShortcutsProvider {
             intent: PlayMediaItemIntent(),
             phrases: [
                 "Lire \(\.$item) dans \(.applicationName)",
+                "Lis \(\.$item) dans \(.applicationName)",
+                "Joue \(\.$item) dans \(.applicationName)",
                 "Regarder \(\.$item) dans \(.applicationName)",
-                "Lance \(\.$item) sur \(.applicationName)"
+                "Lance \(\.$item) sur \(.applicationName)",
+                // No title: Siri asks « Quel titre ? » and the answer is
+                // searched in the whole library (`requestValueDialog`). A
+                // title spoken IN the phrase only matches the suggested ones.
+                "Lis quelque chose dans \(.applicationName)",
+                "Regarder un film dans \(.applicationName)",
+                "Regarder une série dans \(.applicationName)",
+                "Lance un film sur \(.applicationName)"
             ],
             shortTitle: "intent.play.shortTitle",
             systemImageName: "play.fill"

@@ -1118,6 +1118,7 @@
    PHRASES are not here: they live in AppShortcuts.strings. */
 "intent.entity.mediaItem" = "Medium";
 "intent.param.item" = "Titel";
+"intent.param.item.prompt" = "Was möchtest du ansehen?";
 "intent.param.series" = "Serie";
 "intent.param.query" = "Suche";
 

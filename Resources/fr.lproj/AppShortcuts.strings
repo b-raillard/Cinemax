@@ -16,6 +16,12 @@
 "Lire ${item} dans ${applicationName}" = "Lire ${item} dans ${applicationName}";
 "Regarder ${item} dans ${applicationName}" = "Regarder ${item} dans ${applicationName}";
 "Lance ${item} sur ${applicationName}" = "Lance ${item} sur ${applicationName}";
+"Lis ${item} dans ${applicationName}" = "Lis ${item} dans ${applicationName}";
+"Joue ${item} dans ${applicationName}" = "Joue ${item} dans ${applicationName}";
+"Lis quelque chose dans ${applicationName}" = "Lis quelque chose dans ${applicationName}";
+"Regarder un film dans ${applicationName}" = "Regarder un film dans ${applicationName}";
+"Regarder une série dans ${applicationName}" = "Regarder une série dans ${applicationName}";
+"Lance un film sur ${applicationName}" = "Lance un film sur ${applicationName}";
 
 "Lire le prochain épisode de ${series} dans ${applicationName}" = "Lire le prochain épisode de ${series} dans ${applicationName}";
 "Épisode suivant de ${series} dans ${applicationName}" = "Épisode suivant de ${series} dans ${applicationName}";

@@ -118,6 +118,14 @@ struct HomeScreen: View {
             await viewModel.loadInitial(using: appState)
             prefetchCardImages()
         }
+        #if os(iOS)
+        // Siri matches « Lis <titre> dans JellyGlass » only against the titles
+        // the app handed it (`MediaItemQuery.suggestedEntities`: the resume and
+        // next-up rails). Re-handed whenever those rails change.
+        .onChange(of: siriSuggestionIDs) {
+            CinemaxShortcuts.updateAppShortcutParameters()
+        }
+        #endif
         // `initial` hands the row to the view model before its first load
         // reads it (that load fetches it); a later change — the season, or
         // its row switch — re-fetches just that row.
@@ -328,6 +336,14 @@ struct HomeScreen: View {
         if showWatchingNow { rails.insert(.watchingNow) }
         return rails
     }
+
+    #if os(iOS)
+    /// The titles Siri can hear in a phrase — the same two rails
+    /// `MediaItemQuery.suggestedEntities` returns.
+    private var siriSuggestionIDs: [String] {
+        (viewModel.resumeItems + viewModel.nextUpItems).compactMap(\.id)
+    }
+    #endif
 
     /// Warms Nuke's cache for every card the loaded rows will render. URLs
     /// mirror the cards' own requests exactly (same `maxWidth` + `tag`) —
