@@ -121,6 +121,9 @@ struct MediaDetailScreen: View {
     /// Drives the row's own accent focus ring — `.focusEffectDisabled()` kills
     /// the system effect, so the indicator has to be drawn from this.
     @FocusState private var versionRowFocused: Bool
+    /// The season pill holding focus: entering the season row lands on the
+    /// selected season (`defaultFocus`, user-initiated).
+    @FocusState private var focusedSeasonId: String?
     #endif
 
     /// Mirrors the ceiling the players hand `getPlaybackInfo`, so the version
@@ -480,17 +483,10 @@ struct MediaDetailScreen: View {
             Text(overview)
                 .font(CinemaFont.dynamicBody)
                 .frame(maxWidth: readingMaxWidth, alignment: .leading)
-                #if os(tvOS)
-                // Focusable so the remote can reach and scroll a long synopsis,
-                // and washed so that focus is VISIBLE when it lands here. The
-                // wash sits inside `.focusable()`: the environment's
-                // `isFocused` reaches the focusable view's content, not the
-                // modifiers wrapped around it.
-                .tvFocusableProse()
-                .focusable()
-                #else
+                // Not focusable on tvOS: the whole synopsis is on screen, so a
+                // stop on it only left a focus nobody could see between Play
+                // and the cast (user, 2026-10-25).
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
-                #endif
                 .padding(.horizontal, contentPadding)
         }
 
@@ -1663,6 +1659,7 @@ struct MediaDetailScreen: View {
                                     )
                             }
                             .buttonStyle(SeasonTabButtonStyle(isSelected: isSelected, accent: themeManager.accent))
+                            .focused($focusedSeasonId, equals: season.id)
                             .focusEffectDisabled()
                             .hoverEffectDisabled()
                             .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -1673,6 +1670,11 @@ struct MediaDetailScreen: View {
                 // The focus stroke on the first / last pill sits on the row's
                 // edge; without this the scroll view clips it.
                 .scrollClipDisabled()
+                // A full-width section landing on the SELECTED season: Down
+                // from the far right of the cast skipped the pills (all on
+                // the left) for « Marquer la saison comme vue » (2026-10-25).
+                .defaultFocus($focusedSeasonId, viewModel.selectedSeasonId, priority: .userInitiated)
+                .focusSection()
             }
             // Season bulk "mark watched" (F10) — cascades to every episode
             // server-side. Confirmed via the dialog attached below.

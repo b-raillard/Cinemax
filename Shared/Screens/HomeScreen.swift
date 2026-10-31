@@ -20,6 +20,12 @@ struct HomeScreen: View {
     /// make auto-advancing focusable chrome hazardous there).
     @State private var heroIndex = 0
     #endif
+    #if os(tvOS)
+    /// The hero's main button (« Lecture » / « Reprendre »). Down from the
+    /// tab bar lands on it: left to the engine, it picked « Plus d'infos »,
+    /// the button right under « Accueil » (integration report 2026-10-25, OBS-2).
+    @FocusState private var heroPlayFocused: Bool
+    #endif
     @State private var viewModel = HomeViewModel()
     @State private var prefetcher = PosterPrefetcher()
 
@@ -908,6 +914,7 @@ struct HomeScreen: View {
                             }
                             #if os(tvOS)
                             .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
+                            .focused($heroPlayFocused)
                             #else
                             .buttonStyle(.plain)
                             #endif
@@ -947,6 +954,13 @@ struct HomeScreen: View {
                     // Discrete focus section so up-presses from Play / More Info
                     // can escape the bottom-aligned overlay and reach the tab
                     // bar instead of getting trapped inside the hero bounds.
+                    // Entering it (Down from the tab bar) lands on the main
+                    // button, whichever button sits under the focused tab.
+                    // Full width, so Up from ANY « Reprendre » card reaches it:
+                    // only the first card sat under the buttons, the others'
+                    // beam found nothing and Up did nothing (user, 2026-10-25).
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .defaultFocus($heroPlayFocused, true, priority: .userInitiated)
                     .focusSection()
                     #endif
                 }
@@ -1560,6 +1574,7 @@ struct HomeScreen: View {
             title: loc.localized("home.playlists"),
             showViewAll: true,
             onViewAll: { playlistsDestination = PlaylistsDestination() },
+            viewAllAspectRatio: 1,
             data: viewModel.playlists,
             id: \.id
         ) { playlist in
