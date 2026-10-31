@@ -79,3 +79,61 @@ struct MediaEntityIDTests {
         #expect(onA.rawValue != onB.rawValue)
     }
 }
+
+#if os(iOS)
+import JellyfinAPI
+
+/// Siri matches a title spoken IN a phrase against the suggested entities'
+/// names. An in-progress episode is named after itself (« La promesse »), so
+/// « Lis Arrow dans JellyGlass » never matched (user, 2026-10-31): a
+/// suggestion stands for the SERIES, which plays its next-up like the fiche.
+@Suite("Suggestions Siri")
+struct SiriSuggestionEntityTests {
+
+    private let server = "11111111-2222-3333-4444-555555555555"
+    private let episodeId = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+    private let seriesId = "b1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+
+    @Test("Un épisode en cours est proposé sous le nom de sa série")
+    func episodeStandsForItsSeries() throws {
+        var episode = BaseItemDto()
+        episode.id = episodeId
+        episode.name = "La promesse"
+        episode.type = .episode
+        episode.seriesID = seriesId
+        episode.seriesName = "Arrow"
+        episode.parentIndexNumber = 2
+        episode.indexNumber = 15
+
+        let entity = try #require(MediaItemEntity(suggestion: episode, serverId: server))
+        #expect(entity.title == "Arrow")
+        #expect(entity.subtitle == "S02E15")
+        #expect(entity.isEpisodic)
+        #expect(entity.entityID == MediaEntityID(serverId: server, itemId: seriesId))
+    }
+
+    @Test("Un film reste lui-même")
+    func movieIsUnchanged() throws {
+        var movie = BaseItemDto()
+        movie.id = episodeId
+        movie.name = "The Mask"
+        movie.type = .movie
+        movie.productionYear = 1994
+
+        let entity = try #require(MediaItemEntity(suggestion: movie, serverId: server))
+        #expect(entity.title == "The Mask")
+        #expect(entity.entityID == MediaEntityID(serverId: server, itemId: episodeId))
+    }
+
+    @Test("Un épisode sans série connue reste l'épisode")
+    func episodeWithoutSeriesFallsBack() throws {
+        var episode = BaseItemDto()
+        episode.id = episodeId
+        episode.name = "La promesse"
+        episode.type = .episode
+
+        let entity = try #require(MediaItemEntity(suggestion: episode, serverId: server))
+        #expect(entity.title == "La promesse")
+    }
+}
+#endif

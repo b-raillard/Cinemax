@@ -53,6 +53,34 @@ extension MediaItemEntity {
         self.isEpisodic = item.type == .series || item.type == .episode || item.type == .season
     }
 
+    /// What Siri is handed as a suggestion (`MediaItemQuery.suggestedEntities`).
+    ///
+    /// **An episode stands for its SERIES**: Siri matches a title spoken in a
+    /// phrase against these names, and people say « Arrow », never the
+    /// episode's own title (« La promesse ») — so « Lis Arrow dans JellyGlass »
+    /// never matched (user, 2026-10-31). Playing the series goes through the
+    /// fiche's next-up resolution, i.e. the in-progress episode, from where it
+    /// stopped. Falls back to the episode itself when its series is unknown.
+    init?(suggestion item: BaseItemDto, serverId: String) {
+        guard item.type == .episode,
+              let seriesId = item.seriesID, AppState.isValidItemId(seriesId),
+              let seriesName = item.seriesName, !seriesName.isEmpty
+        else {
+            self.init(item: item, serverId: serverId)
+            return
+        }
+        var subtitle: String?
+        if let season = item.parentIndexNumber, let episode = item.indexNumber {
+            subtitle = String(format: "S%02dE%02d", season, episode)
+        }
+        self.init(
+            id: MediaEntityID(serverId: serverId, itemId: seriesId).rawValue,
+            title: seriesName,
+            subtitle: subtitle,
+            isEpisodic: true
+        )
+    }
+
     /// Enough context to tell two similarly-named rows apart in a picker:
     /// the series and episode number for an episode, the year otherwise.
     private static func subtitle(for item: BaseItemDto) -> String? {
