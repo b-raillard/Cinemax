@@ -1118,6 +1118,7 @@
    PHRASES are not here: they live in AppShortcuts.strings. */
 "intent.entity.mediaItem" = "Medium";
 "intent.param.item" = "Titel";
+"intent.param.item.prompt" = "Was möchtest du ansehen?";
 "intent.param.series" = "Serie";
 "intent.param.query" = "Suche";
 
@@ -1260,6 +1261,8 @@
 "whatsNew.skip" = "Überspringen";
 "whatsNew.done" = "Fertig";
 "whatsNew.page" = "Seite %d von %d";
+"whatsNew.channelLogos.title" = "Das Senderlogo";
+"whatsNew.channelLogos.body" = "Die Seite einer Serie zeigt jetzt das Logo ihres Senders neben der Bewertung, und die Besetzung nennt niemanden mehr doppelt.";
 "whatsNew.newName.title" = "Aus Cinemax wird JellyGlass";
 "whatsNew.newName.body" = "Gleiche App, neuer Name. Deine Server, Einstellungen und Widgets bleiben, wo sie sind: Du musst nichts neu einrichten.";
 "whatsNew.parentalLock.title" = "Verbesserte Kindersicherung";

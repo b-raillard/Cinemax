@@ -84,9 +84,11 @@ struct MediaItemQuery: EntityStringQuery {
 
         let items = (await resume ?? []) + (await nextUp ?? [])
 
+        // An episode is handed over as its series (`init(suggestion:)`), so
+        // two episodes of one series collapse into one entry below.
         var seen = Set<String>()
         return items
-            .compactMap { MediaItemEntity(item: $0, serverId: serverId) }
+            .compactMap { MediaItemEntity(suggestion: $0, serverId: serverId) }
             .filter { seen.insert($0.id).inserted }
             .prefix(Self.maxResults)
             .map { $0 }

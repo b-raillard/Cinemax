@@ -20,6 +20,12 @@ struct HomeScreen: View {
     /// make auto-advancing focusable chrome hazardous there).
     @State private var heroIndex = 0
     #endif
+    #if os(tvOS)
+    /// The hero's main button (« Lecture » / « Reprendre »). Down from the
+    /// tab bar lands on it: left to the engine, it picked « Plus d'infos »,
+    /// the button right under « Accueil » (integration report 2026-10-25, OBS-2).
+    @FocusState private var heroPlayFocused: Bool
+    #endif
     @State private var viewModel = HomeViewModel()
     @State private var prefetcher = PosterPrefetcher()
 
@@ -112,6 +118,14 @@ struct HomeScreen: View {
             await viewModel.loadInitial(using: appState)
             prefetchCardImages()
         }
+        #if os(iOS)
+        // Siri matches « Lis <titre> dans JellyGlass » only against the titles
+        // the app handed it (`MediaItemQuery.suggestedEntities`: the resume and
+        // next-up rails). Re-handed whenever those rails change.
+        .onChange(of: siriSuggestionIDs) {
+            CinemaxShortcuts.updateAppShortcutParameters()
+        }
+        #endif
         // `initial` hands the row to the view model before its first load
         // reads it (that load fetches it); a later change — the season, or
         // its row switch — re-fetches just that row.
@@ -322,6 +336,14 @@ struct HomeScreen: View {
         if showWatchingNow { rails.insert(.watchingNow) }
         return rails
     }
+
+    #if os(iOS)
+    /// The titles Siri can hear in a phrase — the same two rails
+    /// `MediaItemQuery.suggestedEntities` returns.
+    private var siriSuggestionIDs: [String] {
+        (viewModel.resumeItems + viewModel.nextUpItems).compactMap(\.id)
+    }
+    #endif
 
     /// Warms Nuke's cache for every card the loaded rows will render. URLs
     /// mirror the cards' own requests exactly (same `maxWidth` + `tag`) —
@@ -908,6 +930,7 @@ struct HomeScreen: View {
                             }
                             #if os(tvOS)
                             .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .accent))
+                            .focused($heroPlayFocused)
                             #else
                             .buttonStyle(.plain)
                             #endif
@@ -947,6 +970,13 @@ struct HomeScreen: View {
                     // Discrete focus section so up-presses from Play / More Info
                     // can escape the bottom-aligned overlay and reach the tab
                     // bar instead of getting trapped inside the hero bounds.
+                    // Entering it (Down from the tab bar) lands on the main
+                    // button, whichever button sits under the focused tab.
+                    // Full width, so Up from ANY « Reprendre » card reaches it:
+                    // only the first card sat under the buttons, the others'
+                    // beam found nothing and Up did nothing (user, 2026-10-25).
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .defaultFocus($heroPlayFocused, true, priority: .userInitiated)
                     .focusSection()
                     #endif
                 }
@@ -1560,6 +1590,7 @@ struct HomeScreen: View {
             title: loc.localized("home.playlists"),
             showViewAll: true,
             onViewAll: { playlistsDestination = PlaylistsDestination() },
+            viewAllAspectRatio: 1,
             data: viewModel.playlists,
             id: \.id
         ) { playlist in

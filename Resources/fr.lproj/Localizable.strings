@@ -1120,6 +1120,7 @@
    ici : elles vivent dans AppShortcuts.strings. */
 "intent.entity.mediaItem" = "Média";
 "intent.param.item" = "Titre";
+"intent.param.item.prompt" = "Quel titre voulez-vous regarder ?";
 "intent.param.series" = "Série";
 "intent.param.query" = "Recherche";
 
@@ -1262,6 +1263,8 @@
 "whatsNew.skip" = "Passer";
 "whatsNew.done" = "Terminé";
 "whatsNew.page" = "Page %d sur %d";
+"whatsNew.channelLogos.title" = "Le logo de la chaîne";
+"whatsNew.channelLogos.body" = "La fiche d’une série affiche désormais le logo de sa chaîne à côté de la note, et le casting ne montre plus deux fois la même personne.";
 "whatsNew.newName.title" = "Cinemax devient JellyGlass";
 "whatsNew.newName.body" = "Même application, nouveau nom. Vos serveurs, vos réglages et vos widgets restent en place : rien à refaire.";
 "whatsNew.parentalLock.title" = "Contrôle parental renforcé";

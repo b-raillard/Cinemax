@@ -10,21 +10,37 @@ import JellyfinAPI
 ///
 /// These deliberately do **not** go through `LocalizationManager.userFacingMessage(for:)`:
 /// that manager is part of the app's UI layer and doesn't exist in a headless
-/// intent context. `LocalizedStringResource` keys resolve from
-/// `Localizable.strings` at the system level instead.
-enum CinemaxIntentError: Error, CustomLocalizedStringResourceConvertible {
+/// intent context. The text is read from the APP's own table, in the app's
+/// language (`appLanguage`, as `IntentSessionProvider.preferredLanguage`
+/// reads it), and handed over already resolved: a bare key was resolved by
+/// the system in the DEVICE's language — an English phone running the app in
+/// French answered its errors in English
+/// (recette 2026-10-23, DEF-IOS3).
+enum CinemaxIntentError: Error, CaseIterable, CustomLocalizedStringResourceConvertible {
     case notSignedIn
     case nothingToResume
     case itemUnavailable
     case notEpisodic
 
-    var localizedStringResource: LocalizedStringResource {
+    var key: String {
         switch self {
         case .notSignedIn:     "intent.error.notSignedIn"
         case .nothingToResume: "intent.error.nothingToResume"
         case .itemUnavailable: "intent.error.itemUnavailable"
         case .notEpisodic:     "intent.error.notEpisodic"
         }
+    }
+
+    var localizedStringResource: LocalizedStringResource {
+        localizedStringResource(defaults: .standard)
+    }
+
+    func localizedStringResource(defaults: UserDefaults) -> LocalizedStringResource {
+        let language = IntentSessionProvider.preferredLanguage(defaults: defaults)
+        let text = Bundle.localizedBundle(for: language).localizedString(forKey: key, value: nil, table: nil)
+        // Interpolated, the value's key is `%@` — found in no table — so it
+        // resolves to `text` verbatim, in whichever process shows it.
+        return LocalizedStringResource("\(text)", locale: Locale(identifier: language))
     }
 }
 
@@ -101,7 +117,11 @@ struct PlayMediaItemIntent: AppIntent {
     static let description = IntentDescription("intent.play.description")
     static let openAppWhenRun = true
 
-    @Parameter(title: "intent.param.item")
+    /// Asked for when the phrase named no title (« Lis quelque chose dans
+    /// JellyGlass »): the answer goes through `MediaItemQuery.entities(matching:)`,
+    /// i.e. the whole library — a title IN the phrase can only be one of the
+    /// suggested entities.
+    @Parameter(title: "intent.param.item", requestValueDialog: IntentDialog("intent.param.item.prompt"))
     var item: MediaItemEntity
 
     @MainActor
@@ -193,8 +213,17 @@ struct CinemaxShortcuts: AppShortcutsProvider {
             intent: PlayMediaItemIntent(),
             phrases: [
                 "Lire \(\.$item) dans \(.applicationName)",
+                "Lis \(\.$item) dans \(.applicationName)",
+                "Joue \(\.$item) dans \(.applicationName)",
                 "Regarder \(\.$item) dans \(.applicationName)",
-                "Lance \(\.$item) sur \(.applicationName)"
+                "Lance \(\.$item) sur \(.applicationName)",
+                // No title: Siri asks « Quel titre ? » and the answer is
+                // searched in the whole library (`requestValueDialog`). A
+                // title spoken IN the phrase only matches the suggested ones.
+                "Lis quelque chose dans \(.applicationName)",
+                "Regarder un film dans \(.applicationName)",
+                "Regarder une série dans \(.applicationName)",
+                "Lance un film sur \(.applicationName)"
             ],
             shortTitle: "intent.play.shortTitle",
             systemImageName: "play.fill"

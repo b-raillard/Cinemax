@@ -107,3 +107,24 @@ struct IntentSessionProviderTests {
         defaults.removePersistentDomain(forName: suite)
     }
 }
+#if os(iOS)
+@Suite("Erreurs des intents")
+struct IntentErrorLanguageTests {
+
+    /// Recette 2026-10-23, DEF-IOS3: device in English, app in French → the
+    /// system resolved the key in the DEVICE's language.
+    @Test("Les erreurs des intents parlent la langue de l'app, pas celle de l'appareil")
+    func errorsFollowTheAppLanguage() throws {
+        for lang in AppLanguage.supported {
+            let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
+            let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
+            let defaults = UserDefaults.isolatedForTesting()
+            defaults.set(lang, forKey: SettingsKey.appLanguage)
+            for error in CinemaxIntentError.allCases {
+                let expected = try #require(table[error.key], "\(lang) \(error.key)")
+                #expect(String(localized: error.localizedStringResource(defaults: defaults)) == expected, "\(lang) \(error)")
+            }
+        }
+    }
+}
+#endif

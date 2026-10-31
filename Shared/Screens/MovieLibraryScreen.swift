@@ -320,7 +320,7 @@ struct MediaLibraryScreen: View {
         LazyVStack(alignment: .leading, spacing: 0) {
             #if os(tvOS)
             Color.clear.frame(height: 0).id("library.top")
-            tvTopBar
+            tvTopBar(spansHero: true)
                 .padding(.bottom, CinemaSpacing.spacing4)
             #endif
 
@@ -445,7 +445,7 @@ struct MediaLibraryScreen: View {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
                     #if os(tvOS)
                     Color.clear.frame(height: 0).id("library.top")
-                    tvTopBar
+                    tvTopBar(spansHero: false)
                     if shouldShowJumpBar {
                         tvLetterStrip(proxy: proxy)
                     }
@@ -563,7 +563,11 @@ struct MediaLibraryScreen: View {
     /// Filter detail (chips for watch status / decade / genre) lives inside
     /// the shared `LibrarySortFilterSheet` — one focusable button reaches
     /// all of it, freeing the entire viewport for posters and the hero.
-    private var tvTopBar: some View {
+    /// `spansHero`: the browse layout's bar takes the hero's full width (its
+    /// title on the hero's text column) — at the page margin it sat visibly
+    /// narrower than the hero right under it (user, 2026-10-25). The grid
+    /// keeps the page column its posters use.
+    private func tvTopBar(spansHero: Bool) -> some View {
         HStack(alignment: .center, spacing: CinemaSpacing.spacing4) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(screenTitle)
@@ -582,13 +586,13 @@ struct MediaLibraryScreen: View {
             tvFilterSheetButton
         }
         .padding(.vertical, CinemaSpacing.spacing3)
-        .padding(.horizontal, CinemaSpacing.spacing5)
+        .padding(.horizontal, spansHero ? CinemaTVLayout.pagePadding : CinemaSpacing.spacing5)
         // A surface of its own: the bar floats directly over the hero backdrop,
         // so its title and count read against whatever image happens to be
         // behind them. Glass rather than an opaque fill, which would cut a
         // hard band across the top of the hero.
         .glassPanel(cornerRadius: CinemaRadius.large)
-        .padding(.horizontal, CinemaTVLayout.pagePadding)
+        .padding(.horizontal, spansHero ? 0 : CinemaTVLayout.pagePadding)
         // Group sort/filter as a discrete focus section so up-presses from the
         // hero's Play/More Info row reliably bridge the ~700pt of empty hero
         // backdrop and land on the top bar (and ultimately escape upward to

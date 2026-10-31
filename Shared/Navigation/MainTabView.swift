@@ -149,7 +149,13 @@ struct MainTabView: View {
         .onChange(of: appState.pendingDeepLinkItemId, initial: true) { _, newValue in
             guard let newValue else { return }
             appState.pendingDeepLinkItemId = nil
-            deepLinkFallback = DeepLinkFallback(id: newValue)
+            // Whatever is open over the tabs goes first: the sheet below (and
+            // the player it raises) cannot be presented over another
+            // presentation — the account switcher left open made a « Lire
+            // sur… » do nothing here (recette 2026-10-27, NEW-1).
+            PlayerPresentation.dismissPresentations {
+                deepLinkFallback = DeepLinkFallback(id: newValue)
+            }
         }
         // "See all" widget tile → just land on the tab, no push.
         .onChange(of: appState.pendingDeepLinkTabId) { _, newValue in
