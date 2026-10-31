@@ -1261,7 +1261,7 @@
 "whatsNew.done" = "Done";
 "whatsNew.page" = "Page %d of %d";
 "whatsNew.channelLogos.title" = "The network’s logo";
-"whatsNew.channelLogos.body" = "A series’ page now shows its network’s logo next to the rating, and the cast no longer lists the same person twice. On Apple TV, the remote goes from Play to the cast and the seasons in a single press.";
+"whatsNew.channelLogos.body" = "A series’ page now shows its network’s logo next to the rating, and the cast no longer lists the same person twice.";
 "whatsNew.newName.title" = "Cinemax is now JellyGlass";
 "whatsNew.newName.body" = "Same app, new name. Your servers, settings and widgets stay right where they were: nothing to set up again.";
 "whatsNew.parentalLock.title" = "Stronger parental controls";

@@ -1263,7 +1263,7 @@
 "whatsNew.done" = "Terminé";
 "whatsNew.page" = "Page %d sur %d";
 "whatsNew.channelLogos.title" = "Le logo de la chaîne";
-"whatsNew.channelLogos.body" = "La fiche d’une série affiche désormais le logo de sa chaîne à côté de la note, et le casting ne montre plus deux fois la même personne. Sur Apple TV, la télécommande passe de « Lecture » au casting et aux saisons en un seul appui.";
+"whatsNew.channelLogos.body" = "La fiche d’une série affiche désormais le logo de sa chaîne à côté de la note, et le casting ne montre plus deux fois la même personne.";
 "whatsNew.newName.title" = "Cinemax devient JellyGlass";
 "whatsNew.newName.body" = "Même application, nouveau nom. Vos serveurs, vos réglages et vos widgets restent en place : rien à refaire.";
 "whatsNew.parentalLock.title" = "Contrôle parental renforcé";
