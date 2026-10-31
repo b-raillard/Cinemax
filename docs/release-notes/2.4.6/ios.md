@@ -12,6 +12,7 @@ JellyGlass 2.4.6
 • Le logo de la chaîne s'affiche sur la fiche d'une série, à côté de la note
 • Le casting ne montre plus deux fois la même personne
 • « Lire sur… » : un film envoyé depuis un autre appareil remplace proprement celui qui était ouvert
+• Siri : dites « Lis quelque chose dans JellyGlass », puis le titre, pour lancer n'importe quel film ou série
 • Siri et Raccourcis répondent dans la langue choisie dans l'app
 • Corrections de bugs
 
@@ -26,6 +27,7 @@ JellyGlass 2.4.6
 • A series' page shows its network's logo next to the rating
 • The cast no longer lists the same person twice
 • "Play on…": a film sent from another device cleanly replaces the one that was open
+• Siri: say "Play something in JellyGlass", then the title, to start any film or show
 • Siri and Shortcuts answer in the language chosen in the app
 • Bug fixes
 
@@ -40,6 +42,7 @@ JellyGlass 2.4.6
 • Die Seite einer Serie zeigt das Logo ihres Senders neben der Bewertung
 • Die Besetzung nennt niemanden mehr doppelt
 • „Abspielen auf …“: Ein von einem anderen Gerät gesendeter Film ersetzt sauber den gerade geöffneten
+• Siri: Sag „Spiele etwas in JellyGlass“ und dann den Titel, um einen beliebigen Film oder eine Serie zu starten
 • Siri und Kurzbefehle antworten in der in der App gewählten Sprache
 • Fehlerbehebungen
 
