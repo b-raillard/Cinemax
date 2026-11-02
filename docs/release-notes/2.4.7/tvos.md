@@ -1,4 +1,4 @@
-# JellyGlass 2.4.6 — Apple TV
+# JellyGlass 2.4.7 — Apple TV
 
 > « Notes de version / What's New » d'App Store Connect (4000 caractères max par langue). Copier le contenu de chaque bloc tel quel.
 >
@@ -7,7 +7,7 @@
 ## Français
 
 ```
-JellyGlass 2.4.6 : la télécommande va droit au but.
+JellyGlass 2.4.7 : la télécommande va droit au but.
 
 • Le logo de la chaîne s'affiche sur la fiche d'une série, à côté de la note
 • Un seul appui pour passer de « Lecture » au casting et aux saisons
@@ -21,7 +21,7 @@ Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.co
 ## English
 
 ```
-JellyGlass 2.4.6: the remote gets straight to the point.
+JellyGlass 2.4.7: the remote gets straight to the point.
 
 • A series' page shows its network's logo next to the rating
 • A single press takes you from Play to the cast and the seasons
@@ -35,7 +35,7 @@ Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-r
 ## Deutsch
 
 ```
-JellyGlass 2.4.6: Die Fernbedienung kommt direkt ans Ziel.
+JellyGlass 2.4.7: Die Fernbedienung kommt direkt ans Ziel.
 
 • Die Seite einer Serie zeigt das Logo ihres Senders neben der Bewertung
 • Ein Druck genügt, um von „Abspielen“ zur Besetzung und zu den Staffeln zu gelangen

@@ -1,4 +1,4 @@
-# JellyGlass 2.4.6 — iPhone / iPad
+# JellyGlass 2.4.7 — iPhone / iPad
 
 > « Notes de version / What's New » d'App Store Connect (4000 caractères max par langue). Copier le contenu de chaque bloc tel quel.
 >
@@ -7,7 +7,7 @@
 ## Français
 
 ```
-JellyGlass 2.4.6
+JellyGlass 2.4.7
 
 • Le logo de la chaîne s'affiche sur la fiche d'une série, à côté de la note
 • Le casting ne montre plus deux fois la même personne
@@ -22,7 +22,7 @@ Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.co
 ## English
 
 ```
-JellyGlass 2.4.6
+JellyGlass 2.4.7
 
 • A series' page shows its network's logo next to the rating
 • The cast no longer lists the same person twice
@@ -37,7 +37,7 @@ Thanks for using JellyGlass. Bug reports and suggestions: https://github.com/b-r
 ## Deutsch
 
 ```
-JellyGlass 2.4.6
+JellyGlass 2.4.7
 
 • Die Seite einer Serie zeigt das Logo ihres Senders neben der Bewertung
 • Die Besetzung nennt niemanden mehr doppelt
