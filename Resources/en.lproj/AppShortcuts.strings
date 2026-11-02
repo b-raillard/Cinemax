@@ -12,11 +12,6 @@
 "Reprendre ${applicationName}" = "Resume ${applicationName}";
 "Continuer à regarder dans ${applicationName}" = "Continue watching in ${applicationName}";
 
-"Lire ${item} dans ${applicationName}" = "Play ${item} in ${applicationName}";
-"Regarder ${item} dans ${applicationName}" = "Watch ${item} in ${applicationName}";
-"Lance ${item} sur ${applicationName}" = "Play ${item} on ${applicationName}";
-"Lis ${item} dans ${applicationName}" = "Put on ${item} in ${applicationName}";
-"Joue ${item} dans ${applicationName}" = "Start ${item} in ${applicationName}";
 "Lis quelque chose dans ${applicationName}" = "Play something in ${applicationName}";
 "Regarder un film dans ${applicationName}" = "Watch a movie in ${applicationName}";
 "Regarder une série dans ${applicationName}" = "Watch a show in ${applicationName}";

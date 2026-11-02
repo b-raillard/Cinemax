@@ -1133,6 +1133,9 @@
 "intent.play.title" = "Lire un titre";
 "intent.play.description" = "Lance la lecture d'un film ou d'une série de votre médiathèque.";
 "intent.play.shortTitle" = "Lire";
+"intent.playTitle.title" = "Choisir quoi regarder";
+"intent.playTitle.description" = "Siri demande le titre, puis le cherche dans toute votre médiathèque.";
+"intent.playTitle.shortTitle" = "Que regarder ?";
 
 "intent.nextEpisode.title" = "Lire le prochain épisode";
 "intent.nextEpisode.description" = "Lance le prochain épisode non vu d'une série.";

@@ -1131,6 +1131,9 @@
 "intent.play.title" = "Play a title";
 "intent.play.description" = "Starts playback of a movie or show from your library.";
 "intent.play.shortTitle" = "Play";
+"intent.playTitle.title" = "Choose what to watch";
+"intent.playTitle.description" = "Siri asks for the title, then searches your whole library.";
+"intent.playTitle.shortTitle" = "What to watch";
 
 "intent.nextEpisode.title" = "Play next episode";
 "intent.nextEpisode.description" = "Starts the next unwatched episode of a series.";
