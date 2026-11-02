@@ -1164,6 +1164,7 @@
    PHRASES are not here: they live in AppShortcuts.strings. */
 "intent.entity.mediaItem" = "Medium";
 "intent.param.item" = "Titel";
+"intent.param.item.prompt" = "Was möchtest du ansehen?";
 "intent.param.series" = "Serie";
 "intent.param.query" = "Suche";
 
@@ -1176,6 +1177,9 @@
 "intent.play.title" = "Titel abspielen";
 "intent.play.description" = "Startet die Wiedergabe eines Films oder einer Serie aus deiner Mediathek.";
 "intent.play.shortTitle" = "Abspielen";
+"intent.playTitle.title" = "Auswählen, was du ansehen willst";
+"intent.playTitle.description" = "Siri fragt nach dem Titel und sucht ihn in deiner ganzen Mediathek.";
+"intent.playTitle.shortTitle" = "Was ansehen?";
 
 "intent.nextEpisode.title" = "Nächste Folge abspielen";
 "intent.nextEpisode.description" = "Startet die nächste ungesehene Folge einer Serie.";
@@ -1307,6 +1311,8 @@
 "whatsNew.skip" = "Überspringen";
 "whatsNew.done" = "Fertig";
 "whatsNew.page" = "Seite %d von %d";
+"whatsNew.channelLogos.title" = "Das Senderlogo";
+"whatsNew.channelLogos.body" = "Die Seite einer Serie zeigt jetzt das Logo ihres Senders neben der Bewertung, und die Besetzung nennt niemanden mehr doppelt.";
 "whatsNew.newName.title" = "Aus Cinemax wird JellyGlass";
 "whatsNew.newName.body" = "Gleiche App, neuer Name. Deine Server, Einstellungen und Widgets bleiben, wo sie sind: Du musst nichts neu einrichten.";
 "whatsNew.parentalLock.title" = "Verbesserte Kindersicherung";

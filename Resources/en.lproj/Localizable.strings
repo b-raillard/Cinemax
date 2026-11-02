@@ -1164,6 +1164,7 @@
    PHRASES are not here: they live in AppShortcuts.strings. */
 "intent.entity.mediaItem" = "Media";
 "intent.param.item" = "Title";
+"intent.param.item.prompt" = "What would you like to watch?";
 "intent.param.series" = "Series";
 "intent.param.query" = "Search";
 
@@ -1176,6 +1177,9 @@
 "intent.play.title" = "Play a title";
 "intent.play.description" = "Starts playback of a movie or show from your library.";
 "intent.play.shortTitle" = "Play";
+"intent.playTitle.title" = "Choose what to watch";
+"intent.playTitle.description" = "Siri asks for the title, then searches your whole library.";
+"intent.playTitle.shortTitle" = "What to watch";
 
 "intent.nextEpisode.title" = "Play next episode";
 "intent.nextEpisode.description" = "Starts the next unwatched episode of a series.";
@@ -1307,6 +1311,8 @@
 "whatsNew.skip" = "Skip";
 "whatsNew.done" = "Done";
 "whatsNew.page" = "Page %d of %d";
+"whatsNew.channelLogos.title" = "The network’s logo";
+"whatsNew.channelLogos.body" = "A series’ page now shows its network’s logo next to the rating, and the cast no longer lists the same person twice.";
 "whatsNew.newName.title" = "Cinemax is now JellyGlass";
 "whatsNew.newName.body" = "Same app, new name. Your servers, settings and widgets stay right where they were: nothing to set up again.";
 "whatsNew.parentalLock.title" = "Stronger parental controls";

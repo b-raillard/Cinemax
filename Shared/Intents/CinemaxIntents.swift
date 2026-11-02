@@ -140,6 +140,7 @@ struct PlayMediaItemIntent: AppIntent {
     static let description = IntentDescription("intent.play.description")
     static let openAppWhenRun = true
 
+    /// Shortcuts app only — deliberately NO Siri phrase (see `CinemaxShortcuts`).
     @Parameter(title: "intent.param.item")
     var item: MediaItemEntity
 
@@ -147,6 +148,52 @@ struct PlayMediaItemIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         try IntentProGate.admit()
         IntentRouter.play(itemId: try activeServerItemId(for: item))
+        return .result()
+    }
+}
+
+/// Plays the library's best match for a title said to Siri.
+///
+/// Same search, ranking and parental filter as the Shortcuts picker. No match
+/// opens the search screen on what Siri heard, so a misheard title can be
+/// corrected rather than dead-ending.
+@MainActor
+private func playBestMatch(for spokenTitle: String) async throws {
+    guard IntentSessionProvider.makeSession() != nil else {
+        throw CinemaxIntentError.notSignedIn
+    }
+    if let best = try await MediaItemQuery().entities(matching: spokenTitle).first {
+        IntentRouter.play(itemId: try activeServerItemId(for: best))
+    } else {
+        let cleaned = LibrarySearchRanker.sanitize(spokenTitle)
+        guard !cleaned.isEmpty else { throw CinemaxIntentError.itemUnavailable }
+        IntentRouter.search(query: cleaned)
+    }
+}
+
+// MARK: - Play a title said after the phrase
+
+/// « Lis quelque chose dans JellyGlass » → « Quel titre ? » → any title in
+/// the library.
+///
+/// **Why a `String` and not a `MediaItemEntity`:** on the new Siri (iOS 27.2),
+/// the answer to an ENTITY parameter's prompt is matched against
+/// `suggestedEntities()` only — `entities(matching:)` is never called, so a
+/// title outside « Reprendre » / « À suivre » made Siri ask again every ~5 s
+/// until it gave up (device logs, 2026-11-01). A `String` answer reaches
+/// `perform()` as said, and the library search runs here.
+struct PlaySpokenTitleIntent: AppIntent {
+    static let title: LocalizedStringResource = "intent.playTitle.title"
+    static let description = IntentDescription("intent.playTitle.description")
+    static let openAppWhenRun = true
+
+    @Parameter(title: "intent.param.item", requestValueDialog: IntentDialog("intent.param.item.prompt"))
+    var spokenTitle: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
+        try await playBestMatch(for: spokenTitle)
         return .result()
     }
 }
@@ -232,15 +279,21 @@ struct CinemaxShortcuts: AppShortcutsProvider {
             shortTitle: "intent.resume.shortTitle",
             systemImageName: "play.circle.fill"
         )
+        // Playing a title by voice has ONE path: a phrase with no title, then
+        // « Quel titre ? », answered as free text and searched in the whole
+        // library. « Lis ${item} dans JellyGlass » was removed: on iOS 27.2 a
+        // title outside the 12 suggested entities left the slot empty, Siri
+        // re-asked every ~5 s and gave up (device logs, 2026-11-01).
         AppShortcut(
-            intent: PlayMediaItemIntent(),
+            intent: PlaySpokenTitleIntent(),
             phrases: [
-                "Lire \(\.$item) dans \(.applicationName)",
-                "Regarder \(\.$item) dans \(.applicationName)",
-                "Lance \(\.$item) sur \(.applicationName)"
+                "Lis quelque chose dans \(.applicationName)",
+                "Regarder un film dans \(.applicationName)",
+                "Regarder une série dans \(.applicationName)",
+                "Lance un film sur \(.applicationName)"
             ],
-            shortTitle: "intent.play.shortTitle",
-            systemImageName: "play.fill"
+            shortTitle: "intent.playTitle.shortTitle",
+            systemImageName: "play.rectangle.fill"
         )
         AppShortcut(
             intent: PlayNextEpisodeIntent(),

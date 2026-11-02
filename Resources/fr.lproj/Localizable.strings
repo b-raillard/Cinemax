@@ -1166,6 +1166,7 @@
    ici : elles vivent dans AppShortcuts.strings. */
 "intent.entity.mediaItem" = "Média";
 "intent.param.item" = "Titre";
+"intent.param.item.prompt" = "Quel titre voulez-vous regarder ?";
 "intent.param.series" = "Série";
 "intent.param.query" = "Recherche";
 
@@ -1178,6 +1179,9 @@
 "intent.play.title" = "Lire un titre";
 "intent.play.description" = "Lance la lecture d'un film ou d'une série de votre médiathèque.";
 "intent.play.shortTitle" = "Lire";
+"intent.playTitle.title" = "Choisir quoi regarder";
+"intent.playTitle.description" = "Siri demande le titre, puis le cherche dans toute votre médiathèque.";
+"intent.playTitle.shortTitle" = "Que regarder ?";
 
 "intent.nextEpisode.title" = "Lire le prochain épisode";
 "intent.nextEpisode.description" = "Lance le prochain épisode non vu d'une série.";
@@ -1309,6 +1313,8 @@
 "whatsNew.skip" = "Passer";
 "whatsNew.done" = "Terminé";
 "whatsNew.page" = "Page %d sur %d";
+"whatsNew.channelLogos.title" = "Le logo de la chaîne";
+"whatsNew.channelLogos.body" = "La fiche d’une série affiche désormais le logo de sa chaîne à côté de la note, et le casting ne montre plus deux fois la même personne.";
 "whatsNew.newName.title" = "Cinemax devient JellyGlass";
 "whatsNew.newName.body" = "Même application, nouveau nom. Vos serveurs, vos réglages et vos widgets restent en place : rien à refaire.";
 "whatsNew.parentalLock.title" = "Contrôle parental renforcé";
