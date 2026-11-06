@@ -39,27 +39,29 @@ struct EarlyAdopterStoreKitTests {
     /// « 1.0 » is the sandbox's value, not Xcode's.
     @Test("Real local StoreKit never makes an early adopter, verified or not")
     func realTransactionNeverGrants() async throws {
-        let session = try await session()
-        defer { _ = session }
-        let source = StoreKitAppTransactionSource()
-        do {
-            let snapshot = try await source.fetch()
-            #expect(snapshot.environment == .xcode)
-        } catch let error as VerificationResult<AppTransaction>.VerificationError {
-            // Refused, as it must be — not a test failure.
-            print("Local AppTransaction unverified and refused: \(error)")
-        }
+        await localStoreKitColdStartTolerant {
+            let session = try await session()
+            defer { _ = session }
+            let source = StoreKitAppTransactionSource()
+            do {
+                let snapshot = try await source.fetch()
+                #expect(snapshot.environment == .xcode)
+            } catch let error as VerificationResult<AppTransaction>.VerificationError {
+                // Refused, as it must be — not a test failure.
+                print("Local AppTransaction unverified and refused: \(error)")
+            }
 
-        let service = EarlyAdopterService(
-            source: source,
-            cache: StoreKitTestCache(nil),
-            configuration: .init(pivotBuild: BuildNumber("3.0"), pivotDate: nil),
-            defaults: .isolatedForTesting(),
-            cloud: InMemoryCloudKeyValueStore()
-        )
-        await service.refreshIfNeeded(isOnline: true)
-        #expect(service.status == .nonProduction || service.status == .unknown)
-        #expect(!service.isEarlyAdopter)
+            let service = EarlyAdopterService(
+                source: source,
+                cache: StoreKitTestCache(nil),
+                configuration: .init(pivotBuild: BuildNumber("3.0"), pivotDate: nil),
+                defaults: .isolatedForTesting(),
+                cloud: InMemoryCloudKeyValueStore()
+            )
+            await service.refreshIfNeeded(isOnline: true)
+            #expect(service.status == .nonProduction || service.status == .unknown)
+            #expect(!service.isEarlyAdopter)
+        }
     }
 
     @Test("A StoreKit failure keeps the cached status")
