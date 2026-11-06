@@ -190,10 +190,14 @@ jobs:
         if: steps.changes.outputs.code == 'true'
         run: |
           set -o pipefail
+          # The image's Apple TV simulators change under us (2026-11-06: no
+          # « Apple TV 4K (3rd generation) » any more) — pick one, or create it.
+          TV_SIMULATOR=$(scripts/ci-tvos-simulator.sh)
+          echo "tvOS destination: $TV_SIMULATOR"
           xcodebuild test \
             -project Cinemax.xcodeproj \
             -scheme CinemaxTV \
-            -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' \
+            -destination "id=$TV_SIMULATOR" \
             -skipPackagePluginValidation \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/tvos-test.log" | xcbeautify
