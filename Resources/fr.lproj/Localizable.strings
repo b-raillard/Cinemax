@@ -1315,6 +1315,12 @@
 "whatsNew.page" = "Page %d sur %d";
 "whatsNew.channelLogos.title" = "Le logo de la chaîne";
 "whatsNew.channelLogos.body" = "La fiche d’une série affiche désormais le logo de sa chaîne à côté de la note, et le casting ne montre plus deux fois la même personne.";
+"whatsNew.accounts.title" = "Qui regarde ?";
+"whatsNew.accounts.body" = "Chacun garde son compte sur le même appareil, avec ses reprises et ses réglages. Votre avatar, en haut à gauche, passe de l’un à l’autre, et un code peut protéger chaque compte.";
+"whatsNew.resumeHere.title" = "Reprendre ici";
+"whatsNew.resumeHere.body" = "Un film en cours sur un autre appareil apparaît à l’accueil : « Reprendre ici » le relance à la même seconde, et l’autre appareil s’arrête.";
+"whatsNew.appIcon.title" = "Votre icône";
+"whatsNew.appIcon.body" = "Douze nouvelles icônes, trois éditions Halloween et neuf couleurs, à choisir dans Réglages → Apparence → Icône de l’app.";
 "whatsNew.newName.title" = "Cinemax devient JellyGlass";
 "whatsNew.newName.body" = "Même application, nouveau nom. Vos serveurs, vos réglages et vos widgets restent en place : rien à refaire.";
 "whatsNew.parentalLock.title" = "Contrôle parental renforcé";

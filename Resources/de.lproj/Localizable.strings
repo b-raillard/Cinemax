@@ -1313,6 +1313,12 @@
 "whatsNew.page" = "Seite %d von %d";
 "whatsNew.channelLogos.title" = "Das Senderlogo";
 "whatsNew.channelLogos.body" = "Die Seite einer Serie zeigt jetzt das Logo ihres Senders neben der Bewertung, und die Besetzung nennt niemanden mehr doppelt.";
+"whatsNew.accounts.title" = "Wer schaut?";
+"whatsNew.accounts.body" = "Jeder behält sein eigenes Konto auf demselben Gerät, mit eigenem Fortschritt und eigenen Einstellungen. Dein Avatar oben links wechselt zwischen ihnen, und ein Code kann jedes Konto schützen.";
+"whatsNew.resumeHere.title" = "Hier fortsetzen";
+"whatsNew.resumeHere.body" = "Ein Film, der auf einem anderen Gerät läuft, erscheint auf der Startseite: „Hier fortsetzen“ macht an derselben Sekunde weiter, und das andere Gerät stoppt.";
+"whatsNew.appIcon.title" = "Dein Symbol";
+"whatsNew.appIcon.body" = "Zwölf neue Symbole, drei Halloween-Editionen und neun Farben, auswählbar unter Einstellungen → Darstellung → App-Symbol.";
 "whatsNew.newName.title" = "Aus Cinemax wird JellyGlass";
 "whatsNew.newName.body" = "Gleiche App, neuer Name. Deine Server, Einstellungen und Widgets bleiben, wo sie sind: Du musst nichts neu einrichten.";
 "whatsNew.parentalLock.title" = "Verbesserte Kindersicherung";

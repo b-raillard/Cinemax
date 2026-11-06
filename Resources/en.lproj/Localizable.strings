@@ -1313,6 +1313,12 @@
 "whatsNew.page" = "Page %d of %d";
 "whatsNew.channelLogos.title" = "The network’s logo";
 "whatsNew.channelLogos.body" = "A series’ page now shows its network’s logo next to the rating, and the cast no longer lists the same person twice.";
+"whatsNew.accounts.title" = "Who’s watching?";
+"whatsNew.accounts.body" = "Everyone keeps their own account on the same device, with their own progress and settings. Your avatar, top left, switches between them, and a code can protect each account.";
+"whatsNew.resumeHere.title" = "Resume here";
+"whatsNew.resumeHere.body" = "A film playing on another device shows up on Home: “Resume here” picks it up at the same second, and the other device stops.";
+"whatsNew.appIcon.title" = "Your icon";
+"whatsNew.appIcon.body" = "Twelve new icons, three Halloween editions and nine colours, to pick in Settings → Appearance → App icon.";
 "whatsNew.newName.title" = "Cinemax is now JellyGlass";
 "whatsNew.newName.body" = "Same app, new name. Your servers, settings and widgets stay right where they were: nothing to set up again.";
 "whatsNew.parentalLock.title" = "Stronger parental controls";
