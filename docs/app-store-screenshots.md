@@ -63,7 +63,7 @@ Mêmes 13 planches, mêmes cadrages, titres traduits, dans `~/Desktop/JellyGlass
 
 ## 2 ter. La série iPhone Duo (2026-10-08)
 
-En-tête (3840 × 1646), résultats de recherche (3840 × 2560) et une 7e image iPhone (1320 × 2868, réduite en 1284 × 2778), en EN / FR / DE : l'iPhone Duo à moitié plié sur une table, le film en haut, le pupitre en bas. Générateurs versionnés dans `design/app-store-header/` : `page.html` (variante `v=duo`), `plank.html` (gabarit du canvas de refonte : Instrument Sans, halo, grain), `render.sh` (`fmt=header|search|plank`, `lang=en|fr|de`, `duo=<capture>`). Accroches : « Put your films on the table. » / « JellyGlass se plie en quatre. L'iPhone Duo, en deux. » / « Klappt wie im Kino. », sous-titre « …Popcorn not included. », badge vert « NEW · MADE FOR IPHONE DUO » — le badge et la 2e ligne verte SONT le message, ne pas les retirer sur la 7e image.
+En-tête (3840 × 1646), résultats de recherche (3840 × 2560) et une 7e image iPhone (1320 × 2868, réduite en 1284 × 2778), en EN / FR / DE : l'iPhone Duo à moitié plié sur une table, le film en haut, le pupitre en bas. Générateurs versionnés dans `design/app-store-header/` : `page.html` (variante `v=duo`), `plank.html` (gabarit du canvas de refonte : Instrument Sans, halo, grain), `render.sh` (`fmt=header|search|plank`, `lang=en|fr|de`, `duo=<capture>`). Accroches : « Put your movies on the table. » / « JellyGlass se plie en quatre. L'iPhone Duo, en deux. » / « Klappt wie im Kino. », sous-titre « …Popcorn not included. », badge vert « NEW · MADE FOR IPHONE DUO » — le badge et la 2e ligne verte SONT le message, ne pas les retirer sur la 7e image.
 
 **Pièges de cette série :**
 
@@ -153,3 +153,12 @@ ASC accepte jusqu'à **3 vidéos de prévisualisation** (15-30s) par taille. Si 
 - Convertir au format `.mov` H.264, 1080p, 30fps via ffmpeg si Apple rejette
 
 Optionnel pour la v1.0 — peut être ajouté plus tard sans nouvelle review.
+
+## 2 quater. Série allemande, planches Duo et écosystème (2026-10-08, après la 2.4.0)
+
+- **`shots.html`** (`fmt=shot&n=1..6&lang=fr|en|de&shot=<capture>`) : portage littéral des planches iPhone 1–6 du canvas de refonte (artifact `S5cJ7tWFU3f3zX3HaCtCHG`, `iPhone-N.dc.html`). Vérifié : rendu EN identique AU PIXEL près à la planche livrée hors de l'écran. Les captures d'origine (`/_blob/…`) ne sont pas récupérables depuis l'artifact : chaque nouvelle langue repasse par le simulateur. Le lecteur (04) ne porte aucun texte de l'app : sa partie basse est reprise telle quelle de la planche anglaise.
+- **Dérivé 6,5″** : redimensionner en 1284 × 2790 puis rogner 6 px en haut et en bas (recadrage CENTRÉ, vérifié sur la série EN).
+- **`duo.html`** (`fmt=duo&v=table|open|land`) : emplacement « iPhone Duo » d'App Store Connect, écran intérieur 2007 × 2853 (le 2034 × 1398 listé à côté est l'écran EXTÉRIEUR). Les captures doivent être prises à la main (Cmd+S) : l'outil de capture du simulateur ne voit que l'écran extérieur.
+- **`eco.html`** (`fmt=eco&f=ios|tv`) : planche « écosystème » (iPhone, iPad, Duo plié, Apple TV), 1320 × 2868 pour l'app iOS et 3840 × 2160 pour l'app Apple TV.
+- **Widgets en allemand** : ils suivent la langue de l'APPAREIL, et un simulateur garde l'instantané de l'ancienne langue même après redémarrage et purge de `Caches/com.apple.chrono*` ; il se renouvelle à la prochaine échéance de la timeline (30 min).
+- **En-tête / résultats « Everywhere, on every screen »** (`page.html`, `v=eco`) : les quatre appareils (Apple TV, iPad, Duo plié, iPhone), captures `{tv,ipad,iphone}-home-{en,fr,de}.png` dans `$ASSETS`. En-tête : texte à gauche ; résultats de recherche : titre sur une ligne centré en haut, appareils dessous.
