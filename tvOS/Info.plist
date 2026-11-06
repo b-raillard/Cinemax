@@ -10,6 +10,24 @@
 	<string>JellyGlass</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundleAlternateIcons</key>
+		<array>
+			<string>AppIconHalloweenPumpkin</string>
+			<string>AppIconHalloweenPotion</string>
+			<string>AppIconHalloween</string>
+			<string>AppIconRed</string>
+			<string>AppIconOrange</string>
+			<string>AppIconYellow</string>
+			<string>AppIconGreen</string>
+			<string>AppIconCyan</string>
+			<string>AppIconBlue</string>
+			<string>AppIconIndigo</string>
+			<string>AppIconPurple</string>
+			<string>AppIconPink</string>
+		</array>
+	</dict>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>

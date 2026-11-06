@@ -246,7 +246,8 @@ struct PluralRuleTests {
     func singularSiblingsExist() {
         let keys = ["library.itemCount", "detail.collection.count", "search.resultCount",
                     "home.remainingTime.minutes", "movies.count", "movies.titles", "tvShows.count",
-                    "person.titleCount", "syncplay.participants", "syncplay.session.more"]
+                    "person.titleCount", "syncplay.participants", "syncplay.session.more",
+                    "settings.appIcon.proBanner"]
         for language in AppLanguage.supported {
             let bundle = Bundle.localizedBundle(for: language)
             for key in keys {

@@ -1,6 +1,29 @@
 import SwiftUI
 import CinemaxKit
 
+private extension View {
+    /// The switch / delete confirmations. iOS: an alert — iOS 27 draws a
+    /// `confirmationDialog` as a popover with no « Annuler » (recette
+    /// 2026-10-26, SRV-DLG-01; the account switcher's Q-ANNULER decision).
+    /// tvOS keeps the confirmation dialog: a SwiftUI `.alert` has focus bugs
+    /// there (`docs/design-system/patterns.md`).
+    @ViewBuilder
+    func serverConfirmation<T, A: View, M: View>(
+        _ title: String,
+        isPresented: Binding<Bool>,
+        presenting data: T?,
+        @ViewBuilder actions: @escaping (T) -> A,
+        @ViewBuilder message: @escaping (T) -> M
+    ) -> some View {
+        #if os(iOS)
+        alert(title, isPresented: isPresented, presenting: data, actions: actions, message: message)
+        #else
+        confirmationDialog(title, isPresented: isPresented, titleVisibility: .visible,
+                           presenting: data, actions: actions, message: message)
+        #endif
+    }
+}
+
 // MARK: - View Model
 
 /// Reachability state for the servers list. Lives outside the view so the
@@ -154,6 +177,8 @@ struct ServersScreen: View {
     @State private var switchingId: String?
     /// Id of the entry being renamed (same freshness RULE as the two above).
     @State private var pendingRenameId: String?
+    /// A switch refused with `.locked`: the server whose account needs a code.
+    @State private var lockedSwitch: ServerEntry?
     @State private var renameText = ""
     #if !os(tvOS)
     @State private var editMode: EditMode = .inactive
@@ -188,13 +213,17 @@ struct ServersScreen: View {
             #endif
         }
         .task { await viewModel.pingIfNeeded(using: appState) }
-        .confirmationDialog(
+        #if os(tvOS)
+        .fullScreenCover(item: $lockedSwitch) { entry in unlockSheet(for: entry) }
+        #else
+        .sheet(item: $lockedSwitch) { entry in unlockSheet(for: entry) }
+        #endif
+        .serverConfirmation(
             loc.localized("servers.switch.action"),
             isPresented: Binding(
                 get: { pendingSwitchId != nil },
                 set: { if !$0 { pendingSwitchId = nil } }
             ),
-            titleVisibility: .visible,
             presenting: pendingSwitchId
         ) { id in
             Button(loc.localized("servers.switch.action")) {
@@ -204,13 +233,12 @@ struct ServersScreen: View {
         } message: { id in
             Text(loc.localized("servers.switch.confirm", name(for: id)))
         }
-        .confirmationDialog(
+        .serverConfirmation(
             loc.localized("servers.delete"),
             isPresented: Binding(
                 get: { pendingDeleteId != nil },
                 set: { if !$0 { pendingDeleteId = nil } }
             ),
-            titleVisibility: .visible,
             presenting: pendingDeleteId
         ) { id in
             Button(loc.localized("servers.delete"), role: .destructive) {
@@ -256,12 +284,39 @@ struct ServersScreen: View {
             toasts.error(loc.localized("servers.offline"))
         case .unreachable:
             toasts.error(loc.localized("servers.unreachable"))
+        case .locked:
+            // Its account carries a code (or would lift the age cap while the
+            // parental code is set): ask it, then switch — see `unlockSheet`.
+            lockedSwitch = entry
         case .needsLogin:
             // The root already swapped to `LoginScreen` scoped to that server.
             // Dismiss so this modal doesn't sit on top of it (it survives when
             // the host is `LoginScreen` itself, which stays mounted).
             dismiss()
         }
+    }
+
+    private func unlockSheet(for entry: ServerEntry) -> some View {
+        AccountUnlockSheet(
+            accountKey: ServerRegistry.accountKey(serverId: entry.id, userId: entry.userId ?? ""),
+            name: entry.username ?? entry.displayName
+        ) {
+            Task {
+                switch await appState.switchTo(entry, unlocked: true) {
+                case .commit:
+                    toasts.success(loc.localized("servers.switchedTo", entry.displayName))
+                    dismiss()
+                case .offline:
+                    toasts.error(loc.localized("servers.offline"))
+                case .unreachable:
+                    toasts.error(loc.localized("servers.unreachable"))
+                case .needsLogin, .locked:
+                    dismiss()
+                }
+            }
+        }
+        .environment(themeManager)
+        .environment(loc)
     }
 
     private func performDelete(id: String) async {

@@ -38,18 +38,34 @@ struct AppNavigation: View {
     /// its `isUnlocked` flag is session state — a scene-event recreation would
     /// either re-open a gate the parent had closed or drop an unlock they are
     /// mid-way through using. See the RULE on `ParentalLockController`.
-    private static let sharedParentalLock = ParentalLockController()
+    static let sharedParentalLock = ParentalLockController()
     /// Seasonal themes — a process singleton like the stores above, so a
-    /// scene-struct recreation never re-reads the defaults.
-    private static let sharedSeasonal = SeasonalThemeController()
+    /// scene-struct recreation never re-reads the defaults. Forcing Halloween
+    /// at any date is the Pro's (lot C): the controller asks the gate itself,
+    /// from init — the root's `onChange` below re-evaluates on a tier change.
+    private static let sharedSeasonal = SeasonalThemeController(
+        allowsForcedSeason: { sharedProAccess.allows(.seasonalAllYear) }
+    )
     /// Free / Pro — a process singleton like the stores above: its `init`
     /// reads the defaults AND the iCloud key-value store and starts listening
     /// for iCloud's external changes, none of which a scene-struct recreation
-    /// may repeat. Nothing gates on it yet (`Shared/Entitlements/CLAUDE.md`).
+    /// may repeat. Read through `ProFeatureGate` (`Shared/Entitlements/CLAUDE.md`).
     private static let sharedEntitlements = EntitlementStore()
     /// Early adopters (installed before the Pro): a process singleton — its
-    /// `init` reads the Keychain cache. Nothing grants on it yet.
+    /// `init` reads the Keychain cache. The founders' grant, via `ProFeatureGate`.
     private static let sharedEarlyAdopter = EarlyAdopterService()
+    /// The gate sites' one entry point and the root's contextual Pro sheet
+    /// (lot B). Not `private`, for the same reason as `sharedAppState`: an App
+    /// Intent has no environment and must ask THIS instance — built from the
+    /// two stores above, so it answers before any view exists.
+    static let sharedProAccess = ProFeatureAccess(entitlements: sharedEntitlements, earlyAdopter: sharedEarlyAdopter)
+    /// The Pro purchase (StoreKit 2): a process singleton — it listens to
+    /// `Transaction.updates` for the life of the process, which a scene-struct
+    /// recreation must not start twice.
+    private static let sharedProStore = ProStore(entitlements: sharedEntitlements)
+    /// The per-account codes (multi-account) — a process singleton: it caches
+    /// what it has read from the Keychain, per account.
+    static let sharedAccountLocks = AccountLockStore()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -61,14 +77,21 @@ struct AppNavigation: View {
     @State private var seasonal = Self.sharedSeasonal
     @State private var entitlements = Self.sharedEntitlements
     @State private var earlyAdopter = Self.sharedEarlyAdopter
+    @State private var proStore = Self.sharedProStore
+    @State private var proAccess = Self.sharedProAccess
+    @State private var accountLocks = Self.sharedAccountLocks
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
     private var remoteControl: RemoteControlListener { Self.sharedRemoteControl }
     @State private var playlistPresenter = AddToPlaylistPresenter()
-    @State private var cardActions = CardActionPresenter()
+    @State private var cardActions = CardActionPresenter(access: Self.sharedProAccess)
     @State private var settingsNav = SettingsNavCoordinator()
     @State private var hasCheckedSession = false
+    /// tvOS « Qui regarde ? » at launch (multi-account) — decided once, right
+    /// after the session is restored, and shown BEFORE « Quoi de neuf ».
+    @State private var showWhoIsWatching = false
+    @AppStorage(SettingsKey.accountsAskOnLaunch) private var accountsAskOnLaunch = SettingsKey.Default.accountsAskOnLaunch
     /// Deliberately NOT one of the process singletons above: it holds two
     /// `UserDefaults` reads and a throttled network hop, so a scene-event
     /// recreation costs nothing — and the standing offer is re-derived from
@@ -235,6 +258,8 @@ struct AppNavigation: View {
         .environment(seasonal)
         .environment(entitlements)
         .environment(earlyAdopter)
+        .environment(proStore)
+        .environment(accountLocks)
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         #if os(iOS)
         .environment(reviewPrompt)
@@ -244,6 +269,11 @@ struct AppNavigation: View {
         }
         // Midnight: a season can start or end while the app stays open.
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged).receive(on: RunLoop.main)) { _ in
+            seasonal.reevaluate()
+        }
+        // The tier moved (a purchase, a refund, Debug « Palier simulé »): a
+        // forced Halloween comes or goes with it (lot C).
+        .onChange(of: proAccess.allows(.seasonalAllYear)) { _, _ in
             seasonal.reevaluate()
         }
         .environment(playlistPresenter)
@@ -259,6 +289,7 @@ struct AppNavigation: View {
             toast: toasts
         ))
         .environment(cardActions)
+        .environment(proAccess)
         // Same reason as the playlist sheet: playback is launched from context
         // menus inside lazy grids, where a presentation attached to the cell
         // dies with it. Nothing to host here on tvOS — the menu calls
@@ -282,6 +313,18 @@ struct AppNavigation: View {
             themeManager: themeManager,
             loc: loc,
             toast: toasts
+        ))
+        // The contextual Pro sheet of a refused gate (lot B): raised by a tap
+        // on a Pro entry (« Lire sur… », the Administration row) or by a
+        // Siri / Raccourcis run — hosted once here, like the two above.
+        .modifier(ProUpsellPresentation(
+            feature: $proAccess.upsell,
+            entitlements: entitlements,
+            earlyAdopter: earlyAdopter,
+            proStore: proStore,
+            loc: loc,
+            themeManager: themeManager,
+            toasts: toasts
         ))
         .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
             appToggle: motionEffects,
@@ -319,7 +362,7 @@ struct AppNavigation: View {
         // `@Observable` objects down with it (same reason `onboardingSheet`
         // does it).
         .whatsNewPresentation(isPresented: Binding(
-            get: { !whatsNewPages.isEmpty && appState.isAuthenticated },
+            get: { !whatsNewPages.isEmpty && appState.isAuthenticated && !showWhoIsWatching },
             set: { presented in
                 guard !presented else { return }
                 finishWhatsNew()
@@ -335,6 +378,21 @@ struct AppNavigation: View {
                     systemReduceMotion: systemReduceMotion
                 ))
         }
+        #if os(tvOS)
+        .fullScreenCover(isPresented: $showWhoIsWatching) {
+            WhoIsWatchingScreen(mode: .launch) { showWhoIsWatching = false }
+                .environment(appState)
+                .environment(themeManager)
+                .environment(loc)
+                .environment(toasts)
+                .environment(accountLocks)
+                .environment(parentalLock)
+                .environment(\.motionEffectsEnabled, MotionEffects.isEnabled(
+                    appToggle: motionEffects,
+                    systemReduceMotion: systemReduceMotion
+                ))
+        }
+        #endif
         // Widget / Top Shelf deep links (cinemax://item/{id}). Routed through
         // AppState — MainTabView switches to Home, HomeScreen pushes detail.
         .onOpenURL { url in
@@ -348,12 +406,27 @@ struct AppNavigation: View {
             appState.apiClient.setPreferredLanguage(code)
         }
         .task {
+            // The Pro purchase: listen to `Transaction.updates` (an « Ask to
+            // Buy » approval or a refund that arrived while the app was closed
+            // is delivered there) and reconcile with StoreKit's current
+            // entitlements — a local cache, no network, no account prompt.
+            proStore.start()
             // Let the confirm-before-logout coordinator see real connectivity.
             // Captured strongly: `NetworkMonitor` and `AppState` are both process
             // singletons, so there is no lifetime to protect — and a `weak`
             // capture here was ineffective anyway, the enclosing `.task` already
             // holding `network` strongly (Swift 6.4 warns about exactly that).
             appState.isOnlineProvider = { [network] in network.isOnline }
+            // Multi-account: remembering several accounts is a Pro feature
+            // (open to everyone until the Pro launches — `ProFeatureGate`); a
+            // protected profile, or one less restricted than the current one
+            // while a parental code is set, needs a code (`AppState.switchAccount`).
+            appState.multiAccountProvider = { [proAccess] in
+                proAccess.allows(.memorizedAccounts)
+            }
+            appState.accountLockProvider = { [accountLocks] key in accountLocks.hasLock(key) }
+            appState.parentalLockProvider = { [parentalLock] in parentalLock.isEnabled }
+            appState.onAccountForgotten = { [accountLocks] key in accountLocks.remove(key: key) }
             // The language rides every request as `Accept-Language` (Jellyfin
             // 12.0 localizes the media-stream titles the track pickers print
             // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds
@@ -373,6 +446,15 @@ struct AppNavigation: View {
                 onboardingSeen = true
             }
             hasCheckedSession = true
+            #if os(tvOS)
+            // The living-room picker: only with several remembered accounts to
+            // choose from, and only when the household asked for it.
+            if appState.isAuthenticated, accountsAskOnLaunch,
+               proAccess.allows(.memorizedAccounts),
+               appState.activeAccounts.count >= 2 {
+                showWhoIsWatching = true
+            }
+            #endif
             // Baseline attach so the menu editor has an API client even with
             // no session. The library-mode view refresh is NOT triggered here:
             // `onChange(of: appState.currentUserId)` below owns it for every
@@ -388,8 +470,9 @@ struct AppNavigation: View {
             // the tab bar visible before its profile is loaded.
             // `restoreSession` has already hydrated the registry, so both the
             // active id and the known ids are available here.
-            menuConfig.activate(serverId: appState.activeServerId,
-                                knownServerIds: Set(appState.servers.map(\.id)))
+            menuConfig.activate(accountKey: appState.activeAccountKey,
+                                serverId: appState.activeServerId,
+                                knownProfileIds: appState.knownMenuProfileIds)
             // Search history is per-server too: the first server that activates
             // after the upgrade inherits the old global list, once.
             SearchHistoryStore.migrateLegacyIfNeeded(into: appState.activeServerId)
@@ -491,24 +574,38 @@ struct AppNavigation: View {
             // the observers below can call it freely.
             remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
         }
-        // RULE — DECLARATION ORDER IS LOAD-BEARING: `activeServerId` must be
-        // observed BEFORE `currentUserId`. A server switch mutates both (and
-        // `serverURL`) in one transaction, and SwiftUI delivers
-        // same-transaction `onChange` handlers in declaration order. This one
-        // swaps the menu profile; the `currentUserId` one below is the single
-        // owner of `refreshAvailableViews()`, which merges the fetched
-        // libraries into `libraryEntries` and persists them. Refreshing before
-        // the swap would merge the NEW server's libraries into the PREVIOUS
-        // server's profile and save them there. Do not reorder these, and do
-        // not add a second refresh owner.
-        .onChange(of: appState.activeServerId) { _, newId in
-            // Menu configuration is per-server (mode, kind, order, enabled
-            // flags, cached views). Nothing to invalidate on a switch — the
-            // target server's own profile is loaded wholesale.
-            menuConfig.activate(serverId: newId,
-                                knownServerIds: Set(appState.servers.map(\.id)))
+        // RULE — DECLARATION ORDER IS LOAD-BEARING: the ACCOUNT (server +
+        // user, `activeAccountKey`) must be observed BEFORE `currentUserId`. A
+        // switch — of server or of account — mutates them in one transaction,
+        // and SwiftUI delivers same-transaction `onChange` handlers in
+        // declaration order. This one swaps the menu profile; the
+        // `currentUserId` one below is the single owner of
+        // `refreshAvailableViews()`, which merges the fetched libraries into
+        // `libraryEntries` and persists them. Refreshing before the swap would
+        // merge the NEW account's libraries into the PREVIOUS one's profile and
+        // save them there. Do not reorder these, and do not add a second
+        // refresh owner. Keyed on the account, not the server, since
+        // multi-account: a same-server switch never moves `activeServerId`.
+        .onChange(of: appState.activeAccountKey) { _, newKey in
+            // Signed out (`nil`): keep the loaded profile, as `activate(nil)`
+            // always did — re-signing in must find it intact.
+            guard let newKey else { return }
+            // Menu configuration is per account (mode, kind, order, enabled
+            // flags, cached views), seeded once from the server's.
+            menuConfig.activate(accountKey: newKey,
+                                serverId: appState.activeServerId,
+                                knownProfileIds: appState.knownMenuProfileIds)
             // No-op once the legacy search history has found its server.
-            SearchHistoryStore.migrateLegacyIfNeeded(into: newId)
+            SearchHistoryStore.migrateLegacyIfNeeded(into: appState.activeServerId)
+            // Accent and light/dark follow the account. `AppState` already
+            // saved the account being left and swapped the age cap; the
+            // appearance goes through `ThemeManager`'s setters so it
+            // re-renders (a raw defaults write would not). No snapshot = the
+            // account inherits the current look.
+            if let look = AccountSettingsStore.load(for: newKey, defaults: .standard) {
+                if themeManager.accentColorKey != look.accentColor { themeManager.accentColorKey = look.accentColor }
+                if themeManager.darkModeEnabled != look.darkMode { themeManager.darkModeEnabled = look.darkMode }
+            }
         }
         .onChange(of: appState.serverURL) { _, new in
             // Re-decide stream transport for the new server (or clear on logout).
@@ -575,6 +672,7 @@ struct AppNavigation: View {
                 // Synchronize the iCloud key-value store on every return to
                 // the foreground (the launch one is the store's `init`).
                 entitlements.refresh()
+                Task { await proStore.refresh() }
             }
             if newPhase == .background {
                 lastBackgroundedAt = Date()
@@ -582,7 +680,14 @@ struct AppNavigation: View {
                 // Drop the remote-control socket: a backgrounded app can't act
                 // on a play command anyway, and holding a WebSocket open is a
                 // standing battery / radio-wake cost. Re-established on `.active`.
-                remoteControl.stop()
+                // EXCEPT while a player is still running (Picture in Picture,
+                // background audio): that session must stay drivable, or
+                // another device's « Reprendre ici » neither sees it (the
+                // server lists only sessions with a live socket) nor can stop
+                // it — the film then played on both (user report 2026-10-25).
+                if !RemotePlaystateRouter.shared.hasActivePlayer {
+                    remoteControl.stop()
+                }
                 // Close the parental gate. `.background` and NOT `.inactive`:
                 // the latter also fires for an app-switcher peek, a Control
                 // Center swipe or a notification banner, and re-asking for the

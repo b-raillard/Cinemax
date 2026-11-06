@@ -187,6 +187,20 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if let playOnSessionError { throw playOnSessionError }
     }
 
+    /// « Reprendre ici »: the stop and the message sent to the source, in order
+    /// (`"message:<session>:<text>"`, `"stop:<session>"`).
+    private(set) var handoffCalls: [String] = []
+    var stopSessionError: Error?
+
+    func stopSession(sessionId: String) async throws {
+        recordLock.withLock { handoffCalls.append("stop:\(sessionId)") }
+        if let stopSessionError { throw stopSessionError }
+    }
+
+    func sendMessage(sessionId: String, header: String, text: String, timeoutMs: Int?) async throws {
+        recordLock.withLock { handoffCalls.append("message:\(sessionId):\(text)") }
+    }
+
     // MARK: - Admin
 
     var stubbedUserByID: UserDto = UserDto()

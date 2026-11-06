@@ -154,6 +154,31 @@ extension JellyfinAPIClient: RemoteControlAPI {
         }
     }
 
+    /// `POST /Sessions/{id}/Playing/Stop` — « Reprendre ici ». The receiver
+    /// (`RemotePlaystateRouter` on a JellyGlass) closes its player as for any
+    /// close, so its stop report and teardown run normally.
+    public func stopSession(sessionId: String) async throws {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        do {
+            _ = try await client.send(Paths.sendPlaystateCommand(sessionID: sessionId, command: "Stop"))
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
+    /// The `DeviceName` this app announces to the server — what another of the
+    /// user's devices prints (« Lecture reprise sur iPhone »).
+    public static var sessionDeviceName: String {
+        #if os(tvOS)
+        "Apple TV"
+        #elseif os(iOS)
+        iOSDeviceName
+        #else
+        "Apple Device"
+        #endif
+    }
+
     /// The URL of Jellyfin's realtime `/socket`, for `JellyfinSocketHub` to
     /// connect. Returns `nil` when unauthenticated.
     ///

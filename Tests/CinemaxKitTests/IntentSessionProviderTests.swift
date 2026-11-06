@@ -107,3 +107,60 @@ struct IntentSessionProviderTests {
         defaults.removePersistentDomain(forName: suite)
     }
 }
+
+#if os(iOS)
+/// Siri, Shortcuts and the Control Center « Reprendre » are ONE Pro feature
+/// (spec 2026-10-22): in free, every intent answers « fonction Pro » and the
+/// app — which `openAppWhenRun` has already opened — shows the Pro sheet.
+@MainActor
+@Suite("Intents et Pro")
+struct IntentProGateTests {
+
+    private func access(launched: Bool) -> ProFeatureAccess {
+        ProFeatureAccess {
+            ProFeatureGate.tier(proLaunched: launched, isPro: false, isEarlyAdopter: false, override: .automatic)
+        }
+    }
+
+    @Test("Avant le lancement, un raccourci passe, sans feuille")
+    func openBeforeLaunch() throws {
+        let gate = access(launched: false)
+        try IntentProGate.admit(gate)
+        #expect(gate.upsell == nil)
+    }
+
+    @Test("En gratuit, l'intent répond « fonction Pro » et ouvre la feuille Pro des raccourcis")
+    func freeIsRefused() {
+        let gate = access(launched: true)
+        #expect(throws: CinemaxIntentError.proRequired) { try IntentProGate.admit(gate) }
+        #expect(gate.upsell == .shortcuts)
+    }
+
+    @Test("Le message « fonction Pro » existe dans chaque langue")
+    func messageLocalized() throws {
+        #expect(CinemaxIntentError.proRequired.key == "intent.error.proRequired")
+        for lang in AppLanguage.supported {
+            let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
+            let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
+            #expect(table["intent.error.proRequired"] != nil, "\(lang)")
+        }
+    }
+
+    /// Recette 2026-10-23, DEF-IOS3: appareil en anglais, app en français →
+    /// « Siri and Shortcuts are part of JellyGlass Pro ». The system resolved
+    /// the key in the DEVICE's language.
+    @Test("Les erreurs des intents parlent la langue de l'app, pas celle de l'appareil")
+    func errorsFollowTheAppLanguage() throws {
+        for lang in AppLanguage.supported {
+            let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
+            let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
+            let defaults = UserDefaults.isolatedForTesting()
+            defaults.set(lang, forKey: SettingsKey.appLanguage)
+            for error in CinemaxIntentError.allCases {
+                let expected = try #require(table[error.key], "\(lang) \(error.key)")
+                #expect(String(localized: error.localizedStringResource(defaults: defaults)) == expected, "\(lang) \(error)")
+            }
+        }
+    }
+}
+#endif

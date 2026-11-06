@@ -1,0 +1,67 @@
+{
+  "identifier" : "9A1F2C3D-4E5B-4C6D-8E7F-1A2B3C4D5E6F",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "7.99",
+      "familyShareable" : true,
+      "internalID" : "6769400001",
+      "localizations" : [
+        {
+          "description" : "Saved multiple accounts, admin, icons and more.",
+          "displayName" : "JellyGlass Pro",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "Comptes multiples mémorisés, admin, icônes et plus.",
+          "displayName" : "JellyGlass Pro",
+          "locale" : "fr"
+        },
+        {
+          "description" : "Gespeicherte Konten, Verwaltung, App-Symbole und mehr.",
+          "displayName" : "JellyGlass Pro",
+          "locale" : "de"
+        }
+      ],
+      "productID" : "com.cinemax.ios.pro",
+      "referenceName" : "JellyGlass Pro (iOS)",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "7.99",
+      "familyShareable" : true,
+      "internalID" : "6769400002",
+      "localizations" : [
+        {
+          "description" : "Saved multiple accounts, admin, icons and more.",
+          "displayName" : "JellyGlass Pro",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "Comptes multiples mémorisés, admin, icônes et plus.",
+          "displayName" : "JellyGlass Pro",
+          "locale" : "fr"
+        },
+        {
+          "description" : "Gespeicherte Konten, Verwaltung, App-Symbole und mehr.",
+          "displayName" : "JellyGlass Pro",
+          "locale" : "de"
+        }
+      ],
+      "productID" : "com.cinemax.tvos.pro",
+      "referenceName" : "JellyGlass Pro (tvOS)",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "fr_FR",
+    "_storefront" : "FRA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

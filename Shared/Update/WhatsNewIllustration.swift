@@ -44,6 +44,12 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     case everyScreen
     /// Playback speed that keeps sound and picture together.
     case smoothSpeed
+    /// Several accounts on one device — « Qui regarde ? », the current one in the accent.
+    case accounts
+    /// « Reprendre ici » — the film paused on the television picked up on the phone.
+    case resumeHere
+    /// The app icon picker — four icons, the chosen one in the accent.
+    case appIcon
     /// Onboarding — your own server.
     case server
     /// Onboarding — Quick Connect's code.
@@ -101,7 +107,7 @@ struct WhatsNewIllustrationView: View {
             case .parentalLock:  parentalLock(u)
             case .accessibility: accessibility(u)
             case .language:      language(u)
-            case .everyScreen, .smoothSpeed, .server, .quickConnect, .personalize:
+            case .everyScreen, .smoothSpeed, .server, .quickConnect, .personalize, .accounts, .resumeHere, .appIcon:
                 MotifCanvas(kind: kind, ink: ink)
             case .halloweenNight, .duoTable: EmptyView()   // drawn by `body` as scenes
             }
@@ -418,6 +424,50 @@ private struct MotifCanvas: View {
             triangle(&ctx, [CGPoint(x: 52, y: 40), CGPoint(x: 66, y: 49), CGPoint(x: 52, y: 58)], ink.accent, 0.55)
             rect(&ctx, box(18, 70, 64, 5), 2.5, ink.tileHigh)
             rect(&ctx, box(18, 70, 40, 5), 2.5, ink.accent)
+        case .accounts:
+            // Three profiles, the middle one picked, its code under it.
+            rect(&ctx, box(12, 34, 22, 22), 7, ink.tile)
+            rect(&ctx, box(37, 28, 26, 26), 8, ink.accent)
+            rect(&ctx, box(66, 34, 22, 22), 7, ink.tileHigh)
+            for x in [23, 77] as [CGFloat] {
+                dot(&ctx, x, 42, 4.5, ink.mark, 0.5)
+                rect(&ctx, box(x - 6.5, 49, 13, 5), 2.5, ink.mark, 0.5)
+            }
+            dot(&ctx, 50, 37.5, 5.5, ink.text)
+            rect(&ctx, box(42, 45.5, 16, 6), 3, ink.text)
+            rect(&ctx, box(14, 62, 18, 3), 1.5, ink.mark, 0.5)
+            rect(&ctx, box(39, 62, 22, 4), 2, ink.text)
+            rect(&ctx, box(68, 62, 18, 3), 1.5, ink.mark, 0.5)
+            for (i, x) in ([41, 47, 53, 59] as [CGFloat]).enumerated() {
+                dot(&ctx, x, 74, 2.2, i < 2 ? ink.accent : ink.mark, i < 2 ? 1 : 0.5)
+            }
+        case .resumeHere:
+            // The television, paused, hands the film to the phone, playing.
+            rect(&ctx, box(10, 20, 50, 34), 6, ink.tile)
+            rect(&ctx, box(31, 29, 4, 10), 2, ink.mark, 0.5)
+            rect(&ctx, box(38, 29, 4, 10), 2, ink.mark, 0.5)
+            rect(&ctx, box(16, 46, 38, 3), 1.5, ink.tileHigh)
+            rect(&ctx, box(16, 46, 24, 3), 1.5, ink.mark, 0.5)
+            dot(&ctx, 42, 62, 2.2, ink.accent, 0.35)
+            dot(&ctx, 49, 66, 2.2, ink.accent, 0.6)
+            dot(&ctx, 56, 70, 2.2, ink.accent, 0.9)
+            rect(&ctx, box(62, 38, 26, 46), 7, ink.tileHigh)
+            rect(&ctx, box(65, 44, 20, 18), 4, ink.accent)
+            triangle(&ctx, [CGPoint(x: 72, y: 48.5), CGPoint(x: 80, y: 53), CGPoint(x: 72, y: 57.5)], ink.text)
+            rect(&ctx, box(65, 68, 20, 3), 1.5, ink.tile)
+            rect(&ctx, box(65, 68, 12, 3), 1.5, ink.accent)
+        case .appIcon:
+            // Four icons, the last one chosen.
+            rect(&ctx, box(20, 20, 26, 26), 7, ink.tile)
+            rect(&ctx, box(54, 20, 26, 26), 7, ink.tileHigh)
+            rect(&ctx, box(20, 54, 26, 26), 7, ink.tileHigh)
+            rect(&ctx, box(54, 54, 26, 26), 7, ink.accent)
+            dot(&ctx, 33, 33, 5, ink.mark, 0.5)
+            dot(&ctx, 67, 33, 5, ink.mark, 0.5)
+            dot(&ctx, 33, 67, 5, ink.mark, 0.5)
+            dot(&ctx, 67, 67, 5, ink.text)
+            dot(&ctx, 82, 82, 6.5, ink.text)
+            dot(&ctx, 82, 82, 2.8, ink.accent)
         default:
             break
         }

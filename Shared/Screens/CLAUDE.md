@@ -13,6 +13,8 @@ This folder is flat, so its features cannot each have a `CLAUDE.md`. **Before ed
 | `AddToPlaylistSheet`, `PlaylistDetailScreen`, `PlaylistCard`, `PlaylistManagement`, `LibraryFolderBrowseScreen` | `docs/rules/playlists.md` (+ the Collections / Playlists RULE in `Shared/Navigation/CLAUDE.md`) |
 | `WatchTogetherLobby`, `MediaDetailWatchTogether` | `VideoPlayer/CLAUDE.md` → SyncPlay / Watch Together |
 | `PrivacySecurityScreen`, `ProfileScreen`, `LicensesView` | `Settings/CLAUDE.md` |
+| `Accounts/` (switcher, « Qui regarde ? », account management) | `docs/rules/server-setup-and-multi-server.md` → Multi-account |
+| `Pro/` (`ProScreen`, `ProPurchaseBlock`, `ProUpsellSheet`) | `Shared/Entitlements/CLAUDE.md` |
 | `NativeVideoPresenter`, `VideoPlayerView`, `PlayLink`, `HLSManifestLoader` | `VideoPlayer/CLAUDE.md` |
 
 Any UI change also reads `Shared/DesignSystem/CLAUDE.md`. The sub-folders `VideoPlayer/`, `Settings/` and `Admin/` carry their own `CLAUDE.md`, loaded automatically.

@@ -563,6 +563,10 @@ struct MediaLibraryScreen: View {
     /// Filter detail (chips for watch status / decade / genre) lives inside
     /// the shared `LibrarySortFilterSheet` — one focusable button reaches
     /// all of it, freeing the entire viewport for posters and the hero.
+    /// No background, on the page column: the title lines up with the hero's
+    /// text and the grid's posters, and the backdrop shows through. A glass
+    /// panel read as a black band, and its edges never matched the hero's
+    /// width on every library (user, 2026-11-02).
     private var tvTopBar: some View {
         HStack(alignment: .center, spacing: CinemaSpacing.spacing4) {
             VStack(alignment: .leading, spacing: 4) {
@@ -582,12 +586,6 @@ struct MediaLibraryScreen: View {
             tvFilterSheetButton
         }
         .padding(.vertical, CinemaSpacing.spacing3)
-        .padding(.horizontal, CinemaSpacing.spacing5)
-        // A surface of its own: the bar floats directly over the hero backdrop,
-        // so its title and count read against whatever image happens to be
-        // behind them. Glass rather than an opaque fill, which would cut a
-        // hard band across the top of the hero.
-        .glassPanel(cornerRadius: CinemaRadius.large)
         .padding(.horizontal, CinemaTVLayout.pagePadding)
         // Group sort/filter as a discrete focus section so up-presses from the
         // hero's Play/More Info row reliably bridge the ~700pt of empty hero

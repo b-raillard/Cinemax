@@ -117,25 +117,43 @@ public enum ServerSessionRevoker {
         deviceId: String,
         session: URLSession? = nil
     ) async {
-        guard !accessToken.isEmpty, !deviceId.isEmpty else { return }
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
-        components.setEndpointPath("/Devices", preservingBasePathOf: url)
-        components.fragment = nil
-        components.queryItems = [URLQueryItem(name: "id", value: deviceId)]
-        guard let endpoint = components.url else { return }
-
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "DELETE"
-        request.setValue(authorizationHeader(accessToken: accessToken, deviceId: deviceId),
-                         forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = requestTimeout
-
+        guard let request = makeRequest(url: url, accessToken: accessToken, deviceId: deviceId) else { return }
         do {
             _ = try await (session ?? revokeSession).data(for: request)
         } catch {
             // Best effort by design — the entry is removed locally regardless.
-            logger.debug("Session revoke failed for \(redactedURL(endpoint), privacy: .public)")
+            logger.debug("Session revoke failed for \(redactedURL(request.url ?? url), privacy: .public)")
         }
+    }
+
+    /// `POST /Sessions/Logout` authenticated BY the token being revoked: the
+    /// server revokes exactly `User.GetToken()`, for any user.
+    ///
+    /// It used to be `DELETE /Devices?id=<deviceId>`, which is wrong twice over
+    /// (read in Jellyfin 10.9.11 and master): `DevicesController` requires an
+    /// administrator, so a regular account's logout was refused and nothing was
+    /// ever revoked; and it revokes EVERY token issued to that device id, all
+    /// users together — with several remembered accounts, an administrator
+    /// signing out would have signed the whole household out.
+    ///
+    /// Known server-side effect, unavoidable: revoking a token ends every LIVE
+    /// session of the device id (`SessionManager.Logout(Device)` →
+    /// `ReportSessionEnded` on all sessions of that DeviceId), so the active
+    /// account's realtime socket drops and reconnects through its own back-off.
+    static func makeRequest(url: URL, accessToken: String, deviceId: String) -> URLRequest? {
+        guard !accessToken.isEmpty, !deviceId.isEmpty else { return nil }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        components.setEndpointPath("/Sessions/Logout", preservingBasePathOf: url)
+        components.fragment = nil
+        components.queryItems = nil
+        guard let endpoint = components.url else { return nil }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue(authorizationHeader(accessToken: accessToken, deviceId: deviceId),
+                         forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = requestTimeout
+        return request
     }
 
     /// Same `MediaBrowser` header the SDK builds, assembled here from explicit

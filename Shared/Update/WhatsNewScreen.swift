@@ -49,7 +49,13 @@ struct WhatsNewScreen: View {
     @State private var pageViewportHeight: CGFloat = 0
     #endif
 
-    private enum Control: Hashable { case primary, back, skip, decline }
+    private enum Control: Hashable { case primary, back, skip, decline, rate }
+    #if os(tvOS)
+    /// The app's page in the Apple TV's App Store (`AppUpdateChecker.rateAppURL`),
+    /// `nil` until a Store lookup has succeeded or when the device cannot open
+    /// it (the simulator) — then the last page has no « Noter » button.
+    @State private var rateURL: URL? = AppUpdateChecker.rateAppURL()
+    #endif
 
     private var page: WhatsNewPage? {
         pages.indices.contains(index) ? pages[index] : pages.first
@@ -81,7 +87,8 @@ struct WhatsNewScreen: View {
     /// replace the navigation button. Once on (or on a replay after
     /// accepting), the page reads like any other and wears a « ✓ Activé » chip.
     private var offerPending: Bool {
-        if offeredSeason != nil { return seasonal.setting != .automatic }
+        // A forced Halloween (lot C) has accepted it too: never re-offered.
+        if offeredSeason != nil { return !seasonal.setting.isOptedIn }
         if let code = offeredLanguage { return loc.languageCode != code }
         return false
     }
@@ -282,6 +289,8 @@ struct WhatsNewScreen: View {
                     CinemaButton(title: loc.localized("whatsNew.skip"), style: .ghost) { onFinish() }
                         .frame(maxWidth: ctaWidth)
                         .focused($focusedControl, equals: .skip)
+                } else if let rateURL {
+                    rateButton(rateURL)
                 }
                 #else
                 // The offer's « Non merci » takes the back slot; a swipe still
@@ -334,6 +343,23 @@ struct WhatsNewScreen: View {
             .focused($focusedControl, equals: .decline)
     }
 
+    #if os(tvOS)
+    /// « Noter JellyGlass » on the LAST page, in the slot « Passer » leaves
+    /// empty there. tvOS has no `requestReview` and guideline 5.6.1 forbids a
+    /// home-made prompt, so the only way to ask is a button the user chooses to
+    /// press — and the end of the reel, right after an update, is when the
+    /// whole active base passes by. Finishes the reel first, so coming back
+    /// from the Store does not show it again.
+    private func rateButton(_ url: URL) -> some View {
+        CinemaButton(title: loc.localized("settings.rateApp"), style: .ghost) {
+            onFinish()
+            UIApplication.shared.open(url)
+        }
+        .frame(maxWidth: ctaWidth)
+        .focused($focusedControl, equals: .rate)
+    }
+    #endif
+
     private var backButton: some View {
         CinemaButton(title: loc.localized("whatsNew.back"), style: .ghost) { goBack() }
             .frame(maxWidth: ctaWidth)
@@ -368,7 +394,8 @@ struct WhatsNewScreen: View {
             return
         }
         guard let season = offeredSeason else { advance(); return }
-        seasonal.setSetting(.automatic)
+        // Never downgrades a forced Halloween to Automatique (lot C).
+        if !seasonal.setting.isOptedIn { seasonal.setSetting(.automatic) }
         if let start = SeasonalOffer.startsLater(season, on: Date(), calendar: .autoupdatingCurrent) {
             toasts.success(
                 loc.localized("whatsNew.offer.accepted"),

@@ -230,3 +230,60 @@ extension View {
         #endif
     }
 }
+
+#if os(tvOS)
+// MARK: - Is focus in the top tab bar?
+
+/// Whether a focus update landed in the native tab bar, or on the account
+/// avatar overlaid beside it — drives `MainTabView`'s avatar (recette
+/// 2026-10-14, TV-10). The bar is recognised by STRUCTURE (the focused view
+/// sits inside a `UITabBar`): a band of the screen would also catch the
+/// header buttons of every full-screen cover and the top controls of some
+/// pages. The avatar, a SwiftUI item that is not always a view, is recognised
+/// by its own box at the top-leading corner, where nothing else is focusable.
+@MainActor
+enum TVTopBarFocus {
+    /// `nil` when the notification carries no next item.
+    static func isInTopBar(_ notification: Notification) -> Bool? {
+        guard let context = notification.userInfo?[UIFocusSystem.focusUpdateContextUserInfoKey] as? UIFocusUpdateContext,
+              let item = context.nextFocusedItem else { return nil }
+        if let view = item as? UIView, isInsideTabBar(view) { return true }
+        guard let frame = windowFrame(of: item) else { return false }
+        return avatarBox.contains(CGPoint(x: frame.midX, y: frame.midY))
+    }
+
+    /// The avatar's place, with room for its focus growth.
+    private static var avatarBox: CGRect {
+        CGRect(x: CinemaTVLayout.pagePadding, y: CinemaTVLayout.accountAvatarTop,
+               width: CinemaTVLayout.accountAvatarSize, height: CinemaTVLayout.accountAvatarSize)
+            .insetBy(dx: -24, dy: -24)
+    }
+
+    private static func isInsideTabBar(_ view: UIView) -> Bool {
+        var current: UIView? = view
+        while let candidate = current {
+            if candidate is UITabBar { return true }
+            current = candidate.superview
+        }
+        return false
+    }
+
+    private static func windowFrame(of item: any UIFocusItem) -> CGRect? {
+        if let view = item as? UIView {
+            return view.convert(view.bounds, to: nil)
+        }
+        // `frame` is in the coordinate space of the nearest container up the
+        // environment chain — not always the immediate parent's.
+        var environment = item.parentFocusEnvironment
+        while let current = environment {
+            if let space = current.focusItemContainer?.coordinateSpace,
+               let window = UIApplication.shared.connectedScenes
+                   .compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first {
+                return space.convert(item.frame, to: window)
+            }
+            environment = current.parentFocusEnvironment
+        }
+        return nil
+    }
+}
+#endif

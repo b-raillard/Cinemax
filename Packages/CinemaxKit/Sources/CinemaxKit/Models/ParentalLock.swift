@@ -200,6 +200,12 @@ public enum ParentalLockPolicy {
     /// Salt length in bytes.
     public static let saltLength = 16
 
+    /// Length of a per-ACCOUNT code (multi-account « Qui regarde ? »): 4 digits,
+    /// as approved in the mockups. It guards which profile opens on a shared
+    /// device, not the parental settings, which keep `minPINLength`. Same
+    /// hashing and back-off: 5 free attempts, then the escalating window.
+    public static let accountPINLength = 4
+
     // MARK: - PIN shape
 
     /// Accepts only ASCII digits, `minPINLength`…`maxPINLength` of them.
@@ -249,11 +255,12 @@ public enum ParentalLockPolicy {
     /// production caller omits it and gets fresh randomness.
     public static func makeCredential(
         pin: String,
+        minimumLength: Int = minPINLength,
         biometricsEnabled: Bool,
         salt: Data? = nil,
         iterations: Int = Self.iterations
     ) -> ParentalLockCredential? {
-        guard isValidPIN(pin) else { return nil }
+        guard isDigits(pin, minLength: minimumLength) else { return nil }
         let salt = salt ?? randomSalt()
         return ParentalLockCredential(
             salt: salt,

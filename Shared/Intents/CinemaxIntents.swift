@@ -10,21 +10,59 @@ import JellyfinAPI
 ///
 /// These deliberately do **not** go through `LocalizationManager.userFacingMessage(for:)`:
 /// that manager is part of the app's UI layer and doesn't exist in a headless
-/// intent context. `LocalizedStringResource` keys resolve from
-/// `Localizable.strings` at the system level instead.
-enum CinemaxIntentError: Error, CustomLocalizedStringResourceConvertible {
+/// intent context. The text is read from the APP's own table, in the app's
+/// language (`appLanguage`, as `IntentSessionProvider.preferredLanguage`
+/// reads it), and handed over already resolved: a bare key was resolved by
+/// the system in the DEVICE's language — an English phone running the app in
+/// French answered « Siri and Shortcuts are part of JellyGlass Pro »
+/// (recette 2026-10-23, DEF-IOS3).
+enum CinemaxIntentError: Error, CaseIterable, CustomLocalizedStringResourceConvertible {
     case notSignedIn
     case nothingToResume
     case itemUnavailable
     case notEpisodic
+    case proRequired
 
-    var localizedStringResource: LocalizedStringResource {
+    var key: String {
         switch self {
         case .notSignedIn:     "intent.error.notSignedIn"
         case .nothingToResume: "intent.error.nothingToResume"
         case .itemUnavailable: "intent.error.itemUnavailable"
         case .notEpisodic:     "intent.error.notEpisodic"
+        case .proRequired:     "intent.error.proRequired"
         }
+    }
+
+    var localizedStringResource: LocalizedStringResource {
+        localizedStringResource(defaults: .standard)
+    }
+
+    func localizedStringResource(defaults: UserDefaults) -> LocalizedStringResource {
+        let language = IntentSessionProvider.preferredLanguage(defaults: defaults)
+        let text = Bundle.localizedBundle(for: language).localizedString(forKey: key, value: nil, table: nil)
+        // Interpolated, the value's key is `%@` — found in no table — so it
+        // resolves to `text` verbatim, in whichever process shows it.
+        return LocalizedStringResource("\(text)", locale: Locale(identifier: language))
+    }
+}
+
+/// Siri, Shortcuts and the Control Center « Reprendre » are ONE Pro feature
+/// (`ProFeatureID.shortcuts`, spec 2026-10-22). Asked FIRST in every
+/// `perform()` — before the session, so a free user hears « fonction Pro »,
+/// not « connectez-vous ». Refused ⇒ `proRequired`, and `admit` has raised the
+/// Pro sheet, which the root presents on the app `openAppWhenRun` has already
+/// opened. Before the Pro launches everybody passes (`ProFeatureGate`).
+@MainActor
+enum IntentProGate {
+    static func admit(_ access: ProFeatureAccess) throws {
+        guard access.admit(.shortcuts) else { throw CinemaxIntentError.proRequired }
+    }
+
+    /// The app's own gate — a process singleton readable without a scene: the
+    /// entitlement comes from UserDefaults + the iCloud KVS and the founder
+    /// facts from the Keychain cache, all read synchronously at init.
+    static func admit() throws {
+        try admit(AppNavigation.sharedProAccess)
     }
 }
 
@@ -82,6 +120,7 @@ struct ResumePlaybackIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         guard let session = IntentSessionProvider.makeSession() else {
             throw CinemaxIntentError.notSignedIn
         }
@@ -101,12 +140,60 @@ struct PlayMediaItemIntent: AppIntent {
     static let description = IntentDescription("intent.play.description")
     static let openAppWhenRun = true
 
+    /// Shortcuts app only — deliberately NO Siri phrase (see `CinemaxShortcuts`).
     @Parameter(title: "intent.param.item")
     var item: MediaItemEntity
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         IntentRouter.play(itemId: try activeServerItemId(for: item))
+        return .result()
+    }
+}
+
+/// Plays the library's best match for a title said to Siri.
+///
+/// Same search, ranking and parental filter as the Shortcuts picker. No match
+/// opens the search screen on what Siri heard, so a misheard title can be
+/// corrected rather than dead-ending.
+@MainActor
+private func playBestMatch(for spokenTitle: String) async throws {
+    guard IntentSessionProvider.makeSession() != nil else {
+        throw CinemaxIntentError.notSignedIn
+    }
+    if let best = try await MediaItemQuery().entities(matching: spokenTitle).first {
+        IntentRouter.play(itemId: try activeServerItemId(for: best))
+    } else {
+        let cleaned = LibrarySearchRanker.sanitize(spokenTitle)
+        guard !cleaned.isEmpty else { throw CinemaxIntentError.itemUnavailable }
+        IntentRouter.search(query: cleaned)
+    }
+}
+
+// MARK: - Play a title said after the phrase
+
+/// « Lis quelque chose dans JellyGlass » → « Quel titre ? » → any title in
+/// the library.
+///
+/// **Why a `String` and not a `MediaItemEntity`:** on the new Siri (iOS 27.2),
+/// the answer to an ENTITY parameter's prompt is matched against
+/// `suggestedEntities()` only — `entities(matching:)` is never called, so a
+/// title outside « Reprendre » / « À suivre » made Siri ask again every ~5 s
+/// until it gave up (device logs, 2026-11-01). A `String` answer reaches
+/// `perform()` as said, and the library search runs here.
+struct PlaySpokenTitleIntent: AppIntent {
+    static let title: LocalizedStringResource = "intent.playTitle.title"
+    static let description = IntentDescription("intent.playTitle.description")
+    static let openAppWhenRun = true
+
+    @Parameter(title: "intent.param.item", requestValueDialog: IntentDialog("intent.param.item.prompt"))
+    var spokenTitle: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
+        try await playBestMatch(for: spokenTitle)
         return .result()
     }
 }
@@ -123,6 +210,7 @@ struct PlayNextEpisodeIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         // Refused up front rather than opening a movie and doing nothing —
         // the entity carries its kind precisely so this costs no round-trip.
         guard series.isEpisodic else { throw CinemaxIntentError.notEpisodic }
@@ -145,6 +233,7 @@ struct OpenMediaItemIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         IntentRouter.open(itemId: try activeServerItemId(for: item))
         return .result()
     }
@@ -162,6 +251,7 @@ struct SearchLibraryIntent: AppIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        try IntentProGate.admit()
         // Same hygiene the search field applies: a Shortcuts-supplied term is
         // as untrusted as a pasted one.
         let cleaned = LibrarySearchRanker.sanitize(query)
@@ -189,15 +279,21 @@ struct CinemaxShortcuts: AppShortcutsProvider {
             shortTitle: "intent.resume.shortTitle",
             systemImageName: "play.circle.fill"
         )
+        // Playing a title by voice has ONE path: a phrase with no title, then
+        // « Quel titre ? », answered as free text and searched in the whole
+        // library. « Lis ${item} dans JellyGlass » was removed: on iOS 27.2 a
+        // title outside the 12 suggested entities left the slot empty, Siri
+        // re-asked every ~5 s and gave up (device logs, 2026-11-01).
         AppShortcut(
-            intent: PlayMediaItemIntent(),
+            intent: PlaySpokenTitleIntent(),
             phrases: [
-                "Lire \(\.$item) dans \(.applicationName)",
-                "Regarder \(\.$item) dans \(.applicationName)",
-                "Lance \(\.$item) sur \(.applicationName)"
+                "Lis quelque chose dans \(.applicationName)",
+                "Regarder un film dans \(.applicationName)",
+                "Regarder une série dans \(.applicationName)",
+                "Lance un film sur \(.applicationName)"
             ],
-            shortTitle: "intent.play.shortTitle",
-            systemImageName: "play.fill"
+            shortTitle: "intent.playTitle.shortTitle",
+            systemImageName: "play.rectangle.fill"
         )
         AppShortcut(
             intent: PlayNextEpisodeIntent(),

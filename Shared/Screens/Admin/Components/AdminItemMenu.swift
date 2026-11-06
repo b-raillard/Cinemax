@@ -21,6 +21,25 @@ import JellyfinAPI
 /// users reach the full refresh-options form via Edit metadata → Actions.
 /// Delete reuses `DestructiveConfirmSheet` with the item title as the
 /// type-to-confirm phrase — same pattern as the editor's Delete tab.
+/// Whether the admin's per-item menu is drawn, and how (user decision
+/// 2026-10-22): a free admin SEES it, with a lock — it shows the Pro feature
+/// exists, and its tap raises the Pro sheet instead of the menu. Non-admins
+/// never see it (the server stays the authority on admin rights).
+nonisolated enum AdminShortcutPresence: Equatable, Sendable {
+    case hidden, locked, open
+
+    static func resolve(isAdmin: Bool, allowsAdministration: Bool) -> Self {
+        guard isAdmin else { return .hidden }
+        return allowsAdministration ? .open : .locked
+    }
+
+    /// `allows` only asks — drawing the lock never opens the sheet. No access
+    /// object in the environment (previews) reads as open, like every gate site.
+    @MainActor static func resolve(isAdmin: Bool, access: ProFeatureAccess?) -> Self {
+        resolve(isAdmin: isAdmin, allowsAdministration: access?.allows(.administration) ?? true)
+    }
+}
+
 struct AdminItemMenu: View {
     let item: BaseItemDto
     /// Fired on successful delete so callers can pop navigation or remove
@@ -36,6 +55,8 @@ struct AdminItemMenu: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
 
     @State private var showDeleteConfirm = false
     @State private var isRefreshing = false
@@ -46,6 +67,31 @@ struct AdminItemMenu: View {
     }
 
     var body: some View {
+        if AdminShortcutPresence.resolve(isAdmin: true, access: proAccess) == .locked {
+            lockedButton
+        } else {
+            menu
+        }
+    }
+
+    /// The free admin's version: same place, same size, a lock instead of the
+    /// ellipsis; the tap raises the Pro sheet of the administration.
+    private var lockedButton: some View {
+        Button {
+            _ = proAccess?.admit(.administration)
+        } label: {
+            Image(systemName: "lock.fill")
+                .font(.system(size: CinemaScale.pt(14), weight: .semibold))
+                .foregroundStyle(themeManager.accent)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(loc.localized("admin.item.menu"))
+        .accessibilityHint(loc.localized("pro.badge"))
+    }
+
+    private var menu: some View {
         Menu {
             Button {
                 onSelectDestination(.identify)

@@ -114,8 +114,8 @@ struct SearchScreen: View {
         // History is per-server: load the active server's list on appear —
         // which also re-reads it after a wipe from Privacy & Security — and
         // swap it on a server switch.
-        .task(id: appState.activeServerId) {
-            viewModel.loadHistory(forServer: appState.activeServerId)
+        .task(id: appState.activeAccountKey ?? appState.activeServerId) {
+            viewModel.loadHistory(serverId: appState.activeServerId, accountKey: appState.activeAccountKey)
         }
         #if os(iOS)
         .navigationTitle(loc.localized("search.title"))

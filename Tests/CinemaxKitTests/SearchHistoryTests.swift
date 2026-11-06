@@ -213,3 +213,45 @@ struct SearchViewModelHistoryTests {
         #expect(SearchHistoryStore.load(serverId: "A", defaults: defaults).isEmpty)
     }
 }
+
+// MARK: - Per-account history (multi-account)
+
+@MainActor
+@Suite("Historique de recherche par compte")
+struct SearchHistoryPerAccountTests {
+
+    @Test("Le premier compte d'un serveur hérite une fois de la liste du serveur")
+    func firstAccountInheritsServerList() {
+        let defaults = makeDefaults()
+        SearchHistoryStore.save(["dune"], serverId: "S1", defaults: defaults)
+        let vm = SearchViewModel(defaults: defaults)
+
+        vm.loadHistory(serverId: "S1", accountKey: "S1|A")
+        #expect(vm.recentSearches == ["dune"])
+
+        // The second account of the same server starts empty: the server's
+        // list belonged to whoever was signed in before multi-account.
+        vm.loadHistory(serverId: "S1", accountKey: "S1|B")
+        #expect(vm.recentSearches.isEmpty)
+
+        // Clearing A never re-imports the server's list (marker, not emptiness).
+        vm.loadHistory(serverId: "S1", accountKey: "S1|A")
+        vm.clearRecentSearches()
+        vm.loadHistory(serverId: "S1", accountKey: "S1|A")
+        #expect(vm.recentSearches.isEmpty)
+    }
+
+    @Test("Retirer un serveur efface aussi les listes de ses comptes")
+    func clearServerRemovesAccounts() {
+        let defaults = makeDefaults()
+        SearchHistoryStore.save(["a"], serverId: "S1|A", defaults: defaults)
+        SearchHistoryStore.save(["s"], serverId: "S1", defaults: defaults)
+        SearchHistoryStore.save(["other"], serverId: "S2|A", defaults: defaults)
+
+        SearchHistoryStore.clearServer(serverId: "S1", defaults: defaults)
+
+        #expect(SearchHistoryStore.load(serverId: "S1|A", defaults: defaults).isEmpty)
+        #expect(SearchHistoryStore.load(serverId: "S1", defaults: defaults).isEmpty)
+        #expect(SearchHistoryStore.load(serverId: "S2|A", defaults: defaults) == ["other"])
+    }
+}

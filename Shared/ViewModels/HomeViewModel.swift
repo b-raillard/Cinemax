@@ -347,6 +347,7 @@ final class HomeViewModel {
 
     private func clearContent() {
         isShowingSnapshot = false
+        elsewhere = [:]
         heroItem = nil
         resumeItems = []
         latestItems = []
@@ -649,6 +650,9 @@ final class HomeViewModel {
             : ()
         // The season's row: its own slice, nothing to wait for.
         async let seasonRowDone: Void = loadSeasonRow(userId: userId, appState: appState, generation: generation)
+        // « Reprendre ici »: matched against Continue Watching, which phase 1
+        // has just filled. Asks nothing when the Pro gate says no.
+        async let elsewhereDone: Void = refreshElsewhere(using: appState)
 
         // Build prev/next episode navigation for BOTH episode rails — Continue
         // Watching and Next Up. Fetch every referenced season's episode list
@@ -665,7 +669,7 @@ final class HomeViewModel {
         resumeNavigation = buildNavigationMap(for: resumeEpisodes, seasonEpisodes: seasonEpisodes)
         nextUpNavigation = buildNavigationMap(for: nextUpEpisodes, seasonEpisodes: seasonEpisodes)
 
-        _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone, seasonRowDone)
+        _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone, seasonRowDone, elsewhereDone)
 
         guard generation == loadGeneration else { return }
         isFullyLoaded = true
@@ -1160,6 +1164,90 @@ final class HomeViewModel {
     func refreshLiveRow(using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
         await loadActiveSessions(userId: userId, appState: appState, generation: loadGeneration)
+    }
+
+    // MARK: - « Reprendre ici » (spec 2026-10-24)
+
+    /// What this user is watching on ANOTHER of their devices, keyed by item
+    /// id — matched against `resumeItems` by the screen. Empty when the Pro
+    /// gate says no (`allowsElsewhere`), so a free user sees Home unchanged.
+    var elsewhere: [String: ElsewherePlayback] = [:]
+    /// The Pro gate (`ProFeatureAccess.allows(.resumeHere)`), wired by
+    /// `HomeScreen` before the first load. `false` by default so tests and
+    /// previews never reach the entitlement singletons.
+    @ObservationIgnored var allowsElsewhere: @MainActor () -> Bool = { false }
+    /// Sessions just handed off (`sessionId|itemId` → when): the source takes
+    /// a moment to stop and to report it, so without this the pill
+    /// would come back on the next poll for a film already playing here.
+    @ObservationIgnored private var handedOff: [String: Date] = [:]
+    private static let handOffMemory: TimeInterval = 60
+
+    /// One probe through the « Lire sur… » query, at every Home load (pull to
+    /// refresh included), on the screen's 20 s poll, on arriving on Accueil and
+    /// on coming back to the foreground. UNCACHED: the 30 s cache made a pull
+    /// to refresh show a stale answer (user report 2026-10-25), and the request
+    /// is one small JSON while Accueil is on screen. A failure keeps what is
+    /// on screen.
+    func refreshElsewhere(using appState: AppState) async {
+        guard allowsElsewhere(), let userId = appState.currentUserId else {
+            if !elsewhere.isEmpty { elsewhere = [:] }
+            return
+        }
+        let generation = loadGeneration
+        guard let sessions = try? await appState.apiClient.getControllableSessions(userId: userId, cached: false),
+              isCurrent(generation) else { return }
+        let now = Date()
+        handedOff = handedOff.filter { now.timeIntervalSince($0.value) < Self.handOffMemory }
+        let fresh = ElsewherePlayback.resolve(
+            sessions: sessions, currentUserId: userId,
+            excludingDeviceId: KeychainService.getOrCreateDeviceID(), now: now
+        ).filter { handedOff["\($0.value.sessionId)|\($0.key)"] == nil }
+        // Equality-guarded: the poll runs every 20 s and tvOS pulls focus off
+        // a card whose row is invalidated (see `loadActiveSessions`).
+        if fresh != elsewhere { elsewhere = fresh }
+        // The pill rides a « Reprendre » card, and Jellyfin lists a film there
+        // only past 5 % of it: one started elsewhere moments ago had no card
+        // until the next Home load (integration report 2026-10-25, OBS-1).
+        // Re-read that row — only while such a film is missing from it.
+        let resumeIds = Set(resumeItems.compactMap(\.id))
+        if fresh.keys.contains(where: { !resumeIds.contains($0) }) {
+            await refreshResume(using: appState)
+        }
+    }
+
+    /// A playback here has ended: the hand-off memory has done its job (it
+    /// only covers the moments the source takes to stop). Kept, it hid for
+    /// up to 60 s a film taken BACK by the other device — the round trip
+    /// phone → TV → phone left the TV without its pill for ~40 s (user test
+    /// 2026-10-25, YOU-2).
+    func forgetHandOffs() {
+        handedOff = [:]
+    }
+
+    /// The playback is now HERE: tell the source, then stop it. Fire-and-
+    /// forget — a failure is logged, never shown, and never holds the local
+    /// player back (it is already opening). Idempotent per session + item.
+    func handOff(_ entry: ElsewherePlayback, using appState: AppState, message: String) {
+        let key = "\(entry.sessionId)|\(entry.itemId)"
+        guard handedOff[key] == nil else { return }
+        handedOff[key] = Date()
+        elsewhere[entry.itemId] = nil
+        guard entry.canStop else { return }
+        let api = appState.apiClient
+        Task {
+            do {
+                // Never an empty header: Jellyfin then sends its own English
+                // « Message from Server » (bench, 2026-10-24).
+                try await api.sendMessage(sessionId: entry.sessionId, header: "JellyGlass", text: message, timeoutMs: 6000)
+            } catch {
+                logger.warning("Resume here: message to the source failed: \(error.localizedDescription, privacy: .public)")
+            }
+            do {
+                try await api.stopSession(sessionId: entry.sessionId)
+            } catch {
+                logger.warning("Resume here: stopping the source failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     /// Fetches active sessions and filters down to ones with a currently-playing item,

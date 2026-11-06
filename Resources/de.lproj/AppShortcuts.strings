@@ -11,9 +11,10 @@
 "Reprendre ${applicationName}" = "${applicationName} fortsetzen";
 "Continuer à regarder dans ${applicationName}" = "In ${applicationName} weiterschauen";
 
-"Lire ${item} dans ${applicationName}" = "${item} in ${applicationName} abspielen";
-"Regarder ${item} dans ${applicationName}" = "${item} in ${applicationName} ansehen";
-"Lance ${item} sur ${applicationName}" = "Starte ${item} in ${applicationName}";
+"Lis quelque chose dans ${applicationName}" = "Spiele etwas in ${applicationName}";
+"Regarder un film dans ${applicationName}" = "Einen Film in ${applicationName} ansehen";
+"Regarder une série dans ${applicationName}" = "Eine Serie in ${applicationName} ansehen";
+"Lance un film sur ${applicationName}" = "Starte einen Film in ${applicationName}";
 
 "Lire le prochain épisode de ${series} dans ${applicationName}" = "Nächste Folge von ${series} in ${applicationName} abspielen";
 "Épisode suivant de ${series} dans ${applicationName}" = "Nächste Folge von ${series} in ${applicationName}";

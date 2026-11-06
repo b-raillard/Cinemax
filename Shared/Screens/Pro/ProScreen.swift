@@ -1,0 +1,191 @@
+import SwiftUI
+
+/// The texts of the Pro page (design C), listed for `pageKeysExistInEveryLanguage`.
+enum ProScreenText {
+    static let keys = [
+        "pro.compare.eyebrow", "pro.compare.title", "pro.compare.subtitle", "pro.compare.you",
+        "pro.compare.alwaysFree", "pro.compare.included", "pro.compare.notIncluded",
+        "pro.compare.column.accessibility", "pro.list.withPro", "pro.tv.browse", "pro.tv.position",
+        "pro.panel.title.free", "pro.panel.line.free", "pro.price.once", "pro.buy.short", "pro.buy",
+        "pro.perk.noSubscription", "pro.perk.family", "pro.perk.devices",
+        "pro.restore", "pro.terms", "pro.privacy", "pro.tv.legal",
+        "pro.tier.title", "pro.tier.free", "pro.tier.pro", "pro.tier.founder",
+        "pro.card.line.founder", "pro.card.line.pro", "pro.card.since.founder", "pro.card.since.pro"
+    ]
+}
+
+/// « Votre niveau » / « JellyGlass Pro » (stories PRO-01…07, spec R7) — opened
+/// by the chip under the Settings title. Design C (chosen 2026-10-24): « Ce que
+/// Pro ajoute », a Gratuit / Pro table, and a purchase panel — the same three
+/// pieces on iPhone, iPad and Apple TV (`ProComparisonViews.swift`).
+/// « Restaurer les achats » is on screen in every tier (App Review requires it).
+///
+/// iOS: pushed from the Settings landing. tvOS: the body of the `.pro`
+/// settings detail (inside `tvDetailView`'s scroll view and back button),
+/// over the tier's material.
+/// RULE: never shown at launch, never re-offered on its own (spec R9).
+struct ProScreen: View {
+    @Environment(EntitlementStore.self) private var entitlements
+    @Environment(EarlyAdopterService.self) private var earlyAdopter
+    @Environment(ProStore.self) private var proStore
+    @Environment(LocalizationManager.self) private var loc
+    @Environment(ToastCenter.self) private var toasts
+    #if os(tvOS)
+    /// The purchase panel holds focus (Right from a table line, design E).
+    @FocusState private var panelFocused: Bool
+    #else
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
+    /// Apple's standard licensed-application EULA, and the app's privacy page
+    /// (the one App Store Connect lists — `docs/app-store-metadata.md`).
+    static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")
+    static let privacyURL = URL(string: "https://b-raillard.github.io/Cinemax/privacy.html")
+
+    /// `false` when pushed inside the contextual sheet, which hosts the
+    /// result alert itself (one host at a time).
+    var hostsResultAlert = true
+
+    private var tier: ProTier { entitlements.proTier(earlyAdopter: earlyAdopter) }
+
+    var body: some View {
+        if hostsResultAlert {
+            // tvOS: the purchase removes « Débloquer », the button that held
+            // focus, so OK on « Merci ! » left the engine to pick — it chose
+            // the « Réglages » tab (recette 2026-10-26, PRO-01-A). Focus goes
+            // back to the panel (« Restaurer les achats »), one turn later so
+            // the alert's own focus restoration cannot override it.
+            platformBody.proPurchaseResultAlert(onPurchased: {
+                #if os(tvOS)
+                Task { @MainActor in panelFocused = true }
+                #endif
+            })
+        } else {
+            platformBody
+        }
+    }
+
+    @ViewBuilder
+    private var platformBody: some View {
+        #if os(tvOS)
+        tvBody
+        #else
+        iOSBody
+        #endif
+    }
+
+    /// « Membre depuis juin 2026 » (founder: the first App Store install, of
+    /// either app) / « Actif depuis février 2027 » (Pro: the purchase).
+    private var since: String? {
+        let date: Date?
+        let key: String
+        switch tier {
+        case .founder:
+            date = earlyAdopter.transaction?.originalPurchaseDate ?? earlyAdopter.otherPlatformTransaction?.originalPurchaseDate
+            key = "pro.card.since.founder"
+        case .pro:
+            date = (entitlements.localRecord ?? entitlements.cloudRecord)?.purchaseDate
+            key = "pro.card.since.pro"
+        case .free:
+            return nil
+        }
+        guard let date else { return nil }
+        return loc.localized(key, date.formatted(.dateTime.month(.wide).year().locale(loc.locale)))
+    }
+
+    private func restore() {
+        Task {
+            switch await proStore.restore() {
+            case .restored: toasts.success(loc.localized("pro.restore.found"))
+            case .nothingFound: toasts.info(loc.localized("pro.restore.none"))
+            case .failed: toasts.error(loc.localized("pro.restore.failed"))
+            case .cancelled: break
+            }
+        }
+    }
+
+    private func panel(_ metrics: ProPageMetrics) -> some View {
+        ProTierPanel(tier: tier, since: since, metrics: metrics, onRestore: restore)
+    }
+
+    // MARK: - iOS
+
+    #if !os(tvOS)
+    private var isCompact: Bool { horizontalSizeClass != .regular }
+
+    /// The purchase bar of a compact width: a free user, a price to show, and
+    /// no « Demander à acheter » request pending.
+    private var barProduct: ProductSnapshot? {
+        guard isCompact, tier == .free, !proStore.isPending else { return nil }
+        return proStore.product
+    }
+
+    private var iOSBody: some View {
+        let metrics = ProPageMetrics.iOS(compact: isCompact)
+        return ScrollView {
+            // Side by side when both fit (iPad landscape), the panel beside
+            // the heading and the table; stacked otherwise, the table first,
+            // so what the purchase contains is what the user sees. Side by
+            // side, the panel is centred on the column's height: pinned to
+            // the top, it left an empty column under it beside the table
+            // (iPad portrait, user report 2026-10-25).
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 28) {
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                        ProCompareHeading(tier: tier, metrics: metrics)
+                        ProComparisonTable(tier: tier, metrics: metrics)
+                    }
+                    .frame(minWidth: 460, idealWidth: 460, maxWidth: .infinity)
+                    panel(metrics)
+                        .frame(width: 340)
+                }
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+                    ProCompareHeading(tier: tier, metrics: metrics)
+                    ProComparisonTable(tier: tier, metrics: metrics)
+                    panel(metrics)
+                }
+            }
+            .padding(.horizontal, CinemaSpacing.spacing5)
+            .padding(.vertical, CinemaSpacing.spacing4)
+            .frame(maxWidth: 1100)
+            .frame(maxWidth: .infinity)
+        }
+        .background(CinemaColor.surface.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) {
+            if let product = barProduct {
+                ProPurchaseBar(product: product)
+            }
+        }
+        .navigationTitle(loc.localized("pro.tier.title"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+    #endif
+
+    // MARK: - tvOS
+
+    #if os(tvOS)
+    /// The heading and the table, the panel beside them, on one screen
+    /// (design E, 2026-10-25): the table's lines take focus and scroll in
+    /// their window; Down from the back button lands on the first line.
+    private var tvBody: some View {
+        let metrics = ProPageMetrics.tv
+        // The panel starts level with the heading: under the table it ran off
+        // the bottom of the screen.
+        return HStack(alignment: .top, spacing: CinemaTVLayout.proPanelGap) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                ProCompareHeading(tier: tier, metrics: metrics)
+                // Right from a line below the panel's buttons finds nothing in
+                // its beam (a `.focusSection()` on the panel's column did not
+                // catch it, measured 2026-10-25): the line hands focus over.
+                ProComparisonTable(tier: tier, metrics: metrics, onMoveRight: { panelFocused = true })
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            panel(metrics)
+                .frame(width: CinemaTVLayout.proPanelWidth)
+                .focused($panelFocused)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.colorScheme, .dark)
+    }
+    #endif
+}

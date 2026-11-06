@@ -43,6 +43,10 @@ struct SeasonTabButtonStyle: ButtonStyle {
                         accent.opacity(isFocused ? CinemaTVFocus.strokeOpacity : 0),
                         lineWidth: CinemaTVFocus.strokeWidth
                     )
+                    // The selected pill is FILLED with the accent container,
+                    // so a stroke on its edge vanished into it (recette
+                    // 2026-10-26): its ring stands off the pill instead.
+                    .padding(isSelected ? -(CinemaTVFocus.strokeWidth + 3) : 0)
             )
             .animation(motionEnabled ? .easeOut(duration: CinemaTVFocus.rowDuration) : nil, value: isFocused)
     }

@@ -34,8 +34,10 @@ nonisolated struct StoreKitAppTransactionSource: AppTransactionSource {
     }
 }
 
-private extension AppTransactionSnapshot.Environment {
+extension AppTransactionSnapshot.Environment {
     /// A value StoreKit may add later counts as non-production: fail closed.
+    /// Shared with `StoreKitProClient` (a purchase's environment decides
+    /// whether it is mirrored).
     nonisolated init(_ environment: AppStore.Environment) {
         switch environment {
         case .production: self = .production

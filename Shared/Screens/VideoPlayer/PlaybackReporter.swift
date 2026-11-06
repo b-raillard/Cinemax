@@ -54,6 +54,13 @@ final class PlaybackReporter {
     /// that announces tier-2. Cleared per session by `reportStart`.
     private var endedPlaySessionIds: Set<String> = []
     private var tickCounter = 0
+    /// The play / pause state the server last heard (a start says playing).
+    /// `onTick` reports a flip at once: Jellyfin advances a PLAYING session's
+    /// position every second on its own until it hears `IsPaused`, and other
+    /// devices read that position (« Reprendre ici ») — on the 10 s cadence a
+    /// pause reached it up to 10 s late (recette 2026-10-26). `nil` = no
+    /// baseline yet: the first tick records one without reporting.
+    private var lastReportedPaused: Bool?
     /// The last report in flight. Every start / progress / stop is chained
     /// behind it so they reach the server in the order they were raised: as
     /// independent detached tasks, a slow start could land AFTER the stop of
@@ -192,6 +199,7 @@ final class PlaybackReporter {
         engagementCredited = false
         guard let ctx = context() else { return }
         if let id = ctx.info.playSessionId { endedPlaySessionIds.remove(id) }
+        lastReportedPaused = false
         let positionTicks = startTime.map { Self.positionTicks(fromSeconds: $0) } ?? 0
         let client = apiClient
         let itemId = ctx.itemId
@@ -232,6 +240,7 @@ final class PlaybackReporter {
         }
         watchedSeconds = 0
         engagementCredited = false
+        lastReportedPaused = nil
         let positionTicks = Self.positionTicks(fromSeconds: currentState(ctx)?.seconds ?? 0)
         let client = apiClient
         let itemId = ctx.itemId
@@ -289,6 +298,7 @@ final class PlaybackReporter {
     /// AVPlayer is still technically playing audio.
     func reportBackgroundProgress() {
         guard let ctx = context(), let state = currentState(ctx) else { return }
+        lastReportedPaused = true
         let positionTicks = Self.positionTicks(fromSeconds: state.seconds)
         let client = apiClient
         let itemId = ctx.itemId
@@ -340,11 +350,17 @@ final class PlaybackReporter {
     /// ticks (~10 s), and keeps a transcoding session alive every 30 ticks
     /// while paused.
     func onTick() {
-        if let ctx = context(), let state = currentState(ctx), !state.isPaused {
+        let state = context().flatMap { currentState($0) }
+        if let state, !state.isPaused {
             watchedSeconds += 1
         }
+        if let state, lastReportedPaused == nil { lastReportedPaused = state.isPaused }
         tickCounter += 1
-        if tickCounter >= 10 {
+        if let state, state.isPaused != lastReportedPaused {
+            // A play / pause flip: report it now and restart the cadence.
+            tickCounter = 0
+            reportPeriodicProgress()
+        } else if tickCounter >= 10 {
             tickCounter = 0
             reportPeriodicProgress()
         }
@@ -381,6 +397,7 @@ final class PlaybackReporter {
         guard let ctx = context(), let state = currentState(ctx) else { return }
         let positionTicks = Self.positionTicks(fromSeconds: state.seconds)
         let isPaused = state.isPaused
+        lastReportedPaused = isPaused
         let client = apiClient
         let itemId = ctx.itemId
         let info = ctx.info

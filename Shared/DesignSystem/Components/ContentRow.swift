@@ -19,6 +19,9 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
     let title: String
     var showViewAll: Bool = false
     var onViewAll: (() -> Void)? = nil
+    /// tvOS: the « Tout voir » card's shape — the row's artwork (2:3 posters,
+    /// 1:1 playlist covers).
+    var viewAllAspectRatio: CGFloat = 2 / 3
     /// A season row's display face (`SeasonalTypography.titleFont`); `nil` = the headline.
     var titleFont: Font?
     let data: Data
@@ -42,6 +45,15 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
                     ForEach(data, id: id, content: itemView)
+                    #if os(tvOS)
+                    // « Tout voir » closes the row as a poster-shaped card:
+                    // Right from the last card reaches it, however few cards
+                    // the row holds. In the header it was out of reach of a
+                    // row too short to sit under it (user, 2026-10-25).
+                    if showViewAll {
+                        viewAllCard
+                    }
+                    #endif
                 }
                 .padding(.horizontal, horizontalPadding)
                 #if os(tvOS)
@@ -69,6 +81,7 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
 
             Spacer()
 
+            #if !os(tvOS)
             if showViewAll {
                 Button {
                     onViewAll?()
@@ -97,8 +110,37 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
                 .buttonStyle(.plain)
                 #endif
             }
+            #endif
         }
     }
+
+    #if os(tvOS)
+    /// The row's « Tout voir », at the end of the cards and in their shape —
+    /// every row that offers one shows posters (`CinemaTVLayout.posterCardWidth`).
+    private var viewAllCard: some View {
+        Button {
+            onViewAll?()
+        } label: {
+            VStack(spacing: CinemaSpacing.spacing2) {
+                Image(systemName: "chevron.right.circle")
+                    .font(.system(size: CinemaScale.pt(30), weight: .regular))
+                Text(loc.localized("action.viewAll"))
+                    .font(CinemaFont.label(.large))
+                    .multilineTextAlignment(.center)
+            }
+            .foregroundStyle(themeManager.accent)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .aspectRatio(viewAllAspectRatio, contentMode: .fit)
+            .background(CinemaColor.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: CinemaRadius.large))
+            .cinemaFocus()
+        }
+        .buttonStyle(CinemaTVCardButtonStyle())
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .frame(width: CinemaTVLayout.posterCardWidth)
+        .accessibilityLabel(loc.localized("action.viewAll"))
+    }
+    #endif
 
     /// A rail is one page element among others, so its header and its first
     /// card must line up with the hero title, the grid and the top bar above
@@ -129,6 +171,7 @@ extension ContentRow where Header == EmptyView {
         title: String,
         showViewAll: Bool = false,
         onViewAll: (() -> Void)? = nil,
+        viewAllAspectRatio: CGFloat = 2 / 3,
         titleFont: Font? = nil,
         data: Data,
         id: KeyPath<Data.Element, ItemID>,
@@ -137,6 +180,7 @@ extension ContentRow where Header == EmptyView {
         self.title = title
         self.showViewAll = showViewAll
         self.onViewAll = onViewAll
+        self.viewAllAspectRatio = viewAllAspectRatio
         self.titleFont = titleFont
         self.data = data
         self.id = id

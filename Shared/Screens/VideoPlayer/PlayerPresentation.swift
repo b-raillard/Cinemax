@@ -15,17 +15,41 @@ enum PlayerPresentation {
     /// where every touch outside the toast falls through: a player nobody can
     /// operate. That window is skipped here, and refuses to become key anyway.
     static func topMostViewController() -> UIViewController? {
+        guard let root = mainRootViewController() else { return nil }
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+        return top
+    }
+
+    /// Whether UIKit will accept a presentation from `presenter`: its view must
+    /// be in a window (a popover on its way out is not). A presentation
+    /// requested during another transition is DEFERRED by UIKit, not refused,
+    /// so this is asked BEFORE presenting, never judged after.
+    static func canPresent(from presenter: UIViewController) -> Bool {
+        presenter.viewIfLoaded?.window != nil && !presenter.isBeingDismissed
+    }
+
+    /// Closes whatever is presented over the main window — a sheet, a cover,
+    /// a popover, a player — then runs `then`. For a request to open a title
+    /// NOW (« Lire sur… » from another device, a widget, Siri): with the
+    /// account switcher open, the fiche's sheet was refused, the player too,
+    /// and nothing appeared (recette 2026-10-27, NEW-1). Runs `then` at once
+    /// when nothing is presented.
+    static func dismissPresentations(then: @escaping @MainActor () -> Void) {
+        guard let root = mainRootViewController(), root.presentedViewController != nil else {
+            then()
+            return
+        }
+        root.dismiss(animated: false) { then() }
+    }
+
+    private static func mainRootViewController() -> UIViewController? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else {
             return nil
         }
         let windows = scene.windows.filter { !($0 is ToastPassthroughWindow) }
-        guard let root = (windows.first(where: \.isKeyWindow) ?? windows.first)?.rootViewController else {
-            return nil
-        }
-        var top = root
-        while let presented = top.presentedViewController { top = presented }
-        return top
+        return (windows.first(where: \.isKeyWindow) ?? windows.first)?.rootViewController
     }
 
     /// Hands back the server resources of a `PlaybackInfo` that will never get

@@ -4,7 +4,7 @@ import OSLog
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Diagnostics")
 
-/// Settings → Lecture → Débogage (iOS): export this launch's last 30 minutes of
+/// Settings → Debug (iOS): export this launch's last 30 minutes of
 /// `com.cinemax` log plus the stored MetricKit payloads as one `.txt`, and show
 /// how many MetricKit reports the device holds.
 ///

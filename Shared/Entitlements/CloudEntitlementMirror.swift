@@ -29,6 +29,13 @@ final class CloudEntitlementMirror {
         store.synchronize()
     }
 
+    /// Drops the record. Only `EntitlementStore.revokeOwnPurchase` calls it,
+    /// and only for a record THIS app wrote (spec R4).
+    func remove() {
+        store.set(nil, forKey: Self.key)
+        store.synchronize()
+    }
+
     /// Called at launch (`EntitlementStore.init`) and on every return to the
     /// foreground (`EntitlementStore.refresh()`, from `AppNavigation`).
     @discardableResult

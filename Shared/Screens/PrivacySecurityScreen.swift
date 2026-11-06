@@ -761,7 +761,7 @@ struct PrivacySecurityScreen: View {
 // MARK: - Age option
 
 /// Selectable caps for the Parental Controls picker. Order matches the menu.
-private enum ParentalAgeOption: Int, CaseIterable, Identifiable {
+enum ParentalAgeOption: Int, CaseIterable, Identifiable {
     case all  = 0
     case age10 = 10
     case age12 = 12

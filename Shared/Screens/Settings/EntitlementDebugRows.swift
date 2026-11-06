@@ -68,6 +68,28 @@ private func earlyAdopterFacts(_ transaction: AppTransactionSnapshot, loc: Local
     return loc.localized("settings.debug.earlyAdopter.facts", transaction.originalAppVersion, date, environment)
 }
 
+/// « Automatique (Fondateur) » / « Gratuit » / « Pro » / « Fondateur » — the
+/// « Palier simulé » Debug row's value: the forced tier, or the real one in
+/// parentheses while nothing is forced.
+@MainActor
+func proTierText(_ entitlements: EntitlementStore, earlyAdopter: EarlyAdopterService, loc: LocalizationManager) -> String {
+    let tier = entitlements.proTier(earlyAdopter: earlyAdopter)
+    let tierText = switch tier {
+    case .free: loc.localized("settings.debug.proTier.free")
+    case .pro: loc.localized("settings.debug.proTier.pro")
+    case .founder: loc.localized("settings.debug.proTier.founder")
+    }
+    #if DEBUG || PRO_PREVIEW
+    if entitlements.proTierOverride == .automatic {
+        return loc.localized("settings.debug.proTier.automatic", tierText)
+    }
+    if entitlements.proTierOverride == .launched {
+        return loc.localized("settings.debug.proTier.launched", tierText)
+    }
+    #endif
+    return tierText
+}
+
 /// The « Early adopter » row's press. DEBUG: cycles the override (automatic →
 /// early adopter → regular). Release: asks the App Store again — a tap is the
 /// user-triggered path `AppTransaction` is allowed on.
@@ -81,11 +103,11 @@ func earlyAdopterRowAction(_ service: EarlyAdopterService) {
 }
 
 #if os(iOS)
-/// Settings → Lecture → Débogage (iOS): the read-only « Droits » row, the
+/// Settings → Debug (iOS): the read-only « Droits » row, the
 /// « Simuler Pro » switch in DEBUG builds, then the « Early adopter » row.
 ///
 /// A standalone `View` with its own `@Environment`, like `DiagnosticsExportRows`:
-/// the Playback page is pushed through `navigationDestination`, where only a
+/// the Debug page is pushed through `navigationDestination`, where only a
 /// standalone view re-renders on an `@Observable` change (root iOS
 /// `NavigationStack` RULE) — the switch would otherwise look dead.
 struct EntitlementDebugRows: View {
@@ -118,8 +140,40 @@ struct EntitlementDebugRows: View {
             #endif
             iOSSettingsDivider
             earlyAdopterRow
+            #if DEBUG || PRO_PREVIEW
+            iOSSettingsDivider
+            proTierRow
+            #endif
         }
     }
+
+    #if DEBUG || PRO_PREVIEW
+    /// Free / Pro / founder, forced — what the Pro features (multi-account)
+    /// see. A press cycles automatic → free → Pro → founder.
+    private var proTierRow: some View {
+        Button {
+            entitlements.setProTierOverride(entitlements.proTierOverride.next)
+        } label: {
+            iOSSettingsRow {
+                SettingsRowAdaptiveLayout {
+                    HStack {
+                        iOSRowIcon(systemName: "person.2.badge.key", color: .orange)
+                        Text(loc.localized("settings.debug.proTier"))
+                            .font(CinemaFont.dynamicLabel(.large))
+                            .foregroundStyle(CinemaColor.onSurface)
+                    }
+                } control: {
+                    Text(proTierText(entitlements, earlyAdopter: earlyAdopter, loc: loc))
+                        .font(CinemaFont.dynamicLabel(.medium))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .multilineTextAlignment(dynamicTypeSize.isAccessibilitySize ? .leading : .trailing)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+    }
+    #endif
 
     private var earlyAdopterRow: some View {
         Button {
