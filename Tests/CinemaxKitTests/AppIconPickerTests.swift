@@ -190,16 +190,24 @@ struct AppIconPickerTests {
     }
 
     /// The test host IS the app: its built Info.plist must declare every
-    /// alternate (`ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` in
-    /// `project.yml`), or `setAlternateIconName` fails at run time; and each
-    /// thumbnail must be in the bundle.
+    /// alternate (iOS: `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`, tvOS:
+    /// the hand-written `CFBundleIcons` array in `project.yml`), or
+    /// `setAlternateIconName` fails at run time; and each thumbnail must be in
+    /// the bundle. On tvOS the key must be an ARRAY: the dictionary form is
+    /// rejected by App Store Connect (ITMS-90471, 2026-11-06).
     @Test("Le bundle déclare chaque icône alternative et embarque chaque aperçu")
     func bundleWiring() {
         let icons = Bundle.main.object(forInfoDictionaryKey: "CFBundleIcons") as? [String: Any]
-        let alternates = icons?["CFBundleAlternateIcons"] as? [String: Any] ?? [:]
+        let declared = icons?["CFBundleAlternateIcons"]
+        #if os(tvOS)
+        let alternates = Set(declared as? [String] ?? [])
+        #expect(declared is [String], "tvOS : CFBundleAlternateIcons doit être un tableau (ITMS-90471)")
+        #else
+        let alternates = Set((declared as? [String: Any])?.keys.map { $0 } ?? [])
+        #endif
         for choice in AppIconCatalogue.choices {
             if let name = choice.alternateName {
-                #expect(alternates[name] != nil, "\(name) absent de CFBundleAlternateIcons")
+                #expect(alternates.contains(name), "\(name) absent de CFBundleAlternateIcons")
             }
             #expect(UIImage(named: choice.previewImage) != nil, "\(choice.previewImage)")
         }
