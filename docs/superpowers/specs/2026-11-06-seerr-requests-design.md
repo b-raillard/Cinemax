@@ -49,7 +49,7 @@ The household's server runs Seerr next to Jellyfin. Today, wanting a title that 
 - An owned item that moves or reflows when Seerr's answer arrives — which is why **every** Seerr-only element (cards, counts, action buttons, prompts) sits after the owned content it relates to, never above it.
 - Seerr content reaching an age-capped account.
 - Seerr branding on browse surfaces; an error banner or empty « Pas encore dans ta bibliothèque » row when Seerr is down.
-- The Jellyfin access token or password ever sent to Seerr.
+- JellyGlass sending the Jellyfin access token or password to Seerr. (Seerr does end up with its OWN Jellyfin session for the user — that is what Quick Connect login is, exactly as on Seerr's web page — see *Trust*.)
 - The Seerr API key stored on the Jellyfin server, synced, or readable by a non-admin.
 - A title shown as « Pas encore dans ta bibliothèque » while it is in the library row just above.
 
@@ -106,7 +106,7 @@ Stock Jellyfin has no place that is admin-writable, readable by the target user 
 
 - Stored in each user's **DisplayPreferences** under a dedicated id and client — `displayPreferencesId` `jellyglass-seerr`, `client` `jellyglass` (≤ 32 chars) — never jellyfin-web's ids (`usersettings` / `emby`). `CustomPrefs`: `seerr.enabled` = `"true"`, `seerr.url` = the address. Nothing secret.
 - An admin may write another user's prefs (`?userId=`, enforced by `RequestHelpers.GetUserId`, same on 10.10 / 10.11 / master). **POST is a full replace** of that (user, id, client): always read-modify-write.
-- « Activer pour tous » = `GET /Users` then one write per user. Changing the address rewrites every enabled user. No server-wide default.
+- « Activer pour tous » = `GET /Users` then one write per user. Changing the address rewrites every enabled user. No server-wide default. The admin's own prefs keep `seerr.url` whatever their flag, so « Tout désactiver » does not lose the address.
 - A non-admin can write their own prefs, i.e. flip their own `seerr.enabled`. Accepted: that only shows the UI; nothing can be requested without a Seerr identity that Seerr itself authorizes.
 - Read at login, account switch, session restore and return to the foreground (next to `AppState.refreshCurrentUser`). No socket event exists for it.
 
@@ -119,30 +119,32 @@ Seerr ≥ 3.4 offers Jellyfin Quick Connect login, and JellyGlass can already ap
 3. Poll `GET /auth/jellyfin/quickconnect/check?secret=` until `authenticated`.
 4. `POST /auth/jellyfin/quickconnect/authenticate {secret}` → Seerr session cookie `connect.sid` (30 days) + the Seerr `User`.
 
-The cookie is stored in the Keychain per **(server, Jellyfin user)** (`ServerRegistry.accountKey(serverId:userId:)`, a new account added to `privateAccounts`) — 2.5.0 ships several accounts per device. On 401 the flow re-runs once silently (the user is still signed in to Jellyfin); if that fails, the « Se connecter à Seerr » state returns. « Se déconnecter » = `POST /auth/logout` + delete the cookie.
+The cookies are stored as **one** non-synchronizable Keychain JSON item (`seerr_sessions`, the `trusted_certificates` pattern — `privateAccounts` is a static migration list, not a per-key registry), keyed by `ServerRegistry.accountKey(serverId:userId:)` — 2.5.0 ships several accounts per device. On 401 the flow re-runs once silently (the user is still signed in to Jellyfin), only against the configured `seerr.url`; if that fails, the « Se connecter à Seerr » state returns.
 
-**The admin's own Seerr identity.** In account mode, « Tester la connexion » ends by signing the admin in (the same one-tap flow), because the Configuration page needs an identity: the per-user lines (« Compte Seerr lié… ») come from `GET /user/jellyfin/{id}` under the admin's Seerr session. Side effects, stated under the button: Seerr may create the admin's account, and Jellyfin shows a new « Seerr » device session. If the admin's Seerr account cannot list users (the spike measures which permission that route needs), the lines read « Statut Seerr indisponible : ton compte Seerr n'a pas le droit de voir les utilisateurs » and the switches still work.
+**Trust.** Approving a code mints a Jellyfin session for whoever holds the matching secret: Seerr keeps it (`user.jellyfinAuthToken`, `server/routes/auth.ts`). JellyGlass therefore trusts the configured Seerr address exactly as it trusts the Jellyfin server — the admin chose it. Jellyfin can refuse the approval (`SessionManager.AuthenticateNewSessionInternal`: the user's device restriction `CanAccessDevice`, or `MaxActiveSessions` reached); each refusal has its own message below. « Se déconnecter » = `POST /auth/logout` + delete the cookie.
 
-Preconditions, all checked by « Tester la connexion »: Jellyfin Quick Connect enabled (`GET /QuickConnect/Enabled`); Seerr `mediaServerLogin` true and `mediaServerType` Jellyfin (`/settings/public`); a user unknown to Seerr is auto-created only if Seerr's `newPlexLogin` is true (it governs Jellyfin too, despite the name) — otherwise 403, reported per user in the admin list.
+**The admin's own Seerr identity.** In account mode, « Tester la connexion » ends by signing the admin in (the same one-tap flow), because the Configuration page needs an identity: the per-user lines (« Compte Seerr lié… ») come from `GET /user/jellyfin/{id}`, which any signed-in Seerr account may call (`isAuthenticated()` only; the filtered user keeps `id`, `permissions`, `jellyfinUserId`). Side effects, stated under the button: Seerr may create the admin's account, and Jellyfin shows a new « Seerr » device session. A Jellyfin admin auto-created in Seerr gets Seerr's `defaultPermissions`, usually without `MANAGE_REQUESTS`: the test result then says « Ton compte Seerr ne peut pas valider les demandes : donne-lui le droit « Gérer les demandes » dans Seerr. »
+
+Preconditions, all checked by « Tester la connexion »: Jellyfin Quick Connect enabled (`GET /QuickConnect/Enabled`); Seerr `mediaServerType` = Jellyfin (`2`, `/settings/public`) — the Quick Connect routes check that and NOT `mediaServerLogin`, which gates only the password route; a user unknown to Seerr is auto-created only if Seerr's `newPlexLogin` is true (it governs Jellyfin too, despite the name) — otherwise 403, reported per user in the admin list.
 
 ### API-key mode — a per-DEVICE override
 
-There is no server-wide "mode": the key is typed by a Jellyfin admin on a given device (iPhone, iPad or Apple TV) and stays in that device's Keychain, per server. When a key is present on the device, every enabled profile on that device uses it: `X-Api-Key` + `X-API-User: <seerrUserId>`, the Seerr user resolved per active Jellyfin user through `GET /api/v1/user/jellyfin/{jellyfinUserId}` (Seerr ≥ 3.3). No Seerr user for that Jellyfin user ⇒ that profile is "not linked", with the message below. Requests then carry that user's permissions and quota (Seerr re-runs every check as `X-API-User`). The key never leaves the device.
+There is no server-wide "mode": the key is typed by a Jellyfin admin on a given device (iPhone, iPad or Apple TV) and stays in that device's Keychain, per server. When a key is present on the device, every enabled profile on that device uses it: `X-Api-Key` + `X-API-User: <seerrUserId>`. **Fail closed**: without `X-API-User` Seerr acts as user 1, its admin (`server/middleware/auth.ts`), so every call except `/status`, `/settings/public` and `/user/jellyfin/{id}` carries it, and the client cannot build a request or mutation without a resolved id (by type, not by convention). The Seerr user is resolved per active Jellyfin user through `GET /api/v1/user/jellyfin/{jellyfinUserId}` (Seerr ≥ 3.3). No Seerr user for that Jellyfin user ⇒ that profile is "not linked", with the message below. Requests then carry that user's permissions and quota (Seerr re-runs every check as `X-API-User`). The key never leaves the device.
 
 ## Seerr facts the build relies on (source-checked 2026-11-06)
 
-- One call per screen: `GET /search?query=` (`mediaType` movie/tv/person/collection, `id` = TMDb, `mediaInfo?`), `GET /tv/{tmdbId}` (`mediaInfo.seasons[].status` — only the detail route carries seasons, list routes don't), `GET /collection/{tmdbCollectionId}` (`parts[]` with `mediaInfo`), `GET /person/{tmdbPersonId}/combined_credits`. Lookup prefixes in search: `tmdb:`, `tvdb:`, `imdb:`.
+- One call per screen: `GET /search?query=` (`mediaType` movie/tv/person/collection, `id` = TMDb, `mediaInfo?`), `GET /tv/{tmdbId}` (TMDb `seasons[]` + `mediaInfo.seasons[].status`), `GET /collection/{tmdbCollectionId}` (`parts[]` with `mediaInfo`), `GET /person/{tmdbPersonId}/combined_credits`. Lookup prefixes in search: `tmdb:`, `tvdb:`, `imdb:`. **Language goes in the `language=` query parameter** of those four routes (`req.query.language ?? req.locale`), not in `Accept-Language`.
 - `POST /request {mediaType, mediaId, seasons?: [n] | "all"}` → 201; 403 permission/quota/blocklist; 409 duplicate; **202 = "no seasons available", a failure**. `partialRequestsEnabled` false ⇒ send every missing season.
 - `GET /request?take&skip&filter&sort=modified&requestedBy=` (users without `MANAGE_REQUESTS`/`REQUEST_VIEW` are forced to their own); `POST /request/{id}/approve|decline` (`MANAGE_REQUESTS`, 409 if not pending); `GET /request/count`.
 - `GET /auth/me` → `permissions` bitmask (`ADMIN` 2 passes everything; `MANAGE_REQUESTS` 16, `REQUEST` 32, `AUTO_APPROVE` 128, `REQUEST_MOVIE` 262144, `REQUEST_TV` 524288 …).
 - Enums — **code, not the YAML spec** (they disagree): `MediaStatus` 1 unknown, 2 pending, 3 processing, 4 partially available, 5 available, 6 blocklisted (« blacklisted » ≤ 2.7), 7 deleted; `MediaRequestStatus` 1 pending, 2 approved, 3 declined, 4 failed, 5 completed.
 - Unauthenticated probes: `GET /status` (`version`), `GET /settings/public` (`mediaServerType`, `mediaServerLogin`, `newPlexLogin`, `jellyfinServerName`, `partialRequestsEnabled`, `enableSpecialEpisodes`, …).
-- Images: TMDb paths, `https://image.tmdb.org/t/p/w300{path}` — irrelevant to the dashed look, used only in the request sheet and Mes demandes. `/imageproxy/tmdb/t/p/{size}{path}` exists when `cacheImages` is on.
-- Traps: when Seerr's CSRF protection is on, every non-GET needs the `XSRF-TOKEN` cookie echoed in `X-XSRF-TOKEN`, API key included, HTTPS only; `express-openapi-validator` may 400 on query parameters not in the spec — send only listed ones; error bodies are `{message}` or `{error}`.
+- Images: TMDb paths, `https://image.tmdb.org/t/p/w300{path}` — irrelevant to the dashed look, used only in the request sheet and Mes demandes. When `cacheImages` is on, use Seerr's unauthenticated `/imageproxy/tmdb/t/p/{size}{path}` instead (no device → TMDb traffic).
+- Traps: when Seerr's CSRF protection is on, every non-GET needs the `XSRF-TOKEN` cookie echoed in `X-XSRF-TOKEN`, API key included, and those cookies are `secure` — over plain HTTP every mutation is blocked; `express-openapi-validator` may 400 on query parameters not in the spec — send only listed ones; error bodies are `{message}` or `{error}`.
 
 ## Who is "in the library"
 
-**Jellyfin wins.** A Seerr result is dropped from the missing set when Jellyfin has it, matched by TMDb id (`ProviderIds["Tmdb"]`); Seerr's `mediaInfo.status` ≥ 4 drops it too (TVDB/IMDb-only items). Seasons: missing = TMDb season numbers − the season `IndexNumber`s the fiche already loaded. Seerr status then only decides the badge of what is missing (none ⇒ « Demander », pending ⇒ « En attente », approved/processing ⇒ « En préparation », declined ⇒ « Refusée »). This needs `ProviderIds` on three queries that lack it today — the search results, the BoxSet members, the person's items — requested **only when the feature is visible**. The fiche's `getItem` already returns them.
+**Jellyfin wins.** A Seerr result is dropped from the missing set when Jellyfin has it, matched by TMDb id (`ProviderIds["Tmdb"]`); Seerr's `mediaInfo.status` ∈ {4 partially available, 5 available, 6 blocklisted} drops it too (TVDB/IMDb-only items) — never 7 « deleted », which is precisely a missing title. Seasons: missing = TMDb season numbers − the season `IndexNumber`s the fiche already loaded. Seerr status then only decides the badge of what is missing (none ⇒ « Demander », pending ⇒ « En attente », approved/processing ⇒ « En préparation », declined ⇒ « Refusée »). This needs `ProviderIds` on three queries that lack it today — the search results, the BoxSet members, the person's items — requested **only when the feature is visible**. The fiche's `getItem` already returns them.
 
 ## Test connection — order and messages (FR, explicit: what + how to fix)
 
@@ -155,8 +157,9 @@ Run in this order, stop at the first error; success lists what was verified (« 
 | Version < 3.4 | « Seerr <v> est trop ancien. » JellyGlass a besoin de Seerr 3.4 ou plus récent. Mets Seerr à jour. |
 | Not Jellyfin-backed | « Ce Seerr n'est pas relié à Jellyfin. » |
 | Other Jellyfin (`jellyfinServerName` ≠ this server's name) | **Warning, not blocking**: « Ce Seerr semble relié à un autre serveur Jellyfin (« X »). Les demandes arriveraient sur ce serveur-là. » |
-| `mediaServerLogin` off (account mode) | « Seerr refuse les comptes Jellyfin. » Active-la dans Seerr → Réglages → Utilisateurs → « Connexion Jellyfin ». |
 | Jellyfin Quick Connect off (account mode) | « La connexion en un geste est désactivée sur ton serveur Jellyfin. » Active Quick Connect dans Jellyfin → Tableau de bord → Général. |
+| Jellyfin refuses the approval (device restriction) | « Ton compte Jellyfin n'est pas autorisé sur un nouvel appareil. » Dans Jellyfin → Utilisateurs → <toi> → Accès, autorise tous les appareils, ou ajoute « Seerr ». |
+| Jellyfin refuses the approval (session limit) | « Ton compte Jellyfin a atteint son nombre maximal de sessions. » Déconnecte un appareil dans Réglages → Confidentialité → Appareils connectés, ou augmente la limite dans Jellyfin. |
 | Key refused (key mode) | « Seerr refuse cette clé d'API. » Elle a peut-être été régénérée. Copie-la de nouveau depuis Seerr → Réglages → Général → Clé d'API. |
 | No Seerr user for this Jellyfin user | « Ton compte n'existe pas dans Seerr. » Ajoute-le dans Seerr → Utilisateurs, ou active la création automatique des comptes. |
 | CSRF blocks the request | « Seerr bloque les demandes venant d'une app. » La protection CSRF est activée dans Seerr → Réglages → Réseau : désactive-la. (No degraded read-only mode — see calls.) |
@@ -166,8 +169,13 @@ The same messages are reused wherever a request fails for that reason. Elsewhere
 ## Constraints
 
 - Pro gate: a new `ProFeatureID` case (`ProFeatureGate.allows` is an exhaustive switch) + its `ProFeatureCatalogue` entry (it appears on the Pro page). After the paid launch a free user sees **nothing on the browse surfaces and makes no Seerr call** (the « Reprendre ici » precedent: the gate sits before any fetch); Settings → Demandes stays visible with a lock → `ProUpsellSheet` (the 2026-10-22 gate-site pattern). Requesting never touches playback.
-- Settings category lives under `Shared/Screens/Settings/`, **not** `Shared/Screens/Admin/` (all `#if os(iOS)`); it must not be `isAdminOnly` (that drops it on tvOS) — admin-only rows are gated inside the page.
-- New CinemaxKit client with its own ephemeral `URLSession` (`urlCache = nil`, no shared `HTTPCookieStorage` — the cookie is set by hand from the Keychain). Never route Seerr through the Jellyfin SDK client. `Accept-Language` from the app language (Seerr localizes titles/overviews).
+- Settings category lives under `Shared/Screens/Settings/`, **not** `Shared/Screens/Admin/` (all `#if os(iOS)`); it must not be `isAdminOnly` (that drops it on tvOS) — admin-only rows are gated inside the page. `SettingsCategory.visibleCases` gains the « enabled / admin » input it needs, and its comment saying tvOS never renders admin entries (`SettingsScreen.swift` ~L101, `SettingsScreen+tvOS.swift` passes `isAdmin: false`) is revised: this category's admin rows are a deliberate exception.
+- New CinemaxKit client with its own ephemeral `URLSession` (`urlCache = nil`, no shared `HTTPCookieStorage` — the cookie is set by hand from the Keychain). Never route Seerr through the Jellyfin SDK client. App language sent as `language=` (see Seerr facts).
+- **URLs**: every Seerr URL goes through `setEndpointPath(_:preservingBasePathOf:)` (root RULE — Seerr behind `https://host/seerr` must work); the typed address is normalized like `ServerURLNormalizer` (scheme, trailing slash, a pasted `/api/v1` stripped).
+- **Secrets never logged**: the Seerr client logs no headers, cookies or Quick Connect secret; lot 1 adds `X-Api-Key:`, `connect.sid=` and `secret=` to `LogScrubber.tokenMarkers` so an exported diagnostic cannot carry them.
+- **Stale answers**: every Seerr task is keyed by (server, Jellyfin user) and generation-guarded like the screens' existing loads (`MediaDetailViewModel.loadGeneration`, `SearchViewModel`'s cancel, `AppState.switchAccount`); age cap, Pro and `seerr.enabled` are re-read at render, not only before the fetch — a late answer must never paint on the next profile's screen (a child's, typically).
+- **Offline / slow**: `NetworkMonitor.isOnline` false ⇒ no call and no skeleton; a skeleton has a deadline (builder: a few seconds) after which it silently disappears; tvOS skeletons are not focusable.
+- **Siri / widgets / Top Shelf**: untouched — Seerr matching stays out of `LibrarySearchRanker` (shared with `MediaItemQuery`).
 - ATS: plain HTTP only on the local network (`NSAllowsLocalNetworking`), like Jellyfin; a public Seerr must be HTTPS.
 - Every new `ServerEntry` field optional (else the registry decodes as `[]`); Seerr data goes in its own Keychain accounts / DisplayPreferences, not `ServerEntry`, unless the builder needs a local cache.
 - Localization FR / EN / DE; counts through `loc.counted`. tvOS: no text entry except the admin's address and key fields.
@@ -176,8 +184,8 @@ The same messages are reused wherever a request fails for that reason. Elsewhere
 
 ## Delivery
 
-0. **Spike (throwaway, before lot 1)** against a local Seerr 3.4+ in Docker linked to the bench Jellyfin (`jf-bench`), never the household's real accounts: Quick Connect self-approval end to end; CSRF on/off with an API key and with a cookie; `X-API-User` attribution; `/user/jellyfin/{id}` and the permission it needs. Findings feed back into this document before lot 1. **The spike is a gate**: if account mode cannot sign a user in without typing, lots 1–3 are not planned and the product owner decides (key-only v1, a password form after all, or stop).
-1. **Lot 1 — base**: CinemaxKit Seerr client + models + pure policies; Settings → Demandes (configuration, test, per-user switches, device key, connect / disconnect); DisplayPreferences read/write; the search section; the Pro feature id.
+0. **Spike (throwaway, before lot 1)** against a local Seerr 3.4+ in Docker linked to the bench Jellyfin (`jf-bench`), never the household's real accounts: Quick Connect self-approval end to end; CSRF on/off with an API key and with a cookie; `X-API-User` attribution; `/user/jellyfin/{id}` (confirm: any signed-in account); Quick Connect login with `mediaServerLogin` OFF; CSRF on over plain HTTP; Jellyfin's device-restriction and session-limit refusals; the `defaultPermissions` of an auto-created admin. Findings feed back into this document before lot 1. **The spike is a gate**: if account mode cannot sign a user in without typing, lots 1–3 are not planned and the product owner decides (key-only v1, a password form after all, or stop).
+1. **Lot 1 — base**, possibly split by the plan: **1a** CinemaxKit Seerr client + models + pure policies + Settings → Demandes (configuration, test, per-user switches, device key, connect / disconnect) + DisplayPreferences read/write + the Pro feature id + LogScrubber markers; **1b** the search section.
 2. **Lot 2 — fiches**: series seasons, saga (BoxSet fiche + movie collection row), actor page.
 3. **Lot 3 — follow-up**: Mes demandes, À valider, the arrival message.
 
@@ -206,6 +214,7 @@ Type and file names; caching (in-memory per (server, user), short TTL, invalidat
 15. « Tester la connexion » in account mode **signs the admin in**, with its side effects stated.
 16. **Free user after the paid launch**: nothing on browse surfaces, no Seerr call; locked Settings category.
 17. **Age cap** = the app's `privacy.maxContentAge` on the device OR the Jellyfin `MaxParentalRating` policy.
+18. **Silent re-sign-in after the 30-day Seerr session expires** (one retry, configured address only). The reviewer suggested making it a visible tap each time, since each approval mints a Jellyfin session for Seerr; I kept it silent because the first approval already trusts that address and a monthly prompt is friction. Your call if you prefer the visible tap.
 
 ## References
 
