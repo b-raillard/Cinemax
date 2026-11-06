@@ -23,6 +23,8 @@ The household's server runs Seerr next to Jellyfin. Today, wanting a title that 
 | Where « Mes demandes » lives | A **new Settings category « Demandes »** — not under Compte, not a tab. |
 | Apple TV | The feature AND its configuration work on Apple TV. |
 | Tier | Pro (decided 2026-10-01). Open to everyone while everyone is a founder. |
+| Age-capped accounts | **Never see anything from Seerr** (Seerr results carry no reliable certification). Accepted cost: a child cannot request on their own. |
+| Missing seasons on iPhone / iPad | The season **Menu keeps the owned seasons only**; the missing seasons are a row « Pas encore dans ta bibliothèque » of dashed season cards **after the episode list**. (Apple TV: dashed pills appended after the owned pills.) |
 
 ## Goals
 
@@ -44,7 +46,8 @@ The household's server runs Seerr next to Jellyfin. Today, wanting a title that 
 ## Anti-goals (would be a failure even if it works)
 
 - A screen that waits for Seerr before showing Jellyfin content.
-- An owned item that moves or reflows when Seerr's answer arrives.
+- An owned item that moves or reflows when Seerr's answer arrives — which is why **every** Seerr-only element (cards, counts, action buttons, prompts) sits after the owned content it relates to, never above it.
+- Seerr content reaching an age-capped account.
 - Seerr branding on browse surfaces; an error banner or empty « Pas encore dans ta bibliothèque » row when Seerr is down.
 - The Jellyfin access token or password ever sent to Seerr.
 - The Seerr API key stored on the Jellyfin server, synced, or readable by a non-admin.
@@ -60,15 +63,22 @@ A user who is enabled but not yet connected to Seerr (account mode) sees, in pla
 
 ### Series fiche
 
-Seasons Seerr knows (TMDb) but Jellyfin does not have are appended **after** the owned seasons in the season selector, as dashed chips with a « + » (or their request state). Skeleton chips while loading. When at least one season is requestable, a card under the selector: « Il te manque N saisons · Saisons 4, 5, 6 » + « Demander ». A missing chip or that button opens the season picker: the missing seasons, pre-checked (the tapped one only, when opened from a chip), « Demander N saisons ». A series with no missing season looks exactly like today. Season 0 (specials) is never offered unless Seerr's `enableSpecialEpisodes` is on.
+Missing seasons = seasons Seerr knows (TMDb) that Jellyfin does not have. A series with none looks exactly like today. Season 0 (specials) is never offered unless Seerr's `enableSpecialEpisodes` is on.
+
+- **iPhone / iPad**: the season `Menu` (`MediaDetailScreen.seasonsSection`) is unchanged and lists the owned seasons only. **After the episode list**, a row « Pas encore dans ta bibliothèque » of dashed season cards (« Saison 4 », « + » or the request state); its header carries « Demander les N ». Skeleton cards in that row while loading. A card opens the season picker with that season checked; the header action opens it with every requestable season checked; « Demander N saisons ». A one-season series (no Menu today) gets the same row.
+- **Apple TV**: when the pill row exists (≥ 2 owned seasons), the missing seasons are dashed pills **appended after** the owned pills (skeleton pills while loading); with one owned season (no pill row today), they take the iPhone's row after the episodes instead, so nothing appears above the episodes. Selecting a missing pill or card opens a confirmation: « Demander la saison 4 », « Demander les saisons 4 à 6 » (when several), « Annuler » — no checkbox list, no typing.
 
 ### Saga
 
-On a BoxSet fiche (`collectionChildren`) AND in the collection row of a movie fiche (`collectionItems`): the missing films of the TMDb collection, **after** the owned ones (BoxSet fiche: a section « Pour compléter la saga »; movie row: appended at the row's end). The BoxSet fiche also says « 5 films sur 8 » and offers « Demander les 3 » (multi-select sheet, all pre-checked).
+The TMDb collection id comes from the BoxSet's or the movie's `ProviderIds["TmdbCollection"]`.
+
+- **BoxSet fiche** (`collectionChildren`): the owned grid is unchanged; after it, a section « Pour compléter la saga » with the missing films; its header says « 3 films manquants » and carries « Demander les 3 » (multi-select sheet, all pre-checked; tvOS: a confirmation « Demander les 3 films » / per film from its card).
+- **Movie fiche, collection row exists today** (`collectionItems`, a Jellyfin BoxSet with another owned member): the missing films are appended at the row's end.
+- **Movie fiche, no row today** (no BoxSet, or this film is the only one owned) but the movie has a `TmdbCollection` id: a new row « Pour compléter la saga <nom> » with the missing films only, placed **at the end of the fiche** (after « Similaires »), so nothing above it moves.
 
 ### Actor page
 
-The filmography lists the owned titles first, then a section « Pas encore dans ta bibliothèque » with the rest of the person's TMDb credits (movies + series, cast; crew only if the person is primarily crew — builder's call). A filter « Tout / Dans ta bibliothèque / Les autres ».
+The filmography lists the owned titles first, then a section « Pas encore dans ta bibliothèque » with the rest of the person's TMDb credits (movies + series, cast; crew only if the person is primarily crew — builder's call). No filter control: it would appear above the grid once Seerr answers, and the two sections already separate owned from missing.
 
 ### Settings → « Demandes » (new category, iOS + tvOS)
 
@@ -83,6 +93,10 @@ Visible to a Jellyfin admin always, and to any other user once the admin has ena
 ### Arrival message
 
 On launch and on return to the foreground (feature visible, connected): if a request of mine became available since last time, a toast « <Titre> est disponible » + « Regarder » (opens the fiche); several ⇒ « 3 demandes sont disponibles » + « Voir » (opens Mes demandes). The first check on a device seeds the "already seen" set without toasting. No push: Seerr cannot notify a native app.
+
+### Age-capped accounts
+
+An account is capped when the app's ceiling `privacy.maxContentAge` is set on this device (> 0) OR its Jellyfin policy carries a `MaxParentalRating`. A capped account sees **nothing from Seerr anywhere** — no browse surface, no prompt, no Settings → Demandes — and makes no Seerr call, whatever its `seerr.enabled` flag. In the admin's « Qui peut demander » list, a capped user's line reads « Limite d'âge active : les demandes restent masquées » and its switch is disabled (the server-side cap is visible there; the device-side one only affects that device and is not shown). Lifting the cap brings the feature back with no other step.
 
 ## Configuration and auth model
 
@@ -106,6 +120,8 @@ Seerr ≥ 3.4 offers Jellyfin Quick Connect login, and JellyGlass can already ap
 4. `POST /auth/jellyfin/quickconnect/authenticate {secret}` → Seerr session cookie `connect.sid` (30 days) + the Seerr `User`.
 
 The cookie is stored in the Keychain per **(server, Jellyfin user)** (`ServerRegistry.accountKey(serverId:userId:)`, a new account added to `privateAccounts`) — 2.5.0 ships several accounts per device. On 401 the flow re-runs once silently (the user is still signed in to Jellyfin); if that fails, the « Se connecter à Seerr » state returns. « Se déconnecter » = `POST /auth/logout` + delete the cookie.
+
+**The admin's own Seerr identity.** In account mode, « Tester la connexion » ends by signing the admin in (the same one-tap flow), because the Configuration page needs an identity: the per-user lines (« Compte Seerr lié… ») come from `GET /user/jellyfin/{id}` under the admin's Seerr session. Side effects, stated under the button: Seerr may create the admin's account, and Jellyfin shows a new « Seerr » device session. If the admin's Seerr account cannot list users (the spike measures which permission that route needs), the lines read « Statut Seerr indisponible : ton compte Seerr n'a pas le droit de voir les utilisateurs » and the switches still work.
 
 Preconditions, all checked by « Tester la connexion »: Jellyfin Quick Connect enabled (`GET /QuickConnect/Enabled`); Seerr `mediaServerLogin` true and `mediaServerType` Jellyfin (`/settings/public`); a user unknown to Seerr is auto-created only if Seerr's `newPlexLogin` is true (it governs Jellyfin too, despite the name) — otherwise 403, reported per user in the admin list.
 
@@ -149,7 +165,7 @@ The same messages are reused wherever a request fails for that reason. Elsewhere
 
 ## Constraints
 
-- Pro gate: a new `ProFeatureID` case (`ProFeatureGate.allows` is an exhaustive switch) + its `ProFeatureCatalogue` entry (it appears on the Pro page). After the paid launch a free user follows the existing gate-site pattern of the 2026-10-22 spec (category visible with a lock → `ProUpsellSheet`). Requesting never touches playback.
+- Pro gate: a new `ProFeatureID` case (`ProFeatureGate.allows` is an exhaustive switch) + its `ProFeatureCatalogue` entry (it appears on the Pro page). After the paid launch a free user sees **nothing on the browse surfaces and makes no Seerr call** (the « Reprendre ici » precedent: the gate sits before any fetch); Settings → Demandes stays visible with a lock → `ProUpsellSheet` (the 2026-10-22 gate-site pattern). Requesting never touches playback.
 - Settings category lives under `Shared/Screens/Settings/`, **not** `Shared/Screens/Admin/` (all `#if os(iOS)`); it must not be `isAdminOnly` (that drops it on tvOS) — admin-only rows are gated inside the page.
 - New CinemaxKit client with its own ephemeral `URLSession` (`urlCache = nil`, no shared `HTTPCookieStorage` — the cookie is set by hand from the Keychain). Never route Seerr through the Jellyfin SDK client. `Accept-Language` from the app language (Seerr localizes titles/overviews).
 - ATS: plain HTTP only on the local network (`NSAllowsLocalNetworking`), like Jellyfin; a public Seerr must be HTTPS.
@@ -160,7 +176,7 @@ The same messages are reused wherever a request fails for that reason. Elsewhere
 
 ## Delivery
 
-0. **Spike (throwaway, before lot 1)** against a local Seerr 3.4+ in Docker linked to the bench Jellyfin (`jf-bench`), never the household's real accounts: Quick Connect self-approval end to end; CSRF on/off with an API key and with a cookie; `X-API-User` attribution; `/user/jellyfin/{id}`. Findings feed back into this document before lot 1.
+0. **Spike (throwaway, before lot 1)** against a local Seerr 3.4+ in Docker linked to the bench Jellyfin (`jf-bench`), never the household's real accounts: Quick Connect self-approval end to end; CSRF on/off with an API key and with a cookie; `X-API-User` attribution; `/user/jellyfin/{id}` and the permission it needs. Findings feed back into this document before lot 1. **The spike is a gate**: if account mode cannot sign a user in without typing, lots 1–3 are not planned and the product owner decides (key-only v1, a password form after all, or stop).
 1. **Lot 1 — base**: CinemaxKit Seerr client + models + pure policies; Settings → Demandes (configuration, test, per-user switches, device key, connect / disconnect); DisplayPreferences read/write; the search section; the Pro feature id.
 2. **Lot 2 — fiches**: series seasons, saga (BoxSet fiche + movie collection row), actor page.
 3. **Lot 3 — follow-up**: Mes demandes, À valider, the arrival message.
@@ -180,11 +196,16 @@ Type and file names; caching (in-memory per (server, user), short TTL, invalidat
 5. **"Other Jellyfin" is a warning, not an error** (server names can differ legitimately).
 6. **Jellyfin wins on "in the library"**, at the cost of asking `ProviderIds` on three queries when the feature is visible.
 7. **Partially available seasons count as present** (Jellyfin has them); requesting the missing episodes of a season is out of v1.
-8. **Missing films also appear in a movie fiche's collection row**, not only on the BoxSet fiche.
+8. **Missing films also appear on a movie fiche**: appended to its collection row when it exists, else as a new row at the end of the fiche (from the movie's `TmdbCollection` id).
 9. The not-connected prompt in search is **dismissible** (« Plus tard »).
 10. Settings → Demandes is visible to a non-admin **only once enabled**; to a Jellyfin admin always.
 11. « À valider » follows **Seerr's `MANAGE_REQUESTS`**, not the Jellyfin admin flag.
-12. The spike runs against a **local Docker Seerr + `jf-bench`**, never the household's accounts.
+12. The spike runs against a **local Docker Seerr + `jf-bench`**, never the household's accounts — and it is a **gate** (failure ⇒ back to the product owner).
+13. **Every Seerr-only control sits after the owned content** (from the owner's « sinon ça peut décaler des items »): the mockup's « Il te manque N saisons » card above the episodes, the saga's « 5 films sur 8 » header and the actor-page filter are gone; their counts and « Demander les N » moved into the header of the missing section.
+14. **Apple TV, one owned season**: missing seasons go in the row after the episodes (no pill row exists to append to).
+15. « Tester la connexion » in account mode **signs the admin in**, with its side effects stated.
+16. **Free user after the paid launch**: nothing on browse surfaces, no Seerr call; locked Settings category.
+17. **Age cap** = the app's `privacy.maxContentAge` on the device OR the Jellyfin `MaxParentalRating` policy.
 
 ## References
 
