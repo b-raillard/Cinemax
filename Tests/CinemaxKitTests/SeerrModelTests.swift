@@ -128,6 +128,37 @@ struct SeerrConfigurationTests {
         #expect(SeerrUserConfig.read(nil) == SeerrUserConfig(isEnabled: false, url: nil))
     }
 
+    /// What a real server answers (bench Jellyfin 10.11.0, 2026-11-07): it
+    /// injects legacy keys into EVERY entity's `CustomPrefs`, two of them
+    /// `null` — which the SDK's `[String: String]` cannot hold, so the whole
+    /// read failed and Seerr's configuration was never read on a server.
+    private static let serverBody = Data("""
+    {"Id":"17617b18-f4d4-ffb3-0974-ff669560942d","SortBy":"SortName","RememberIndexing":false,
+     "PrimaryImageHeight":250,"PrimaryImageWidth":250,
+     "CustomPrefs":{"chromecastVersion":"stable","skipForwardLength":"30000","skipBackLength":"10000",
+                    "enableNextVideoInfoOverlay":"False","tvhome":null,"dashboardTheme":null,
+                    "seerr.enabled":"true","seerr.url":"http://h:5055"},
+     "ScrollDirection":"Horizontal","ShowBackdrop":true,"RememberSorting":false,"SortOrder":"Ascending",
+     "ShowSidebar":false,"Client":"jellyglass"}
+    """.utf8)
+
+    @Test("a server's preferences with null legacy values still read")
+    func serverBodyWithNullsDecodes() throws {
+        // The SDK's own decoding refuses the body: the cause, kept in view.
+        #expect(throws: (any Error).self) { try JSONDecoder().decode(DisplayPreferencesDto.self, from: Self.serverBody) }
+        let dto = try DisplayPreferencesDecoding.decode(Self.serverBody)
+        #expect(dto.customPrefs?["chromecastVersion"] == "stable")
+        #expect(dto.customPrefs?.keys.contains("tvhome") == false)
+        #expect(dto.client == "jellyglass")
+        #expect(dto.scrollDirection == .horizontal)
+        #expect(SeerrUserConfig.read(dto) == SeerrUserConfig(isEnabled: true, url: address))
+    }
+
+    @Test("a body that is not an object is refused")
+    func nonObjectBodyThrows() {
+        #expect(throws: (any Error).self) { try DisplayPreferencesDecoding.decode(Data("[1]".utf8)) }
+    }
+
     @Test("enabled round-trips through read")
     func readRoundTrips() {
         let config = SeerrUserConfig(isEnabled: true, url: address)
