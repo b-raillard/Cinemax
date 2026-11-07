@@ -54,15 +54,8 @@ final class SeerrRequestPresenter {
     /// failed lookup says so quietly, never naming Seerr; an account change on
     /// the way says nothing.
     func request(_ missing: SeerrMissingTitle, session: SeerrSession, loc: LocalizationManager, toasts: ToastCenter) async {
-        switch badge(for: missing.id, default: missing.badge) {
-        case .pending:
-            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.pending"))
+        guard !refusesAlreadyRequested(badge(for: missing.id, default: missing.badge), loc: loc, toasts: toasts) else {
             return
-        case .processing:
-            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.processing"))
-            return
-        case .request, .declined:
-            break
         }
         let title = missing.title
         guard title.kind == .tv else {
@@ -92,6 +85,66 @@ final class SeerrRequestPresenter {
             return
         }
         present(.series(title, seasons: seasons, preselected: Set(seasons)))
+    }
+
+    /// A missing SEASON's card or pill was selected (series fiche). Same rule
+    /// as a title, on the season's effective badge: already asked for ⇒ the
+    /// info toast, nothing opens. Otherwise the season picker over every
+    /// season still requestable, ascending, with this one ticked — the fiche
+    /// already knows the seasons, so no lookup.
+    func request(
+        season: SeerrMissingSeason, among missing: [SeerrMissingSeason], of series: SeerrTitle,
+        loc: LocalizationManager, toasts: ToastCenter
+    ) {
+        guard !refusesAlreadyRequested(badge(for: season.id, default: season.badge), loc: loc, toasts: toasts) else {
+            return
+        }
+        let seasons = requestableSeasons(missing)
+        guard seasons.contains(season.seasonNumber) else { return }
+        present(.series(series, seasons: seasons, preselected: [season.seasonNumber]))
+    }
+
+    /// The row's « Demander les N »: every requestable season, all ticked.
+    func requestAll(
+        _ missing: [SeerrMissingSeason], of series: SeerrTitle, loc: LocalizationManager, toasts: ToastCenter
+    ) {
+        let seasons = requestableSeasons(missing)
+        guard !seasons.isEmpty else {
+            toasts.info(loc.localized("seerr.request.duplicate"))
+            return
+        }
+        present(.series(series, seasons: seasons, preselected: Set(seasons)))
+    }
+
+    /// The season numbers that may still be asked for — never asked, or
+    /// declined — by their EFFECTIVE badge, ascending.
+    func requestableSeasons(_ missing: [SeerrMissingSeason]) -> [Int] {
+        missing.filter { season in
+            switch badge(for: season.id, default: season.badge) {
+            case .request, .declined: true
+            case .pending, .processing: false
+            }
+        }
+        .map(\.seasonNumber).sorted()
+    }
+
+    /// Pending / in preparation ⇒ « Déjà demandé » and `true`: nothing opens.
+    private func refusesAlreadyRequested(_ badge: SeerrBadge, loc: LocalizationManager, toasts: ToastCenter) -> Bool {
+        switch badge {
+        case .pending:
+            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.pending"))
+            return true
+        case .processing:
+            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.processing"))
+            return true
+        case .request, .declined:
+            return false
+        }
+    }
+
+    /// « Saison 4 », or « Épisodes spéciaux » for season 0.
+    static func seasonName(_ number: Int, loc: LocalizationManager) -> String {
+        number == 0 ? loc.localized("seerr.season.specials") : loc.localized("seerr.request.seasonRow", number)
     }
 
     /// The account changed: another profile's requests are not this one's.
@@ -291,6 +344,14 @@ struct SeerrRequestPresentation: ViewModifier {
             Button(SeerrRequestPresenter.actionTitle(for: draft, selection: selection, loc: loc)) {
                 Task { await presenter.submit(draft, selection: selection, session: session, loc: loc, toasts: toasts) }
             }
+            // A season pill / card preselects its own season: with nothing to
+            // tick on tvOS, the others are one more button (« Demander les
+            // saisons 4 à 6 »).
+            if case .series(_, let seasons, _) = draft, selection != Set(seasons) {
+                Button(SeerrRequestPresenter.seasonsActionTitle(seasons, loc: loc)) {
+                    Task { await presenter.submit(draft, selection: Set(seasons), session: session, loc: loc, toasts: toasts) }
+                }
+            }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         }
         #else
@@ -416,13 +477,14 @@ struct SeerrRequestSheet: View {
         return "\(kind) · \(String(year))"
     }
 
+    /// None without a poster path (a request raised from a series fiche,
+    /// whose own poster the user just left): no empty placeholder box.
     @ViewBuilder
     private func poster(for title: SeerrTitle) -> some View {
-        if let base = session.client?.baseURL {
-            CinemaLazyImage(
-                url: SeerrImages.posterURL(
-                    path: title.posterPath, seerrBase: base,
-                    cacheImages: session.publicSettings?.cacheImages ?? false))
+        if let base = session.client?.baseURL,
+           let url = SeerrImages.posterURL(
+               path: title.posterPath, seerrBase: base, cacheImages: session.publicSettings?.cacheImages ?? false) {
+            CinemaLazyImage(url: url)
                 .frame(width: 84, height: 126)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .accessibilityHidden(true)
@@ -438,7 +500,7 @@ struct SeerrRequestSheet: View {
             if session.publicSettings?.partialRequestsEnabled ?? true {
                 VStack(spacing: CinemaSpacing.spacing2) {
                     ForEach(seasons, id: \.self) { number in
-                        tickRow(number, label: loc.localized("seerr.request.seasonRow", number))
+                        tickRow(number, label: SeerrRequestPresenter.seasonName(number, loc: loc))
                     }
                 }
             }

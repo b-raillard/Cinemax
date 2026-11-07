@@ -749,3 +749,323 @@ struct MetadataEditorViewModelGateTests {
     }
 }
 #endif
+
+// MARK: - Seerr — missing seasons (« Pas encore dans ta bibliothèque »)
+
+/// `/tv/{id}` as Seerr answers it: the TMDb seasons, in Seerr's order.
+private func seerrTVBody(_ tmdbId: Int, seasons: [Int]) -> String {
+    let list = seasons.map { #"{"seasonNumber":\#($0),"episodeCount":8}"# }.joined(separator: ",")
+    return #"{"id":\#(tmdbId),"name":"Série du banc","seasons":[\#(list)]}"#
+}
+
+/// Answers Seerr for a series fiche: the session's reload (`/settings/public`,
+/// `/auth/me`), then `/tv/{id}` from `series` — held by that id's gate when
+/// one is given — and `/request`.
+private final class DetailSeerrTransport: SeerrTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var sent: [URLRequest] = []
+    private let series: [Int: String]
+    private let gates: [Int: TestLatch]
+    private let specials: Bool
+    /// Opens when the first `/tv/{id}` request reaches the transport.
+    let tvArrived = TestLatch()
+
+    init(series: [Int: String], gates: [Int: TestLatch] = [:], specials: Bool = false) {
+        self.series = series
+        self.gates = gates
+        self.specials = specials
+    }
+
+    var tvRequestCount: Int {
+        lock.withLock { sent }.filter { $0.url?.path.contains("/tv/") == true }.count
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        lock.withLock { sent.append(request) }
+        let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
+        let status: Int
+        let body: String
+        switch path {
+        case "/settings/public":
+            status = 200
+            body = #"{"mediaServerType":2,"partialRequestsEnabled":true,"enableSpecialEpisodes":\#(specials)}"#
+        case "/auth/me":
+            status = 200
+            body = #"{"id":7,"permissions":32,"jellyfinUserId":"A","displayName":"Alice"}"#
+        case "/request":
+            status = 201
+            body = """
+            {"id":1,"status":1,"type":"tv","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-01T10:00:00Z",
+            "requestedBy":{"id":7,"permissions":32},"media":{"tmdbId":1399,"status":2}}
+            """
+        case let tv where tv.hasPrefix("/tv/"):
+            guard let id = Int(tv.dropFirst("/tv/".count)), let reply = series[id] else {
+                throw StubSeerrTransport.Exhausted()
+            }
+            tvArrived.open()
+            if let gate = gates[id] { await gate.wait() }
+            status = 200
+            body = reply
+        default:
+            throw StubSeerrTransport.Exhausted()
+        }
+        let url = request.url ?? URL(string: "http://192.168.1.20:5055")!
+        let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: [:])!
+        return (Data(body.utf8), response)
+    }
+}
+
+/// A series the library holds `owned` seasons of, matched to TMDb `tmdb`
+/// (`nil` ⇒ no TMDb id at all). `tmdbForCall` overrides it per `getItem`
+/// call (1-based) — an identify between two loads.
+private func ownedSeriesAPI(
+    tmdb: String? = "1399", owned: [Int] = [1, 2, 3], tmdbForCall: (@Sendable (Int) -> String?)? = nil
+) -> MockAPIClient {
+    let api = MockAPIClient()
+    let calls = CallCounter()
+    api.getItemHandler = { id in
+        var series = makeSeries(id: id, played: false)
+        series.name = "Série du banc"
+        series.productionYear = 2011
+        let call = calls.next()
+        if let value = tmdbForCall?(call) ?? tmdb { series.providerIDs = ["Tmdb": value] }
+        return series
+    }
+    api.getSeasonsHandler = { _ in
+        owned.map { number in
+            var season = BaseItemDto()
+            season.id = "season-\(number)"
+            season.indexNumber = number
+            return season
+        }
+    }
+    api.getEpisodesHandler = { seasonId in
+        [makeEpisodeInSeason(id: "ep-\(seasonId)-1", name: "Épisode 1", seasonId: seasonId)]
+    }
+    return api
+}
+
+private func missingSeasons(_ tmdbId: Int, _ numbers: [Int], _ badge: SeerrBadge = .request) -> [SeerrMissingSeason] {
+    numbers.map { SeerrMissingSeason(seriesTmdbId: tmdbId, seasonNumber: $0, badge: badge) }
+}
+
+@MainActor
+@Suite("Detail — missing seasons")
+struct MediaDetailMissingSeasonsTests {
+    private let loc = LocalizationManager()
+
+    private func makeViewModel(_ session: SeerrSession, allowed: Bool = true) -> MediaDetailViewModel {
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        vm.seerr = session
+        vm.allowsSeerr = { allowed }
+        vm.seerrDeadline = neverExpires
+        return vm
+    }
+
+    @Test("the owned seasons are on screen before Seerr answers; the missing ones follow, ascending")
+    func missingSeasonsAfterOwned() async {
+        let gate = TestLatch()
+        let transport = DetailSeerrTransport(
+            series: [1399: seerrTVBody(1399, seasons: [3, 1, 6, 2, 5, 0, 4])], gates: [1399: gate])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await transport.tvArrived.wait()
+
+        // Seerr is held: the fiche is painted with what the library owns.
+        #expect(!vm.isLoading)
+        #expect(vm.seasons.compactMap(\.indexNumber) == [1, 2, 3])
+        #expect(!vm.episodes.isEmpty)
+        #expect(vm.seerrSeasons == .loading)
+
+        gate.open()
+        await vm.seerrSeasonsTask?.value
+        // Seerr's order is not the row's: ascending, specials left out.
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1399, [4, 5, 6])))
+        #expect(vm.seerrSeasons(for: session.snapshot()) == vm.seerrSeasons)
+        #expect(vm.seerrSeasons(for: SeerrSession.Snapshot(accountKey: "S1|B", generation: 99)) == .hidden)
+        #expect(vm.seerrSeriesTitle == SeerrTitle(kind: .tv, tmdbId: 1399, title: "Série du banc", year: 2011))
+    }
+
+    @Test("specials are offered only when Seerr enables them")
+    func specialsOnlyWhenEnabled() async {
+        let transport = DetailSeerrTransport(
+            series: [1399: seerrTVBody(1399, seasons: [0, 1, 2, 3, 4])], specials: true)
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1399, [0, 4])))
+    }
+
+    @Test("no TMDb id on the series: no Seerr call, nothing shown")
+    func noTmdbIdNoCall() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1, 2, 3, 4])])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(tmdb: nil), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .hidden)
+        #expect(transport.tvRequestCount == 0)
+        #expect(vm.seerrSeriesTitle == nil)
+    }
+
+    @Test("not allowed (Pro, cap, offline…): no Seerr call at all")
+    func notAllowedNoCall() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1, 2, 3, 4])])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session, allowed: false)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .hidden)
+        #expect(transport.tvRequestCount == 0)
+    }
+
+    @Test("an answer for a fiche the screen has moved past is dropped")
+    func staleSeasonsDropped() async {
+        // The first load matches TMDb 1399, held; an identify then reloads the
+        // fiche (tier-1), now matched to 1400, which answers at once.
+        let gate = TestLatch()
+        let transport = DetailSeerrTransport(
+            series: [1399: seerrTVBody(1399, seasons: [1, 2, 3, 4, 5, 6]), 1400: seerrTVBody(1400, seasons: [1, 2, 3, 4])],
+            gates: [1399: gate])
+        let api = ownedSeriesAPI(tmdbForCall: { $0 == 1 ? "1399" : "1400" })
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await transport.tvArrived.wait()
+        let first = vm.seerrSeasonsTask
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+        gate.open()
+        await first?.value
+
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1400, [4])))
+    }
+
+    @Test("a playback refresh while Seerr answers keeps the row")
+    func playbackRefreshKeepsTheRow() async {
+        let gate = TestLatch()
+        let transport = DetailSeerrTransport(
+            series: [1399: seerrTVBody(1399, seasons: [1, 2, 3, 4])], gates: [1399: gate])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await transport.tvArrived.wait()
+        // Bumps `loadGeneration` without reloading Seerr.
+        await vm.refreshAfterPlayback(using: app)
+        gate.open()
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1399, [4])))
+    }
+
+    @Test("a one-season series still gets its row")
+    func oneSeasonSeriesStillGetsRow() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1, 2, 3])])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(owned: [1]), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seasons.count == 1)
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1399, [2, 3])))
+    }
+
+    @Test("an unreachable Seerr hides the row and leaves the fiche alone")
+    func unreachableSeerrHidesTheRow() async {
+        // No `/tv` answer at all: the transport throws.
+        let transport = DetailSeerrTransport(series: [:])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .hidden)
+        #expect(vm.errorMessage == nil)
+        #expect(vm.seasons.count == 3)
+    }
+}
+
+@MainActor
+@Suite("Seerr season request entry point")
+struct SeerrSeasonRequestTests {
+    private let loc = LocalizationManager()
+    private let series = SeerrTitle(kind: .tv, tmdbId: 1399, title: "Série du banc", year: 2011)
+
+    @Test("a season card opens the picker over every requestable season, that one ticked")
+    func seasonCardPreselectsItsSeason() {
+        let presenter = SeerrRequestPresenter()
+        let missing = missingSeasons(1399, [4, 5, 6])
+
+        presenter.request(season: missing[1], among: missing, of: series, loc: loc, toasts: ToastCenter())
+
+        #expect(presenter.draft == .series(series, seasons: [4, 5, 6], preselected: [5]))
+    }
+
+    @Test("« Demander les N » ticks every requestable season")
+    func requestAllTicksThemAll() {
+        let presenter = SeerrRequestPresenter()
+        let missing = missingSeasons(1399, [6, 4, 5])
+
+        presenter.requestAll(missing, of: series, loc: loc, toasts: ToastCenter())
+
+        #expect(presenter.draft == .series(series, seasons: [4, 5, 6], preselected: [4, 5, 6]))
+    }
+
+    @Test("a season already asked for: « Déjà demandé », nothing opens, and the others' picker leaves it out")
+    func alreadyRequestedSeasonShowsInfo() {
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        let missing = [
+            SeerrMissingSeason(seriesTmdbId: 1399, seasonNumber: 4, badge: .pending),
+            SeerrMissingSeason(seriesTmdbId: 1399, seasonNumber: 5, badge: .declined),
+            SeerrMissingSeason(seriesTmdbId: 1399, seasonNumber: 6, badge: .processing),
+        ]
+
+        presenter.request(season: missing[0], among: missing, of: series, loc: loc, toasts: toasts)
+        #expect(presenter.draft == nil)
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.request.duplicate"))
+        #expect(toasts.current?.message == loc.localized("seerr.request.already.pending"))
+
+        presenter.request(season: missing[2], among: missing, of: series, loc: loc, toasts: toasts)
+        #expect(presenter.draft == nil)
+        #expect(toasts.current?.message == loc.localized("seerr.request.already.processing"))
+
+        // Declined may be asked again — alone: the two others are already out.
+        #expect(presenter.requestableSeasons(missing) == [5])
+        presenter.request(season: missing[1], among: missing, of: series, loc: loc, toasts: toasts)
+        #expect(presenter.draft == .series(series, seasons: [5], preselected: [5]))
+    }
+
+    @Test("a season just requested counts as requested, without reloading the row")
+    func justRequestedSeasonCounts() async {
+        let transport = DetailSeerrTransport(series: [:])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        let missing = missingSeasons(1399, [4, 5])
+
+        await presenter.submit(
+            .series(series, seasons: [4, 5], preselected: [4]), selection: [4],
+            session: session, loc: loc, toasts: toasts)
+        #expect(presenter.badge(for: missing[0].id, default: .request) == .pending)
+        #expect(presenter.requestableSeasons(missing) == [5])
+
+        presenter.request(season: missing[0], among: missing, of: series, loc: loc, toasts: toasts)
+        #expect(presenter.draft == nil)
+        #expect(toasts.current?.message == loc.localized("seerr.request.already.pending"))
+    }
+}

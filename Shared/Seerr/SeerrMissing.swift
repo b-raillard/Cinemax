@@ -31,6 +31,15 @@ struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
 /// `hidden`; `loading` is the skeleton, bounded by `loadSection`'s deadline.
 enum MissingSection<Element: Equatable & Sendable>: Equatable {
     case hidden, loading, loaded([Element])
+
+    /// Draws nothing at all: hidden, or an empty answer.
+    var drawsNothing: Bool {
+        switch self {
+        case .hidden: true
+        case .loading: false
+        case .loaded(let elements): elements.isEmpty
+        }
+    }
 }
 
 enum SeerrImages {
@@ -58,11 +67,16 @@ enum SeerrMissing {
             case .series: kind = .tv
             default: continue
             }
-            guard let value = item.providerIDs?.first(where: { $0.key.lowercased() == "tmdb" })?.value,
-                  let id = Int(value) else { continue }
+            guard let id = tmdbId(of: item) else { continue }
             ids.insert(SeerrOwnedKey(kind: kind, tmdbId: id))
         }
         return ids
+    }
+
+    /// The item's TMDb id: provider key matched case-insensitively, a
+    /// non-numeric value ignored.
+    static func tmdbId(of item: BaseItemDto) -> Int? {
+        item.providerIDs?.first { $0.key.lowercased() == "tmdb" }.flatMap { Int($0.value) }
     }
 
     /// Candidates minus what Jellyfin owns and what Seerr has (partially)

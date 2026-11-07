@@ -57,8 +57,14 @@ struct MissingTitleCard: View {
             .accessibilityLabel(loc.localized("seerr.missing.a11y", title, badgeLabel))
     }
 
-    private var badgeLabel: String {
-        switch badge {
+    private var badgeLabel: String { badge.label(loc) }
+}
+
+extension SeerrBadge {
+    /// « Demander », « En attente », « En préparation », « Refusée ».
+    @MainActor
+    func label(_ loc: LocalizationManager) -> String {
+        switch self {
         case .request: loc.localized("seerr.badge.request")
         case .pending: loc.localized("seerr.badge.pending")
         case .processing: loc.localized("seerr.badge.processing")

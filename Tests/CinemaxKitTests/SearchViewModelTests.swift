@@ -214,8 +214,8 @@ private let duneSearchBody = """
 """
 
 /// A deadline that never fires (the tests hold Seerr with a latch instead),
-/// released when the race cancels it.
-private let neverExpires: @Sendable () async throws -> Void = {
+/// released when the race cancels it. Shared with the fiche's Seerr tests.
+let neverExpires: @Sendable () async throws -> Void = {
     let never = TestLatch()
     await withTaskCancellationHandler { await never.wait() } onCancel: { never.open() }
 }
@@ -289,9 +289,10 @@ private final class SearchSeerrTransport: SeerrTransport, @unchecked Sendable {
 }
 
 /// Signed in as « A » on server S1, Seerr enabled for them, and a session
-/// connected through a stored cookie — the state a search starts from.
+/// connected through a stored cookie — the state a search (or a fiche) starts
+/// from. Shared with the fiche's Seerr tests (`MediaDetailViewModelTests`).
 @MainActor
-private func seerrBench(api: MockAPIClient, transport: SearchSeerrTransport) async -> (AppState, SeerrSession) {
+func seerrBench(api: MockAPIClient, transport: any SeerrTransport) async -> (AppState, SeerrSession) {
     let jellyfin = URL(string: "https://maison.local")!
     api.displayPreferences["me|\(SeerrUserConfig.preferencesId)|\(SeerrUserConfig.client)"] =
         SeerrUserConfig.merged(SeerrUserConfig(isEnabled: true, url: searchSeerrURL), into: nil)

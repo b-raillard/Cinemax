@@ -130,6 +130,52 @@ final class MediaDetailViewModel {
     /// not even `isLoading`) once superseded.
     private var loadGeneration: Int = 0
 
+    // MARK: Seerr — « Pas encore dans ta bibliothèque » (series)
+
+    /// The active account's Seerr, set by the screen. `nil` ⇒ no row.
+    @ObservationIgnored var seerr: SeerrSession?
+    /// Whether the missing seasons may load — `SeerrSession.isVisible` with the
+    /// screen's Pro and network inputs, set by the screen (same wiring as the
+    /// search). Unwired, it answers `false`: fail closed.
+    @ObservationIgnored var allowsSeerr: @MainActor () -> Bool = { false }
+    /// `SeerrSession.loadSection`'s deadline — injectable for the tests.
+    @ObservationIgnored var seerrDeadline: @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(6)) }
+    /// The seasons Seerr knows that the library lacks, ascending. A side task
+    /// once the owned seasons and episodes are on screen, so nothing above the
+    /// episodes moves when it answers. Read through `seerrSeasons(for:)`,
+    /// which hides another account's answer.
+    private(set) var seerrSeasons: MissingSection<SeerrMissingSeason> = .hidden
+    /// The side task filling `seerrSeasons`. Internal so a test can await it.
+    private(set) var seerrSeasonsTask: Task<Void, Never>?
+    /// The Seerr account and generation `seerrSeasons` was loaded for.
+    @ObservationIgnored private var seerrSeasonsSnapshot: SeerrSession.Snapshot?
+    /// The `loadGeneration` of the `load()` pass that owns `seerrSeasons`.
+    /// Not the live counter: `refreshAfterPlayback` bumps that one without
+    /// reloading Seerr, which would strand the skeleton for good.
+    @ObservationIgnored private var seerrSeasonsGeneration = 0
+
+    /// The series as the request flow names it, or `nil` without a TMDb id.
+    var seerrSeriesTitle: SeerrTitle? {
+        guard resolvedType == .series, let item, let tmdbId = SeerrMissing.tmdbId(of: item) else { return nil }
+        return SeerrTitle(
+            kind: .tv, tmdbId: tmdbId, title: item.name ?? "", year: item.productionYear, overview: item.overview)
+    }
+
+    /// The row to draw for the account Seerr serves right now
+    /// (`SeerrSession.snapshot()`): another profile's never shows.
+    func seerrSeasons(for current: SeerrSession.Snapshot?) -> MissingSection<SeerrMissingSeason> {
+        // Read FIRST, whatever the guard says: the view must observe the
+        // section, or it never re-renders once the section changes.
+        let section = seerrSeasons
+        guard let current, current == seerrSeasonsSnapshot else { return .hidden }
+        return section
+    }
+
+    private func setSeerrSeasons(_ section: MissingSection<SeerrMissingSeason>, snapshot: SeerrSession.Snapshot?) {
+        seerrSeasonsSnapshot = snapshot
+        if seerrSeasons != section { seerrSeasons = section }
+    }
+
     let itemId: String
     let itemType: BaseItemKind
 
@@ -172,6 +218,12 @@ final class MediaDetailViewModel {
         // body still took the `errorMessage` branch (and `hasLoaded` stayed
         // false, so every reappearance re-loaded behind it).
         errorMessage = nil
+        // The missing seasons belong to the pass that loads them: a reload
+        // (Retry, an identify's tier-1) never shows the previous answer. The
+        // body is the spinner meanwhile, so nothing visibly empties.
+        seerrSeasonsTask?.cancel()
+        seerrSeasonsGeneration = generation
+        setSeerrSeasons(.hidden, snapshot: nil)
 
         do {
             // The series' own item and its seasons / next-up / episodes need
@@ -244,6 +296,12 @@ final class MediaDetailViewModel {
         // for nothing.
         if resolvedType != .boxSet, errorMessage == nil, let similarSourceId = item?.id {
             similarTask = Task { await loadSimilar(for: similarSourceId, using: appState) }
+        }
+        // The seasons Seerr knows and the library lacks: a side task too, once
+        // the owned seasons and episodes are written — never on the critical
+        // path, silent on failure.
+        if resolvedType == .series, errorMessage == nil, let seriesItem = item {
+            seerrSeasonsTask = Task { await loadSeerrSeasons(for: seriesItem, generation: generation) }
         }
         // Collections are a movie-only garnish — resolved after the main load
         // so a slow boxset lookup never delays the detail render.
@@ -699,6 +757,32 @@ final class MediaDetailViewModel {
         else { return }
         guard item?.id == sourceId else { return }
         if loaded != similarItems { similarItems = loaded }
+    }
+
+    /// The seasons Seerr knows (TMDb) that the library lacks — after the owned
+    /// ones, never instead of them. Silent: no TMDb id ⇒ no call; an error or
+    /// the deadline hides the row, nothing says why (only Settings names
+    /// Seerr). A newer `load()` owns the row once it starts: this pass then
+    /// writes nothing (it was cancelled, and its generation is no longer the
+    /// owner's).
+    private func loadSeerrSeasons(for series: BaseItemDto, generation: Int) async {
+        guard !seasons.isEmpty, let tmdbId = SeerrMissing.tmdbId(of: series),
+              allowsSeerr(), let seerr, let snapshot = seerr.snapshot() else {
+            setSeerrSeasons(.hidden, snapshot: nil)
+            return
+        }
+        let owned = Set(seasons.compactMap(\.indexNumber))
+        let includeSpecials = seerr.publicSettings?.enableSpecialEpisodes ?? false
+        setSeerrSeasons(.loading, snapshot: snapshot)
+        let section = await seerr.loadSection(deadline: seerrDeadline) { client, credential in
+            let details = try await client.tv(tmdbId: tmdbId, credential)
+            return SeerrMissing.seasons(details, ownedSeasonNumbers: owned, includeSpecials: includeSpecials)
+                .sorted { $0.seasonNumber < $1.seasonNumber }
+        }
+        guard !Task.isCancelled, seerrSeasonsGeneration == generation else { return }
+        // `nil` = the account moved: nothing of this answer is written, and
+        // the skeleton goes rather than wait for the next profile.
+        setSeerrSeasons(section ?? .hidden, snapshot: section == nil ? nil : snapshot)
     }
 
     func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {

@@ -1659,6 +1659,9 @@
 "seerr.badge.declined" = "Declined";
 "seerr.missing.title" = "Not in your library yet";
 "seerr.missing.a11y" = "%@, not in your library yet, %@";
+"seerr.missing.requestAll" = "Request all %d";
+"seerr.missing.requestAll.one" = "Request the season";
+"seerr.season.specials" = "Specials";
 "seerr.searchPrompt.title" = "Missing a title?";
 "seerr.searchPrompt.body" = "Your server uses Seerr for requests. Sign in once with your Jellyfin account: nothing to type.";
 "seerr.searchPrompt.later" = "Later";
