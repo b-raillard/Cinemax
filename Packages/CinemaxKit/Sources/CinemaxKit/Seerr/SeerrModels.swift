@@ -491,20 +491,34 @@ public struct SeerrRequest: Sendable, Equatable, Decodable {
 }
 
 public struct SeerrRequestPage: Sendable, Equatable, Decodable {
+    /// The rows that decoded: an odd one (no asker, an unknown kind…) is
+    /// skipped, never fatal to the page.
     public let results: [SeerrRequest]
     public let total: Int
+    /// How many rows the server SENT, skipped ones included: the next page's
+    /// `skip` — counting only `results` would re-ask the skipped rows forever.
+    public let served: Int
 
-    public init(results: [SeerrRequest], total: Int) {
+    public init(results: [SeerrRequest], total: Int, served: Int? = nil) {
         self.results = results
         self.total = total
+        self.served = served ?? results.count
     }
 
     private enum CodingKeys: String, CodingKey { case results, pageInfo }
     private struct PageInfo: Decodable { let results: Int }
+    private struct LossyRequest: Decodable {
+        let request: SeerrRequest?
+        init(from decoder: Decoder) throws {
+            request = try? SeerrRequest(from: decoder)
+        }
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        results = try c.decode([SeerrRequest].self, forKey: .results)
+        let rows = try c.decode([LossyRequest].self, forKey: .results)
+        results = rows.compactMap(\.request)
+        served = rows.count
         total = try c.decode(PageInfo.self, forKey: .pageInfo).results
     }
 }

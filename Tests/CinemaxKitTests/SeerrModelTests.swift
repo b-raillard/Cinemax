@@ -75,6 +75,37 @@ struct SeerrModelTests {
         #expect(page.results.first?.kind == .movie)
     }
 
+    @Test("An odd request row is skipped, not fatal; paging counts what the server sent")
+    func requestPageRowsDecodeLossily() throws {
+        func row(_ id: Int, type: String = "movie", requestedBy: String = #"{"id":3,"permissions":32}"#) -> String {
+            """
+            {"id":\(id),"status":1,"type":"\(type)","createdAt":"2026-11-01T10:00:00.000Z",
+             "updatedAt":"2026-11-02T10:00:00.000Z","requestedBy":\(requestedBy),"media":{"tmdbId":\(id),"status":2}}
+            """
+        }
+        // A row without its asker and a row of an unknown kind, between two good ones.
+        let json = """
+        {"pageInfo":{"pages":1,"pageSize":20,"results":4,"page":1},"results":[
+        \(row(1)), \(row(2, requestedBy: "null")), \(row(3, type: "music")), \(row(4))]}
+        """
+        let page = try decode(SeerrRequestPage.self, json)
+        #expect(page.results.map(\.id) == [1, 4])
+        #expect(page.served == 4)
+        #expect(page.total == 4)
+
+        // `skip` follows what the server sent, and a page of odd rows only is not the end.
+        var pages = SeerrRequestPages()
+        _ = pages.append(page)
+        #expect(pages.loadedCount == 4)
+        var more = SeerrRequestPages()
+        _ = more.append(try decode(SeerrRequestPage.self, """
+        {"pageInfo":{"pages":2,"pageSize":20,"results":30,"page":1},"results":[\(row(9, type: "music"))]}
+        """))
+        #expect(more.rows.isEmpty)
+        #expect(more.loadedCount == 1)
+        #expect(more.canLoadMore)
+    }
+
     @Test("TV keeps season zero")
     func tvKeepsSeasonZero() throws {
         let json = """

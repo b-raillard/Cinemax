@@ -31,11 +31,13 @@ struct SeerrRequestPages {
 
     var canLoadMore: Bool { !reachedEnd && loadedCount < total }
 
-    /// Adds the page's requests not listed yet; returns them.
+    /// Adds the page's requests not listed yet; returns them. `skip` and the
+    /// end of paging follow what the server SENT (`served`): a row that did
+    /// not decode still took its place in the listing.
     mutating func append(_ page: SeerrRequestPage) -> [SeerrRequest] {
-        loadedCount += page.results.count
+        loadedCount += page.served
         total = page.total
-        if page.results.isEmpty { reachedEnd = true }
+        if page.served == 0 { reachedEnd = true }
         var known = Set(rows.map(\.id))
         let fresh = page.results.filter { known.insert($0.id).inserted }
         rows.append(contentsOf: fresh.map { SeerrRequestRow(request: $0) })
