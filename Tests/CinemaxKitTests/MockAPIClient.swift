@@ -174,7 +174,9 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func getPublicUsers() async throws -> [UserDto] { [] }
-    func getUsers() async throws -> [UserDto] { [] }
+    /// The administrator's user list (`getUsers`).
+    var stubbedUsers: [UserDto] = []
+    func getUsers() async throws -> [UserDto] { recordLock.withLock { stubbedUsers } }
     var stubbedActiveSessions: [SessionInfoDto] = []
     /// Every `getActiveSessions` call's `controllableByUserId`, in order —
     /// `nil` entries are the unfiltered (admin) shape.

@@ -1519,3 +1519,230 @@ struct SeerrConnectionTestTests {
         #expect(session.connection == .notConnected)
     }
 }
+
+// MARK: - Activation (admin)
+
+private func prefsKey(for userId: String) -> String {
+    "\(userId)|\(SeerrUserConfig.preferencesId)|\(SeerrUserConfig.client)"
+}
+
+private func jellyfinUser(_ id: String, _ name: String, maxRating: Int? = nil) -> UserDto {
+    var user = UserDto()
+    user.id = id
+    user.name = name
+    user.policy = policy(maxRating: maxRating)
+    return user
+}
+
+private let adminJSON = #"{"id":1,"permissions":2,"jellyfinUserId":"ADMIN","displayName":"Admin"}"#
+
+@MainActor
+private struct ActivationWorld {
+    let app: AppState
+    let api: MockAPIClient
+    let session: SeerrSession
+    let transport: RoutedSeerrTransport
+    let model = SeerrActivationModel()
+    let loc = LocalizationManager()
+
+    func writes(for userId: String) -> [DisplayPreferencesDto] {
+        api.updateDisplayPreferencesCalls.filter { $0.userId == userId }.map(\.prefs)
+    }
+
+    func stored(_ userId: String) -> SeerrUserConfig {
+        SeerrUserConfig.read(api.displayPreferences[prefsKey(for: userId)])
+    }
+}
+
+/// An administrator (`ADMIN`) whose Seerr session is connected, over `users`.
+/// `enabled` users carry `seerr.enabled` + the address; the admin always keeps
+/// the address. `lookups` answers `/user/jellyfin/<id>` (absent ⇒ no answer).
+@MainActor
+private func activationWorld(
+    users: [UserDto], enabled: Set<String> = [], lookups: [String: StubSeerrTransport.Reply] = [:],
+    credentialed: Bool = true, publicSettings: StubSeerrTransport.Reply = settingsReply
+) async -> ActivationWorld {
+    let api = MockAPIClient()
+    api.stubbedUsers = users
+    for user in users {
+        guard let id = user.id else { continue }
+        let on = enabled.contains(id)
+        if on || id == "ADMIN" {
+            api.displayPreferences[prefsKey(for: id)] = SeerrUserConfig.merged(
+                SeerrUserConfig(isEnabled: on, url: seerrURL), into: nil)
+        }
+    }
+    let (app, _) = signedIn(userId: "ADMIN", config: enabledConfig, api: api)
+    var routes: [String: [StubSeerrTransport.Reply]] = [
+        "/settings/public": [publicSettings], "/auth/me": [userReply(adminJSON)]]
+    for (id, reply) in lookups { routes["/user/jellyfin/\(id)"] = [reply] }
+    let transport = RoutedSeerrTransport(routes)
+    let storage = MockKeychain()
+    if credentialed { storage.saveSeerrSessions(["S1|ADMIN": bound("abc")]) }
+    let session = makeSession(transport, storage: storage, following: app)
+    await session.reload(appState: app)
+    return ActivationWorld(app: app, api: api, session: session, transport: transport)
+}
+
+@MainActor
+@Suite("Seerr activation")
+struct SeerrActivationTests {
+    private let adminUser = jellyfinUser("ADMIN", "Admin")
+    private let ann = jellyfinUser("ANN", "Ann")
+    private let bobUser = jellyfinUser("BOB", "Bob")
+    private let tom = jellyfinUser("TOM", "Tom", maxRating: 10)
+
+    @Test("a server-capped user is refused with a reason, and nothing is written for them")
+    func cappedUserIsRefusedWithReason() async {
+        let world = await activationWorld(
+            users: [adminUser, tom], lookups: ["ADMIN": userReply(adminJSON)])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setEnabled(true, userId: "TOM", appState: world.app, loc: world.loc)
+
+        #expect(message == world.loc.localized("seerr.activation.refused.capped", "Tom"))
+        #expect(world.writes(for: "TOM").isEmpty)
+        #expect(world.model.lines.first { $0.id == "TOM" }?.kind == .ageCapped)
+        #expect(world.model.lines.first { $0.id == "TOM" }?.isEnabled == false)
+    }
+
+    @Test("enable-all skips the capped, writes the others, and summarises")
+    func enableAllSkipsCappedAndSummarises() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser, tom],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply, "BOB": userReply(bobJSON)])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let summary = await world.model.enableAll(appState: world.app, loc: world.loc)
+
+        #expect(world.api.updateDisplayPreferencesCalls.count == 3)
+        #expect(world.writes(for: "TOM").isEmpty)
+        for id in ["ADMIN", "ANN", "BOB"] { #expect(world.stored(id) == SeerrUserConfig(isEnabled: true, url: seerrURL)) }
+        #expect(summary == SeerrActivationModel.activationSummary(enabled: 3, refusedNames: ["Tom"], loc: world.loc))
+        #expect(world.model.enabledCount == 3)
+    }
+
+    @Test("a write carries every other pref of the stored entity")
+    func writePreservesOtherPrefs() async {
+        let world = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply])
+        var existing = DisplayPreferencesDto(client: SeerrUserConfig.client, id: SeerrUserConfig.preferencesId)
+        existing.customPrefs = ["skipForwardLength": "30000", "chromecastVersion": "stable"]
+        existing.sortBy = "SortName"
+        world.api.displayPreferences[prefsKey(for: "ANN")] = existing
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setEnabled(true, userId: "ANN", appState: world.app, loc: world.loc)
+
+        #expect(message == nil)
+        let sent = world.writes(for: "ANN")
+        #expect(sent.count == 1)
+        #expect(sent.first?.customPrefs?["skipForwardLength"] == "30000")
+        #expect(sent.first?.customPrefs?["chromecastVersion"] == "stable")
+        #expect(sent.first?.sortBy == "SortName")
+        #expect(sent.first?.customPrefs?["seerr.enabled"] == "true")
+        #expect(sent.first?.customPrefs?["seerr.url"] == seerrURL.absoluteString)
+    }
+
+    @Test("disable-all keeps the admin's address, and each user's")
+    func disableAllKeepsAdminAddress() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser], enabled: ["ADMIN", "ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(), "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.model.enabledCount == 2)
+
+        await world.model.disableAll(appState: world.app)
+
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+        #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+        #expect(world.writes(for: "BOB").isEmpty)
+        #expect(world.model.enabledCount == 0)
+    }
+
+    @Test("turning one user off keeps their stored address")
+    func disableOneKeepsAddress() async {
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"], lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setEnabled(false, userId: "ANN", appState: world.app, loc: world.loc)
+
+        #expect(message == nil)
+        #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+    }
+
+    @Test("a new address rewrites the admin and every enabled user, never a disabled one")
+    func setAddressRewritesEnabledOnly() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(), "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+
+        await world.model.setAddress(otherSeerrURL, appState: world.app)
+
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: false, url: otherSeerrURL))
+        #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: true, url: otherSeerrURL))
+        #expect(world.writes(for: "BOB").isEmpty)
+        #expect(world.api.updateDisplayPreferencesCalls.count == 2)
+    }
+
+    @Test("a failed Seerr lookup is « unknown »; with no credential nothing is looked up")
+    func lookupFailureIsUnknown() async {
+        let failing = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": .failure(URLError(.timedOut))])
+        await failing.model.load(appState: failing.app, session: failing.session)
+        #expect(failing.model.lines.map(\.kind) == [.linked(autoApproves: true), .unknown])
+
+        let keyless = await activationWorld(users: [adminUser, ann], credentialed: false)
+        let before = keyless.transport.requests.count
+        await keyless.model.load(appState: keyless.app, session: keyless.session)
+        #expect(keyless.transport.requests.count == before)
+        #expect(keyless.model.lines.map(\.kind) == [.unknown, .unknown])
+    }
+
+    @Test("lines keep the server's user order and reflect each stored switch")
+    func linesInUserOrder() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser], enabled: ["BOB"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply, "BOB": userReply(bobJSON)],
+            publicSettings: .response(status: 200, body: #"{"mediaServerType":2,"newPlexLogin":true}"#))
+        await world.model.load(appState: world.app, session: world.session)
+
+        #expect(world.model.lines.map(\.id) == ["ADMIN", "ANN", "BOB"])
+        #expect(world.model.lines.map(\.name) == ["Admin", "Ann", "Bob"])
+        #expect(world.model.lines.map(\.isEnabled) == [false, false, true])
+        #expect(world.model.lines[1].kind == .willBeCreated)
+    }
+
+    @Test("the line kind truth table")
+    func lineKinds() {
+        let request = SeerrUser(id: SeerrUserID(rawValue: 2), permissions: .request)
+        let approved = SeerrUser(id: SeerrUserID(rawValue: 3), permissions: [.request, .autoApprove])
+        let adminSeerr = SeerrUser(id: SeerrUserID(rawValue: 4), permissions: .admin)
+        let movieOnly = SeerrUser(id: SeerrUserID(rawValue: 5), permissions: [.request, .autoApproveMovie])
+        func kind(_ policy: UserPolicy?, _ user: SeerrUser?, failed: Bool = false, plex: Bool = false) -> SeerrUserLineKind {
+            SeerrUserLineKind.kind(policy: policy, seerrUser: user, lookupFailed: failed, newPlexLogin: plex)
+        }
+        #expect(kind(policy(maxRating: 10), request) == .ageCapped)
+        #expect(kind(policy(maxRating: 10), nil, failed: true) == .ageCapped)
+        #expect(kind(policy(), request, failed: true) == .unknown)
+        #expect(kind(policy(), request) == .linked(autoApproves: false))
+        #expect(kind(policy(), approved) == .linked(autoApproves: true))
+        #expect(kind(policy(), adminSeerr) == .linked(autoApproves: true))
+        #expect(kind(policy(), movieOnly) == .linked(autoApproves: false))
+        #expect(kind(policy(), nil, plex: true) == .willBeCreated)
+        #expect(kind(policy(), nil, plex: false) == .mustBeAdded)
+        #expect(kind(nil, nil) == .mustBeAdded)
+    }
+
+    @Test("the summary names who was refused, with the plural rule")
+    func summaryWording() {
+        let loc = LocalizationManager()
+        #expect(SeerrActivationModel.activationSummary(enabled: 3, refusedNames: [], loc: loc)
+                == loc.counted("seerr.activation.summary.enabled", 3))
+        let one = SeerrActivationModel.activationSummary(enabled: 1, refusedNames: ["Tom"], loc: loc)
+        #expect(one.hasPrefix(loc.counted("seerr.activation.summary.enabled", 1)))
+        #expect(one.contains(loc.localized(loc.pluralKey("seerr.activation.summary.refused", 1), "Tom")))
+        let two = SeerrActivationModel.activationSummary(enabled: 0, refusedNames: ["Tom", "Zoé"], loc: loc)
+        #expect(two.contains(loc.localized(loc.pluralKey("seerr.activation.summary.refused", 2), "Tom, Zoé")))
+    }
+}

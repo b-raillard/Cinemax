@@ -137,6 +137,7 @@
 		2D35DBFD13AA75B6C5659366 /* OnboardingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A361F11FB81621F3F110778D /* OnboardingPolicy.swift */; };
 		2E1A085843FA335D04A9B52B /* ToastCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5610FD34CD71B2F9E4D65FC6 /* ToastCenter.swift */; };
 		2E41DA320C3BAD16BED4FBFD /* JellyfinLite.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8757BE6612821942C5A36AB /* JellyfinLite.swift */; };
+		2F2665924782406A6D4F6012 /* SeerrActivation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D508AB1744CFF8B6AE7AA4D2 /* SeerrActivation.swift */; };
 		2F4C51078FC6EFB427650A5F /* AccentOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6972E29F4227F16D517B124A /* AccentOption.swift */; };
 		2F59062A0754C46430071661 /* MetadataImagesTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9405DE38F64738B12862F6B5 /* MetadataImagesTab.swift */; };
 		2FA1FE57761F94C1764861F9 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32016E5B7B38AFDEB6E75857 /* LocalizationManager.swift */; };
@@ -202,6 +203,7 @@
 		3F4FBBFA1C6FFF8C3E6AAA38 /* HeroBackdropDriftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47B848A47DC7A5AD7FDBA409 /* HeroBackdropDriftTests.swift */; };
 		3F54016BEA73B7FE701C16AD /* DiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8119FB81D7402C131E9B1DB0 /* DiagnosticsTests.swift */; };
 		3F6DB053F2E36DC1CA4F46A7 /* MediaDetailCastSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A51D73542F8E7874313164 /* MediaDetailCastSection.swift */; };
+		3FC65ECB11823AD0BF4FAB40 /* SeerrActivation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D508AB1744CFF8B6AE7AA4D2 /* SeerrActivation.swift */; };
 		4067439FB88F4A0C526FE72F /* CardPlayTargetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 378B9A362B8428E2A6F99BB9 /* CardPlayTargetTests.swift */; };
 		409362A6EC91C09AD6A89471 /* AccountSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2572067930833AF233E9A6DB /* AccountSettingsStore.swift */; };
 		4134A3AE6228FC62801C9E93 /* CinemaxKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC223F1A46FB5458A8F326AD /* CinemaxKit */; };
@@ -1200,6 +1202,7 @@
 		D3DF8C441837A8A10C480077 /* ProgressBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressBarView.swift; sourceTree = "<group>"; };
 		D411739B23A852BEEFC0B087 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D455572B09131C62FDAE5239 /* JellyfinSocketHubTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JellyfinSocketHubTests.swift; sourceTree = "<group>"; };
+		D508AB1744CFF8B6AE7AA4D2 /* SeerrActivation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeerrActivation.swift; sourceTree = "<group>"; };
 		D584410BAFEC8C152E9D4530 /* CardLabelLocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardLabelLocalizationTests.swift; sourceTree = "<group>"; };
 		D657D13170DAA4F01D4B99E8 /* FocusScaleModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FocusScaleModifier.swift; sourceTree = "<group>"; };
 		D6D5D1A97008B4A1CA8B514B /* AdminUsersScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminUsersScreen.swift; sourceTree = "<group>"; };
@@ -2077,6 +2080,7 @@
 			isa = PBXGroup;
 			children = (
 				E7C6BD211BB4DF0818E3E174 /* SeerrAccess.swift */,
+				D508AB1744CFF8B6AE7AA4D2 /* SeerrActivation.swift */,
 				2682C02D4BED0BAC8806A8ED /* SeerrConnectionTest.swift */,
 				338AFCFCF58821A6F9985A29 /* SeerrSession.swift */,
 			);
@@ -2695,6 +2699,7 @@
 				CCA01F1FD9DF944BFDEBD578 /* SeekCoalescer.swift in Sources */,
 				329C2104D5C6F3DEB74B09DB /* SeekMachine.swift in Sources */,
 				DE444628240EC2EBF484A218 /* SeerrAccess.swift in Sources */,
+				3FC65ECB11823AD0BF4FAB40 /* SeerrActivation.swift in Sources */,
 				B5383C5D1C73882CAD8AD464 /* SeerrConnectionTest.swift in Sources */,
 				73B71FECA44B9116E94F386F /* SeerrSession.swift in Sources */,
 				95D94E036EDA6AE3326386D4 /* ServerDiscoverySheet.swift in Sources */,
@@ -3097,6 +3102,7 @@
 				F9A891C275B494CA3A05BF0C /* SeekCoalescer.swift in Sources */,
 				7C04769DD57EAB5A1B9B7B92 /* SeekMachine.swift in Sources */,
 				3B938E4C5758EF39B43195E9 /* SeerrAccess.swift in Sources */,
+				2F2665924782406A6D4F6012 /* SeerrActivation.swift in Sources */,
 				947BFE51B554134163A8782C /* SeerrConnectionTest.swift in Sources */,
 				5EDCD7A1259F24135D153BB3 /* SeerrSession.swift in Sources */,
 				60C9BC65C7DCC678C8D21DA4 /* ServerDiscoverySheet.swift in Sources */,
