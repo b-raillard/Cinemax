@@ -205,6 +205,32 @@ public struct KeychainService: Sendable {
         }
     }
 
+    // MARK: - Seerr secrets
+
+    /// Account holding `[accountKey: session cookie]`.
+    static let seerrSessionsAccount = "seerr_sessions"
+    /// Account holding `[activeServerId: API key]`.
+    static let seerrAPIKeysAccount = "seerr_api_keys"
+
+    private func seerrMap(_ account: String) -> [String: String] {
+        guard let data = getData(for: account) else { return [:] }
+        return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+    }
+
+    private func saveSeerrMap(_ map: [String: String], account: String) {
+        guard let data = try? JSONEncoder().encode(map) else { return }
+        do {
+            try save(data: data, for: account)
+        } catch {
+            keychainLog.error("Saving Seerr secrets failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    public func seerrSessions() -> [String: String] { seerrMap(Self.seerrSessionsAccount) }
+    public func saveSeerrSessions(_ sessions: [String: String]) { saveSeerrMap(sessions, account: Self.seerrSessionsAccount) }
+    public func seerrAPIKeys() -> [String: String] { seerrMap(Self.seerrAPIKeysAccount) }
+    public func saveSeerrAPIKeys(_ keys: [String: String]) { saveSeerrMap(keys, account: Self.seerrAPIKeysAccount) }
+
     // MARK: - Parental-controls lock
 
     /// Account holding the JSON `ParentalLockCredential`.
@@ -379,6 +405,7 @@ public struct KeychainService: Sendable {
         serversAccount, activeServerIdAccount, trustedCertificatesAccount,
         earlyAdopterAccount,
         parentalLockAccount,
+        seerrSessionsAccount, seerrAPIKeysAccount
     ]
 
     private static let privateGroupMigratedKey = "keychain.privateAccessGroup.migrated"

@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import JellyfinAPI
 @testable import CinemaxKit
 @testable import Cinemax
 
@@ -91,5 +92,66 @@ struct SeerrModelTests {
         #expect(c.parts.count == 1)
         #expect(c.parts[0].kind == .movie)
         #expect(c.parts[0].year == nil)
+    }
+}
+
+@Suite("Seerr configuration")
+struct SeerrConfigurationTests {
+
+    private let address = URL(string: "http://h:5055")!
+
+    @Test("merge keeps the legacy keys Jellyfin injects")
+    func mergeRoundTripsLegacyKeys() {
+        let dto = DisplayPreferencesDto(customPrefs: ["skipForwardLength": "30000", "chromecastVersion": "stable"])
+        let merged = SeerrUserConfig.merged(SeerrUserConfig(isEnabled: true, url: address), into: dto)
+        #expect(merged.customPrefs?["skipForwardLength"] == "30000")
+        #expect(merged.customPrefs?["chromecastVersion"] == "stable")
+        #expect(merged.customPrefs?["seerr.enabled"] == "true")
+        #expect(merged.customPrefs?["seerr.url"] == "http://h:5055")
+        #expect(merged.id == SeerrUserConfig.preferencesId)
+        #expect(merged.client == SeerrUserConfig.client)
+    }
+
+    @Test("disabling keeps the address")
+    func disableKeepsAddress() {
+        let merged = SeerrUserConfig.merged(SeerrUserConfig(isEnabled: false, url: address), into: nil)
+        #expect(merged.customPrefs?["seerr.enabled"] == nil)
+        #expect(merged.customPrefs?["seerr.url"] == "http://h:5055")
+    }
+
+    @Test("garbage reads as off / no address")
+    func readIgnoresGarbage() {
+        let dto = DisplayPreferencesDto(customPrefs: ["seerr.enabled": "yes", "seerr.url": "not a url"])
+        let config = SeerrUserConfig.read(dto)
+        #expect(config.isEnabled == false)
+        #expect(config.url == nil)
+        #expect(SeerrUserConfig.read(nil) == SeerrUserConfig(isEnabled: false, url: nil))
+    }
+
+    @Test("enabled round-trips through read")
+    func readRoundTrips() {
+        let config = SeerrUserConfig(isEnabled: true, url: address)
+        #expect(SeerrUserConfig.read(SeerrUserConfig.merged(config, into: nil)) == config)
+    }
+
+    @Test("secret storage round-trips in the mock")
+    func secretsRoundTripInMock() {
+        let keychain = MockKeychain()
+        keychain.saveSeerrSessions(["srv|usr": "cookie"])
+        keychain.saveSeerrAPIKeys(["srv": "key"])
+        #expect(keychain.seerrSessions() == ["srv|usr": "cookie"])
+        #expect(keychain.seerrAPIKeys() == ["srv": "key"])
+    }
+
+    @Test("the mock serves and records display preferences")
+    func mockDisplayPreferences() async throws {
+        let api = MockAPIClient()
+        let empty = try await api.getDisplayPreferences(id: "x", client: "c", userId: nil)
+        #expect(empty.customPrefs == nil)
+        let dto = SeerrUserConfig.merged(SeerrUserConfig(isEnabled: true, url: address), into: empty)
+        try await api.updateDisplayPreferences(dto, id: "x", client: "c", userId: nil)
+        let back = try await api.getDisplayPreferences(id: "x", client: "c", userId: nil)
+        #expect(SeerrUserConfig.read(back).isEnabled)
+        #expect(api.updateDisplayPreferencesCalls.count == 1)
     }
 }

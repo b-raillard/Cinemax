@@ -6,6 +6,28 @@ import CinemaxKit
 
 final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
+    // MARK: - UserPreferencesAPI
+
+    /// Keyed `"\(userId ?? "me")|\(id)|\(client)"`.
+    var displayPreferences: [String: DisplayPreferencesDto] = [:]
+    private(set) var updateDisplayPreferencesCalls: [(id: String, client: String, userId: String?, prefs: DisplayPreferencesDto)] = []
+
+    private func displayPreferencesKey(_ id: String, _ client: String, _ userId: String?) -> String {
+        "\(userId ?? "me")|\(id)|\(client)"
+    }
+
+    func getDisplayPreferences(id: String, client: String, userId: String?) async throws -> DisplayPreferencesDto {
+        recordLock.withLock { displayPreferences[displayPreferencesKey(id, client, userId)] }
+            ?? DisplayPreferencesDto(client: client, id: id)
+    }
+
+    func updateDisplayPreferences(_ prefs: DisplayPreferencesDto, id: String, client: String, userId: String?) async throws {
+        recordLock.withLock {
+            displayPreferences[displayPreferencesKey(id, client, userId)] = prefs
+            updateDisplayPreferencesCalls.append((id, client, userId, prefs))
+        }
+    }
+
     // MARK: - Call tracking
 
     /// Serializes every mutation of the call-recording state below. View
@@ -813,7 +835,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
 // MARK: - Mock Keychain
 
-final class MockKeychain: SecureStorageProtocol, @unchecked Sendable {
+final class MockKeychain: SecureStorageProtocol, SeerrSecretStorage, @unchecked Sendable {
+    private var storedSeerrSessions: [String: String] = [:]
+    private var storedSeerrAPIKeys: [String: String] = [:]
+    func seerrSessions() -> [String: String] { storedSeerrSessions }
+    func saveSeerrSessions(_ s: [String: String]) { storedSeerrSessions = s }
+    func seerrAPIKeys() -> [String: String] { storedSeerrAPIKeys }
+    func saveSeerrAPIKeys(_ k: [String: String]) { storedSeerrAPIKeys = k }
+
     var savedAccessToken: String?
     var savedServerURL: URL?
     var savedSession: UserSession?

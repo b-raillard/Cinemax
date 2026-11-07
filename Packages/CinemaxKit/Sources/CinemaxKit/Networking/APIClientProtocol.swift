@@ -725,13 +725,31 @@ public extension PlaylistAPI {
     func renamePlaylist(playlistId: String, name: String) async throws {}
 }
 
+// MARK: - User preferences
+
+/// Server-side DisplayPreferences (the per-user Seerr configuration lives
+/// there). Conformance is declared in `JellyfinAPIClient+DisplayPreferences.swift`.
+public protocol UserPreferencesAPI: Sendable {
+    func getDisplayPreferences(id: String, client: String, userId: String?) async throws -> DisplayPreferencesDto
+    func updateDisplayPreferences(_ prefs: DisplayPreferencesDto, id: String, client: String, userId: String?) async throws
+}
+
+public extension UserPreferencesAPI {
+    func getDisplayPreferences(id: String, client: String, userId: String?) async throws -> DisplayPreferencesDto {
+        throw JellyfinError.notConnected
+    }
+    func updateDisplayPreferences(_ prefs: DisplayPreferencesDto, id: String, client: String, userId: String?) async throws {
+        throw JellyfinError.notConnected
+    }
+}
+
 // MARK: - Aggregate
 
 /// Umbrella protocol kept as the default dependency type — view models and
 /// screens that touch multiple domains (e.g. `HomeViewModel`,
 /// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
 /// narrower sub-protocol they actually need.
-public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI & RemoteControlAPI & PlaylistAPI
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI & RemoteControlAPI & PlaylistAPI & UserPreferencesAPI
 
 // MARK: - Default arguments
 
