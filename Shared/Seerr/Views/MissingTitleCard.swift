@@ -9,6 +9,7 @@ import SwiftUI
 struct MissingTitleCard: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let title: String
     let subtitle: String?
@@ -26,9 +27,10 @@ struct MissingTitleCard: View {
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurface)
                         .multilineTextAlignment(.center)
-                        .lineLimit(4)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 4)
                         .minimumScaleFactor(0.8)
-                    if let subtitle {
+                    // At accessibility sizes the badge must stay visible: the year goes.
+                    if let subtitle, !dynamicTypeSize.isAccessibilitySize {
                         Text(subtitle)
                             .font(CinemaFont.label(.medium))
                             .foregroundStyle(CinemaColor.onSurfaceMuted)
@@ -40,6 +42,7 @@ struct MissingTitleCard: View {
                         .foregroundStyle(badge == .request ? themeManager.accent : CinemaColor.onSurfaceMuted)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
+                        .layoutPriority(1)
                 }
                 .padding(CinemaSpacing.spacing3)
             }
@@ -76,5 +79,15 @@ struct MissingTitleCard: View {
     .background(CinemaColor.surfaceContainerLowest)
     .environment(ThemeManager())
     .environment(LocalizationManager())
+}
+
+#Preview("MissingTitleCard — accessibility5") {
+    MissingTitleCard(title: "Un titre très long qui passe sur plusieurs lignes", subtitle: "2023", badge: .request)
+        .frame(width: 160)
+        .padding(CinemaSpacing.spacing4)
+        .background(CinemaColor.surfaceContainerLowest)
+        .dynamicTypeSize(.accessibility5)
+        .environment(ThemeManager())
+        .environment(LocalizationManager())
 }
 #endif

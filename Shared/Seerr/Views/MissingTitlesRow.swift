@@ -65,10 +65,19 @@ struct MissingTitlesRow<Element: Identifiable & Equatable & Sendable, Card: View
             }
         case .loaded(let elements):
             if !elements.isEmpty {
-                ContentRow(data: elements, id: \.id) {
+                ContentRow(data: rowItems(elements), id: \.id) {
                     header(count: count, action: headerAction)
-                } itemView: { element in
-                    card(element).frame(width: cardWidth)
+                } itemView: { item in
+                    switch item {
+                    case .card(let element):
+                        card(element).frame(width: cardWidth)
+                    case .action(let action):
+                        #if os(tvOS)
+                        actionCard(action)
+                        #else
+                        EmptyView()
+                        #endif
+                    }
                 }
             }
         }
@@ -89,27 +98,61 @@ struct MissingTitlesRow<Element: Identifiable & Equatable & Sendable, Card: View
                     .lineLimit(1)
             }
             Spacer()
+            #if !os(tvOS)
             if let action {
                 Button(action: action.perform) {
                     Text(action.label)
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(themeManager.accent)
-                        #if os(tvOS)
-                        .padding(.horizontal, CinemaSpacing.spacing3)
-                        .padding(.vertical, CinemaSpacing.spacing2)
-                        .background(CinemaColor.surfaceContainerHigh, in: Capsule())
-                        #endif
                 }
-                #if os(tvOS)
-                .buttonStyle(TVFilterChipButtonStyle(accent: themeManager.accent))
-                .focusEffectDisabled()
-                .hoverEffectDisabled()
-                #else
                 .buttonStyle(.plain)
-                #endif
+            }
+            #endif
+        }
+    }
+
+    private enum RowItem: Identifiable {
+        case card(Element)
+        case action(MissingHeaderAction)
+
+        var id: String {
+            switch self {
+            case .card(let element): "card-\(element.id)"
+            case .action: "action"
             }
         }
     }
+
+    /// tvOS: the action closes the row as a card (a header link is out of the
+    /// focus beam of a short row — see ContentRow's « Tout voir »).
+    private func rowItems(_ elements: [Element]) -> [RowItem] {
+        var items = elements.map(RowItem.card)
+        #if os(tvOS)
+        if let headerAction { items.append(.action(headerAction)) }
+        #endif
+        return items
+    }
+
+    #if os(tvOS)
+    private func actionCard(_ action: MissingHeaderAction) -> some View {
+        Button(action: action.perform) {
+            Text(action.label)
+                .font(CinemaFont.label(.large))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(themeManager.accent)
+                .padding(CinemaSpacing.spacing3)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .aspectRatio(2 / 3, contentMode: .fit)
+                .background(CinemaColor.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: CinemaRadius.large))
+                .cinemaFocus()
+        }
+        .buttonStyle(CinemaTVCardButtonStyle())
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        .frame(width: cardWidth)
+        .accessibilityLabel(action.label)
+    }
+    #endif
 
     private var titleFont: Font {
         #if os(tvOS)
