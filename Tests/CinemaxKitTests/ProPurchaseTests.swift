@@ -412,6 +412,8 @@ struct ProFeatureCatalogueTests {
         #expect(ProFeatureCatalogue.features.map(\.id) == [
             // « Reprendre ici » joined on 2026-10-24, beside « Lire sur… ».
             .memorizedAccounts, .administration, .playOn, .resumeHere, .appIcons, .seasonalAllYear, .shortcuts,
+            // Seerr requests joined on 2026-11-07, at the end.
+            .requests,
         ])
         #expect(ProFeatureID.allCases.count == ProFeatureCatalogue.features.count)
     }
@@ -424,7 +426,8 @@ struct ProFeatureCatalogueTests {
     @Test("Les fonctions réellement verrouillées après le lot D")
     func gatedSet() {
         let gated = Set(ProFeatureCatalogue.features.filter(\.isGated).map(\.id))
-        #expect(gated == [.memorizedAccounts, .administration, .playOn, .resumeHere, .appIcons, .seasonalAllYear, .shortcuts])
+        #expect(gated == [.memorizedAccounts, .administration, .playOn, .resumeHere, .appIcons, .seasonalAllYear, .shortcuts,
+                          .requests])
     }
 
     @Test("Chaque fonction a son titre, son détail et sa ligne de tableau, dans chaque langue")

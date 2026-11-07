@@ -1112,6 +1112,41 @@ struct SeerrSessionTests {
         #expect(!stub.exhausted)
     }
 
+    /// Settings shows « Clé enregistrée » for any key stored for this server,
+    /// even one entered for another Seerr address (unusable, but there to remove).
+    @Test("a stored device key is reported for the active server only, whatever its address")
+    func storedDeviceKeyIsPerServer() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let storage = MockKeychain()
+        storage.saveSeerrAPIKeys(["S9": bound("OTHER")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        #expect(!session.hasStoredDeviceKey(appState: app))
+        storage.saveSeerrAPIKeys(["S9": bound("OTHER"),
+                                  "S1": SeerrBoundSecret(value: "KEY", origin: URL(string: "http://elsewhere:5055")!)])
+        #expect(session.hasStoredDeviceKey(appState: app))
+        storage.saveSeerrAPIKeys(["S1": SeerrBoundSecret(value: "", origin: URL(string: "http://elsewhere:5055")!)])
+        #expect(!session.hasStoredDeviceKey(appState: app))
+    }
+
+    @Test("a device key without an address is never stored; removing needs no address")
+    func deviceKeyNeedsAnAddress() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let storage = MockKeychain()
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await promoteToAdmin(app, api)
+
+        await session.setDeviceKey("KEY", address: nil, appState: app)
+        #expect(storage.seerrAPIKeys().isEmpty)
+        #expect(stub.requests.isEmpty)
+
+        storage.saveSeerrAPIKeys(["S1": bound("KEY")])
+        await session.setDeviceKey(nil, address: nil, appState: app)
+        #expect(storage.seerrAPIKeys().isEmpty)
+        #expect(!session.hasStoredDeviceKey(appState: app))
+    }
+
     @Test("forgetting an account drops its cookie; forgetting a server drops its key")
     func forgettingDropsSecrets() {
         let storage = MockKeychain()

@@ -71,8 +71,9 @@ final class SeerrSession {
 
     // MARK: Providers (wired at the root)
 
-    /// Whether the Pro allows requests. `true` until Task 10 wires it to the
-    /// `.requests` feature; `false` ⇒ no Seerr call anywhere.
+    /// Whether the Pro allows requests — `ProFeatureAccess.allows(.requests)`,
+    /// wired by `AppNavigation` before the first reload (and the session is
+    /// reloaded when the tier moves); `false` ⇒ no Seerr call anywhere.
     @ObservationIgnored var proAllowsProvider: @MainActor () -> Bool = { true }
     /// The account the app is on (`AppState.activeAccountKey`), wired by
     /// `AppNavigation`. Unwired (`nil`) serves nothing: fail closed.
@@ -537,19 +538,30 @@ final class SeerrSession {
 
     /// An administrator writes (or removes, for `nil` / blank) this device's
     /// API key for the active server, bound to the Seerr `address` it was
-    /// entered for, then the identity is re-read in the new mode.
-    func setDeviceKey(_ key: String?, address: URL, appState: AppState) async {
+    /// entered for, then the identity is re-read in the new mode. A key with
+    /// no address is never stored (it could not be bound); removing needs none.
+    func setDeviceKey(_ key: String?, address: URL?, appState: AppState) async {
         guard appState.isAdministrator, let serverId = appState.activeServerId else { return }
         let trimmed = key?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         var keys = storage.seerrAPIKeys()
         if trimmed.isEmpty {
             keys.removeValue(forKey: serverId)
         } else {
+            guard let address else { return }
             let origin = SeerrAddress.normalize(address.absoluteString) ?? address
             keys[serverId] = SeerrBoundSecret(value: trimmed, origin: origin)
         }
         storage.saveSeerrAPIKeys(keys)
         await reload(appState: appState)
+    }
+
+    /// Whether this device holds an API key for the active server — bound to
+    /// the saved address or not: Settings shows « Clé enregistrée » for it, so
+    /// a key entered for an address since changed can still be removed. The
+    /// value itself never leaves this type.
+    func hasStoredDeviceKey(appState: AppState) -> Bool {
+        guard let serverId = appState.activeServerId else { return false }
+        return storage.seerrAPIKeys()[serverId].map { !$0.value.isEmpty } ?? false
     }
 
     /// An account left this device for good (`AppState.onAccountForgotten`).

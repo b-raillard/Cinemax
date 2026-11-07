@@ -62,7 +62,11 @@ nonisolated enum ProFeatureCatalogue {
         // keeps Automatique (Halloween in season) and Désactivé.
         Feature(id: .seasonalAllYear, titleKey: "pro.feature.seasonal.title", detailKey: "pro.feature.seasonal.detail", icon: "leaf", isGated: true),
         Feature(id: .shortcuts, titleKey: "pro.feature.shortcuts.title", detailKey: "pro.feature.shortcuts.detail", icon: "square.stack.3d.up", isGated: true,
-                tvDetailKey: "pro.feature.shortcuts.detail.tv", tvRowKey: "pro.feature.shortcuts.row.tv")
+                tvDetailKey: "pro.feature.shortcuts.detail.tv", tvRowKey: "pro.feature.shortcuts.row.tv"),
+        // Seerr requests (spec 2026-11-06): Réglages → Demandes is the gate
+        // site (`SettingsCategory.proFeature`), and `SeerrSession` makes no
+        // Seerr call without it. Same wording on both platforms.
+        Feature(id: .requests, titleKey: "pro.feature.requests.title", detailKey: "pro.feature.requests.detail", icon: "tray.and.arrow.down", isGated: true)
     ]
 
     /// A « Toujours gratuit » line of the Pro page's table: what the free tier
@@ -107,6 +111,7 @@ nonisolated enum ProFeatureID: String, Sendable, CaseIterable, Identifiable {
     case appIcons
     case seasonalAllYear
     case shortcuts
+    case requests
 
     /// `sheet(item:)` — the root's contextual Pro sheet.
     var id: String { rawValue }

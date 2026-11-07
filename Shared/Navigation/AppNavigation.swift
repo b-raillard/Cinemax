@@ -283,6 +283,11 @@ struct AppNavigation: View {
         .onChange(of: proAccess.allows(.seasonalAllYear)) { _, _ in
             seasonal.reevaluate()
         }
+        // Seerr follows the tier too: refused ⇒ the session forgets its
+        // identity and makes no call; granted again ⇒ it comes back.
+        .onChange(of: proAccess.allows(.requests)) { _, _ in
+            Task { await seerr.reload(appState: appState) }
+        }
         .environment(playlistPresenter)
         // "Add to a playlist" is raised from poster context menus inside lazy
         // grids, where a presentation attached to the cell dies when it scrolls
@@ -457,6 +462,9 @@ struct AppNavigation: View {
             // The account the app is on RIGHT NOW: between `applyActiveServer`
             // and the reset, the session serves nothing of the previous one.
             seerr.activeAccountKeyProvider = { [appState] in appState.activeAccountKey }
+            // Seerr requests are a Pro feature: no Seerr call without it. Wired
+            // before `restoreSession`, whose refresh runs the first reload.
+            seerr.proAllowsProvider = { [proAccess] in proAccess.allows(.requests) }
             // The language rides every request as `Accept-Language` (Jellyfin
             // 12.0 localizes the media-stream titles the track pickers print
             // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds

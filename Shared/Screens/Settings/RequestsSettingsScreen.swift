@@ -1,0 +1,676 @@
+import SwiftUI
+import CinemaxKit
+
+/// Réglages → Demandes (Seerr, spec 2026-11-06), iOS AND tvOS. Three sections,
+/// in this order: **Connexion** (everyone who sees the page), then — Jellyfin
+/// admin only — **Configuration** (the address, « Tester la connexion » and its
+/// report, who may request) and **Sur cet appareil** (the optional API key).
+///
+/// A standalone view with its own environment: iOS pushes it inside the
+/// Settings detail wrapper, where an extension method returning `some View`
+/// would never redraw on an `@Observable` change (root RULE). On tvOS it is
+/// rendered inside `tvDetailView`, with its own focus lane (`tvActionRow` and
+/// `tvGlassToggle` read `SettingsScreen`'s — the `MenuSettingsScreen`
+/// precedent), every row ONE focusable unit.
+///
+/// Nothing here reads `isPro`: the category row is the Pro gate
+/// (`SettingsCategory.proFeature`), and `SeerrSession` makes no call without it.
+struct RequestsSettingsScreen: View {
+    @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
+    @Environment(ToastCenter.self) private var toasts
+    @Environment(SeerrSession.self) private var seerr
+    @Environment(\.motionEffectsEnabled) private var motionEffects
+
+    /// Replaced on an account change: another account's users are never shown.
+    @State private var activation = SeerrActivationModel()
+    @State private var addressText = ""
+    @State private var keyText = ""
+    /// The last report worth showing — an empty one (R19) never replaces it.
+    @State private var report: SeerrTestReport?
+    @State private var isTesting = false
+    @State private var isSigningIn = false
+    @State private var isBulkUpdating = false
+    @State private var isLoadingLines = false
+    @State private var pendingUserIds: Set<String> = []
+    @State private var hasStoredKey = false
+    @State private var showsDisableAllConfirm = false
+    /// What the user lines were last loaded for. The tvOS `.task` re-fires on
+    /// every re-presentation of Settings (Settings RULE): an unchanged trigger
+    /// loads nothing.
+    @State private var loadedTrigger: LoadTrigger?
+
+    #if os(tvOS)
+    @FocusState private var focusedItem: SettingsFocus?
+    #endif
+
+    /// The inputs the per-user lines depend on: who is asking, with which
+    /// Seerr identity, toward which address.
+    private struct LoadTrigger: Equatable {
+        let account: String?
+        let isAdmin: Bool
+        let connection: SeerrSession.Connection
+        let usesDeviceKey: Bool
+        let url: URL?
+    }
+
+    private var trigger: LoadTrigger {
+        LoadTrigger(account: appState.activeAccountKey, isAdmin: appState.isAdministrator,
+                    connection: seerr.connection, usesDeviceKey: seerr.usesDeviceKey, url: seerr.config?.url)
+    }
+
+    /// Re-read at render: an account switch to a capped (or not enabled)
+    /// profile while the page is open shows nothing of Seerr.
+    private var isVisible: Bool {
+        SeerrAccess.showsSettingsCategory(ageCapped: seerr.isAgeCapped, isAdmin: appState.isAdministrator,
+                                          config: seerr.config)
+    }
+
+    private var typedAddress: URL? { SeerrAddress.normalize(addressText) }
+    private var typedKey: String { keyText.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+            if isVisible {
+                connectionSection
+                if appState.isAdministrator {
+                    configurationSection
+                    deviceSection
+                }
+            } else {
+                noteText(loc.localized("seerr.settings.unavailable"))
+            }
+        }
+        .task(id: trigger) { await loadLinesIfNeeded() }
+        .onAppear {
+            seedAddress()
+            hasStoredKey = seerr.hasStoredDeviceKey(appState: appState)
+        }
+        .onChange(of: seerr.config?.url) { _, _ in seedAddress() }
+        .onChange(of: appState.activeAccountKey) { _, _ in resetForAccountChange() }
+        .alert(loc.localized("seerr.settings.disableAll"), isPresented: $showsDisableAllConfirm) {
+            Button(loc.localized("seerr.settings.disableAll"), role: .destructive) {
+                Task { await disableAll() }
+            }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
+        } message: {
+            Text(loc.localized("seerr.settings.disableAll.confirm"))
+        }
+    }
+
+    // MARK: - Connexion
+
+    private var connectionSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            sectionHeader(loc.localized("seerr.settings.section.connection"))
+            panel {
+                connectionRows
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var connectionRows: some View {
+        switch seerr.connection {
+        case .connected(let user):
+            let name = user.displayName ?? appState.currentUser?.name ?? ""
+            if seerr.usesDeviceKey {
+                infoRow(icon: "key.fill", text: loc.localized("seerr.settings.deviceKeyProfile", name))
+            } else {
+                infoRow(icon: "checkmark.circle.fill", text: loc.localized("seerr.settings.connectedAs", name),
+                        tint: CinemaColor.success)
+                divider
+                actionRow(id: "seerr.signOut", icon: "rectangle.portrait.and.arrow.right",
+                          label: loc.localized("seerr.settings.signOut")) {
+                    Task { await seerr.signOut() }
+                }
+            }
+        case .notConnected:
+            actionRow(id: "seerr.signIn", icon: "person.crop.circle.badge.checkmark",
+                      label: loc.localized("seerr.settings.signIn"), isBusy: isSigningIn) {
+                Task { await signIn() }
+            }
+            .disabled(isSigningIn)
+        case .notLinked:
+            failureRow(.notInSeerr)
+        case .keyRefused:
+            failureRow(.keyRefused)
+        case .unavailable:
+            infoRow(icon: "info.circle", text: loc.localized(
+                seerr.config?.url == nil ? "seerr.settings.connection.noAddress" : "seerr.settings.connection.unavailable"))
+        }
+    }
+
+    // MARK: - Configuration (admin)
+
+    private var configurationSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            sectionHeader(loc.localized("seerr.settings.section.configuration"))
+
+            addressField
+
+            panel {
+                actionRow(id: "seerr.test", icon: "checkmark.shield", label: loc.localized("seerr.settings.test"),
+                          isBusy: isTesting) {
+                    Task { await runTest() }
+                }
+                .disabled(isTesting || typedAddress == nil)
+            }
+
+            // Account mode signs the admin in: say what that leaves behind.
+            if typedKey.isEmpty {
+                noteText(loc.localized("seerr.settings.test.accountNote"))
+            }
+
+            if let report {
+                reportView(report)
+            }
+
+            if seerr.config?.url != nil {
+                usersBlock
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var addressField: some View {
+        #if os(iOS)
+        GlassTextField(label: loc.localized("seerr.settings.address"), text: $addressText,
+                       placeholder: loc.localized("seerr.settings.address.placeholder"), icon: "link",
+                       keyboardType: .URL)
+        #else
+        GlassTextField(label: loc.localized("seerr.settings.address"), text: $addressText,
+                       placeholder: loc.localized("seerr.settings.address.placeholder"), icon: "link")
+        #endif
+    }
+
+    @ViewBuilder
+    private var usersBlock: some View {
+        let lines = activation.lines
+        sectionHeader(loc.localized("seerr.settings.whoCanRequest", activation.enabledCount, lines.count))
+            .padding(.top, CinemaSpacing.spacing3)
+
+        if lines.isEmpty {
+            if isLoadingLines {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, CinemaSpacing.spacing3)
+            }
+        } else {
+            panel {
+                ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
+                    userRow(line)
+                    if index < lines.count - 1 { divider }
+                }
+            }
+
+            panel {
+                actionRow(id: "seerr.enableAll", icon: "person.3.fill", label: loc.localized("seerr.settings.enableAll"),
+                          isBusy: isBulkUpdating) {
+                    Task { await enableAll() }
+                }
+                .disabled(isBulkUpdating)
+                divider
+                actionRow(id: "seerr.disableAll", icon: "person.3", label: loc.localized("seerr.settings.disableAll"),
+                          tint: CinemaColor.error) {
+                    showsDisableAllConfirm = true
+                }
+                .disabled(isBulkUpdating || activation.enabledCount == 0)
+            }
+        }
+
+        noteText(loc.localized("seerr.settings.footnote"))
+    }
+
+    private func lineText(_ kind: SeerrUserLineKind) -> String {
+        switch kind {
+        case .ageCapped: loc.localized("seerr.settings.line.ageCapped")
+        case .linked(let autoApproves):
+            loc.localized(autoApproves ? "seerr.settings.line.linkedAutoApprove" : "seerr.settings.line.linked")
+        case .willBeCreated: loc.localized("seerr.settings.line.willBeCreated")
+        case .mustBeAdded: loc.localized("seerr.settings.line.mustBeAdded")
+        case .unknown: loc.localized("seerr.settings.line.unknown")
+        }
+    }
+
+    // MARK: - Report
+
+    private func reportView(_ report: SeerrTestReport) -> some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            ForEach(report.verified, id: \.self) { line in
+                reportLine(icon: "checkmark.circle.fill", tint: CinemaColor.success, title: line, detail: nil)
+            }
+            if let warning = report.warning {
+                reportLine(icon: "exclamationmark.triangle.fill", tint: themeManager.accent, title: warning, detail: nil)
+            }
+            if let failure = report.failure {
+                reportLine(icon: "xmark.octagon.fill", tint: CinemaColor.error, title: failureTitle(failure),
+                           detail: loc.localized(failure.fixKey))
+            }
+        }
+        .padding(CinemaSpacing.spacing4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        // One element per line for VoiceOver, read in order.
+        .accessibilityElement(children: .contain)
+    }
+
+    private func reportLine(icon: String, tint: Color, title: String, detail: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing3) {
+            Image(systemName: icon)
+                .font(.system(size: CinemaScale.pt(16), weight: .semibold))
+                .foregroundStyle(tint)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                Text(title)
+                    .font(rowLabelFont)
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail {
+                    Text(detail)
+                        .font(rowDetailFont)
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func failureTitle(_ failure: SeerrTestFailure) -> String {
+        if case .tooOld(let version) = failure { return loc.localized(failure.titleKey, version) }
+        return loc.localized(failure.titleKey)
+    }
+
+    /// A failure inside the Connexion section: its title, then how to fix it.
+    private func failureRow(_ failure: SeerrTestFailure) -> some View {
+        contentRow {
+            reportLine(icon: "exclamationmark.circle.fill", tint: CinemaColor.error, title: failureTitle(failure),
+                       detail: loc.localized(failure.fixKey))
+        }
+    }
+
+    // MARK: - Sur cet appareil (admin)
+
+    private var deviceSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            sectionHeader(loc.localized("seerr.settings.section.device"))
+            // Above the field, so the remote's scroll to the last row still shows it.
+            noteText(loc.localized("seerr.settings.key.explanation"))
+
+            if hasStoredKey {
+                panel {
+                    // The key is never shown back — only that there is one.
+                    infoRow(icon: "key.fill", text: loc.localized("seerr.settings.key.saved"))
+                    divider
+                    actionRow(id: "seerr.key.remove", icon: "trash", label: loc.localized("seerr.settings.key.remove"),
+                              tint: CinemaColor.error) {
+                        Task { await removeKey() }
+                    }
+                }
+            } else {
+                GlassTextField(label: loc.localized("seerr.settings.key"), text: $keyText, icon: "key", isSecure: true)
+                panel {
+                    actionRow(id: "seerr.key.save", icon: "square.and.arrow.down", label: loc.localized("seerr.settings.key.save")) {
+                        Task { await saveKey() }
+                    }
+                    .disabled(typedKey.isEmpty)
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func seedAddress() {
+        if addressText.isEmpty, let url = seerr.config?.url { addressText = url.absoluteString }
+    }
+
+    private func resetForAccountChange() {
+        activation = SeerrActivationModel()
+        loadedTrigger = nil
+        report = nil
+        keyText = ""
+        addressText = seerr.config?.url?.absoluteString ?? ""
+        hasStoredKey = seerr.hasStoredDeviceKey(appState: appState)
+    }
+
+    /// The per-user lines need a Seerr identity: they are (re)loaded each time
+    /// it, the address or the account moves — not on a mere re-presentation.
+    private func loadLinesIfNeeded() async {
+        let current = trigger
+        guard current.isAdmin, current.url != nil, current != loadedTrigger else { return }
+        isLoadingLines = true
+        await activation.load(appState: appState, session: seerr)
+        isLoadingLines = false
+        if !Task.isCancelled { loadedTrigger = current }
+    }
+
+    /// « Tester la connexion »: on the TYPED address (R18), in key mode when
+    /// the key field holds one. The address is saved only when nothing failed;
+    /// an empty report (the account changed, R19) shows nothing new.
+    private func runTest() async {
+        guard let address = typedAddress, !isTesting else { return }
+        isTesting = true
+        defer { isTesting = false }
+        let result = await SeerrConnectionTest.run(
+            address: address, deviceKey: typedKey.isEmpty ? nil : typedKey,
+            session: seerr, appState: appState, loc: loc)
+        guard result != SeerrTestReport() else { return }
+        report = result
+        guard result.failure == nil else { return }
+        addressText = address.absoluteString
+        if !SeerrAddress.sameOrigin(address, seerr.config?.url),
+           let message = await activation.setAddress(address, appState: appState, loc: loc) {
+            toasts.error(message)
+        }
+        // The admin's own address (and the session the test signed in) are
+        // read again: the lines follow through `trigger`.
+        await seerr.reload(appState: appState)
+    }
+
+    /// « Se connecter à Seerr », toward the SAVED address only. A failure says
+    /// what the connection test would say for the same reason.
+    private func signIn() async {
+        guard let address = seerr.config?.url, !isSigningIn else { return }
+        isSigningIn = true
+        defer { isSigningIn = false }
+        // Without Quick Connect, Jellyfin's refusal would read as a device one.
+        guard (try? await appState.apiClient.isQuickConnectEnabled()) == true else {
+            showFailure(.quickConnectOff)
+            return
+        }
+        if case .failure(let error) = await seerr.signIn(address: address, appState: appState),
+           let failure = SeerrAccess.signInFailure(error, policy: appState.currentUser?.policy) {
+            showFailure(failure)
+        }
+    }
+
+    private func showFailure(_ failure: SeerrTestFailure) {
+        toasts.error(failureTitle(failure), message: loc.localized(failure.fixKey))
+    }
+
+    private func toggle(_ line: SeerrUserLine) async {
+        guard !pendingUserIds.contains(line.id) else { return }
+        pendingUserIds.insert(line.id)
+        defer { pendingUserIds.remove(line.id) }
+        let turningOn = !line.isEnabled
+        if let message = await activation.setEnabled(turningOn, userId: line.id, appState: appState, loc: loc) {
+            // A refusal (age cap, no address yet) informs; a failed write is an error.
+            if turningOn, line.kind == .ageCapped || seerr.config?.url == nil {
+                toasts.info(message)
+            } else {
+                toasts.error(message)
+            }
+            return
+        }
+        // The admin's own switch changes the admin's own configuration (R22).
+        if line.id == appState.currentUserId { await seerr.reload(appState: appState) }
+    }
+
+    private func enableAll() async {
+        guard !isBulkUpdating else { return }
+        isBulkUpdating = true
+        defer { isBulkUpdating = false }
+        let summary = await activation.enableAll(appState: appState, loc: loc)
+        let everyoneOn = activation.lines.allSatisfy(\.isEnabled)
+        if everyoneOn { toasts.success(summary) } else { toasts.info(summary) }
+        await seerr.reload(appState: appState)
+    }
+
+    private func disableAll() async {
+        guard !isBulkUpdating else { return }
+        isBulkUpdating = true
+        defer { isBulkUpdating = false }
+        if let message = await activation.disableAll(appState: appState, loc: loc) {
+            toasts.error(message)
+        } else {
+            toasts.success(loc.localized("seerr.settings.disableAll.done"))
+        }
+        await seerr.reload(appState: appState)
+    }
+
+    /// Bound to the SAVED address: the key is only ever sent there.
+    private func saveKey() async {
+        let key = typedKey
+        guard !key.isEmpty else { return }
+        guard let address = seerr.config?.url else {
+            toasts.info(loc.localized("seerr.activation.noAddress"))
+            return
+        }
+        keyText = ""
+        await seerr.setDeviceKey(key, address: address, appState: appState)
+        hasStoredKey = seerr.hasStoredDeviceKey(appState: appState)
+        if hasStoredKey { toasts.success(loc.localized("seerr.settings.key.savedToast")) }
+    }
+
+    private func removeKey() async {
+        await seerr.setDeviceKey(nil, address: seerr.config?.url, appState: appState)
+        hasStoredKey = seerr.hasStoredDeviceKey(appState: appState)
+        if !hasStoredKey { toasts.success(loc.localized("seerr.settings.key.removedToast")) }
+    }
+
+    // MARK: - Row building blocks (one look per platform)
+
+    private var rowLabelFont: Font {
+        #if os(tvOS)
+        .system(size: CinemaScale.pt(20), weight: .medium)
+        #else
+        CinemaFont.dynamicLabel(.large)
+        #endif
+    }
+
+    private var rowDetailFont: Font {
+        #if os(tvOS)
+        .system(size: CinemaScale.pt(16), weight: .regular)
+        #else
+        CinemaFont.dynamicLabel(.medium)
+        #endif
+    }
+
+    @ViewBuilder
+    private func sectionHeader(_ title: String) -> some View {
+        #if os(tvOS)
+        Text(title.uppercased())
+            .font(.system(size: CinemaScale.pt(17), weight: .bold))
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+            .tracking(1.5)
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(.isHeader)
+        #else
+        iOSSettingsSectionHeader(title)
+        #endif
+    }
+
+    /// iOS: one glass panel, rows split by dividers. tvOS: separate focusable
+    /// rows, each with its own opaque background (`tvSettingsFocusable`).
+    @ViewBuilder
+    private func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        #if os(tvOS)
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) { content() }
+        #else
+        VStack(spacing: 0) { content() }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        #endif
+    }
+
+    @ViewBuilder
+    private var divider: some View {
+        #if os(iOS)
+        iOSSettingsDivider
+        #endif
+    }
+
+    private func noteText(_ text: String) -> some View {
+        Text(text)
+            .font(rowDetailFont)
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, CinemaSpacing.spacing2)
+    }
+
+    /// A non-interactive row's padding and frame, per platform.
+    @ViewBuilder
+    private func contentRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        #if os(tvOS)
+        content()
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing3)
+            .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: CinemaRadius.large).fill(CinemaColor.surfaceContainerHigh))
+        #else
+        iOSSettingsRow {
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        #endif
+    }
+
+    private func infoRow(icon: String, text: String, tint: Color? = nil) -> some View {
+        contentRow {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                rowIcon(icon, tint: tint ?? themeManager.accent)
+                Text(text)
+                    .font(rowLabelFont)
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func rowIcon(_ name: String, tint: Color) -> some View {
+        #if os(tvOS)
+        Image(systemName: name)
+            .font(.system(size: CinemaScale.pt(20), weight: .medium))
+            .foregroundStyle(tint)
+            .frame(width: 24)
+            .accessibilityHidden(true)
+        #else
+        iOSRowIcon(systemName: name, color: tint)
+            .accessibilityHidden(true)
+        #endif
+    }
+
+    private func actionRow(
+        id: String, icon: String, label: String, tint: Color? = nil, isBusy: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            rowChrome(id: id) {
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    rowIcon(icon, tint: tint ?? themeManager.accent)
+                    Text(label)
+                        .font(rowLabelFont)
+                        .foregroundStyle(tint ?? CinemaColor.onSurface)
+                    Spacer(minLength: 0)
+                    if isBusy { ProgressView() }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .modifier(RowFocus(id: id, focus: focusBinding))
+    }
+
+    /// One Jellyfin user: the whole row is the switch, its Seerr state under
+    /// the name (ONE focusable unit on tvOS).
+    private func userRow(_ line: SeerrUserLine) -> some View {
+        let id = "seerr.user.\(line.id)"
+        let subtitle = lineText(line.kind)
+        let action: () -> Void = { Task { await toggle(line) } }
+        return Button(action: action) {
+            rowChrome(id: id) {
+                toggleRowContent(label: line.name, subtitle: subtitle, isOn: line.isEnabled,
+                                 isBusy: pendingUserIds.contains(line.id))
+            }
+        }
+        .buttonStyle(.plain)
+        .modifier(RowFocus(id: id, focus: focusBinding))
+        // One VoiceOver element: name, state line, on / off, toggle semantics.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(line.name)
+        .accessibilityValue(loc.localized(line.isEnabled ? "a11y.toggle.on" : "a11y.toggle.off"))
+        .accessibilityHint(subtitle)
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityAction { action() }
+    }
+
+    @ViewBuilder
+    private func toggleRowContent(label: String, subtitle: String, isOn: Bool, isBusy: Bool) -> some View {
+        let text = VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+            Text(label)
+                .font(rowLabelFont)
+                .foregroundStyle(CinemaColor.onSurface)
+            Text(subtitle)
+                .font(rowDetailFont)
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        let control = Group {
+            if isBusy {
+                ProgressView()
+            } else {
+                CinemaToggleIndicator(isOn: isOn, accent: themeManager.accent, animated: motionEffects)
+            }
+        }
+        #if os(tvOS)
+        HStack(spacing: CinemaSpacing.spacing3) {
+            text.padding(.vertical, CinemaSpacing.spacing2)
+            Spacer(minLength: CinemaSpacing.spacing3)
+            control
+        }
+        #else
+        SettingsRowAdaptiveLayout {
+            text
+        } control: {
+            control
+        }
+        #endif
+    }
+
+    /// The row's padding, background and focus look.
+    @ViewBuilder
+    private func rowChrome<Content: View>(id: String, @ViewBuilder _ content: () -> Content) -> some View {
+        #if os(tvOS)
+        content()
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .frame(maxWidth: .infinity, minHeight: 80)
+            .tvSettingsFocusable(isFocused: focusedItem == .toggle(id), accent: themeManager.accent,
+                                 animated: motionEffects,
+                                 colorScheme: themeManager.darkModeEnabled ? .dark : .light)
+        #else
+        iOSSettingsRow { content() }
+        #endif
+    }
+
+    #if os(tvOS)
+    private var focusBinding: FocusState<SettingsFocus?>.Binding { $focusedItem }
+    #else
+    private var focusBinding: Void { () }
+    #endif
+}
+
+/// tvOS: a row is ONE focusable unit in the screen's lane, without the
+/// system focus effect (Settings and design-system focus RULEs). iOS: nothing.
+private struct RowFocus: ViewModifier {
+    let id: String
+    #if os(tvOS)
+    let focus: FocusState<SettingsFocus?>.Binding
+    #else
+    let focus: Void
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(tvOS)
+        content
+            .focusEffectDisabled()
+            .hoverEffectDisabled()
+            .focused(focus, equals: .toggle(id))
+        #else
+        content
+        #endif
+    }
+}

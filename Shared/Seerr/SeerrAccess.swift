@@ -35,6 +35,22 @@ enum SeerrAccess {
         if (policy?.maxActiveSessions ?? 0) > 0 { return .jellyfinSessions }
         return .jellyfinRefused
     }
+
+    /// What a failed one-gesture sign-in tells the user — the connection
+    /// test's message for the same reason, wherever the sign-in was started
+    /// (the test, « Se connecter à Seerr »). `nil` = nothing to say (cancelled:
+    /// the account changed, or the sign-in no longer applies).
+    nonisolated static func signInFailure(_ error: SeerrSignInError, policy: UserPolicy?) -> SeerrTestFailure? {
+        switch error {
+        case .cancelled: nil
+        case .otherJellyfin: .otherJellyfin
+        case .jellyfinRefused: refusalFailure(policy: policy)
+        case .notImported: .notInSeerr
+        case .seerr(.redirected): .redirected
+        case .seerr(.notSeerr): .notSeerr
+        case .timedOut, .seerr: .unreachable
+        }
+    }
 }
 
 /// Why a Seerr connection failed. One enum so the connection test and every

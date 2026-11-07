@@ -87,19 +87,12 @@ enum SeerrConnectionTest {
             switch await session.signIn(address: address, appState: appState) {
             case .success(let signedIn):
                 user = signedIn
-            case .failure(.cancelled):
-                return SeerrTestReport()
-            case .failure(.otherJellyfin):
-                report.failure = .otherJellyfin
-                return report
-            case .failure(.jellyfinRefused):
-                report.failure = SeerrAccess.refusalFailure(policy: appState.currentUser?.policy)
-                return report
-            case .failure(.notImported):
-                report.failure = .notInSeerr
-                return report
-            case .failure(.timedOut), .failure(.seerr):
-                report.failure = .unreachable
+            case .failure(let error):
+                // `.cancelled` maps to nothing: an empty report (R19).
+                guard let failure = SeerrAccess.signInFailure(error, policy: appState.currentUser?.policy) else {
+                    return SeerrTestReport()
+                }
+                report.failure = failure
                 return report
             }
             report.verified.append(loc.localized("seerr.test.ok.server", appState.activeServerDisplayName))
