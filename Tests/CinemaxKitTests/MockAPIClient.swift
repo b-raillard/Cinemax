@@ -16,8 +16,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         "\(userId ?? "me")|\(id)|\(client)"
     }
 
+    /// Runs inside every `getDisplayPreferences` before it answers, so a test
+    /// can hold a read open with a `TestLatch` (the Seerr session's generations).
+    var onGetDisplayPreferences: (@Sendable () async -> Void)?
+
     func getDisplayPreferences(id: String, client: String, userId: String?) async throws -> DisplayPreferencesDto {
-        recordLock.withLock { displayPreferences[displayPreferencesKey(id, client, userId)] }
+        if let hook = recordLock.withLock({ onGetDisplayPreferences }) { await hook() }
+        return recordLock.withLock { displayPreferences[displayPreferencesKey(id, client, userId)] }
             ?? DisplayPreferencesDto(client: client, id: id)
     }
 
