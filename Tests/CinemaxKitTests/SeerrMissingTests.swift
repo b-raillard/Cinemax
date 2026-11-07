@@ -31,6 +31,17 @@ private func owned(_ providers: [String: String], _ type: BaseItemKind = .movie)
 /// never reach the network.
 @MainActor
 private func connectedSession() async -> (SeerrSession, AppState) {
+    let bench = await requestBench()
+    return (bench.session, bench.app)
+}
+
+/// `connectedSession`, parameterised by the user's Seerr permissions and the
+/// server's partial-requests switch, and handing back the stub so a test can
+/// queue the answers to the POSTs it triggers.
+@MainActor
+private func requestBench(
+    permissions: Int = 32, partialRequests: Bool = true
+) async -> (session: SeerrSession, app: AppState, stub: StubSeerrTransport) {
     let url = URL(string: "http://192.168.1.20:5055")!
     let jellyfin = URL(string: "https://maison.local")!
     let api = MockAPIClient()
@@ -55,8 +66,8 @@ private func connectedSession() async -> (SeerrSession, AppState) {
     app.currentUser = user
 
     let stub = StubSeerrTransport([
-        .response(status: 200, body: #"{"mediaServerType":2,"partialRequestsEnabled":true}"#),
-        .response(status: 200, body: #"{"id":7,"permissions":32,"jellyfinUserId":"A","displayName":"Alice"}"#),
+        .response(status: 200, body: #"{"mediaServerType":2,"partialRequestsEnabled":\#(partialRequests)}"#),
+        .response(status: 200, body: #"{"id":7,"permissions":\#(permissions),"jellyfinUserId":"A","displayName":"Alice"}"#),
     ])
     let storage = MockKeychain()
     storage.saveSeerrSessions(["S1|A": SeerrBoundSecret(value: "abc", origin: url)])
@@ -64,7 +75,24 @@ private func connectedSession() async -> (SeerrSession, AppState) {
     session.proAllowsProvider = { true }
     session.activeAccountKeyProvider = { [app] in app.activeAccountKey }
     await session.reload(appState: app)
-    return (session, app)
+    return (session, app, stub)
+}
+
+private func created(_ type: String = "movie", id: Int = 1) -> StubSeerrTransport.Reply {
+    .response(status: 201, body: """
+    {"id":\(id),"status":1,"type":"\(type)","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-01T10:00:00Z",
+    "requestedBy":{"id":7,"permissions":32},"media":{"tmdbId":1,"status":3}}
+    """)
+}
+
+@MainActor
+private func sentBody(_ stub: StubSeerrTransport, _ index: Int) -> [String: Any]? {
+    stub.requests.filter { $0.httpMethod == "POST" }[safe: index]?.httpBody
+        .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
 }
 
 private final class CallFlag: @unchecked Sendable {
@@ -322,5 +350,122 @@ struct SeerrMissingTests {
         #expect(SeerrImages.posterURL(path: "/x.jpg", seerrBase: base, cacheImages: false)?.absoluteString
                 == "https://image.tmdb.org/t/p/w300/x.jpg")
         #expect(SeerrImages.posterURL(path: nil, seerrBase: base, cacheImages: true) == nil)
+    }
+}
+
+// MARK: - Request flow
+
+@MainActor
+@Suite("Seerr request flow")
+struct SeerrRequestFlowTests {
+    private let loc = LocalizationManager()
+    private let series = SeerrTitle(kind: .tv, tmdbId: 90228, title: "Série")
+
+    @Test("without partial requests every missing season is sent, whatever the selection")
+    func nonPartialSendsAllMissingSeasons() async {
+        let bench = await requestBench(partialRequests: false)
+        bench.stub.enqueue(created("tv"))
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        await presenter.submit(
+            .series(series, seasons: [2, 3, 4], preselected: [4]), selection: [4],
+            session: bench.session, loc: loc, toasts: toasts)
+        #expect(sentBody(bench.stub, 0)?["seasons"] as? [Int] == [2, 3, 4])
+        #expect(presenter.badge(for: "tv-90228", default: .request) == .pending)
+        #expect(presenter.badge(for: "tv-90228-s3", default: .request) == .pending)
+    }
+
+    @Test("with partial requests only the selection is sent, in order")
+    func partialSendsTheSelection() async {
+        let bench = await requestBench(permissions: 128)
+        bench.stub.enqueue(created("tv"))
+        let presenter = SeerrRequestPresenter()
+        await presenter.submit(
+            .series(series, seasons: [2, 3, 4], preselected: []), selection: [4, 2],
+            session: bench.session, loc: loc, toasts: ToastCenter())
+        #expect(sentBody(bench.stub, 0)?["seasons"] as? [Int] == [2, 4])
+        #expect(presenter.badge(for: "tv-90228-s2", default: .request) == .processing)
+        #expect(presenter.badge(for: "tv-90228-s3", default: .request) == .request)
+        #expect(presenter.badge(for: "tv-90228", default: .request) == .processing)
+    }
+
+    @Test("a duplicate flips the card to pending and says so")
+    func duplicateFlipsToPending() async {
+        let bench = await requestBench()
+        bench.stub.enqueue(.response(status: 409, body: #"{"message":"Request for this media already exists."}"#))
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        await presenter.submit(
+            .movie(SeerrTitle(kind: .movie, tmdbId: 5, title: "Film")), selection: [],
+            session: bench.session, loc: loc, toasts: toasts)
+        #expect(presenter.badge(for: "movie-5", default: .request) == .pending)
+        #expect(toasts.current?.title == loc.localized("seerr.request.duplicate"))
+    }
+
+    @Test("a refusal leaves the card alone and explains the fix")
+    func forbiddenShowsRefusal() async {
+        let bench = await requestBench()
+        bench.stub.enqueue(.response(status: 403, body: #"{"message":"You do not have permission"}"#))
+        bench.stub.enqueue(.response(status: 200, body: #"{"id":7,"permissions":32,"jellyfinUserId":"A"}"#))
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        await presenter.submit(
+            .movie(SeerrTitle(kind: .movie, tmdbId: 5, title: "Film")), selection: [],
+            session: bench.session, loc: loc, toasts: toasts)
+        #expect(presenter.badge(for: "movie-5", default: .request) == .request)
+        #expect(toasts.current?.title == loc.localized("seerr.request.forbidden.title"))
+        #expect(toasts.current?.message == loc.localized("seerr.request.forbidden.fix"))
+    }
+
+    @Test("a 202 is a failure: nothing was available to request")
+    func noSeasonsIsAFailure() async {
+        let bench = await requestBench()
+        bench.stub.enqueue(.response(status: 202, body: #"{"message":"No seasons available to request"}"#))
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        await presenter.submit(
+            .series(series, seasons: [1], preselected: []), selection: [1],
+            session: bench.session, loc: loc, toasts: toasts)
+        #expect(presenter.badge(for: "tv-90228", default: .request) == .request)
+        #expect(toasts.current?.title == loc.localized("seerr.request.noSeasons"))
+    }
+
+    @Test("several films: one request each, the failure counted in the same toast")
+    func filmsPartialFailure() async {
+        let bench = await requestBench()
+        bench.stub.enqueue(created())
+        bench.stub.enqueue(.response(status: 500, body: ""))
+        bench.stub.enqueue(created())
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        let films = (1...3).map { SeerrTitle(kind: .movie, tmdbId: $0, title: "F\($0)") }
+        await presenter.submit(.films(films), selection: [1, 2, 3], session: bench.session, loc: loc, toasts: toasts)
+        #expect(bench.stub.requests.filter { $0.httpMethod == "POST" }.count == 3)
+        #expect(presenter.badge(for: "movie-1", default: .request) == .pending)
+        #expect(presenter.badge(for: "movie-2", default: .request) == .request)
+        #expect(presenter.badge(for: "movie-3", default: .request) == .pending)
+        #expect(toasts.current?.title == loc.counted("seerr.request.sentFilms", 2))
+        #expect(toasts.current?.message == loc.counted("seerr.request.refusedCount", 1))
+    }
+
+    @Test("the line under the button depends on who approves")
+    func autoApproveLine() {
+        let auto = "seerr.request.next.auto"
+        let manual = "seerr.request.next.approval"
+        #expect(SeerrRequestPresenter.nextStepKey(permissions: SeerrPermissions(rawValue: 2), kind: .movie) == auto)
+        #expect(SeerrRequestPresenter.nextStepKey(permissions: SeerrPermissions(rawValue: 128), kind: .tv) == auto)
+        #expect(SeerrRequestPresenter.nextStepKey(permissions: SeerrPermissions(rawValue: 256), kind: .movie) == auto)
+        #expect(SeerrRequestPresenter.nextStepKey(permissions: SeerrPermissions(rawValue: 256), kind: .tv) == manual)
+        #expect(SeerrRequestPresenter.nextStepKey(permissions: SeerrPermissions(rawValue: 32), kind: .movie) == manual)
+    }
+
+    @Test("the confirmation reads a season, a range, or a count")
+    func seasonLabels() {
+        func label(_ s: Set<Int>) -> String {
+            SeerrRequestPresenter.seasonsActionTitle(Array(s).sorted(), loc: loc)
+        }
+        #expect(label([4]) == loc.localized("seerr.request.action.season", 4))
+        #expect(label([4, 5, 6]) == loc.localized("seerr.request.action.seasonRange", 4, 6))
+        #expect(label([1, 3]) == loc.counted("seerr.request.action.seasons", 2))
     }
 }

@@ -91,6 +91,7 @@ struct AppNavigation: View {
     /// property wrapper would only add semantics without a purpose.
     private var remoteControl: RemoteControlListener { Self.sharedRemoteControl }
     @State private var playlistPresenter = AddToPlaylistPresenter()
+    @State private var seerrRequests = SeerrRequestPresenter()
     @State private var cardActions = CardActionPresenter(access: Self.sharedProAccess)
     @State private var settingsNav = SettingsNavCoordinator()
     @State private var hasCheckedSession = false
@@ -299,6 +300,17 @@ struct AppNavigation: View {
             themeManager: themeManager,
             loc: loc,
             toast: toasts
+        ))
+        // The Seerr request flow: raised from cards in lazy grids, so it is
+        // hosted once here too.
+        .environment(seerrRequests)
+        .modifier(SeerrRequestPresentation(
+            presenter: seerrRequests,
+            session: seerr,
+            appState: appState,
+            themeManager: themeManager,
+            loc: loc,
+            toasts: toasts
         ))
         .environment(cardActions)
         .environment(proAccess)
