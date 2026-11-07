@@ -283,8 +283,10 @@ public protocol LibraryAPI: Sendable {
     func getItemUserData(itemId: String, userId: String) async throws -> UserItemDataDto?
 
     /// Filmography for a person (persons are items — fetch the person's own
-    /// bio via `getItem` with the person id).
-    func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
+    /// bio via `getItem` with the person id). `includeProviderIds`: each
+    /// item's TMDb id, asked only while the actor page's Seerr section may
+    /// show — what tells an owned title from a missing one.
+    func getPersonItems(personId: String, userId: String, limit: Int, includeProviderIds: Bool) async throws -> [BaseItemDto]
 
     /// Persons matching `searchTerm`, for the search screen's person row.
     /// Returns `BaseItemDto` (persons are Jellyfin items), so scoring and image
@@ -857,8 +859,10 @@ public extension LibraryAPI {
             limit: limit, extras: extras
         )
     }
-    func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
-        try await getPersonItems(personId: personId, userId: userId, limit: limit)
+    func getPersonItems(
+        personId: String, userId: String, limit: Int = 60, includeProviderIds: Bool = false
+    ) async throws -> [BaseItemDto] {
+        try await getPersonItems(personId: personId, userId: userId, limit: limit, includeProviderIds: includeProviderIds)
     }
 }
 

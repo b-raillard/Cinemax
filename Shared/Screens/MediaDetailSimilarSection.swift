@@ -210,7 +210,9 @@ struct MediaDetailSagaRow: View, Equatable {
     let onRequest: (SeerrMissingTitle) -> Void
     let onRequestAll: () -> Void
 
-    @Environment(SeerrRequestPresenter.self) private var presenter
+    /// Optional like its siblings': a host without it loses the action, never
+    /// crashes.
+    @Environment(SeerrRequestPresenter.self) private var presenter: SeerrRequestPresenter?
     @Environment(LocalizationManager.self) private var loc
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
@@ -238,7 +240,7 @@ struct MediaDetailSagaRow: View, Equatable {
     }
 
     private var headerAction: MissingHeaderAction? {
-        guard case .loaded(let missing) = section else { return nil }
+        guard let presenter, case .loaded(let missing) = section else { return nil }
         let count = presenter.requestableFilms(missing).count
         guard count >= 2 else { return nil }
         return MissingHeaderAction(label: loc.counted("seerr.saga.requestAll", count), perform: onRequestAll)

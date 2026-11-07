@@ -1,6 +1,6 @@
 # Seerr requests
 
-> Loaded when you work under `Shared/Seerr/` or on `RequestsSettingsScreen`. Spec (the long stories, the spike measurements): `docs/superpowers/specs/2026-11-06-seerr-requests-design.md`. The client itself lives in `Packages/CinemaxKit/Sources/CinemaxKit/Seerr/` (see `Packages/CinemaxKit/CLAUDE.md`). Lot 1a ships the base and Réglages → Demandes; lot 1b the first browse surface, the search section (its RULEs: `docs/rules/search.md`).
+> Loaded when you work under `Shared/Seerr/` or on `RequestsSettingsScreen`. Spec (the long stories, the spike measurements): `docs/superpowers/specs/2026-11-06-seerr-requests-design.md`. The client itself lives in `Packages/CinemaxKit/Sources/CinemaxKit/Seerr/` (see `Packages/CinemaxKit/CLAUDE.md`). Lot 1a ships the base and Réglages → Demandes; lot 1b the first browse surface, the search section (its RULEs: `docs/rules/search.md`); lot 2 the fiches — missing seasons, saga, actor page (their RULEs: `docs/rules/media-detail.md`).
 
 - **RULE — everything Seerr-only comes AFTER owned content, and the word « Seerr » appears only in Réglages and in the invitation to sign in.** Browse surfaces (search, Home, fiches) never name it; its rows sit below what the Jellyfin server owns.
 - **RULE — an age-capped account gets NOTHING from Seerr: no call, no UI.** Capped = the device cap `privacy.maxContentAge` > 0 OR the server's `maxParentalRating` (`SeerrAccess.isAgeCapped`). An unknown policy counts as capped (fail closed). Lifting the cap reloads at once (`AppState.onAgeCapChanged`).

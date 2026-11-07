@@ -60,6 +60,42 @@ struct MissingTitleCard: View {
     private var badgeLabel: String { badge.label(loc) }
 }
 
+/// A missing title as the tappable card of a list mixing films and series —
+/// the search and the actor page. Reads the request presenter itself, so its
+/// badge flips once a request is sent even inside an `.equatable()` parent;
+/// optional, like the fiche's cards: a host without it draws Seerr's badge.
+struct MissingTitleButton: View {
+    let missing: SeerrMissingTitle
+    let onRequest: (SeerrMissingTitle) -> Void
+
+    @Environment(SeerrRequestPresenter.self) private var presenter: SeerrRequestPresenter?
+    @Environment(LocalizationManager.self) private var loc
+
+    var body: some View {
+        Button {
+            onRequest(missing)
+        } label: {
+            MissingTitleCard(
+                title: missing.title.title,
+                subtitle: subtitle,
+                badge: presenter?.badge(for: missing.id, default: missing.badge) ?? missing.badge
+            )
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVCardButtonStyle())
+        #else
+        .buttonStyle(.plain)
+        #endif
+    }
+
+    /// « 2021 · Film », like the library cards beside it.
+    private var subtitle: String {
+        let kind = loc.localized(missing.title.kind == .movie ? "seerr.request.kind.movie" : "seerr.request.kind.series")
+        guard let year = missing.title.year else { return kind }
+        return "\(year) · \(kind)"
+    }
+}
+
 extension SeerrBadge {
     /// « Demander », « En attente », « En préparation », « Refusée ».
     @MainActor

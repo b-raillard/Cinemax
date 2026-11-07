@@ -815,7 +815,12 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func markItemUnplayed(itemId: String, userId: String) async throws { recordLock.withLock { markUnplayedCalls.append(itemId) } }
     func markItemPlayed(itemId: String, userId: String) async throws { recordLock.withLock { markPlayedCalls.append(itemId) } }
     func setFavorite(itemId: String, userId: String, favorite: Bool) async throws {}
-    func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
+    /// `includeProviderIds` of every `getPersonItems` call, in order.
+    private(set) var personItemsProviderIdFlags: [Bool] = []
+    func getPersonItems(personId: String, userId: String, limit: Int, includeProviderIds: Bool) async throws -> [BaseItemDto] {
+        recordLock.withLock { personItemsProviderIdFlags.append(includeProviderIds) }
+        return []
+    }
     /// Answers `getCollections` when set (a movie's « Fait partie de »): the
     /// BoxSets containing `containingItemId`. Unset ⇒ none.
     var getCollectionsHandler: (@Sendable (_ itemId: String, _ tmdbCollectionId: String?) async throws -> [BaseItemDto])?

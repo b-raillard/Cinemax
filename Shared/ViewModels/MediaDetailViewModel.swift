@@ -674,12 +674,15 @@ final class MediaDetailViewModel {
         )
         guard !Task.isCancelled, sideTaskGeneration == generation, let boxsets else { return }
         if let boxset = boxsets.first, let boxsetId = boxset.id {
+            // The whole BoxSet while the saga may show (like a BoxSet fiche's
+            // members): this row IS the owned set, and a 20-film cap would
+            // offer a film the library holds. Otherwise the row's 20.
             let members = try? await appState.apiClient.getItems(
                 userId: userId,
                 parentId: boxsetId,
                 sortBy: [.premiereDate],
                 sortOrder: [.ascending],
-                limit: 20,
+                limit: allowsSeerr() ? 100 : 20,
                 enableTotalRecordCount: false,
                 fieldSet: memberFieldSet
             ).items

@@ -672,7 +672,9 @@ extension JellyfinAPIClient {
 
     // MARK: - Persons
 
-    public func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
+    public func getPersonItems(
+        personId: String, userId: String, limit: Int = 60, includeProviderIds: Bool = false
+    ) async throws -> [BaseItemDto] {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let maxOfficialRating = ContentRatingClassifier.maxOfficialRatingCode(forAge: getMaxContentAge())
@@ -689,6 +691,9 @@ extension JellyfinAPIClient {
             // Returns items only — no caller can read a count, so there is no
             // reason to make the server run the COUNT query for one.
             params.enableTotalRecordCount = false
+            // The TMDb id, only while the actor page's Seerr section may show:
+            // what tells an owned title from a missing one.
+            if includeProviderIds { params.fields = [.providerIDs] }
             let response = try await client.send(Paths.getItems(parameters: params))
             return applyRatingFilter(response.value.items ?? [])
         } catch {

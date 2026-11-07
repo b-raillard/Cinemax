@@ -1245,6 +1245,9 @@ struct MediaDetailSagaTests {
         #expect(sagaEntries(vm.seerrSaga) == ["movie-673 request", "movie-675 pending"])
         #expect(vm.sagaPlacement == .appendedToPartOfRow)
         #expect(api.getItemsQueries.last?.fieldSet == .cardWithProviderIds)
+        // The whole BoxSet, like a BoxSet fiche's members: the row is the
+        // owned set, and a 20-film cap would offer a film the library holds.
+        #expect(api.getItemsQueries.last?.limit == 100)
 
         // The row: owned first, untouched; then the missing cards, or the
         // skeletons while loading; the action card closes it.
@@ -1347,6 +1350,7 @@ struct MediaDetailSagaTests {
         #expect(vm.seerrSaga == .hidden)
         #expect(transport.collectionRequestCount == 0)
         #expect(api.getItemsQueries.last?.fieldSet == .card)
+        #expect(api.getItemsQueries.last?.limit == 20)
     }
 
     @Test("an unreachable Seerr hides the saga and leaves the collection row alone")
