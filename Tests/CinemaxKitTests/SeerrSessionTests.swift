@@ -1946,13 +1946,13 @@ struct SeerrActivationTests {
 
 private func requestJSON(
     _ id: Int, status: Int = 1, type: String = "movie", seasons: [Int] = [],
-    tmdbId: Int = 11, mediaStatus: Int = 2, jellyfinId: String? = nil
+    tmdbId: Int = 11, mediaStatus: Int = 2, jellyfinId: String? = nil, by requester: String = aliceJSON
 ) -> String {
     let seasonList = seasons.map { #"{"seasonNumber":\#($0)}"# }.joined(separator: ",")
     let jellyfin = jellyfinId.map { #","jellyfinMediaId":"\#($0)""# } ?? ""
     return #"{"id":\#(id),"status":\#(status),"type":"\#(type)","seasons":[\#(seasonList)],"#
         + #""createdAt":"2026-11-01T10:00:00.000Z","updatedAt":"2026-11-02T10:00:00.000Z","#
-        + #""requestedBy":\#(aliceJSON),"media":{"tmdbId":\#(tmdbId),"status":\#(mediaStatus)\#(jellyfin)}}"#
+        + #""requestedBy":\#(requester),"media":{"tmdbId":\#(tmdbId),"status":\#(mediaStatus)\#(jellyfin)}}"#
 }
 
 private func requestPage(_ items: [String], total: Int) -> StubSeerrTransport.Reply {
@@ -2190,6 +2190,253 @@ struct SeerrMyRequestsTests {
         app.pendingDeepLinkItemId = nil
         #expect(!Model.watch(myRequest(media: .processing, jellyfinId: "jf1"), appState: app))
         #expect(app.pendingDeepLinkItemId == nil)
+    }
+}
+
+// MARK: - À valider (Settings → Demandes)
+
+private let leaJSON = #"{"id":9,"permissions":32,"jellyfinUserId":"L","displayName":"Léa"}"#
+
+/// Léa's pending requests 1…`count` (all for TMDb 11), and a title for each.
+private func pendingRoutes(
+    _ count: Int, total: Int, extra: [String: [StubSeerrTransport.Reply]] = [:]
+) -> [String: [StubSeerrTransport.Reply]] {
+    var routes = extra
+    routes["/request", default: []].insert(
+        requestPage((1...count).map { requestJSON($0, by: leaJSON) }, total: total), at: 0)
+    routes["/movie/11"] = Array(repeating: movieReply(11, "Dune"), count: count + 5)
+    return routes
+}
+
+private func settled(_ id: Int, status: Int) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: requestJSON(id, status: status, by: leaJSON))
+}
+
+private func isCall(_ suffix: String) -> (URLRequest) -> Bool {
+    { $0.url?.path.hasSuffix(suffix) == true }
+}
+
+@MainActor
+@Suite("Seerr — À valider")
+struct SeerrPendingTests {
+    private let loc = LocalizationManager()
+
+    @Test("the count is the pending listing's own total, everyone's requests — never /request/count")
+    func countFromPendingFilter() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: pendingRoutes(20, total: 23))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("filter", in: sent) == "pending")
+        // The queue is the household's: never narrowed to the manager.
+        #expect(queryValue("requestedBy", in: sent) == nil)
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(model.count == 23)
+        #expect(model.rows.count == 20)
+        #expect(model.rows.allSatisfy { $0.request.requestedBy.displayName == "Léa" && $0.title == "Dune" })
+        #expect(model.canLoadMore)
+        #expect(model.phase == .loaded)
+        #expect(!transport.requests.contains(where: isCall("/request/count")))
+        #expect(transport.requests.filter(isRequestList).count == 1)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("approving or refusing removes the row, drops the count, says so — and the next page starts that much earlier")
+    func approveRemovesRow() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(20, total: 22, extra: [
+            "/request": [requestPage([requestJSON(21, by: leaJSON), requestJSON(22, by: leaJSON)], total: 20)],
+            "/request/2/approve": [settled(2, status: 2)],
+            "/request/3/decline": [settled(3, status: 3)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(!model.rows.contains { $0.id == 2 })
+        #expect(model.count == 21)
+        #expect(model.inFlight.isEmpty)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.approved"))
+        let approval = transport.requests.first(where: isCall("/request/2/approve"))
+        #expect(approval?.httpMethod == "POST")
+
+        await model.decline(3, session: session, toasts: toasts, loc: loc)
+        #expect(!model.rows.contains { $0.id == 3 })
+        #expect(model.count == 20)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.declined"))
+        #expect(transport.requests.first(where: isCall("/request/3/decline"))?.httpMethod == "POST")
+
+        // 20 served, 2 settled: the listing is 2 shorter, so the next page's skip is 18.
+        #expect(model.canLoadMore)
+        await model.loadNextPage(session: session)
+        #expect(queryValue("skip", in: transport.requests.filter(isRequestList).last) == "18")
+        #expect(queryValue("filter", in: transport.requests.filter(isRequestList).last) == "pending")
+        #expect(model.rows.map(\.id) == [1] + Array(4...22))
+        #expect(model.count == 20)
+        #expect(!model.canLoadMore)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a request settled elsewhere first (409) leaves quietly: row removed, an info toast")
+    func alreadyHandledIsQuiet() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [.response(status: 409, body: #"{"message":"Request is not pending."}"#)],
+            "/request/3/decline": [.response(status: 409, body: #"{"message":"Request is not pending."}"#)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(model.count == 2)
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.alreadyHandled"))
+
+        await model.decline(3, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1])
+        #expect(model.count == 1)
+        #expect(toasts.current?.level == .info)
+        #expect(model.inFlight.isEmpty)
+    }
+
+    @Test("any other failure keeps the row for another try, with an error toast")
+    func otherErrorKeepsRow() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [.response(status: 500, body: #"{"message":"boom"}"#), settled(2, status: 2)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.count == 3)
+        #expect(model.inFlight.isEmpty)
+        #expect(toasts.current?.level == .error)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.approveFailed"))
+
+        // The row is still there to be pressed again.
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(toasts.current?.level == .success)
+    }
+
+    @Test("while a request is being settled, a second press on its row sends nothing")
+    func secondPressIgnored() async {
+        let asked = TestLatch()
+        let held = TestLatch()
+        let (session, _, transport) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [settled(2, status: 2)],
+        ]))
+        transport.onRequest { path, _ in
+            guard path == "/request/2/approve" else { return }
+            asked.open()
+            await held.wait()
+        }
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        let first = Task { await model.approve(2, session: session, toasts: toasts, loc: loc) }
+        await asked.wait()
+        #expect(model.inFlight[2] == .approve)
+        #expect(model.inFlight[1] == nil)
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        await model.decline(2, session: session, toasts: toasts, loc: loc)
+        held.open()
+        await first.value
+
+        #expect(transport.requests.filter { $0.url?.path.contains("/request/2/") == true }.count == 1)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(!transport.exhausted)
+    }
+
+    @Test("an account change during the call writes and shows nothing")
+    func accountChangeMidCall() async {
+        let (session, app, transport) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [settled(2, status: 2)],
+        ]))
+        transport.onRequest { path, _ in
+            if path == "/request/2/approve" { await MainActor.run { app.currentUserId = "B" } }
+        }
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(toasts.current == nil)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.count == 3)
+    }
+
+    @Test("without Seerr's permission to manage requests: no section, no call — whatever Jellyfin says")
+    func hiddenWithoutManage() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: 32 | 128, routes: [:])
+        #expect(!SeerrPendingModel.isShown(for: session.connection))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+        #expect(model.phase == .idle)
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(!transport.exhausted)
+
+        func connected(_ permissions: SeerrPermissions) -> SeerrSession.Connection {
+            .connected(SeerrUser(id: SeerrUserID(rawValue: 1), permissions: permissions))
+        }
+        #expect(SeerrPendingModel.isShown(for: connected(.manageRequests)))
+        #expect(SeerrPendingModel.isShown(for: connected([.manageRequests, .request])))
+        // A Seerr admin passes every check, as on the server.
+        #expect(SeerrPendingModel.isShown(for: connected(.admin)))
+        #expect(!SeerrPendingModel.isShown(for: connected([.request, .autoApprove, .requestView])))
+        #expect(!SeerrPendingModel.isShown(for: .notConnected))
+        #expect(!SeerrPendingModel.isShown(for: .unavailable))
+        #expect(!SeerrPendingModel.isShown(for: .notLinked))
+    }
+
+    @Test("a pending list Seerr does not serve ends in a failure, and can be read again")
+    func failedThenRetried() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: [
+            "/request": [.response(status: 500, body: #"{"message":"boom"}"#), requestPage([], total: 0)],
+        ])
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+        #expect(model.phase == .failed)
+        await model.load(session: session)
+        #expect(model.phase == .loaded)
+        #expect(model.rows.isEmpty)
+        #expect(model.count == 0)
+        #expect(!model.canLoadMore)
+    }
+
+    @Test("who and when: « Demandé par Léa · il y a 2 h », in the app's language")
+    func requestedLine() {
+        let created = Date.now.addingTimeInterval(-7_200)
+        func request(by user: SeerrUser) -> SeerrRequest {
+            SeerrRequest(id: 1, status: .pending, kind: .movie, createdAt: created, updatedAt: created,
+                         requestedBy: user, media: SeerrRequestMedia(tmdbId: 1, status: .pending))
+        }
+        let style = SeerrPendingModel.relativeStyle(loc: loc)
+        #expect(style.locale == loc.locale)
+        let when = created.formatted(style)
+        let lea = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: .request, displayName: "Léa")
+        #expect(SeerrPendingModel.requestedLine(request(by: lea), loc: loc)
+                == loc.localized("seerr.pending.requestedBy", "Léa", when))
+        let nobody = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: .request)
+        #expect(SeerrPendingModel.requestedLine(request(by: nobody), loc: loc)
+                == loc.localized("seerr.pending.requestedAt", when))
+        #expect(loc.localized("seerr.pending.requestedBy", "Léa", when).contains("Léa"))
+        #expect(loc.localized("seerr.pending.requestedBy", "Léa", when).contains(when))
+        for key in ["seerr.pending.approved", "seerr.pending.declined", "seerr.pending.alreadyHandled",
+                    "seerr.pending.approveFailed", "seerr.pending.declineFailed", "seerr.pending.empty",
+                    "seerr.pending.approve", "seerr.pending.decline", "seerr.pending.approving",
+                    "seerr.pending.declining", "seerr.settings.section.pending"] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
+        #expect(loc.counted("seerr.settings.section.pendingCount", 3).contains("3"))
     }
 }
 

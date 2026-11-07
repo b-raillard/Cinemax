@@ -1,18 +1,21 @@
 import SwiftUI
 import CinemaxKit
 
-/// Réglages → Demandes (Seerr, spec 2026-11-06), iOS AND tvOS. Four sections,
+/// Réglages → Demandes (Seerr, spec 2026-11-06), iOS AND tvOS. Five sections,
 /// in this order: **Mes demandes** (an enabled account signed in to Seerr,
-/// admin or not), **Connexion** (everyone who sees the page), then — Jellyfin
-/// admin only — **Configuration** (the address, « Tester la connexion » and its
-/// report, who may request) and **Sur cet appareil** (the optional API key).
+/// admin or not), **À valider** (a Seerr user who may manage requests —
+/// Seerr's permission, never Jellyfin's admin flag), **Connexion** (everyone
+/// who sees the page), then — Jellyfin admin only — **Configuration** (the
+/// address, « Tester la connexion » and its report, who may request) and
+/// **Sur cet appareil** (the optional API key).
 ///
 /// A standalone view with its own environment: iOS pushes it inside the
 /// Settings detail wrapper, where an extension method returning `some View`
 /// would never redraw on an `@Observable` change (root RULE). On tvOS it is
 /// rendered inside `tvDetailView`, with its own focus lane (`tvActionRow` and
 /// `tvGlassToggle` read `SettingsScreen`'s — the `MenuSettingsScreen`
-/// precedent), every row ONE focusable unit.
+/// precedent), every row ONE focusable unit — but an « À valider » row, whose
+/// two buttons are each one.
 ///
 /// Nothing here reads `isPro`: the category row is the Pro gate
 /// (`SettingsCategory.proFeature`), and `SeerrSession` makes no call without it.
@@ -34,9 +37,18 @@ struct RequestsSettingsScreen: View {
     @State private var reportAddress: URL?
     /// Replaced on an account change, like `activation`.
     @State private var myRequests = SeerrMyRequestsModel()
-    /// What « Mes demandes » was last loaded for (the tvOS `.task` re-fire
-    /// guard, as `loadedTrigger`).
-    @State private var myRequestsLoadedFor: MyRequestsTrigger?
+    /// What « Mes demandes » was last LOADED for (the tvOS `.task` re-fire
+    /// guard, as `loadedTrigger`) — never a failed load, which the next
+    /// re-presentation tries again (recette R30).
+    @State private var myRequestsLoadedFor: RequestListTrigger?
+    /// Replaced on an account change, like `activation`.
+    @State private var pending = SeerrPendingModel()
+    @State private var pendingLoadedFor: RequestListTrigger?
+    /// A « Réessayer » press is on its way: the failed panel stays, its row
+    /// turning, rather than giving way to the spinner (on tvOS the pressed row
+    /// would vanish under focus).
+    @State private var isRetryingMyRequests = false
+    @State private var isRetryingPending = false
     @State private var isTesting = false
     @State private var isSigningIn = false
     @State private var isBulkUpdating = false
@@ -70,8 +82,8 @@ struct RequestsSettingsScreen: View {
                     connection: seerr.connection, usesDeviceKey: seerr.usesDeviceKey, url: seerr.config?.url)
     }
 
-    /// Who « Mes demandes » lists, toward which Seerr.
-    private struct MyRequestsTrigger: Equatable {
+    /// Who a request list is read for, toward which Seerr.
+    private struct RequestListTrigger: Equatable {
         let account: String?
         let user: SeerrUserID
         let url: URL?
@@ -80,9 +92,20 @@ struct RequestsSettingsScreen: View {
     /// `nil` = the section is not shown: an account Seerr is not enabled for
     /// (an admin setting it up), or not signed in — the Connexion section
     /// already invites to sign in.
-    private var myRequestsTrigger: MyRequestsTrigger? {
+    private var myRequestsTrigger: RequestListTrigger? {
         guard seerr.config?.isEnabled == true, case .connected(let user) = seerr.connection else { return nil }
-        return MyRequestsTrigger(account: appState.activeAccountKey, user: user.id, url: seerr.config?.url)
+        return RequestListTrigger(account: appState.activeAccountKey, user: user.id, url: seerr.config?.url)
+    }
+
+    /// `nil` = « À valider » is not shown: not signed in to Seerr, or a Seerr
+    /// user who may not manage requests. Unlike Mes demandes it does not ask
+    /// for the account's own switch: an admin who manages the household's
+    /// requests without requesting anything still validates them.
+    private var pendingTrigger: RequestListTrigger? {
+        guard SeerrPendingModel.isShown(for: seerr.connection), case .connected(let user) = seerr.connection else {
+            return nil
+        }
+        return RequestListTrigger(account: appState.activeAccountKey, user: user.id, url: seerr.config?.url)
     }
 
     /// Re-read at render: an account switch to a capped (or not enabled)
@@ -111,6 +134,9 @@ struct RequestsSettingsScreen: View {
                 if myRequestsTrigger != nil {
                     myRequestsSection
                 }
+                if pendingTrigger != nil {
+                    pendingSection
+                }
                 connectionSection
                 if appState.isAdministrator {
                     configurationSection
@@ -122,6 +148,7 @@ struct RequestsSettingsScreen: View {
         }
         .task(id: trigger) { await loadLinesIfNeeded() }
         .task(id: myRequestsTrigger) { await loadMyRequestsIfNeeded() }
+        .task(id: pendingTrigger) { await loadPendingIfNeeded() }
         .onAppear {
             seedAddress()
             refreshStoredKey()
@@ -159,12 +186,14 @@ struct RequestsSettingsScreen: View {
     private var myRequestsContent: some View {
         switch myRequests.phase {
         case .idle, .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, CinemaSpacing.spacing3)
+            if isRetryingMyRequests {
+                failedPanel(retryId: "seerr.requests.retry", isRetrying: true) {}
+            } else {
+                loadingRow
+            }
         case .failed:
-            panel {
-                infoRow(icon: "info.circle", text: loc.localized("seerr.settings.connection.unavailable"))
+            failedPanel(retryId: "seerr.requests.retry", isRetrying: false) {
+                Task { await retryMyRequests() }
             }
         case .loaded:
             let rows = myRequests.rows
@@ -227,12 +256,7 @@ struct RequestsSettingsScreen: View {
         let text = HStack(spacing: CinemaSpacing.spacing3) {
             requestPoster(row)
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
-                Text(requestTitle(row))
-                    .font(rowLabelFont)
-                    .foregroundStyle(row.title == nil ? CinemaColor.onSurfaceVariant : CinemaColor.onSurface)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .redacted(reason: row.isTitlePending ? .placeholder : [])
-                    .accessibilityHidden(row.isTitlePending)
+                requestTitleText(row)
                 Text(loc.localized(SeerrMyRequestsModel.statusKey(row.request)))
                     .font(rowDetailFont)
                     .foregroundStyle(statusTint(row.request))
@@ -259,6 +283,16 @@ struct RequestsSettingsScreen: View {
             watch
         }
         #endif
+    }
+
+    /// The row's title line — a placeholder bar while its lookup is on its way.
+    private func requestTitleText(_ row: SeerrRequestRow) -> some View {
+        Text(requestTitle(row))
+            .font(rowLabelFont)
+            .foregroundStyle(row.title == nil ? CinemaColor.onSurfaceVariant : CinemaColor.onSurface)
+            .fixedSize(horizontal: false, vertical: true)
+            .redacted(reason: row.isTitlePending ? .placeholder : [])
+            .accessibilityHidden(row.isTitlePending)
     }
 
     /// The title, or « Titre indisponible » once its lookup failed (a bar
@@ -298,6 +332,185 @@ struct RequestsSettingsScreen: View {
         #else
         CinemaScale.pt(44)
         #endif
+    }
+
+    // MARK: - À valider
+
+    private var pendingSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            // The count only once the listing said it: « (0) » while loading
+            // would be false.
+            sectionHeader(pending.phase == .loaded
+                          ? loc.counted("seerr.settings.section.pendingCount", pending.count)
+                          : loc.localized("seerr.settings.section.pending"))
+            pendingContent
+        }
+    }
+
+    @ViewBuilder
+    private var pendingContent: some View {
+        switch pending.phase {
+        case .idle, .loading:
+            if isRetryingPending {
+                failedPanel(retryId: "seerr.pending.retry", isRetrying: true) {}
+            } else {
+                loadingRow
+            }
+        case .failed:
+            failedPanel(retryId: "seerr.pending.retry", isRetrying: false) {
+                Task { await retryPending() }
+            }
+        case .loaded:
+            let rows = pending.rows
+            panel {
+                // Every listed row settled while more wait on the server: only
+                // « Afficher plus » remains.
+                if rows.isEmpty, !pending.canLoadMore {
+                    infoRow(icon: "checkmark.circle", text: loc.localized("seerr.pending.empty"))
+                }
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    pendingRow(row)
+                    if index < rows.count - 1 || pending.canLoadMore { divider }
+                }
+                if pending.canLoadMore {
+                    actionRow(id: "seerr.pending.more", icon: "ellipsis.circle",
+                              label: loc.localized("seerr.myRequests.more"), isBusy: pending.isLoadingMore) {
+                        Task { await pending.loadNextPage(session: seerr) }
+                    }
+                }
+            }
+        }
+    }
+
+    /// One pending request: poster, title, who asked and when, then
+    /// « Approuver » / « Refuser » side by side under the text. tvOS: the two
+    /// buttons are the row's focus units (the text itself takes no focus).
+    @ViewBuilder
+    private func pendingRow(_ row: SeerrRequestRow) -> some View {
+        let content = VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            HStack(spacing: CinemaSpacing.spacing3) {
+                requestPoster(row)
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                    requestTitleText(row)
+                    Text(SeerrPendingModel.requestedLine(row.request, loc: loc))
+                        .font(rowDetailFont)
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement(children: .combine)
+            HStack(spacing: CinemaSpacing.spacing3) {
+                pendingButton(row, .approve)
+                pendingButton(row, .decline)
+            }
+        }
+        #if os(tvOS)
+        content
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: CinemaRadius.large).fill(CinemaColor.surfaceContainer))
+        #else
+        iOSSettingsRow { content }
+        #endif
+    }
+
+    /// One tap, no confirmation (Seerr's own page asks none). While the row's
+    /// request is being settled, both its buttons wait: disabled on iOS; on
+    /// tvOS still focusable — disabling the focused button would throw focus
+    /// off it — the pressed one reading « Approbation en cours… » and the
+    /// model ignoring any press.
+    @ViewBuilder
+    private func pendingButton(_ row: SeerrRequestRow, _ action: SeerrPendingModel.Action) -> some View {
+        let inFlight = pending.inFlight[row.id]
+        let isApprove = action == .approve
+        let label = loc.localized(isApprove ? "seerr.pending.approve" : "seerr.pending.decline")
+        let press: () -> Void = {
+            #if os(tvOS)
+            let formerIndex = pending.rows.firstIndex { $0.id == row.id }
+            #endif
+            Task {
+                if isApprove {
+                    await pending.approve(row.id, session: seerr, toasts: toasts, loc: loc)
+                } else {
+                    await pending.decline(row.id, session: seerr, toasts: toasts, loc: loc)
+                }
+                #if os(tvOS)
+                focusAfterSettling(row.id, action, formerIndex: formerIndex)
+                #endif
+            }
+        }
+        #if os(tvOS)
+        let id = pendingButtonId(row.id, action)
+        let isBusy = inFlight == action
+        Button {
+            press()
+        } label: {
+            rowChrome(id: id) {
+                HStack(spacing: CinemaSpacing.spacing2) {
+                    rowIcon(isApprove ? "checkmark.circle.fill" : "xmark.circle",
+                            tint: isApprove ? themeManager.accent : CinemaColor.error)
+                    Text(isBusy
+                         ? loc.localized(isApprove ? "seerr.pending.approving" : "seerr.pending.declining")
+                         : label)
+                        .font(rowLabelFont)
+                        .foregroundStyle(CinemaColor.onSurface)
+                }
+            }
+            .opacity(inFlight != nil && !isBusy ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
+        .modifier(RowFocus(id: id, focus: focusBinding))
+        .accessibilityLabel(label)
+        #else
+        CinemaButton(title: label, style: isApprove ? .accent : .ghost, isLoading: inFlight == action) {
+            press()
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .disabled(inFlight != nil)
+        #endif
+    }
+
+    #if os(tvOS)
+    private func pendingButtonId(_ requestId: Int, _ action: SeerrPendingModel.Action) -> String {
+        "seerr.pending.\(requestId).\(action == .approve ? "approve" : "decline")"
+    }
+
+    /// The focused button's row just left the list: focus goes to the same
+    /// button of the row that took its place — left to itself, the engine
+    /// sends it back to the top of the page, and a manager working down the
+    /// queue would walk down again after every press (recette 2026-11-07).
+    /// Only while focus is still on the pressed button: a user who moved on
+    /// during the call keeps their place.
+    private func focusAfterSettling(_ requestId: Int, _ action: SeerrPendingModel.Action, formerIndex: Int?) {
+        let rows = pending.rows
+        guard focusedItem == .toggle(pendingButtonId(requestId, action)), let formerIndex,
+              !rows.contains(where: { $0.id == requestId }) else { return }
+        if rows.isEmpty {
+            if pending.canLoadMore { focusedItem = .toggle("seerr.pending.more") }
+            return
+        }
+        focusedItem = .toggle(pendingButtonId(rows[min(formerIndex, rows.count - 1)].id, action))
+    }
+    #endif
+
+    // MARK: - Shared states
+
+    private var loadingRow: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, CinemaSpacing.spacing3)
+    }
+
+    /// A list Seerr did not serve: say so, and offer « Réessayer » (R30).
+    private func failedPanel(retryId: String, isRetrying: Bool, retry: @escaping () -> Void) -> some View {
+        panel {
+            infoRow(icon: "info.circle", text: loc.localized("seerr.settings.connection.unavailable"))
+            divider
+            actionRow(id: retryId, icon: "arrow.clockwise", label: loc.localized("action.retry"),
+                      isBusy: isRetrying, action: retry)
+        }
     }
 
     // MARK: - Connexion
@@ -543,6 +756,10 @@ struct RequestsSettingsScreen: View {
         loadedTrigger = nil
         myRequests = SeerrMyRequestsModel()
         myRequestsLoadedFor = nil
+        pending = SeerrPendingModel()
+        pendingLoadedFor = nil
+        isRetryingMyRequests = false
+        isRetryingPending = false
         report = nil
         reportAddress = nil
         keyText = ""
@@ -569,7 +786,9 @@ struct RequestsSettingsScreen: View {
     /// « Mes demandes » is (re)loaded each time who is asking, as whom or
     /// toward which Seerr moves — not on a mere re-presentation. Leaving the
     /// section (signed out) forgets what it was loaded for, so signing in
-    /// again reads the list afresh.
+    /// again reads the list afresh. A FAILED first page records nothing: the
+    /// next re-presentation tries again, and the section offers « Réessayer »
+    /// meanwhile (recette R30).
     private func loadMyRequestsIfNeeded() async {
         guard let current = myRequestsTrigger else {
             myRequestsLoadedFor = nil
@@ -577,8 +796,36 @@ struct RequestsSettingsScreen: View {
         }
         guard current != myRequestsLoadedFor else { return }
         await myRequests.loadFirstPage(session: seerr)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, myRequests.phase == .loaded else { return }
         myRequestsLoadedFor = current
+    }
+
+    private func retryMyRequests() async {
+        guard !isRetryingMyRequests, let current = myRequestsTrigger else { return }
+        isRetryingMyRequests = true
+        defer { isRetryingMyRequests = false }
+        await myRequests.loadFirstPage(session: seerr)
+        if myRequests.phase == .loaded, current == myRequestsTrigger { myRequestsLoadedFor = current }
+    }
+
+    /// « À valider », on the same terms as Mes demandes.
+    private func loadPendingIfNeeded() async {
+        guard let current = pendingTrigger else {
+            pendingLoadedFor = nil
+            return
+        }
+        guard current != pendingLoadedFor else { return }
+        await pending.load(session: seerr)
+        guard !Task.isCancelled, pending.phase == .loaded else { return }
+        pendingLoadedFor = current
+    }
+
+    private func retryPending() async {
+        guard !isRetryingPending, let current = pendingTrigger else { return }
+        isRetryingPending = true
+        defer { isRetryingPending = false }
+        await pending.load(session: seerr)
+        if pending.phase == .loaded, current == pendingTrigger { pendingLoadedFor = current }
     }
 
     /// « Tester la connexion »: on the TYPED address (R18), in key mode when
