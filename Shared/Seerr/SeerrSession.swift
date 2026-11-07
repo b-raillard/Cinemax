@@ -449,6 +449,9 @@ final class SeerrSession {
     ) -> ReSignIn {
         if pendingReSignIn?.ticket.id == ticket.id { pendingReSignIn = nil }
         guard ticket.generation == generation, ticket.accountKey == accountKey else { return .stale }
+        // The mode or the saved address moved while the sign-in ran: it no
+        // longer describes the connection, so it writes nothing.
+        guard !usesDeviceKey, SeerrAddress.sameOrigin(ticket.origin, client?.baseURL) else { return .stale }
         switch outcome {
         case .success(let signedIn):
             storeCookie(SeerrBoundSecret(value: signedIn.cookie, origin: ticket.origin), for: ticket.accountKey)
@@ -472,6 +475,12 @@ final class SeerrSession {
     }
 
     // MARK: Sign in / out, device key
+
+    /// A throwaway client for the connection test: the TYPED address, this
+    /// session's transport and language, nothing saved.
+    func makeTestClient(for address: URL) -> SeerrClient {
+        SeerrClient(baseURL: address, languageCode: languageCode, transport: transport)
+    }
 
     /// The one-gesture sign-in against `address` — the SAVED address from
     /// Settings and search, the TYPED one from the connection test. The cookie

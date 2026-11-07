@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import Testing
+import Get
 import JellyfinAPI
 @testable import CinemaxKit
 @testable import Cinemax
@@ -1234,5 +1235,210 @@ struct SeerrSessionAppStateHookTests {
         app.setAgeCap(16, forAccountKey: "S1|Z")       // another account: stored, applies when it opens
 
         #expect(calls == 1)
+    }
+}
+
+// MARK: - Connection test
+
+private let statusReply = StubSeerrTransport.Reply.response(status: 200, body: #"{"version":"3.4.0"}"#)
+private let seerrServerReply = StubSeerrTransport.Reply.response(status: 200, body: #"{"serverId":"srv","ip":"x"}"#)
+
+@MainActor
+@Suite("Seerr connection test")
+struct SeerrConnectionTestTests {
+    private let loc = LocalizationManager()
+
+    /// Account mode: Quick Connect is on, the session is loaded (no cookie).
+    private func accountMode(
+        _ replies: [StubSeerrTransport.Reply], quickConnect: Bool = true, policy userPolicy: UserPolicy = policy()
+    ) async -> (StubSeerrTransport, SeerrSession, AppState, MockAPIClient) {
+        let stub = StubSeerrTransport([settingsReply])
+        let (app, api) = signedIn(policy: userPolicy)
+        app.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: jellyfinURL)
+        api.stubbedQuickConnectEnabled = quickConnect
+        let session = makeSession(stub, following: app)
+        await session.reload(appState: app)
+        for reply in replies { stub.enqueue(reply) }
+        return (stub, session, app, api)
+    }
+
+    private func keyMode(
+        _ replies: [StubSeerrTransport.Reply]
+    ) -> (StubSeerrTransport, SeerrSession, AppState) {
+        let stub = StubSeerrTransport(replies)
+        let (app, _) = signedIn()
+        app.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: jellyfinURL)
+        return (stub, makeSession(stub, following: app), app)
+    }
+
+    private func run(_ session: SeerrSession, _ app: AppState, key: String? = nil) async -> SeerrTestReport {
+        await SeerrConnectionTest.run(address: seerrURL, deviceKey: key, session: session, appState: app, loc: loc)
+    }
+
+    private let signInReplies = [initiatedReply, approvedReply, authenticatedReply(cookie: "c")]
+
+    @Test("nothing answering is « unreachable »")
+    func reportsUnreachable() async {
+        let (_, session, app, _) = await accountMode([.failure(URLError(.cannotConnectToHost))])
+        let report = await run(session, app)
+        #expect(report == SeerrTestReport(failure: .unreachable))
+    }
+
+    @Test("something else answering /status is « not Seerr », a redirect is « redirected »")
+    func reportsNotSeerr() async {
+        let (_, session, app, _) = await accountMode([.response(status: 200, body: "<html></html>")])
+        #expect(await run(session, app).failure == .notSeerr)
+        let (_, redirected, app2, _) = await accountMode([.response(status: 302, headers: ["Location": "https://elsewhere.example/"])])
+        #expect(await run(redirected, app2).failure == .redirected)
+    }
+
+    @Test("a Seerr older than 3.4 is « too old »")
+    func reportsTooOld() async {
+        let (stub, session, app, _) = await accountMode([.response(status: 200, body: #"{"version":"3.3.2"}"#)])
+        let report = await run(session, app)
+        #expect(report.failure == .tooOld("3.3.2"))
+        #expect(report.verified.isEmpty)
+        #expect(stub.requests.count == 2)   // the reload's /settings/public, then /status: it stopped there
+    }
+
+    @Test("a Seerr on Plex or Emby is « not Jellyfin »")
+    func reportsNotJellyfin() async {
+        let plex = StubSeerrTransport.Reply.response(status: 200, body: #"{"mediaServerType":1}"#)
+        let (_, session, app, _) = await accountMode([statusReply, plex])
+        #expect(await run(session, app).failure == .notJellyfin)
+    }
+
+    @Test("Quick Connect off on Jellyfin stops before any Seerr sign-in")
+    func reportsQuickConnectOff() async {
+        let (stub, session, app, api) = await accountMode([statusReply, settingsReply], quickConnect: false)
+        let report = await run(session, app)
+        #expect(report.failure == .quickConnectOff)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(stub.requests.count == 3)
+    }
+
+    @Test("an approval Jellyfin answers 404 is « another Jellyfin »")
+    func reportsOtherJellyfinFromApproval404() async {
+        let (_, session, app, api) = await accountMode([statusReply, settingsReply, initiatedReply])
+        api.shouldThrow = true
+        api.stubbedError = Get.APIError.unacceptableStatusCode(404)
+        #expect(await run(session, app).failure == .otherJellyfin)
+    }
+
+    @Test("a different Jellyfin server id behind the key is « another Jellyfin »")
+    func reportsOtherJellyfinFromServerId() async {
+        let other = StubSeerrTransport.Reply.response(status: 200, body: #"{"serverId":"elsewhere"}"#)
+        let (_, session, app) = keyMode([statusReply, settingsReply, userReply(), other])
+        let report = await run(session, app, key: "KEY")
+        #expect(report.failure == .otherJellyfin)
+        #expect(report.verified.count == 1)      // the version line only
+    }
+
+    @Test("a Jellyfin refusal names its cause: device restriction, session limit, or plain refusal")
+    func reportsDeviceRestriction() async {
+        var restricted = policy()
+        restricted.enableAllDevices = false
+        let (_, session, app, api) = await accountMode([statusReply, settingsReply, initiatedReply], policy: restricted)
+        api.shouldThrow = true
+        api.stubbedError = Get.APIError.unacceptableStatusCode(403)
+        #expect(await run(session, app).failure == .jellyfinDevice)
+    }
+
+    @Test("a key Seerr refuses is « key refused »")
+    func reportsKeyRefused() async {
+        let (_, session, app) = keyMode([statusReply, settingsReply, forbiddenReply])
+        #expect(await run(session, app, key: "KEY").failure == .keyRefused)
+    }
+
+    @Test("a user Seerr has not imported is « not in Seerr », in both modes")
+    func reportsNotInSeerr() async {
+        let (_, session, app) = keyMode([statusReply, settingsReply, notFoundReply])
+        #expect(await run(session, app, key: "KEY").failure == .notInSeerr)
+        let denied = StubSeerrTransport.Reply.response(status: 403, body: #"{"message":"Access denied."}"#)
+        let (_, accountSession, accountApp, _) = await accountMode(
+            [statusReply, settingsReply, initiatedReply, approvedReply, denied])
+        #expect(await run(accountSession, accountApp).failure == .notInSeerr)
+    }
+
+    @Test("success lists what was verified; a user who cannot manage requests is warned")
+    func successListsVerifiedAndWarnsWithoutManage() async {
+        let storage = MockKeychain()
+        let stub = StubSeerrTransport([settingsReply])
+        let (app, api) = signedIn()
+        app.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: jellyfinURL)
+        api.stubbedQuickConnectEnabled = true
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        for reply in [statusReply, settingsReply] + signInReplies { stub.enqueue(reply) }
+
+        let report = await run(session, app)
+
+        #expect(report.failure == nil)
+        #expect(report.verified == [
+            loc.localized("seerr.test.ok.version", "3.4.0"),
+            loc.localized("seerr.test.ok.server", "Maison"),
+            loc.localized("seerr.test.ok.quickConnect"),
+            loc.localized("seerr.test.ok.account", loc.localized("seerr.test.ok.role.request")),
+        ])
+        #expect(report.warning == loc.localized("seerr.test.warning.cannotManage"))
+        // The test saves no configuration: the cookie bound to the address is the only trace
+        // (the typed address is the saved one here, so the session reads as connected).
+        #expect(storage.seerrSessions()["S1|A"] == bound("c"))
+        #expect(session.connection == .connected(alice))
+    }
+
+    @Test("key mode succeeds with the key's user; an admin is not warned")
+    func keyModeSucceedsWithoutWarningForAdmins() async {
+        let admin = #"{"id":1,"permissions":2,"jellyfinUserId":"A","displayName":"Alice"}"#
+        let (_, session, app) = keyMode([statusReply, settingsReply, userReply(admin), seerrServerReply])
+        let report = await run(session, app, key: "KEY")
+        #expect(report.failure == nil)
+        #expect(report.warning == nil)
+        #expect(report.verified.count == 3)      // no Quick Connect line in key mode
+    }
+
+    @Test("a cancelled sign-in is an empty report")
+    func cancelledSignInIsEmpty() async {
+        let (_, session, app, api) = await accountMode([statusReply, settingsReply, initiatedReply])
+        api.shouldThrow = true
+        api.stubbedError = CancellationError()
+        #expect(await run(session, app) == SeerrTestReport())
+    }
+
+    @Test("a re-sign-in finishing after the mode or the address changed writes nothing")
+    func reSignInIgnoresModeOrAddressChange() async throws {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/user/jellyfin/A": [userReply()],
+            "/auth/jellyfin/quickconnect/initiate": [initiatedReply],
+            "/auth/jellyfin/quickconnect/check": [approvedReply],
+            "/auth/jellyfin/quickconnect/authenticate": [authenticatedReply(cookie: "late")],
+        ])
+        let silentStarted = TestLatch()
+        let releaseSilent = TestLatch()
+        transport.onRequest { path, _ in
+            if path == "/auth/jellyfin/quickconnect/initiate" {
+                silentStarted.open()
+                await releaseSilent.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("old")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await silentStarted.wait()
+        await promoteToAdmin(app, api)
+        await session.setDeviceKey("KEY", address: seerrURL, appState: app)     // account mode → key mode
+        releaseSilent.open()
+        _ = try? await call.value
+
+        #expect(session.usesDeviceKey)
+        #expect(storage.seerrSessions()["S1|A"] == bound("old"))
+        #expect(session.connection == .connected(alice))
     }
 }

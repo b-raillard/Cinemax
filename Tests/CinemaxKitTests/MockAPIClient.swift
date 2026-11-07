@@ -136,7 +136,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedValidity
     }
 
-    func isQuickConnectEnabled() async throws -> Bool { false }
+    var stubbedQuickConnectEnabled = false
+    func isQuickConnectEnabled() async throws -> Bool { stubbedQuickConnectEnabled }
     func initiateQuickConnect() async throws -> QuickConnectRequest {
         if shouldThrow { throw stubbedError }
         return QuickConnectRequest(code: "123456", secret: "secret")
