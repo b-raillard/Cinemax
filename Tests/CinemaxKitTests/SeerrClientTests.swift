@@ -19,6 +19,10 @@ final class StubSeerrTransport: SeerrTransport, @unchecked Sendable {
     private let lock = NSLock()
     private var replies: [Reply]
     private var sent: [URLRequest] = []
+    private var ranDry = false
+
+    /// Whether a request ever arrived with no canned answer left.
+    var exhausted: Bool { lock.withLock { ranDry } }
 
     init(_ replies: [Reply] = []) {
         self.replies = replies
@@ -35,6 +39,7 @@ final class StubSeerrTransport: SeerrTransport, @unchecked Sendable {
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let reply: Reply? = lock.withLock {
             sent.append(request)
+            if replies.isEmpty { ranDry = true }
             return replies.isEmpty ? nil : replies.removeFirst()
         }
         switch reply {
@@ -311,5 +316,258 @@ struct SeerrClientCoreTests {
             "POST", "/request/7/decline", body: nil, auth: .credential(.session(cookie: "sid")))
         #expect(empty.0 == nil)
         #expect(empty.1 == 200)
+    }
+}
+
+// MARK: - Endpoints
+
+@Suite("Seerr client endpoints")
+struct SeerrClientEndpointTests {
+
+    private let lanURL = URL(string: "http://192.168.1.20:5055")!
+    private let key = SeerrCredential.apiKey(key: "k", user: SeerrUserID(rawValue: 3))
+    private let userJSON = #"{"id":3,"permissions":32,"jellyfinUserId":"abc","displayName":"Léa"}"#
+    private let emptyPage = #"{"page":1,"totalPages":1,"totalResults":0,"results":[]}"#
+
+    private func client(_ stub: StubSeerrTransport) -> SeerrClient {
+        SeerrClient(baseURL: lanURL, languageCode: "fr", transport: stub)
+    }
+
+    private func queryString(_ request: URLRequest?) -> String? {
+        request?.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedQuery }
+    }
+
+    @Test("GET /request always sorts by modified, requestedBy only when given")
+    func requestsQuery() async throws {
+        let page = #"{"pageInfo":{"results":0},"results":[]}"#
+        let stub = StubSeerrTransport([.response(status: 200, body: page), .response(status: 200, body: page)])
+        let seerr = client(stub)
+        _ = try await seerr.requests(filter: .pending, take: 20, skip: 40, requestedBy: nil, key)
+        _ = try await seerr.requests(filter: .all, take: 10, skip: 0, requestedBy: SeerrUserID(rawValue: 2), key)
+        #expect(stub.requests[0].httpMethod == "GET")
+        #expect(stub.requests[0].url?.path == "/api/v1/request")
+        #expect(queryString(stub.requests[0]) == "take=20&skip=40&filter=pending&sort=modified")
+        #expect(queryString(stub.requests[1]) == "take=10&skip=0&filter=all&sort=modified&requestedBy=2")
+        #expect(stub.requests[1].value(forHTTPHeaderField: "X-API-User") == "3")
+        #expect(!stub.exhausted)
+    }
+
+    @Test("A TV request body carries the seasons")
+    func createTVRequestBody() async throws {
+        let created = """
+        {"id":9,"status":1,"type":"tv","createdAt":"2026-11-01T10:00:00.000Z","updatedAt":"2026-11-01T10:00:00.000Z",
+        "requestedBy":{"id":3,"permissions":32},"media":{"tmdbId":90228,"status":3},"seasons":[{"seasonNumber":4}]}
+        """
+        let stub = StubSeerrTransport([.response(status: 201, body: created)])
+        let request = try await client(stub).createRequest(.tv(tmdbId: 90228, seasons: [4, 5]), key)
+        #expect(request.id == 9)
+        let sent = try #require(stub.requests.first)
+        #expect(sent.httpMethod == "POST")
+        #expect(sent.url?.path == "/api/v1/request")
+        let body = try #require(sent.httpBody)
+        let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(object["mediaType"] as? String == "tv")
+        #expect(object["mediaId"] as? Int == 90228)
+        #expect(object["seasons"] as? [Int] == [4, 5])
+        #expect(object.count == 3)
+    }
+
+    @Test("A movie request has no seasons key")
+    func createMovieRequestBody() async throws {
+        let created = """
+        {"id":9,"status":1,"type":"movie","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-01T10:00:00Z",
+        "requestedBy":{"id":3,"permissions":32},"media":{"tmdbId":1,"status":3}}
+        """
+        let stub = StubSeerrTransport([.response(status: 201, body: created)])
+        _ = try await client(stub).createRequest(.movie(tmdbId: 438631), key)
+        let body = try #require(stub.requests.first?.httpBody)
+        let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(object["mediaType"] as? String == "movie")
+        #expect(object["mediaId"] as? Int == 438631)
+        #expect(object.count == 2)
+    }
+
+    @Test("202 on POST /request means no season was available")
+    func acceptedWithoutSeasonsIsAFailure() async {
+        let stub = StubSeerrTransport([.response(status: 202, body: #"{"message":"No seasons available to request"}"#)])
+        await #expect(throws: SeerrError.noSeasonsAvailable) {
+            _ = try await client(stub).createRequest(.tv(tmdbId: 1, seasons: [1]), key)
+        }
+    }
+
+    @Test("Quick Connect authenticate reads connect.sid and the CSRF pair, Secure over http")
+    func quickConnectAuthenticateReadsCookie() async throws {
+        let cookies = "connect.sid=s%3Aabc.def; Path=/; Expires=Thu, 07 Dec 2026 06:11:38 GMT; HttpOnly; Secure, "
+            + "_csrf=x; Path=/; HttpOnly; Secure; SameSite=Strict, "
+            + "XSRF-TOKEN=y; Path=/; Secure; SameSite=Strict"
+        let stub = StubSeerrTransport([
+            .response(status: 200, headers: ["Set-Cookie": cookies], body: userJSON),
+            .response(status: 200, body: "{}"),
+        ])
+        let seerr = client(stub)
+        let result = try await seerr.quickConnectAuthenticate(secret: "shh")
+        #expect(result.cookie == "s%3Aabc.def")
+        #expect(result.user.id == SeerrUserID(rawValue: 3))
+        let sent = try #require(stub.requests.first)
+        #expect(sent.httpMethod == "POST")
+        #expect(sent.url?.path == "/api/v1/auth/jellyfin/quickconnect/authenticate")
+        #expect(sent.httpBody.map { String(decoding: $0, as: UTF8.self) } == #"{"secret":"shh"}"#)
+
+        // The pair was absorbed from that very answer: the next mutation carries it.
+        await seerr.logout(cookie: "s%3Aabc.def")
+        let logout = stub.requests[1]
+        #expect(logout.httpMethod == "POST")
+        #expect(logout.url?.path == "/api/v1/auth/logout")
+        #expect(logout.value(forHTTPHeaderField: "X-XSRF-TOKEN") == "y")
+        #expect(logout.value(forHTTPHeaderField: "Cookie")?.contains("_csrf=x") == true)
+        #expect(logout.value(forHTTPHeaderField: "Cookie")?.contains("connect.sid=s%3Aabc.def") == true)
+    }
+
+    @Test("Without connect.sid, authenticate fails")
+    func quickConnectAuthenticateWithoutCookie() async {
+        let stub = StubSeerrTransport([.response(status: 200, body: userJSON)])
+        await #expect(throws: SeerrError.self) {
+            _ = try await client(stub).quickConnectAuthenticate(secret: "shh")
+        }
+    }
+
+    @Test("A lookup answering 404 is nil; the key carries no X-API-User")
+    func lookupNotFoundIsNil() async throws {
+        let stub = StubSeerrTransport([
+            .response(status: 404, body: "{}"),
+            .response(status: 200, body: userJSON),
+        ])
+        let seerr = client(stub)
+        #expect(try await seerr.user(forJellyfinUserId: "abc", auth: .adminKey("k")) == nil)
+        let found = try await seerr.user(forJellyfinUserId: "abc", auth: .session(cookie: "sid"))
+        #expect(found?.id == SeerrUserID(rawValue: 3))
+        #expect(stub.requests[0].url?.path == "/api/v1/user/jellyfin/abc")
+        #expect(stub.requests[0].value(forHTTPHeaderField: "X-Api-Key") == "k")
+        #expect(stub.requests[0].value(forHTTPHeaderField: "X-API-User") == nil)
+        #expect(stub.requests[1].value(forHTTPHeaderField: "Cookie") == "connect.sid=sid")
+    }
+
+    @Test("approve and decline are POSTs")
+    func approveIsPOST() async throws {
+        let stub = StubSeerrTransport([.response(status: 200, body: "{}"), .response(status: 200, body: "{}")])
+        let seerr = client(stub)
+        try await seerr.approve(requestId: 7, key)
+        try await seerr.decline(requestId: 8, key)
+        #expect(stub.requests[0].httpMethod == "POST")
+        #expect(stub.requests[0].url?.path == "/api/v1/request/7/approve")
+        #expect(stub.requests[1].httpMethod == "POST")
+        #expect(stub.requests[1].url?.path == "/api/v1/request/8/decline")
+        #expect(stub.requests[0].value(forHTTPHeaderField: "X-API-User") == "3")
+    }
+
+    @Test("Read endpoints: paths, language and credentials")
+    func readEndpointPaths() async throws {
+        let movie = #"{"mediaType":"movie","id":5,"title":"Dune"}"#
+        let tv = #"{"id":6,"name":"Dune","seasons":[]}"#
+        let collection = #"{"id":7,"name":"Saga","parts":[]}"#
+        let person = #"{"knownForDepartment":"Acting"}"#
+        let credits = #"{"cast":[],"crew":[]}"#
+        let stub = StubSeerrTransport([
+            .response(status: 200, body: #"{"version":"3.5.1"}"#),
+            .response(status: 200, body: emptyPage),
+            .response(status: 200, body: movie), .response(status: 200, body: tv),
+            .response(status: 200, body: collection), .response(status: 200, body: person),
+            .response(status: 200, body: credits), .response(status: 200, body: userJSON),
+        ])
+        let seerr = client(stub)
+        _ = try await seerr.status()
+        _ = try await seerr.search("Mission: Impossible", key)
+        _ = try await seerr.movie(tmdbId: 5, key)
+        _ = try await seerr.tv(tmdbId: 6, key)
+        _ = try await seerr.collection(id: 7, key)
+        _ = try await seerr.person(id: 8, key)
+        _ = try await seerr.combinedCredits(personId: 8, key)
+        _ = try await seerr.me(key)
+        let r = stub.requests
+        #expect(r.map { $0.url?.path } == [
+            "/api/v1/status", "/api/v1/search", "/api/v1/movie/5", "/api/v1/tv/6", "/api/v1/collection/7",
+            "/api/v1/person/8", "/api/v1/person/8/combined_credits", "/api/v1/auth/me",
+        ])
+        #expect(queryString(r[0]) == nil)
+        #expect(queryString(r[1]) == "query=Mission%3A%20Impossible&page=1&language=fr")
+        #expect(queryString(r[2]) == "language=fr")
+        #expect(queryString(r[6]) == "language=fr")
+        #expect(queryString(r[7]) == nil)
+        #expect(r[0].value(forHTTPHeaderField: "X-API-User") == nil)
+        #expect(r[1].value(forHTTPHeaderField: "X-API-User") == "3")
+        #expect(!stub.exhausted)
+    }
+
+    @Test("Quick Connect initiate, check and the server id")
+    func quickConnectAndServerId() async throws {
+        let stub = StubSeerrTransport([
+            .response(status: 200, body: #"{"code":"123456","secret":"shh"}"#),
+            .response(status: 200, body: #"{"authenticated":false}"#),
+            .response(status: 200, body: #"{"authenticated":true}"#),
+            .response(status: 200, body: #"{"serverId":"sid","apiKey":"top-secret","ip":"x"}"#),
+        ])
+        let seerr = client(stub)
+        let code = try await seerr.quickConnectInitiate()
+        #expect(code.code == "123456")
+        #expect(stub.requests[0].httpMethod == "POST")
+        #expect(stub.requests[0].url?.path == "/api/v1/auth/jellyfin/quickconnect/initiate")
+        #expect(try await seerr.quickConnectCheck(secret: "shh") == false)
+        #expect(try await seerr.quickConnectCheck(secret: "shh") == true)
+        #expect(stub.requests[1].httpMethod == "GET")
+        #expect(queryString(stub.requests[1]) == "secret=shh")
+        #expect(try await seerr.jellyfinServerId(adminKey: "k") == "sid")
+        #expect(stub.requests[3].url?.path == "/api/v1/settings/jellyfin")
+        #expect(stub.requests[3].value(forHTTPHeaderField: "X-API-User") == nil)
+        #expect(!stub.exhausted)
+    }
+
+    @Test("logout swallows every error")
+    func logoutSwallowsErrors() async {
+        let stub = StubSeerrTransport([.failure(URLError(.notConnectedToInternet))])
+        await client(stub).logout(cookie: "sid")
+        #expect(stub.requests.count == 1)
+    }
+
+    @Test("The redirect policy keeps credentials on the origin only")
+    func redirectPolicyKeepsOrigin() throws {
+        let origin = try #require(URL(string: "http://h:5055/api/v1/status"))
+        let task = URLSession.shared.dataTask(with: origin)
+        let response = try #require(HTTPURLResponse(
+            url: origin, statusCode: 301, httpVersion: "HTTP/1.1", headerFields: nil))
+
+        func follow(_ target: String) throws -> URLRequest? {
+            final class Box: @unchecked Sendable { var request: URLRequest?? = .none }
+            let box = Box()
+            let next = URLRequest(url: try #require(URL(string: target)))
+            SeerrRedirectPolicy.shared.urlSession(
+                URLSession.shared, task: task, willPerformHTTPRedirection: response, newRequest: next
+            ) { box.request = .some($0) }
+            return try #require(box.request)
+        }
+        #expect(try follow("http://elsewhere.example/api/v1/status") == nil)
+        #expect(try follow("https://h:5055/api/v1/status")?.url?.scheme == "https")
+    }
+
+    @Test("Credentials never print their secrets")
+    func credentialsNeverPrintSecrets() {
+        let secrets = ["TOPSECRETKEY", "SESSIONCOOKIE", "CSRFTOKEN"]
+        let values: [Any] = [
+            SeerrCredential.apiKey(key: "TOPSECRETKEY", user: SeerrUserID(rawValue: 3)),
+            SeerrCredential.session(cookie: "SESSIONCOOKIE"),
+            SeerrLookupAuth.adminKey("TOPSECRETKEY"),
+            SeerrLookupAuth.session(cookie: "SESSIONCOOKIE"),
+            SeerrClient.Auth.credential(.session(cookie: "SESSIONCOOKIE")),
+            SeerrClient.Auth.lookup(.adminKey("TOPSECRETKEY")),
+            SeerrClient.Call(
+                method: "POST", path: "/x", body: Data("CSRFTOKEN".utf8),
+                auth: .credential(.apiKey(key: "TOPSECRETKEY", user: SeerrUserID(rawValue: 3)))),
+        ]
+        for value in values {
+            for text in [String(describing: value), String(reflecting: value)] {
+                for secret in secrets { #expect(!text.contains(secret), "\(text)") }
+            }
+        }
+        #expect(String(describing: SeerrCredential.apiKey(key: "TOPSECRETKEY", user: SeerrUserID(rawValue: 3)))
+            == "apiKey(user: 3)")
     }
 }

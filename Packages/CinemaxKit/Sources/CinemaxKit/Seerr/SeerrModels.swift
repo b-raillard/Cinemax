@@ -20,14 +20,6 @@ public enum SeerrJSON {
     }
 }
 
-/// Decodes an array, silently dropping the entries that do not decode.
-private struct Lossy<Element: Decodable>: Decodable {
-    let element: Element?
-    init(from decoder: Decoder) throws {
-        element = try? Element(from: decoder)
-    }
-}
-
 /// Decodes a `[SeerrTitle]`, dropping people / collections, and — for
 /// collection `parts` — reading a missing `mediaType` as a movie.
 private struct LossyTitle: Decodable {
@@ -195,6 +187,14 @@ public struct SeerrSeasonInfo: Sendable, Equatable, Decodable {
         self.seasonNumber = seasonNumber
         self.status = status
     }
+
+    private enum CodingKeys: String, CodingKey { case seasonNumber, status }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        seasonNumber = try c.decode(Int.self, forKey: .seasonNumber)
+        status = try c.decodeIfPresent(SeerrMediaStatus.self, forKey: .status) ?? .unknown
+    }
 }
 
 public struct SeerrRequestSummary: Sendable, Equatable, Decodable {
@@ -300,7 +300,8 @@ public struct SeerrTitle: Sendable, Equatable, Decodable {
         year = dateString.flatMap { Int($0.prefix(4)) }
         overview = try c.decodeIfPresent(String.self, forKey: .overview)
         posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
-        mediaInfo = try c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
+        // A malformed `mediaInfo` costs the title its status, not its place.
+        mediaInfo = try? c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
     }
 }
 

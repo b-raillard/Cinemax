@@ -25,6 +25,29 @@ public enum SeerrLookupAuth: Sendable, Equatable {
     case adminKey(String)
 }
 
+// A key or a cookie must not leak through `print`, `dump`, an `os_log("\(x)")`
+// or a failed `#expect`: the descriptions name the case and the user, nothing
+// else.
+extension SeerrCredential: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        switch self {
+        case .session: "session(…)"
+        case .apiKey(_, let user): "apiKey(user: \(user.rawValue))"
+        }
+    }
+    public var debugDescription: String { description }
+}
+
+extension SeerrLookupAuth: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String {
+        switch self {
+        case .session: "session(…)"
+        case .adminKey: "adminKey(…)"
+        }
+    }
+    public var debugDescription: String { description }
+}
+
 public enum SeerrError: Error, Equatable {
     /// No answer: the transport failed (DNS, refused, timeout, TLS).
     case unreachable
@@ -171,14 +194,23 @@ public final class SeerrClient: Sendable {
         URLSessionSeerrTransport()
     }
 
-    enum Auth: Sendable {
+    enum Auth: Sendable, CustomStringConvertible, CustomDebugStringConvertible {
         case none
         case credential(SeerrCredential)
         case lookup(SeerrLookupAuth)
+
+        var description: String {
+            switch self {
+            case .none: "none"
+            case .credential(let credential): "credential(\(credential))"
+            case .lookup(let lookup): "lookup(\(lookup))"
+            }
+        }
+        var debugDescription: String { description }
     }
 
     /// One request, as `perform` sends it. `path` is relative to `/api/v1`.
-    struct Call: Sendable {
+    struct Call: Sendable, CustomStringConvertible, CustomDebugStringConvertible {
         var method: String
         var path: String
         var query: [URLQueryItem] = []
@@ -186,6 +218,11 @@ public final class SeerrClient: Sendable {
         var auth: Auth = .none
         /// Appends `language=<app language>` (the routes the spec lists).
         var localized = false
+
+        /// Method, path and auth kind: never the query or the body, which
+        /// carry the Quick Connect secret.
+        var description: String { "\(method) \(path) auth: \(auth)" }
+        var debugDescription: String { description }
 
         var isMutation: Bool {
             let verb = method.uppercased()
@@ -300,6 +337,12 @@ public final class SeerrClient: Sendable {
     }
 
     private func makeRequest(_ call: Call, url: URL) -> URLRequest {
+        if case .lookup(.adminKey) = call.auth {
+            // Fail closed: the one credential that must not carry `X-API-User`
+            // is confined to the two routes that refuse it.
+            assert(call.path.hasPrefix("/user/jellyfin/") || call.path == "/settings/jellyfin",
+                   "An admin lookup key is only for /user/jellyfin/{id} and /settings/jellyfin")
+        }
         var request = URLRequest(url: url)
         request.httpMethod = call.method
         request.setValue("application/json", forHTTPHeaderField: "Accept")

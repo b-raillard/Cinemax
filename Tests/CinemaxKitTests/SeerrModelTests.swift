@@ -26,6 +26,20 @@ struct SeerrModelTests {
         #expect(page.results[1].mediaInfo?.requests.first?.seasons == [1])
     }
 
+    @Test("A malformed mediaInfo keeps the title; a season without status is unknown")
+    func badMediaInfoKeepsTitle() throws {
+        let json = """
+        {"page":1,"totalPages":1,"results":[
+        {"mediaType":"movie","id":1,"title":"Dune","mediaInfo":{"status":"nope","requests":"x"}},
+        {"mediaType":"movie","id":2,"title":"Heat"}]}
+        """
+        let page = try decode(SeerrSearchPage.self, json)
+        #expect(page.results.map(\.title) == ["Dune", "Heat"])
+        #expect(page.results[0].mediaInfo == nil)
+        let season = try decode(SeerrSeasonInfo.self, #"{"seasonNumber":2}"#)
+        #expect(season.status == .unknown)
+    }
+
     @Test("Unknown statuses fall back")
     func unknownStatusesFallBack() throws {
         let media = try decode(SeerrMediaInfo.self, #"{"status":9}"#)
