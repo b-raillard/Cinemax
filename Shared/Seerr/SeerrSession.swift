@@ -11,24 +11,29 @@ private let logger = Logger(subsystem: "com.cinemax", category: "Seerr")
 /// The ACTIVE account's Seerr identity — one root store, a process singleton
 /// (`AppNavigation.sharedSeerrSession`), read at render by every Seerr surface.
 ///
-/// Three invariants, in order of importance:
-/// 1. **Fail closed.** An account whose policy is not known yet, or that is
-///    capped by age (server policy OR this device's `privacy.maxContentAge`),
-///    makes no Seerr call at all — not from `reload`, not through `perform`,
-///    not through `signIn`. The device half of the cap is re-read live, so a
-///    cap set while connected hides everything at the next render.
-/// 2. **No answer crosses accounts.** Everything is keyed to `accountKey` and
-///    a `generation` bumped by `reset()` — synchronously, on the account
-///    change, and again at the head of `reload` before its first `await`.
-///    Every write after an `await` is dropped once the generation moved, and a
-///    screen's own load does the same through `snapshot()` / `isCurrent(_:)`.
-/// 3. **A 403 is probed before it is believed** (spec, § Spike findings 2):
+/// Four invariants, in order of importance:
+/// 1. **Fail closed.** An account whose policy is not known yet (or carries
+///    none), or that is capped by age (server policy OR this device's
+///    `privacy.maxContentAge`, the latter re-read live), or without Pro, makes
+///    no Seerr call at all — not from `reload`, not through `perform`, not
+///    through `signIn`.
+/// 2. **No answer crosses accounts.** Everything is keyed to `accountKey`, a
+///    `generation` bumped by `reset()` — synchronously, on the account change,
+///    and again at the head of `reload` before its first `await` — and the
+///    account the app is on RIGHT NOW (`activeAccountKeyProvider`), which
+///    closes the window between `applyActiveServer` and the reset. A write
+///    after an `await` is dropped once the generation moved; `perform` turns a
+///    late answer into a `CancellationError`.
+/// 3. **A secret only goes where it was issued.** A cookie and a device key
+///    are stored with the Seerr address they belong to (`SeerrBoundSecret`):
+///    a configuration pointing elsewhere makes them unusable, never sent.
+/// 4. **A 403 is probed before it is believed** (spec, § Spike findings 2):
 ///    Seerr answers a dead session, a refused key and a genuine refusal alike.
 @MainActor @Observable
 final class SeerrSession {
     enum Connection: Equatable {
-        /// Not known, or not applicable (capped, disabled, no address, offline
-        /// before the first answer). Nothing Seerr renders.
+        /// Not known, or not applicable (capped, disabled, no Pro, no address,
+        /// offline before the first answer). Nothing Seerr renders.
         case unavailable
         /// Account mode without a (live) session: « Se connecter à Seerr ».
         case notConnected
@@ -51,8 +56,9 @@ final class SeerrSession {
     private(set) var config: SeerrUserConfig?
     private(set) var connection: Connection = .unavailable
     private(set) var publicSettings: SeerrPublicSettings?
-    /// This device holds an API key for the active server: every profile goes
-    /// through it (`X-API-User`), the account mode's cookie is not used.
+    /// This device holds an API key for the active server AND its address: every
+    /// profile goes through it (`X-API-User`), the account mode's cookie is not
+    /// used.
     private(set) var usesDeviceKey = false
     /// The server half of the cap, as of the last `reload` (`true` until the
     /// policy is known).
@@ -62,6 +68,15 @@ final class SeerrSession {
     var isAgeCapped: Bool {
         policyCapped || defaults.integer(forKey: SettingsKey.privacyMaxContentAge) > 0
     }
+
+    // MARK: Providers (wired at the root)
+
+    /// Whether the Pro allows requests. `true` until Task 10 wires it to the
+    /// `.requests` feature; `false` ⇒ no Seerr call anywhere.
+    @ObservationIgnored var proAllowsProvider: @MainActor () -> Bool = { true }
+    /// The account the app is on (`AppState.activeAccountKey`), wired by
+    /// `AppNavigation`. Unwired (`nil`) serves nothing: fail closed.
+    @ObservationIgnored var activeAccountKeyProvider: @MainActor () -> String? = { nil }
 
     // MARK: Identity (not observed)
 
@@ -73,10 +88,33 @@ final class SeerrSession {
     @ObservationIgnored private var reloadPass = 0
     @ObservationIgnored private var accountKey: String?
     @ObservationIgnored private var jellyfinUserId: String?
-    @ObservationIgnored private var cookie: String?
-    @ObservationIgnored private var deviceKey: String?
+    /// As stored — `credential()` uses each only toward its own address.
+    @ObservationIgnored private var cookie: SeerrBoundSecret?
+    @ObservationIgnored private var deviceKey: SeerrBoundSecret?
     @ObservationIgnored private var approve: (@Sendable (String) async throws -> Bool)?
     @ObservationIgnored private var languageCode: String?
+
+    /// One silent sign-in: who started it, for which account and address, and
+    /// which cookie it replaces.
+    private struct ReSignInTicket: Sendable {
+        let id: Int
+        let generation: Int
+        let accountKey: String
+        let origin: URL
+        let deadCookie: String
+    }
+    /// The silent sign-in in flight, shared by every caller of its generation.
+    private struct PendingReSignIn {
+        let ticket: ReSignInTicket
+        let task: Task<ReSignIn, Never>
+    }
+    private enum ReSignIn: Sendable {
+        case renewed(String)
+        case failed
+        case stale
+    }
+    @ObservationIgnored private var pendingReSignIn: PendingReSignIn?
+    @ObservationIgnored private var reSignInCount = 0
 
     @ObservationIgnored private let storage: any SeerrSecretStorage
     @ObservationIgnored private let defaults: UserDefaults
@@ -98,9 +136,12 @@ final class SeerrSession {
     // MARK: Account lifecycle
 
     /// Forgets the identity — never the stored secrets, which are keyed per
-    /// account precisely so that they survive a switch. Synchronous.
+    /// account precisely so that they survive a switch. Synchronous. A silent
+    /// sign-in in flight is cancelled with it.
     func reset() {
         generation &+= 1
+        pendingReSignIn?.task.cancel()
+        pendingReSignIn = nil
         accountKey = nil
         jellyfinUserId = nil
         cookie = nil
@@ -133,8 +174,9 @@ final class SeerrSession {
 
     /// Re-reads the active account's configuration and Seerr identity. Called
     /// after every `refreshCurrentUser` (sign-in, switch, restore, foreground,
-    /// `UserUpdated`). The SAME account keeps its generation and its state
-    /// until a new answer replaces it — no flicker on every return to the app.
+    /// `UserUpdated`), when the network comes back and when the active
+    /// account's age cap changes. The SAME account keeps its generation and
+    /// its state until a new answer replaces it — no flicker on every return.
     func reload(appState: AppState) async {
         let key = appState.activeAccountKey
         accountDidChange(to: key)
@@ -145,15 +187,17 @@ final class SeerrSession {
         let pass = (generation: generation, reload: reloadPass)
         approve = Self.makeApprover(appState: appState, accountKey: key)
 
-        // The policy first, and an unknown one is a cap: nothing is read for a
-        // capped account — not even its configuration.
-        let policy = appState.currentUser.flatMap { $0.id == userId ? $0.policy : nil }
-        let known = appState.currentUser?.id == userId
-        setPolicyCapped(!known || SeerrAccess.isAgeCapped(deviceMaxAge: 0, policy: policy))
+        // The policy first. Not known yet (no user, someone else's record) or
+        // absent is a cap: nothing is read for a capped account — not even its
+        // configuration.
+        let user = appState.currentUser
+        let policy = user?.id == userId ? user?.policy : nil
+        setPolicyCapped(policy.map { SeerrAccess.isAgeCapped(deviceMaxAge: 0, policy: $0) } ?? true)
         guard !isAgeCapped else {
             forgetIdentity(keepingConfig: false)
             return
         }
+        let isAdmin = appState.isAdministrator
 
         let api = appState.apiClient
         let prefs: DisplayPreferencesDto
@@ -168,7 +212,7 @@ final class SeerrSession {
         guard isLive(pass) else { return }
         let fresh = SeerrUserConfig.read(prefs)
         if config != fresh { config = fresh }
-        guard fresh.isEnabled, let url = fresh.url else {
+        guard let url = fresh.url, Self.resolvesIdentity(fresh, isAdmin: isAdmin), proAllowsProvider() else {
             forgetIdentity(keepingConfig: true)
             return
         }
@@ -180,13 +224,16 @@ final class SeerrSession {
             if publicSettings != nil { publicSettings = nil }
         }
         guard let client else { return }
-        let storedKey = storage.seerrAPIKeys()[serverId].flatMap { $0.isEmpty ? nil : $0 }
-        if (storedKey != nil) != usesDeviceKey {
-            usesDeviceKey = storedKey != nil
+        // A key entered for another address is not this Seerr's: the device is
+        // keyless here, and the key is never sent.
+        let usableKey = storage.seerrAPIKeys()[serverId].flatMap { !$0.value.isEmpty && $0.isBound(to: url) ? $0 : nil }
+        if (usableKey != nil) != usesDeviceKey {
+            usesDeviceKey = usableKey != nil
             setConnection(.unavailable)
         }
-        deviceKey = storedKey
+        deviceKey = usableKey
         cookie = storage.seerrSessions()[key]
+        let usableCookie = cookie.flatMap { $0.isBound(to: url) ? $0 : nil }
 
         let settings: SeerrPublicSettings
         do {
@@ -197,13 +244,21 @@ final class SeerrSession {
         guard isLive(pass) else { return }
         if publicSettings != settings { publicSettings = settings }
 
-        if let storedKey {
-            await resolveByKey(storedKey, jellyfinUserId: userId, client: client, pass: pass)
-        } else if let cookie {
-            await resolveBySession(cookie, accountKey: key, client: client, pass: pass)
+        if let usableKey {
+            await resolveByKey(usableKey.value, jellyfinUserId: userId, client: client, pass: pass)
+        } else if let usableCookie {
+            await resolveBySession(usableCookie.value, client: client, pass: pass)
         } else {
             setConnection(.notConnected)
         }
+    }
+
+    /// Whose Seerr identity is resolved: an enabled account, or an
+    /// administrator whose own switch is off (the Configuration page needs
+    /// their identity for the per-user lookups). The browse surfaces still
+    /// require `isEnabled` (`SeerrAccess.showsBrowse`).
+    private static func resolvesIdentity(_ config: SeerrUserConfig, isAdmin: Bool) -> Bool {
+        config.url != nil && (config.isEnabled || isAdmin)
     }
 
     private func resolveByKey(_ key: String, jellyfinUserId: String, client: SeerrClient,
@@ -221,18 +276,17 @@ final class SeerrSession {
         }
     }
 
-    private func resolveBySession(_ cookie: String, accountKey key: String, client: SeerrClient,
+    private func resolveBySession(_ cookie: String, client: SeerrClient,
                                   pass: (generation: Int, reload: Int)) async {
         do {
             let user = try await client.me(.session(cookie: cookie))
             guard isLive(pass) else { return }
             setConnection(.connected(user))
         } catch SeerrError.forbidden {
-            // `/auth/me` refusing IS the dead-session probe.
+            // `/auth/me` refusing IS the dead-session probe: sign in again,
+            // once, silently (spec call #18); a failure shows the prompt.
             guard isLive(pass) else { return }
-            logger.notice("Seerr ▸ stored session expired")
-            dropCookie(cookie, for: key)
-            setConnection(.notConnected)
+            _ = await reSignInOnce(client: client, deadCookie: cookie)
         } catch {
             // A blip: the last known state stands.
         }
@@ -241,11 +295,18 @@ final class SeerrSession {
     // MARK: Stale-answer token
 
     func snapshot() -> Snapshot? {
-        accountKey.map { Snapshot(accountKey: $0, generation: generation) }
+        guard servesActiveAccount, let accountKey else { return nil }
+        return Snapshot(accountKey: accountKey, generation: generation)
     }
 
     func isCurrent(_ snapshot: Snapshot) -> Bool {
-        snapshot.generation == generation && snapshot.accountKey == accountKey
+        snapshot.generation == generation && snapshot.accountKey == accountKey && servesActiveAccount
+    }
+
+    /// The state belongs to the account the app is on right now.
+    private var servesActiveAccount: Bool {
+        guard let accountKey else { return false }
+        return accountKey == activeAccountKeyProvider()
     }
 
     private func isLive(_ pass: (generation: Int, reload: Int)) -> Bool {
@@ -254,30 +315,46 @@ final class SeerrSession {
 
     // MARK: Calls
 
-    /// How the active account is authenticated right now, `nil` when it is not
-    /// (capped, not connected, not linked, key refused).
+    /// How the active account is authenticated right now, toward the
+    /// configured Seerr only; `nil` when it is not (another account on screen,
+    /// no Pro, capped, not connected, not linked, key refused, a secret issued
+    /// for another address).
     func credential() -> SeerrCredential? {
-        guard !isAgeCapped, case .connected(let user) = connection else { return nil }
+        guard servesActiveAccount, proAllowsProvider(), !isAgeCapped, let client,
+              case .connected(let user) = connection else { return nil }
         if usesDeviceKey {
-            return deviceKey.map { SeerrCredential.apiKey(key: $0, user: user.id) }
+            guard let deviceKey, deviceKey.isBound(to: client.baseURL) else { return nil }
+            return .apiKey(key: deviceKey.value, user: user.id)
         }
-        return cookie.map { SeerrCredential.session(cookie: $0) }
+        guard let cookie, cookie.isBound(to: client.baseURL) else { return nil }
+        return .session(cookie: cookie.value)
     }
 
     /// Runs `op` as the active account. A 403 is probed: in account mode a
-    /// dead session (`/auth/me` 403 too) signs in again ONCE, silently, and
-    /// `op` is retried once; anything else surfaces the 403. Throws
-    /// `CancellationError` when the account changed under the call — the
-    /// caller then writes nothing.
+    /// dead session (`/auth/me` 403 too) signs in again ONCE, silently — one
+    /// sign-in shared by concurrent callers — and `op` is retried once;
+    /// anything else surfaces the 403. Whatever `op` returns or throws, if the
+    /// account changed meanwhile the caller gets a `CancellationError` and
+    /// must write and show nothing.
     func perform<T: Sendable>(_ op: @Sendable (SeerrClient, SeerrCredential) async throws -> T) async throws -> T {
         guard let snapshot = snapshot(), let client, let credential = credential() else {
             throw SeerrError.unreachable
         }
         do {
-            return try await op(client, credential)
-        } catch SeerrError.forbidden {
-            let renewed = try await recoverFromForbidden(client: client, credential: credential, snapshot: snapshot)
-            return try await op(client, renewed)
+            let answer: T
+            do {
+                answer = try await op(client, credential)
+            } catch SeerrError.forbidden {
+                let renewed = try await recoverFromForbidden(client: client, credential: credential, snapshot: snapshot)
+                answer = try await op(client, renewed)
+            }
+            guard isCurrent(snapshot) else { throw CancellationError() }
+            return answer
+        } catch {
+            // An answer — or a failure — of an account the app has left is
+            // nobody's to show.
+            guard isCurrent(snapshot) else { throw CancellationError() }
+            throw error
         }
     }
 
@@ -305,72 +382,109 @@ final class SeerrSession {
             throw SeerrError.forbidden
 
         case .session(let deadCookie):
-            let sessionIsDead: Bool
+            let probe: Result<SeerrUser, any Error>
             do {
-                let user = try await client.me(credential)
-                guard isCurrent(snapshot) else { throw CancellationError() }
-                setConnection(.connected(user))
-                sessionIsDead = false
-            } catch SeerrError.forbidden {
-                sessionIsDead = true
-            } catch is CancellationError {
-                throw CancellationError()
+                probe = .success(try await client.me(credential))
             } catch {
-                sessionIsDead = false
+                probe = .failure(error)
             }
             guard isCurrent(snapshot) else { throw CancellationError() }
-            guard sessionIsDead else { throw SeerrError.forbidden }
-            return try await signInSilently(client: client, deadCookie: deadCookie, snapshot: snapshot)
+            switch probe {
+            case .success(let user):
+                setConnection(.connected(user))
+                throw SeerrError.forbidden
+            case .failure(let error as SeerrError) where error == .forbidden:
+                break   // the session is dead
+            case .failure(let error) where error is CancellationError:
+                throw CancellationError()
+            case .failure:
+                throw SeerrError.forbidden
+            }
+            switch await reSignInOnce(client: client, deadCookie: deadCookie) {
+            case .renewed(let fresh): return .session(cookie: fresh)
+            case .failed: throw SeerrError.forbidden
+            case .stale: throw CancellationError()
+            }
         }
     }
 
-    private func signInSilently(
-        client: SeerrClient, deadCookie: String, snapshot: Snapshot
-    ) async throws -> SeerrCredential {
-        // Only against the configured address, with this account's approver.
-        guard let approve, client.baseURL == config?.url else {
-            dropCookie(deadCookie, for: snapshot.accountKey)
-            setConnection(.notConnected)
-            throw SeerrError.forbidden
+    /// The silent sign-in after a dead session: ONE per generation, every
+    /// concurrent caller awaits the same one. Only against the configured
+    /// address, with this account's approver. Its outcome is written here; a
+    /// failure never overwrites a fresher session (a manual sign-in that
+    /// landed meanwhile).
+    private func reSignInOnce(client: SeerrClient, deadCookie: String) async -> ReSignIn {
+        guard let key = accountKey else { return .stale }
+        if let cookie, cookie.value != deadCookie, cookie.isBound(to: client.baseURL) {
+            return .renewed(cookie.value)   // a concurrent caller already renewed it
+        }
+        if let pending = pendingReSignIn, pending.ticket.generation == generation {
+            return await pending.task.value
+        }
+        guard let approve, SeerrAddress.sameOrigin(client.baseURL, config?.url) else {
+            abandonSession(deadCookie: deadCookie, for: key)
+            return .failed
         }
         logger.notice("Seerr ▸ session expired, signing in again")
+        reSignInCount &+= 1
+        let ticket = ReSignInTicket(
+            id: reSignInCount, generation: generation, accountKey: key, origin: client.baseURL, deadCookie: deadCookie)
         let signIn = SeerrQuickConnectSignIn(client: client, approve: approve, pause: signInPause)
-        let outcome: Result<(cookie: String, user: SeerrUser), SeerrSignInError>
-        do {
-            outcome = .success(try await signIn.run())
-        } catch {
-            outcome = .failure(error)
+        let task = Task { [weak self] () -> ReSignIn in
+            let outcome: Result<(cookie: String, user: SeerrUser), SeerrSignInError>
+            do throws(SeerrSignInError) {
+                outcome = .success(try await signIn.run())
+            } catch {
+                outcome = .failure(error)
+            }
+            guard let self else { return .stale }
+            return self.finishReSignIn(outcome, ticket: ticket)
         }
-        guard isCurrent(snapshot) else { throw CancellationError() }
+        pendingReSignIn = PendingReSignIn(ticket: ticket, task: task)
+        return await task.value
+    }
+
+    private func finishReSignIn(
+        _ outcome: Result<(cookie: String, user: SeerrUser), SeerrSignInError>, ticket: ReSignInTicket
+    ) -> ReSignIn {
+        if pendingReSignIn?.ticket.id == ticket.id { pendingReSignIn = nil }
+        guard ticket.generation == generation, ticket.accountKey == accountKey else { return .stale }
         switch outcome {
         case .success(let signedIn):
-            storeCookie(signedIn.cookie, for: snapshot.accountKey)
+            storeCookie(SeerrBoundSecret(value: signedIn.cookie, origin: ticket.origin), for: ticket.accountKey)
             setConnection(.connected(signedIn.user))
-            return .session(cookie: signedIn.cookie)
+            return .renewed(signedIn.cookie)
         case .failure(.cancelled):
-            throw CancellationError()
+            return .stale
         case .failure(let error):
             logger.notice("Seerr ▸ silent sign-in failed: \(String(describing: error), privacy: .public)")
-            dropCookie(deadCookie, for: snapshot.accountKey)
-            setConnection(.notConnected)
-            throw SeerrError.forbidden
+            abandonSession(deadCookie: ticket.deadCookie, for: ticket.accountKey)
+            return .failed
         }
+    }
+
+    /// The dead session is given up — cookie dropped, « Se connecter à
+    /// Seerr » — unless a fresher one landed meanwhile, which stands.
+    private func abandonSession(deadCookie: String, for key: String) {
+        guard cookie == nil || cookie?.value == deadCookie else { return }
+        dropCookie(deadCookie, for: key)
+        setConnection(.notConnected)
     }
 
     // MARK: Sign in / out, device key
 
     /// The one-gesture sign-in against `address` — the SAVED address from
     /// Settings and search, the TYPED one from the connection test. The cookie
-    /// is always stored under the active account; the connection only moves
-    /// when `address` is the saved one (the test may sign in before saving).
-    /// `.cancelled` — or no account, a capped one, a switch midway — changes
-    /// nothing.
+    /// is always stored under the active account, bound to `address`; the
+    /// connection only moves to `.connected` when `address` is the saved one
+    /// (the test may sign in before saving). `.cancelled` — or no account, a
+    /// capped one, no Pro, a switch midway — changes nothing.
     func signIn(address: URL, appState: AppState) async -> Result<SeerrUser, SeerrSignInError> {
-        guard let key = appState.activeAccountKey, key == accountKey,
+        guard let key = appState.activeAccountKey, key == accountKey, proAllowsProvider(),
               let snapshot = snapshot(), !isAgeCapped else {
             return .failure(.cancelled)
         }
-        let target = client?.baseURL == address
+        let target = SeerrAddress.sameOrigin(client?.baseURL, address)
             ? client
             : SeerrClient(baseURL: address, languageCode: languageCode, transport: transport)
         guard let target else { return .failure(.cancelled) }
@@ -386,32 +500,45 @@ final class SeerrSession {
             return .failure(error)
         }
         guard isCurrent(snapshot), appState.activeAccountKey == key else { return .failure(.cancelled) }
-        storeCookie(signedIn.cookie, for: key)
-        if !usesDeviceKey, config?.isEnabled == true, address == config?.url {
-            setConnection(.connected(signedIn.user))
+        storeCookie(SeerrBoundSecret(value: signedIn.cookie, origin: target.baseURL), for: key)
+        if !usesDeviceKey {
+            if let config, SeerrAddress.sameOrigin(address, config.url),
+               Self.resolvesIdentity(config, isAdmin: appState.isAdministrator) {
+                setConnection(.connected(signedIn.user))
+            } else if case .connected = connection {
+                // The saved address's session was replaced by another address's.
+                setConnection(.notConnected)
+            }
         }
         return .success(signedIn.user)
     }
 
     /// « Se déconnecter »: the cookie goes first, then Seerr is told (best
-    /// effort — a failed logout changes nothing the user can act on).
+    /// effort — a failed logout changes nothing the user can act on), and only
+    /// the Seerr that issued it.
     func signOut() async {
-        guard let key = accountKey else { return }
+        guard servesActiveAccount, let key = accountKey else { return }
         let signedOut = cookie ?? storage.seerrSessions()[key]
         dropCookie(nil, for: key)
         if !usesDeviceKey, client != nil { setConnection(.notConnected) }
-        if let signedOut, let client, !isAgeCapped {
-            await client.logout(cookie: signedOut)
+        if let signedOut, let client, signedOut.isBound(to: client.baseURL), !isAgeCapped, proAllowsProvider() {
+            await client.logout(cookie: signedOut.value)
         }
     }
 
-    /// Writes (or removes, for `nil` / blank) this device's API key for the
-    /// active server, then re-reads the identity in the new mode.
-    func setDeviceKey(_ key: String?, appState: AppState) async {
-        guard let serverId = appState.activeServerId else { return }
+    /// An administrator writes (or removes, for `nil` / blank) this device's
+    /// API key for the active server, bound to the Seerr `address` it was
+    /// entered for, then the identity is re-read in the new mode.
+    func setDeviceKey(_ key: String?, address: URL, appState: AppState) async {
+        guard appState.isAdministrator, let serverId = appState.activeServerId else { return }
         let trimmed = key?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         var keys = storage.seerrAPIKeys()
-        if trimmed.isEmpty { keys.removeValue(forKey: serverId) } else { keys[serverId] = trimmed }
+        if trimmed.isEmpty {
+            keys.removeValue(forKey: serverId)
+        } else {
+            let origin = SeerrAddress.normalize(address.absoluteString) ?? address
+            keys[serverId] = SeerrBoundSecret(value: trimmed, origin: origin)
+        }
         storage.saveSeerrAPIKeys(keys)
         await reload(appState: appState)
     }
@@ -431,16 +558,19 @@ final class SeerrSession {
     // MARK: Render gates
 
     /// Whether a browse surface shows its Seerr part — read at RENDER, every
-    /// input re-evaluated (Pro, cap, configuration, network, connection).
+    /// input re-evaluated (account, Pro, cap, configuration, network,
+    /// connection).
     func isVisible(proAllows: Bool, isOnline: Bool) -> Bool {
-        guard SeerrAccess.showsBrowse(proAllows: proAllows, ageCapped: isAgeCapped, config: config, isOnline: isOnline),
+        guard servesActiveAccount,
+              SeerrAccess.showsBrowse(proAllows: proAllows, ageCapped: isAgeCapped, config: config, isOnline: isOnline),
               case .connected = connection else { return false }
         return true
     }
 
     /// « Se connecter à Seerr » in place of the section: account mode only.
     func showsConnectPrompt(proAllows: Bool, isOnline: Bool) -> Bool {
-        SeerrAccess.showsBrowse(proAllows: proAllows, ageCapped: isAgeCapped, config: config, isOnline: isOnline)
+        servesActiveAccount
+            && SeerrAccess.showsBrowse(proAllows: proAllows, ageCapped: isAgeCapped, config: config, isOnline: isOnline)
             && !usesDeviceKey && connection == .notConnected
     }
 
@@ -481,11 +611,11 @@ final class SeerrSession {
         if policyCapped != capped { policyCapped = capped }
     }
 
-    private func storeCookie(_ value: String, for key: String) {
+    private func storeCookie(_ secret: SeerrBoundSecret, for key: String) {
         var sessions = storage.seerrSessions()
-        sessions[key] = value
+        sessions[key] = secret
         storage.saveSeerrSessions(sessions)
-        if key == accountKey { cookie = value }
+        if key == accountKey { cookie = secret }
     }
 
     /// Removes `key`'s cookie — only if it is still `expected` when one is
@@ -493,7 +623,7 @@ final class SeerrSession {
     /// concurrent sign-in just stored.
     private func dropCookie(_ expected: String?, for key: String) {
         var sessions = storage.seerrSessions()
-        guard let stored = sessions[key], expected == nil || stored == expected else { return }
+        guard let stored = sessions[key], expected == nil || stored.value == expected else { return }
         sessions.removeValue(forKey: key)
         storage.saveSeerrSessions(sessions)
         if key == accountKey { cookie = nil }

@@ -31,4 +31,47 @@ public enum SeerrAddress {
         }
         return components.url
     }
+
+    /// Whether two addresses name the same Seerr: scheme, host, port and path,
+    /// exactly, once normalized (a default port written out or not is the same
+    /// port). A Seerr secret — a session cookie, an API key — is only ever sent
+    /// to the address it was issued for.
+    public static func sameOrigin(_ lhs: URL?, _ rhs: URL?) -> Bool {
+        guard let lhs, let rhs, let left = originKey(lhs), let right = originKey(rhs) else { return false }
+        return left == right
+    }
+
+    private static func originKey(_ url: URL) -> String? {
+        guard let normalized = normalize(url.absoluteString),
+              let components = URLComponents(url: normalized, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased(),
+              let host = components.host?.lowercased(), !host.isEmpty
+        else { return nil }
+        let port = components.port ?? (scheme == "https" ? 443 : 80)
+        return "\(scheme)://\(host):\(port)\(components.percentEncodedPath)"
+    }
+}
+
+/// A Seerr secret (session cookie, API key) and the Seerr address it belongs
+/// to. Stored together so the secret can never be sent to another address —
+/// a profile's configuration pointing elsewhere makes it unusable, not leaked.
+public struct SeerrBoundSecret: Codable, Equatable, Sendable {
+    public let value: String
+    /// The normalized address (`SeerrAddress.normalize`) it was issued for.
+    public let origin: String
+
+    public init(value: String, origin: URL) {
+        self.value = value
+        self.origin = origin.absoluteString
+    }
+
+    public func isBound(to url: URL?) -> Bool {
+        SeerrAddress.sameOrigin(URL(string: origin), url)
+    }
+}
+
+// The value must not leak through `print`, interpolation or a failed `#expect`.
+extension SeerrBoundSecret: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String { "SeerrBoundSecret(…)" }
+    public var debugDescription: String { description }
 }

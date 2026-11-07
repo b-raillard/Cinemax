@@ -90,12 +90,13 @@ public protocol AccountLockStorage: Sendable {
 extension KeychainService: AccountLockStorage {}
 
 /// Device-local Seerr secrets (session cookies per account, API keys per
-/// server). A small seam so the Seerr layer is testable without a Keychain.
+/// server), each bound to the Seerr address it was issued for. A small seam so
+/// the Seerr layer is testable without a Keychain.
 public protocol SeerrSecretStorage: Sendable {
-    func seerrSessions() -> [String: String]
-    func saveSeerrSessions(_ s: [String: String])
-    func seerrAPIKeys() -> [String: String]
-    func saveSeerrAPIKeys(_ k: [String: String])
+    func seerrSessions() -> [String: SeerrBoundSecret]
+    func saveSeerrSessions(_ s: [String: SeerrBoundSecret])
+    func seerrAPIKeys() -> [String: SeerrBoundSecret]
+    func saveSeerrAPIKeys(_ k: [String: SeerrBoundSecret])
 }
 
 extension KeychainService: SeerrSecretStorage {}

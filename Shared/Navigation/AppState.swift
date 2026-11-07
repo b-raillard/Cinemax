@@ -96,6 +96,10 @@ final class AppState {
     /// `UserUpdated`: the Seerr session re-reads the account's configuration
     /// and policy there. Wired by `AppNavigation`.
     var onCurrentUserRefreshed: @MainActor () -> Void = {}
+    /// Called when the ACTIVE account's age cap changes (`setAgeCap`): lifting
+    /// it must bring back what it hid with no other step — the Seerr session
+    /// re-reads its identity there. Wired by `AppNavigation`.
+    var onAgeCapChanged: @MainActor () -> Void = {}
 
     /// Accounts whose token a switch found revoked (`accountKey`). They stay in
     /// the list, marked « Session expirée », until reconnected or removed.
@@ -1011,6 +1015,7 @@ final class AppState {
             apiClient.applyContentRatingLimit(maxAge: age)
             republishExtensionSession()
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            onAgeCapChanged()
         } else {
             var snapshot = AccountSettingsStore.load(for: key, defaults: settingsDefaults)
                 ?? AccountSettingsStore.current(defaults: settingsDefaults)

@@ -207,17 +207,19 @@ public struct KeychainService: Sendable {
 
     // MARK: - Seerr secrets
 
-    /// Account holding `[accountKey: session cookie]`.
+    /// Account holding `[accountKey: {session cookie, Seerr address}]`.
     static let seerrSessionsAccount = "seerr_sessions"
-    /// Account holding `[activeServerId: API key]`.
+    /// Account holding `[activeServerId: {API key, Seerr address}]`.
     static let seerrAPIKeysAccount = "seerr_api_keys"
 
-    private func seerrMap(_ account: String) -> [String: String] {
+    /// An unreadable map (or one in a pre-release shape) reads as empty: the
+    /// user signs in to Seerr again, nothing is sent anywhere.
+    private func seerrMap(_ account: String) -> [String: SeerrBoundSecret] {
         guard let data = getData(for: account) else { return [:] }
-        return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+        return (try? JSONDecoder().decode([String: SeerrBoundSecret].self, from: data)) ?? [:]
     }
 
-    private func saveSeerrMap(_ map: [String: String], account: String) {
+    private func saveSeerrMap(_ map: [String: SeerrBoundSecret], account: String) {
         guard let data = try? JSONEncoder().encode(map) else { return }
         do {
             try save(data: data, for: account)
@@ -226,10 +228,14 @@ public struct KeychainService: Sendable {
         }
     }
 
-    public func seerrSessions() -> [String: String] { seerrMap(Self.seerrSessionsAccount) }
-    public func saveSeerrSessions(_ sessions: [String: String]) { saveSeerrMap(sessions, account: Self.seerrSessionsAccount) }
-    public func seerrAPIKeys() -> [String: String] { seerrMap(Self.seerrAPIKeysAccount) }
-    public func saveSeerrAPIKeys(_ keys: [String: String]) { saveSeerrMap(keys, account: Self.seerrAPIKeysAccount) }
+    public func seerrSessions() -> [String: SeerrBoundSecret] { seerrMap(Self.seerrSessionsAccount) }
+    public func saveSeerrSessions(_ sessions: [String: SeerrBoundSecret]) {
+        saveSeerrMap(sessions, account: Self.seerrSessionsAccount)
+    }
+    public func seerrAPIKeys() -> [String: SeerrBoundSecret] { seerrMap(Self.seerrAPIKeysAccount) }
+    public func saveSeerrAPIKeys(_ keys: [String: SeerrBoundSecret]) {
+        saveSeerrMap(keys, account: Self.seerrAPIKeysAccount)
+    }
 
     // MARK: - Parental-controls lock
 

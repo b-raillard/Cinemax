@@ -841,12 +841,12 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 // MARK: - Mock Keychain
 
 final class MockKeychain: SecureStorageProtocol, SeerrSecretStorage, @unchecked Sendable {
-    private var storedSeerrSessions: [String: String] = [:]
-    private var storedSeerrAPIKeys: [String: String] = [:]
-    func seerrSessions() -> [String: String] { storedSeerrSessions }
-    func saveSeerrSessions(_ s: [String: String]) { storedSeerrSessions = s }
-    func seerrAPIKeys() -> [String: String] { storedSeerrAPIKeys }
-    func saveSeerrAPIKeys(_ k: [String: String]) { storedSeerrAPIKeys = k }
+    private var storedSeerrSessions: [String: SeerrBoundSecret] = [:]
+    private var storedSeerrAPIKeys: [String: SeerrBoundSecret] = [:]
+    func seerrSessions() -> [String: SeerrBoundSecret] { storedSeerrSessions }
+    func saveSeerrSessions(_ s: [String: SeerrBoundSecret]) { storedSeerrSessions = s }
+    func seerrAPIKeys() -> [String: SeerrBoundSecret] { storedSeerrAPIKeys }
+    func saveSeerrAPIKeys(_ k: [String: SeerrBoundSecret]) { storedSeerrAPIKeys = k }
 
     var savedAccessToken: String?
     var savedServerURL: URL?

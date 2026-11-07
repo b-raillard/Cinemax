@@ -450,6 +450,13 @@ struct AppNavigation: View {
             appState.onCurrentUserRefreshed = { [seerr, appState] in
                 Task { await seerr.reload(appState: appState) }
             }
+            // Lifting the active account's age cap brings Seerr back at once.
+            appState.onAgeCapChanged = { [seerr, appState] in
+                Task { await seerr.reload(appState: appState) }
+            }
+            // The account the app is on RIGHT NOW: between `applyActiveServer`
+            // and the reset, the session serves nothing of the previous one.
+            seerr.activeAccountKeyProvider = { [appState] in appState.activeAccountKey }
             // The language rides every request as `Accept-Language` (Jellyfin
             // 12.0 localizes the media-stream titles the track pickers print
             // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds
@@ -771,6 +778,10 @@ struct AppNavigation: View {
             // is per-network, so re-run the transport probe.
             if online {
                 StreamTransportPolicy.shared.refresh()
+                // Seerr makes no call offline: back online, its identity is
+                // read again (an offline cold launch would otherwise keep it
+                // dark until the next foreground).
+                Task { await seerr.reload(appState: appState) }
             }
         }
         #if !DEBUG

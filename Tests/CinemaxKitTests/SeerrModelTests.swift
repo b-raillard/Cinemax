@@ -137,10 +137,11 @@ struct SeerrConfigurationTests {
     @Test("secret storage round-trips in the mock")
     func secretsRoundTripInMock() {
         let keychain = MockKeychain()
-        keychain.saveSeerrSessions(["srv|usr": "cookie"])
-        keychain.saveSeerrAPIKeys(["srv": "key"])
-        #expect(keychain.seerrSessions() == ["srv|usr": "cookie"])
-        #expect(keychain.seerrAPIKeys() == ["srv": "key"])
+        let origin = URL(string: "http://seerr.local:5055")!
+        keychain.saveSeerrSessions(["srv|usr": SeerrBoundSecret(value: "cookie", origin: origin)])
+        keychain.saveSeerrAPIKeys(["srv": SeerrBoundSecret(value: "key", origin: origin)])
+        #expect(keychain.seerrSessions() == ["srv|usr": SeerrBoundSecret(value: "cookie", origin: origin)])
+        #expect(keychain.seerrAPIKeys() == ["srv": SeerrBoundSecret(value: "key", origin: origin)])
     }
 
     @Test("the mock serves and records display preferences")
