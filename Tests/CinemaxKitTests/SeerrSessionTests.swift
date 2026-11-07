@@ -2700,6 +2700,126 @@ struct SeerrArrivalTests {
         #expect(toasts.current == nil)
     }
 
+    @Test("a failed fetch writes nothing: the next successful check is still the silent first one")
+    func failedFetchSeedsNothing() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        let (session, app, _, transport) = await arrivalWorld(defaults: defaults, routes: [
+            "/request": [
+                .response(status: 500, body: #"{"message":"boom"}"#),
+                requestPage([arrivedJSON(1)], total: 1),
+            ],
+        ])
+        let toasts = ToastCenter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+        #expect(transport.requests.contains(where: isAvailableList))
+        #expect(defaults.object(forKey: arrivalKey) == nil)
+        #expect(toasts.current == nil)
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+        #expect(toasts.current == nil)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [1])
+    }
+
+    @Test("two checks racing announce an arrival once: the seen set is read after the fetch")
+    func concurrentChecksAnnounceOnce() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set([Int](), forKey: arrivalKey)
+        let (session, app, _, transport) = await arrivalWorld(routes: [
+            "/request": [requestPage([arrivedJSON(1)], total: 1), requestPage([arrivedJSON(1)], total: 1)],
+            "/movie/11": [movieReply(11, "Dune"), movieReply(11, "Dune")],
+        ])
+        let asked = TestLatch()
+        let held = TestLatch()
+        transport.onRequest { path, index in
+            // The FIRST listing is held until the second check has finished.
+            guard path == "/request", index == 0 else { return }
+            asked.open()
+            await held.wait()
+        }
+        let loc = LocalizationManager()
+        let first = Task {
+            await SeerrArrivalWatcher.check(
+                session: session, appState: app, defaults: defaults, loc: loc, openRequests: {})
+        }
+        await asked.wait()
+        let second = await SeerrArrivalWatcher.check(
+            session: session, appState: app, defaults: defaults, loc: loc, openRequests: {})
+        held.open()
+        let late = await first.value
+
+        #expect(second?.title == loc.localized("seerr.arrival.title", "Dune"))
+        #expect(late == nil)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [1])
+    }
+
+    @Test("« Voir » closes any deeper Settings page, selects Demandes and asks for the Settings tab")
+    func openRequestsLandsOnRequests() {
+        let (app, _) = signedIn()
+        let nav = SettingsNavCoordinator()
+        nav.selectedCategory = .appearance
+        nav.selectedInterfaceSub = .menu
+        nav.showsAppIconPage = true
+
+        SeerrArrivalWatcher.openRequests(appState: app, settingsNav: nav)
+
+        #expect(nav.selectedCategory == .requests)
+        #expect(nav.selectedInterfaceSub == nil)
+        #expect(!nav.showsAppIconPage)
+        #expect(app.pendingDeepLinkTabId == MenuEntry.settingsID)
+    }
+
+    @Test("« Qui regarde ? » at launch holds the check until a profile is chosen, then runs ONE")
+    func launchPickerHoldsArrivals() {
+        typealias Flow = AccountSwitchFlow
+        #expect(Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 2))
+        // Every missing input: no picker, nothing held past the launch.
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: false, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: false, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: false, memorizedAccountsAllowed: true, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: false, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 1))
+
+        // Held from the start: the launch check (the PREVIOUS profile's) waits.
+        let gate = SeerrArrivalGate()
+        #expect(gate.isHeld)
+        #expect(!gate.admit())
+        #expect(!gate.admit())
+        // The picker closes: ONE check runs, then every check passes.
+        #expect(gate.release())
+        #expect(!gate.isHeld)
+        #expect(gate.admit())
+        #expect(!gate.release())
+
+        // No check came while held (the reload still running): nothing to run
+        // at release — the hook's own check passes the gate when it arrives.
+        let quiet = SeerrArrivalGate()
+        #expect(!quiet.release())
+        #expect(quiet.admit())
+    }
+
+    @Test("an account forgotten on this device forgets its seen arrivals and its dismissed invitation")
+    func forgetAccountForgetsArrivals() {
+        let defaults = UserDefaults.isolatedForTesting()
+        let otherKey = SettingsKey.seerrArrivalsSeen(accountKey: "S1|B")
+        defaults.set([3, 2], forKey: arrivalKey)
+        defaults.set(true, forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: "S1|A"))
+        defaults.set([9], forKey: otherKey)
+        let session = makeSession(StubSeerrTransport(), defaults: defaults)
+
+        session.forgetAccount("S1|A")
+
+        #expect(defaults.object(forKey: arrivalKey) == nil)
+        #expect(defaults.object(forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: "S1|A")) == nil)
+        #expect(defaults.array(forKey: otherKey) as? [Int] == [9])
+    }
+
     @Test("the seen list keeps what is on the page first, the newest 200 at most")
     func seenListCapped() {
         func arrived(_ id: Int) -> SeerrRequest {

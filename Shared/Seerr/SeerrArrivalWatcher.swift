@@ -132,3 +132,37 @@ enum SeerrArrivalWatcher {
         appState.pendingDeepLinkTabId = MenuEntry.settingsID
     }
 }
+
+/// Holds the arrival message until the launch knows who is watching.
+///
+/// On an Apple TV opening on « Qui regarde ? », the session restored is the
+/// PREVIOUS profile's: checking it would toast that profile's arrival over the
+/// picker and spend its seen set before anyone chose. So the gate is held
+/// from the start of the process; `AppNavigation` releases it right after
+/// `restoreSession` when no picker shows (every iOS launch), else when the
+/// picker closes. A check that came while held is not lost: `release` says
+/// to run ONE then (a profile kept, or the restored one with no picker). A
+/// profile switched to from the picker runs its own check through
+/// `refreshCurrentUser` anyway — the seen set keeps the two from announcing
+/// twice.
+@MainActor
+final class SeerrArrivalGate {
+    private(set) var isHeld = true
+    private var missedWhileHeld = false
+
+    /// A check is due: `true` = run it now; `false` = held (and remembered).
+    func admit() -> Bool {
+        guard isHeld else { return true }
+        missedWhileHeld = true
+        return false
+    }
+
+    /// The launch decided: `true` = a check was held back, run one now.
+    /// Only the first release counts.
+    func release() -> Bool {
+        guard isHeld else { return false }
+        isHeld = false
+        defer { missedWhileHeld = false }
+        return missedWhileHeld
+    }
+}

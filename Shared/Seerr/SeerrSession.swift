@@ -604,9 +604,15 @@ final class SeerrSession {
         return stored
     }
 
-    /// An account left this device for good (`AppState.onAccountForgotten`).
+    /// An account left this device for good (`AppState.onAccountForgotten`):
+    /// its cookie goes, and so does what this device remembered for it — the
+    /// arrivals already seen and the dismissed search invitation — so the
+    /// account added back starts afresh (its first arrival check seeds again,
+    /// in silence).
     func forgetAccount(_ accountKey: String) {
         dropCookie(nil, for: accountKey)
+        defaults.removeObject(forKey: SettingsKey.seerrArrivalsSeen(accountKey: accountKey))
+        defaults.removeObject(forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: accountKey))
     }
 
     /// A server was removed (`AppState.onServerForgotten`): its device key goes.

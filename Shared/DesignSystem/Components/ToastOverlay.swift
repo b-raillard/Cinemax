@@ -52,7 +52,6 @@ private struct ToastView: View {
     @Environment(LocalizationManager.self) private var loc
     #if os(iOS)
     @Environment(ThemeManager.self) private var themeManager
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #endif
 
     var body: some View {
@@ -62,39 +61,28 @@ private struct ToastView: View {
                 .foregroundStyle(toast.level.tint)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                // Dynamic Type: a toast is reading text, and the fixed sizes
-                // ignored the user's text size (audit 2026-09-22).
-                // Six lines, not three: three cut « Vous restez connecté au
-                // serveur actuel » mid-word on an iPhone — the half that says
-                // nothing went wrong. But not unbounded either: at AX5 a long
-                // title covered much of the screen, and the pill takes every
-                // touch in its frame.
-                Text(toast.title)
-                    .font(CinemaFont.dynamicLabel(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-                    .lineLimit(6)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let msg = toast.message {
-                    Text(msg)
-                        .font(CinemaFont.dynamicBody)
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                        .lineLimit(3)
-                }
-                #if os(iOS)
-                // At accessibility sizes the button goes under the text: beside
-                // it, it squeezed the title it explains.
-                if let action = toast.action, dynamicTypeSize.isAccessibilitySize {
-                    actionButton(action, inline: false)
-                }
-                #endif
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
             #if os(iOS)
-            if let action = toast.action, !dynamicTypeSize.isAccessibilitySize {
-                actionButton(action, inline: true)
+            if let action = toast.action {
+                // Beside the text only when the whole title fits on its line
+                // next to it; otherwise under the text, at every text size —
+                // a long title beside a fixed-width button was truncated on
+                // a narrow iPhone.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
+                        textStack
+                        actionButton(action, inline: true)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        textStack
+                        actionButton(action, inline: false)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                textStack
             }
+            #else
+            textStack
             #endif
 
             Button(action: onDismiss) {
@@ -131,6 +119,30 @@ private struct ToastView: View {
         // explicitly, like the dismissal.
         .modifier(ToastActionAccessibility(action: toast.action, onDismiss: onDismiss))
         #endif
+    }
+
+    private var textStack: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // Dynamic Type: a toast is reading text, and the fixed sizes
+            // ignored the user's text size (audit 2026-09-22).
+            // Six lines, not three: three cut « Vous restez connecté au
+            // serveur actuel » mid-word on an iPhone — the half that says
+            // nothing went wrong. But not unbounded either: at AX5 a long
+            // title covered much of the screen, and the pill takes every
+            // touch in its frame.
+            Text(toast.title)
+                .font(CinemaFont.dynamicLabel(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+                .lineLimit(6)
+                .fixedSize(horizontal: false, vertical: true)
+            if let msg = toast.message {
+                Text(msg)
+                    .font(CinemaFont.dynamicBody)
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .lineLimit(3)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     #if os(iOS)
