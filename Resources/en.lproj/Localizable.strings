@@ -1613,14 +1613,15 @@
 "seerr.settings.line.mustBeAdded" = "No Seerr account, and Seerr doesn't create one on its own: add it in Seerr → Users";
 "seerr.settings.line.unknown" = "Seerr status unknown for now";
 "seerr.settings.enableAll" = "Enable for everyone";
-"seerr.settings.disableAll" = "Turn off for everyone";
+"seerr.settings.disableAll" = "Disable for everyone";
 "seerr.settings.disableAll.confirm" = "Nobody will see requests any more. The Seerr address is kept.";
-"seerr.settings.disableAll.done" = "Requests turned off for everyone.";
+"seerr.settings.disableAll.done" = "Requests disabled for everyone.";
 "seerr.settings.footnote" = "A user created later in Jellyfin will need to be enabled here. What each person may request is set in Seerr.";
 "seerr.settings.key" = "API key (optional)";
 "seerr.settings.key.explanation" = "The key stays in this device's keychain and is never sent to the others. It grants full rights over Seerr: keep it for trusted devices, like the living-room Apple TV. Requests are attributed to the active profile.";
 "seerr.settings.key.save" = "Save key";
 "seerr.settings.key.saved" = "Key saved";
+"seerr.settings.key.otherAddress" = "This key belongs to another Seerr address: it is not used.";
 "seerr.settings.key.remove" = "Remove";
 "seerr.settings.key.savedToast" = "Key saved on this device.";
 "seerr.settings.key.removedToast" = "Key removed from this device.";

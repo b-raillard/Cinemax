@@ -34,7 +34,9 @@ struct RequestsSettingsScreen: View {
     @State private var isBulkUpdating = false
     @State private var isLoadingLines = false
     @State private var pendingUserIds: Set<String> = []
-    @State private var hasStoredKey = false
+    /// The address this device's key was entered for (`nil` = no key). Read
+    /// from the Keychain on appear and after each change, never per render.
+    @State private var storedKeyOrigin: URL?
     @State private var showsDisableAllConfirm = false
     /// What the user lines were last loaded for. The tvOS `.task` re-fires on
     /// every re-presentation of Settings (Settings RULE): an unchanged trigger
@@ -69,6 +71,16 @@ struct RequestsSettingsScreen: View {
 
     private var typedAddress: URL? { SeerrAddress.normalize(addressText) }
     private var typedKey: String { keyText.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var hasStoredKey: Bool { storedKeyOrigin != nil }
+    /// The test runs in key mode: a key typed in the field, or the stored one
+    /// when it was entered for the typed address.
+    private var testUsesKey: Bool {
+        !typedKey.isEmpty || (storedKeyOrigin != nil && SeerrAddress.sameOrigin(storedKeyOrigin, typedAddress))
+    }
+    /// A stored key entered for another address than the saved one: unused.
+    private var storedKeyIsForAnotherAddress: Bool {
+        storedKeyOrigin != nil && !SeerrAddress.sameOrigin(storedKeyOrigin, seerr.config?.url)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
@@ -85,7 +97,7 @@ struct RequestsSettingsScreen: View {
         .task(id: trigger) { await loadLinesIfNeeded() }
         .onAppear {
             seedAddress()
-            hasStoredKey = seerr.hasStoredDeviceKey(appState: appState)
+            refreshStoredKey()
         }
         .onChange(of: seerr.config?.url) { _, _ in seedAddress() }
         .onChange(of: appState.activeAccountKey) { _, _ in resetForAccountChange() }
@@ -159,7 +171,7 @@ struct RequestsSettingsScreen: View {
             }
 
             // Account mode signs the admin in: say what that leaves behind.
-            if typedKey.isEmpty {
+            if !testUsesKey {
                 noteText(loc.localized("seerr.settings.test.accountNote"))
             }
 
@@ -303,6 +315,11 @@ struct RequestsSettingsScreen: View {
                 panel {
                     // The key is never shown back — only that there is one.
                     infoRow(icon: "key.fill", text: loc.localized("seerr.settings.key.saved"))
+                    if storedKeyIsForAnotherAddress {
+                        divider
+                        infoRow(icon: "exclamationmark.triangle", text: loc.localized("seerr.settings.key.otherAddress"),
+                                tint: CinemaColor.error)
+                    }
                     divider
                     actionRow(id: "seerr.key.remove", icon: "trash", label: loc.localized("seerr.settings.key.remove"),
                               tint: CinemaColor.error) {
@@ -327,13 +344,20 @@ struct RequestsSettingsScreen: View {
         if addressText.isEmpty, let url = seerr.config?.url { addressText = url.absoluteString }
     }
 
+    private func refreshStoredKey() {
+        storedKeyOrigin = seerr.storedDeviceKeyOrigin(appState: appState)
+    }
+
     private func resetForAccountChange() {
         activation = SeerrActivationModel()
         loadedTrigger = nil
         report = nil
         keyText = ""
-        addressText = seerr.config?.url?.absoluteString ?? ""
-        hasStoredKey = seerr.hasStoredDeviceKey(appState: appState)
+        // Emptied, then refilled by `seedAddress` once the new account's
+        // configuration is read — never the previous account's address.
+        addressText = ""
+        seedAddress()
+        refreshStoredKey()
     }
 
     /// The per-user lines need a Seerr identity: they are (re)loaded each time
@@ -343,31 +367,39 @@ struct RequestsSettingsScreen: View {
         guard current.isAdmin, current.url != nil, current != loadedTrigger else { return }
         isLoadingLines = true
         await activation.load(appState: appState, session: seerr)
+        // A cancelled load is replaced by the next trigger's: leave it its state.
+        guard !Task.isCancelled else { return }
         isLoadingLines = false
-        if !Task.isCancelled { loadedTrigger = current }
+        loadedTrigger = current
     }
 
     /// « Tester la connexion »: on the TYPED address (R18), in key mode when
-    /// the key field holds one. The address is saved only when nothing failed;
-    /// an empty report (the account changed, R19) shows nothing new.
+    /// the key field holds one — or, empty, when this device's stored key was
+    /// entered for that address (never displayed). The address is saved only
+    /// when nothing failed; an empty report (the account changed, R19) shows
+    /// nothing new.
     private func runTest() async {
         guard let address = typedAddress, !isTesting else { return }
         isTesting = true
         defer { isTesting = false }
+        let key = typedKey.isEmpty ? seerr.deviceKeyForTest(address: address, appState: appState) : typedKey
         let result = await SeerrConnectionTest.run(
-            address: address, deviceKey: typedKey.isEmpty ? nil : typedKey,
-            session: seerr, appState: appState, loc: loc)
+            address: address, deviceKey: key, session: seerr, appState: appState, loc: loc)
         guard result != SeerrTestReport() else { return }
         report = result
         guard result.failure == nil else { return }
         addressText = address.absoluteString
+        var saveFailed = false
         if !SeerrAddress.sameOrigin(address, seerr.config?.url),
            let message = await activation.setAddress(address, appState: appState, loc: loc) {
             toasts.error(message)
+            saveFailed = true
         }
         // The admin's own address (and the session the test signed in) are
         // read again: the lines follow through `trigger`.
         await seerr.reload(appState: appState)
+        // A write failed: the field shows the address the server now holds.
+        if saveFailed { addressText = seerr.config?.url?.absoluteString ?? "" }
     }
 
     /// « Se connecter à Seerr », toward the SAVED address only. A failure says
@@ -377,7 +409,15 @@ struct RequestsSettingsScreen: View {
         isSigningIn = true
         defer { isSigningIn = false }
         // Without Quick Connect, Jellyfin's refusal would read as a device one.
-        guard (try? await appState.apiClient.isQuickConnectEnabled()) == true else {
+        // A probe that does not get through says nothing about Quick Connect.
+        let quickConnectOn: Bool
+        do {
+            quickConnectOn = try await appState.apiClient.isQuickConnectEnabled()
+        } catch {
+            showFailure(.unreachable)
+            return
+        }
+        guard quickConnectOn else {
             showFailure(.quickConnectOff)
             return
         }
@@ -441,13 +481,13 @@ struct RequestsSettingsScreen: View {
         }
         keyText = ""
         await seerr.setDeviceKey(key, address: address, appState: appState)
-        hasStoredKey = seerr.hasStoredDeviceKey(appState: appState)
+        refreshStoredKey()
         if hasStoredKey { toasts.success(loc.localized("seerr.settings.key.savedToast")) }
     }
 
     private func removeKey() async {
         await seerr.setDeviceKey(nil, address: seerr.config?.url, appState: appState)
-        hasStoredKey = seerr.hasStoredDeviceKey(appState: appState)
+        refreshStoredKey()
         if !hasStoredKey { toasts.success(loc.localized("seerr.settings.key.removedToast")) }
     }
 

@@ -1621,6 +1621,7 @@
 "seerr.settings.key.explanation" = "Der Schlüssel bleibt im Schlüsselbund dieses Geräts und wird nie an andere gesendet. Er gibt alle Rechte über Seerr: verwende ihn nur auf vertrauenswürdigen Geräten wie dem Apple TV im Wohnzimmer. Anfragen werden dem aktiven Profil zugeordnet.";
 "seerr.settings.key.save" = "Schlüssel speichern";
 "seerr.settings.key.saved" = "Schlüssel gespeichert";
+"seerr.settings.key.otherAddress" = "Dieser Schlüssel gehört zu einer anderen Seerr-Adresse: er wird nicht verwendet.";
 "seerr.settings.key.remove" = "Entfernen";
 "seerr.settings.key.savedToast" = "Schlüssel auf diesem Gerät gespeichert.";
 "seerr.settings.key.removedToast" = "Schlüssel von diesem Gerät entfernt.";

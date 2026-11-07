@@ -106,10 +106,11 @@ enum SeerrConnectionTest {
         return report
     }
 
-    /// `atStatus`: the first call. Only there is any HTTP answer that is not
+    /// `atStatus`: the first call. Only there is an HTTP answer that is not
     /// Seerr's — Jellyfin's own empty 404 on `/api/v1/status` when the port is
     /// 8096 — « a server answers, but not Seerr »; once `/status` has answered
-    /// as Seerr, a later error is not the port's.
+    /// as Seerr, a later error is not the port's. A gateway error (502–504) is
+    /// a reverse proxy speaking for a Seerr that is down: « ne répond pas ».
     private static func stop(at error: Error, in report: SeerrTestReport, atStatus: Bool = false) -> SeerrTestReport {
         var report = report
         if error is CancellationError { return SeerrTestReport() }
@@ -117,6 +118,7 @@ enum SeerrConnectionTest {
         case .redirected: report.failure = .redirected
         case .notSeerr: report.failure = .notSeerr
         case .unreachable, nil: report.failure = .unreachable
+        case .http(let code) where (502...504).contains(code): report.failure = .unreachable
         case .some: report.failure = atStatus ? .notSeerr : .unreachable
         }
         return report

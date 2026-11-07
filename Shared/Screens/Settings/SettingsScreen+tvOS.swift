@@ -339,7 +339,7 @@ extension SettingsScreen {
                 }
 
                 if isLocked {
-                    ProBadge()
+                    ProBadge(ink: isFocused ? themeManager.onAccentContainer : nil)
                 } else if isFocused {
                     Image(systemName: "chevron.right")
                         .font(.system(size: CinemaScale.pt(20), weight: .semibold))
@@ -352,6 +352,7 @@ extension SettingsScreen {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .category(category.rawValue))
+        .accessibilityHint(isLocked ? loc.localized("pro.locked.hint") : "")
     }
 
     /// « Noter JellyGlass » — its own block under the category pills, wearing

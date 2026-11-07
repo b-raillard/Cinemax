@@ -113,7 +113,9 @@ final class SeerrActivationModel {
             for await item in group { all.append(item) }
             return all.sorted { $0.index < $1.index }
         }
-        guard session.isCurrent(snapshot) else { return }
+        // A load cancelled midway (its trigger moved) holds failed lookups:
+        // it must not overwrite what the load replacing it writes.
+        guard session.isCurrent(snapshot), !Task.isCancelled else { return }
 
         let newPlexLogin = session.publicSettings?.newPlexLogin ?? false
         var built: [SeerrUserLine] = []
@@ -268,7 +270,8 @@ final class SeerrActivationModel {
         let adminId = appState.currentUserId
         var targets: [(id: String, name: String)] = []
         if let adminId {
-            targets.append((adminId, lines.first { $0.id == adminId }?.name ?? ""))
+            // The lines may not be loaded yet: the admin is the signed-in user.
+            targets.append((adminId, lines.first { $0.id == adminId }?.name ?? appState.currentUser?.name ?? ""))
         }
         for line in lines where line.isEnabled && line.id != adminId { targets.append((line.id, line.name)) }
         var failed: [String] = []

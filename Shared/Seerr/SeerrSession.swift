@@ -74,7 +74,8 @@ final class SeerrSession {
     /// Whether the Pro allows requests — `ProFeatureAccess.allows(.requests)`,
     /// wired by `AppNavigation` before the first reload (and the session is
     /// reloaded when the tier moves); `false` ⇒ no Seerr call anywhere.
-    @ObservationIgnored var proAllowsProvider: @MainActor () -> Bool = { true }
+    /// Unwired, it answers `false`: fail closed.
+    @ObservationIgnored var proAllowsProvider: @MainActor () -> Bool = { false }
     /// The account the app is on (`AppState.activeAccountKey`), wired by
     /// `AppNavigation`. Unwired (`nil`) serves nothing: fail closed.
     @ObservationIgnored var activeAccountKeyProvider: @MainActor () -> String? = { nil }
@@ -557,11 +558,30 @@ final class SeerrSession {
 
     /// Whether this device holds an API key for the active server — bound to
     /// the saved address or not: Settings shows « Clé enregistrée » for it, so
-    /// a key entered for an address since changed can still be removed. The
-    /// value itself never leaves this type.
+    /// a key entered for an address since changed can still be removed.
     func hasStoredDeviceKey(appState: AppState) -> Bool {
-        guard let serverId = appState.activeServerId else { return false }
-        return storage.seerrAPIKeys()[serverId].map { !$0.value.isEmpty } ?? false
+        storedDeviceKeyOrigin(appState: appState) != nil
+    }
+
+    /// The Seerr address this device's key was entered for (not a secret):
+    /// Settings says when it is not the saved one, i.e. the key is unused.
+    func storedDeviceKeyOrigin(appState: AppState) -> URL? {
+        storedDeviceKey(appState: appState).flatMap { URL(string: $0.origin) }
+    }
+
+    /// The stored key, lent to « Tester la connexion » — only to an
+    /// administrator and only toward the address it was entered for. Passed
+    /// straight to the test, never displayed.
+    func deviceKeyForTest(address: URL, appState: AppState) -> String? {
+        guard appState.isAdministrator, let stored = storedDeviceKey(appState: appState),
+              stored.isBound(to: address) else { return nil }
+        return stored.value
+    }
+
+    private func storedDeviceKey(appState: AppState) -> SeerrBoundSecret? {
+        guard let serverId = appState.activeServerId,
+              let stored = storage.seerrAPIKeys()[serverId], !stored.value.isEmpty else { return nil }
+        return stored
     }
 
     /// An account left this device for good (`AppState.onAccountForgotten`).

@@ -206,6 +206,8 @@ private func makeSession(
     following app: AppState? = nil
 ) -> SeerrSession {
     let session = SeerrSession(storage: storage, defaults: defaults, transport: transport, signInPause: {})
+    // The Pro gate fails closed when unwired; these tests are about everything else.
+    session.proAllowsProvider = { true }
     if let app { session.follow(app) }
     return session
 }
@@ -1129,6 +1131,37 @@ struct SeerrSessionTests {
         #expect(!session.hasStoredDeviceKey(appState: app))
     }
 
+    /// « Tester la connexion » with a key already saved: the stored key is
+    /// used only toward the address it was entered for, and only by an admin.
+    @Test("the stored key is lent to the test only for its own address, and only to an admin")
+    func deviceKeyForTestOnlyForItsAddress() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let storage = MockKeychain()
+        storage.saveSeerrAPIKeys(["S1": bound("KEY"), "S9": bound("OTHER")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        let elsewhere = URL(string: "http://elsewhere:5055")!
+
+        #expect(session.deviceKeyForTest(address: seerrURL, appState: app) == nil)   // not an admin
+        await promoteToAdmin(app, api)
+        #expect(session.deviceKeyForTest(address: seerrURL, appState: app) == "KEY")
+        #expect(session.deviceKeyForTest(address: URL(string: "http://192.168.1.20:5055/")!, appState: app) == "KEY")
+        #expect(session.deviceKeyForTest(address: elsewhere, appState: app) == nil)
+        #expect(session.storedDeviceKeyOrigin(appState: app).map { SeerrAddress.sameOrigin($0, seerrURL) } == true)
+    }
+
+    /// `AppNavigation` wires the Pro gate; an unwired session must not call Seerr.
+    @Test("an unwired Pro gate fails closed: no Seerr call")
+    func unwiredProGateFailsClosed() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let (app, _) = signedIn()
+        let session = SeerrSession(storage: MockKeychain(), defaults: .isolatedForTesting(), transport: stub, signInPause: {})
+        session.follow(app)
+        await session.reload(appState: app)
+        #expect(stub.requests.isEmpty)
+        #expect(session.connection == .unavailable)
+    }
+
     @Test("a device key without an address is never stored; removing needs no address")
     func deviceKeyNeedsAnAddress() async {
         let stub = StubSeerrTransport([settingsReply])
@@ -1341,6 +1374,15 @@ struct SeerrConnectionTestTests {
         // Past /status, Seerr HAS answered: a later HTTP error is not « the port ».
         let (_, later, app3, _) = await accountMode([statusReply, .response(status: 500, body: "oops")])
         #expect(await run(later, app3).failure == .unreachable)
+    }
+
+    /// A reverse proxy answering for a Seerr that is down: « ne répond pas ».
+    @Test("a gateway error from /status is « unreachable »")
+    func gatewayErrorIsUnreachable() async {
+        for code in [502, 503, 504] {
+            let (_, session, app, _) = await accountMode([.response(status: code, body: "<html>Bad Gateway</html>")])
+            #expect(await run(session, app).failure == .unreachable, "\(code)")
+        }
     }
 
     @Test("a Seerr older than 3.4 is « too old »")
@@ -1811,6 +1853,18 @@ struct SeerrActivationTests {
         let enabled = await world.model.setEnabled(true, userId: "ADMIN", appState: world.app, loc: world.loc)
         #expect(enabled == nil)
         #expect(world.stored("ADMIN").url == seerrURL)      // still the old address
+    }
+
+    @Test("a failed admin address write names the admin even before the lines are loaded")
+    func addressFailureNamesTheAdminWithoutLines() async {
+        let world = await activationWorld(users: [adminUser], lookups: ["ADMIN": userReply(adminJSON)])
+        world.app.currentUser?.name = "Admin"
+        world.api.failingUpdateUserIds = ["ADMIN"]
+
+        let message = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+
+        #expect(world.model.lines.isEmpty)
+        #expect(message == world.loc.localized(world.loc.pluralKey("seerr.activation.summary.addressFailed", 1), "Admin"))
     }
 
     @Test("an id that is not in the list is never enabled")

@@ -128,7 +128,7 @@ struct SeerrAccessTests {
             "seerr.settings.enableAll", "seerr.settings.disableAll", "seerr.settings.disableAll.confirm",
             "seerr.settings.disableAll.done", "seerr.settings.footnote",
             "seerr.settings.key", "seerr.settings.key.explanation", "seerr.settings.key.save",
-            "seerr.settings.key.saved", "seerr.settings.key.remove", "seerr.settings.key.savedToast",
+            "seerr.settings.key.saved", "seerr.settings.key.otherAddress", "seerr.settings.key.remove", "seerr.settings.key.savedToast",
             "seerr.settings.key.removedToast", "seerr.settings.unavailable",
         ]
         let keys = fixed + failures.flatMap { [$0.titleKey, $0.fixKey] }

@@ -1623,6 +1623,7 @@
 "seerr.settings.key.explanation" = "La clé reste dans le trousseau de cet appareil et n'est jamais envoyée aux autres. Elle donne tous les droits sur Seerr : réserve-la aux appareils de confiance, comme l'Apple TV du salon. Les demandes sont attribuées au profil actif.";
 "seerr.settings.key.save" = "Enregistrer la clé";
 "seerr.settings.key.saved" = "Clé enregistrée";
+"seerr.settings.key.otherAddress" = "Cette clé correspond à une autre adresse de Seerr : elle n'est pas utilisée.";
 "seerr.settings.key.remove" = "Retirer";
 "seerr.settings.key.savedToast" = "Clé enregistrée sur cet appareil.";
 "seerr.settings.key.removedToast" = "Clé retirée de cet appareil.";
