@@ -1651,7 +1651,7 @@ struct SeerrActivationTests {
         await world.model.load(appState: world.app, session: world.session)
         #expect(world.model.enabledCount == 2)
 
-        await world.model.disableAll(appState: world.app)
+        _ = await world.model.disableAll(appState: world.app, loc: world.loc)
 
         #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
         #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
@@ -1678,7 +1678,7 @@ struct SeerrActivationTests {
             lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(), "BOB": notFoundReply])
         await world.model.load(appState: world.app, session: world.session)
 
-        await world.model.setAddress(otherSeerrURL, appState: world.app)
+        _ = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
 
         #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: false, url: otherSeerrURL))
         #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: true, url: otherSeerrURL))
@@ -1711,6 +1711,99 @@ struct SeerrActivationTests {
         #expect(world.model.lines.map(\.name) == ["Admin", "Ann", "Bob"])
         #expect(world.model.lines.map(\.isEnabled) == [false, false, true])
         #expect(world.model.lines[1].kind == .willBeCreated)
+    }
+
+    @Test("a profile switch in the middle of enable-all stops the writes")
+    func switchMidEnableAllStopsWriting() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply, "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        let started = TestLatch()
+        let release = TestLatch()
+        world.api.onUpdateDisplayPreferences = { _ in started.open(); await release.wait() }
+
+        let task = Task { await world.model.enableAll(appState: world.app, loc: world.loc) }
+        await started.wait()
+        world.app.currentUserId = "OTHER"
+        release.open()
+        _ = await task.value
+
+        #expect(world.api.updateDisplayPreferencesCalls.count == 1)
+    }
+
+    @Test("disable-all names who could not be switched off")
+    func disableAllReportsFailures() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser], enabled: ["ANN", "BOB"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(), "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        world.api.failingUpdateUserIds = ["ANN"]
+
+        let message = await world.model.disableAll(appState: world.app, loc: world.loc)
+
+        #expect(message == world.loc.localized(world.loc.pluralKey("seerr.activation.summary.disableFailed", 1), "Ann"))
+        #expect(world.stored("BOB").isEnabled == false)
+        #expect(world.stored("ANN").isEnabled == true)
+    }
+
+    @Test("a failed admin write leaves the remembered address alone")
+    func setAddressKeepsOldAddressWhenAdminWriteFails() async {
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()])
+        await world.model.load(appState: world.app, session: world.session)
+        world.api.failingUpdateUserIds = ["ADMIN"]
+
+        let message = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+        #expect(message == world.loc.localized(world.loc.pluralKey("seerr.activation.summary.addressFailed", 1), "Admin"))
+        #expect(world.stored("ANN").url == otherSeerrURL)
+
+        world.api.failingUpdateUserIds = []
+        let enabled = await world.model.setEnabled(true, userId: "ADMIN", appState: world.app, loc: world.loc)
+        #expect(enabled == nil)
+        #expect(world.stored("ADMIN").url == seerrURL)      // still the old address
+    }
+
+    @Test("an id that is not in the list is never enabled")
+    func unknownUserIsNeverEnabled() async {
+        let world = await activationWorld(users: [adminUser], lookups: ["ADMIN": userReply(adminJSON)])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setEnabled(true, userId: "GHOST", appState: world.app, loc: world.loc)
+
+        #expect(message == world.loc.localized("seerr.activation.failed.enable", ""))
+        #expect(world.writes(for: "GHOST").isEmpty)
+    }
+
+    @Test("loading for another account clears the previous account's lines")
+    func loadForAnotherAccountClearsLines() async {
+        let world = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.model.lines.count == 2)
+
+        world.app.currentUserId = "OTHER"
+        await world.session.reload(appState: world.app)
+        world.api.getUsersError = URLError(.notConnectedToInternet)
+        await world.model.load(appState: world.app, session: world.session)
+
+        #expect(world.model.lines.isEmpty)
+    }
+
+    @Test("a failed write is named in the enable-all summary, the others still land")
+    func enableAllReportsFailedNames() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser, tom],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply, "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        world.api.failingUpdateUserIds = ["ANN"]
+
+        let summary = await world.model.enableAll(appState: world.app, loc: world.loc)
+
+        #expect(summary == SeerrActivationModel.activationSummary(
+            enabled: 2, refusedNames: ["Tom"], failedNames: ["Ann"], loc: world.loc))
+        #expect(world.stored("ADMIN").isEnabled && world.stored("BOB").isEnabled)
+        #expect(!world.stored("ANN").isEnabled)
     }
 
     @Test("the line kind truth table")

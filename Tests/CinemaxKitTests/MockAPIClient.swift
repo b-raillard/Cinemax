@@ -26,7 +26,17 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
             ?? DisplayPreferencesDto(client: client, id: id)
     }
 
+    /// Runs at the head of every `updateDisplayPreferences` (with the user id),
+    /// so a test can hold a write open.
+    var onUpdateDisplayPreferences: (@Sendable (String?) async -> Void)?
+    /// Users whose `updateDisplayPreferences` throws.
+    var failingUpdateUserIds: Set<String> = []
+
     func updateDisplayPreferences(_ prefs: DisplayPreferencesDto, id: String, client: String, userId: String?) async throws {
+        if let hook = recordLock.withLock({ onUpdateDisplayPreferences }) { await hook(userId) }
+        if let userId, recordLock.withLock({ failingUpdateUserIds.contains(userId) }) {
+            throw URLError(.cannotConnectToHost)
+        }
         recordLock.withLock {
             displayPreferences[displayPreferencesKey(id, client, userId)] = prefs
             updateDisplayPreferencesCalls.append((id, client, userId, prefs))
@@ -176,7 +186,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func getPublicUsers() async throws -> [UserDto] { [] }
     /// The administrator's user list (`getUsers`).
     var stubbedUsers: [UserDto] = []
-    func getUsers() async throws -> [UserDto] { recordLock.withLock { stubbedUsers } }
+    var getUsersError: (any Error)?
+    func getUsers() async throws -> [UserDto] {
+        if let error = recordLock.withLock({ getUsersError }) { throw error }
+        return recordLock.withLock { stubbedUsers }
+    }
     var stubbedActiveSessions: [SessionInfoDto] = []
     /// Every `getActiveSessions` call's `controllableByUserId`, in order —
     /// `nil` entries are the unfiltered (admin) shape.

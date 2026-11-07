@@ -55,6 +55,7 @@ final class SeerrActivationModel {
 
     /// The admin's own address — what `setEnabled(true)` writes for a user.
     @ObservationIgnored private var address: URL?
+    @ObservationIgnored private var loadedAccount: String?
 
     private enum Lookup: Sendable {
         case skipped
@@ -72,6 +73,12 @@ final class SeerrActivationModel {
 
     func load(appState: AppState, session: SeerrSession) async {
         guard let snapshot = session.snapshot() else { return }
+        // Another account's users are never shown for this one.
+        if snapshot.accountKey != loadedAccount {
+            lines = []
+            address = nil
+            loadedAccount = snapshot.accountKey
+        }
         let users: [UserDto]
         do {
             users = try await appState.apiClient.getUsers()
@@ -149,17 +156,33 @@ final class SeerrActivationModel {
 
     // MARK: Writes
 
-    /// Read → change → write one user's entity. Throws when either call does.
+    /// Read → change → write one user's entity, on the API client and for the
+    /// account captured when the operation began: the account is re-checked
+    /// before the read and again before the write, and a switch throws
+    /// `CancellationError` — an old account's user ids never reach another
+    /// account's server.
     private func write(
-        userId: String, appState: AppState, _ change: (SeerrUserConfig) -> SeerrUserConfig
+        userId: String, appState: AppState, scope: Scope,
+        _ change: (SeerrUserConfig) -> SeerrUserConfig
     ) async throws {
-        let api = appState.apiClient
-        let dto = try await api.getDisplayPreferences(
+        guard appState.activeAccountKey == scope.account else { throw CancellationError() }
+        let dto = try await scope.api.getDisplayPreferences(
             id: SeerrUserConfig.preferencesId, client: SeerrUserConfig.client, userId: userId)
         let next = change(SeerrUserConfig.read(dto))
-        try await api.updateDisplayPreferences(
+        guard appState.activeAccountKey == scope.account else { throw CancellationError() }
+        try await scope.api.updateDisplayPreferences(
             SeerrUserConfig.merged(next, into: dto),
             id: SeerrUserConfig.preferencesId, client: SeerrUserConfig.client, userId: userId)
+    }
+
+    /// The API client and account an operation started on.
+    @MainActor private struct Scope {
+        let api: any APIClientProtocol
+        let account: String?
+        init(_ appState: AppState) {
+            api = appState.apiClient
+            account = appState.activeAccountKey
+        }
     }
 
     private func record(_ userId: String, enabled: Bool) {
@@ -169,72 +192,106 @@ final class SeerrActivationModel {
 
     /// `nil` on success, else the sentence to show the admin.
     func setEnabled(_ on: Bool, userId: String, appState: AppState, loc: LocalizationManager) async -> String? {
+        await setEnabled(on, userId: userId, appState: appState, scope: Scope(appState), loc: loc)
+    }
+
+    private func setEnabled(
+        _ on: Bool, userId: String, appState: AppState, scope: Scope, loc: LocalizationManager
+    ) async -> String? {
         let line = lines.first { $0.id == userId }
         let name = line?.name ?? ""
-        if on, line?.kind == .ageCapped {
-            return loc.localized("seerr.activation.refused.capped", name)
+        if on {
+            // The cap is only known from the lines: an unknown id is never enabled.
+            guard let line else { return loc.localized("seerr.activation.failed.enable", name) }
+            if line.kind == .ageCapped { return loc.localized("seerr.activation.refused.capped", name) }
         }
         let target = address
         if on, target == nil { return loc.localized("seerr.activation.noAddress") }
-        let account = appState.activeAccountKey
         do {
-            try await write(userId: userId, appState: appState) { existing in
+            try await write(userId: userId, appState: appState, scope: scope) { existing in
                 // Off keeps the address already stored: `merged` would drop it.
                 SeerrUserConfig(isEnabled: on, url: on ? target : existing.url)
             }
+        } catch is CancellationError {
+            return nil
         } catch {
             logger.notice("Seerr ▸ activation write failed")
             return loc.localized(on ? "seerr.activation.failed.enable" : "seerr.activation.failed.disable", name)
         }
-        if appState.activeAccountKey == account { record(userId, enabled: on) }
+        if appState.activeAccountKey == scope.account { record(userId, enabled: on) }
         return nil
     }
 
     /// Enables everyone who can be; returns the sentence summarising it.
     func enableAll(appState: AppState, loc: LocalizationManager) async -> String {
+        let scope = Scope(appState)
         var refused: [String] = []
         var failed: [String] = []
         for line in lines {
+            guard appState.activeAccountKey == scope.account else { break }
             if line.kind == .ageCapped {
                 refused.append(line.name)
             } else if !line.isEnabled {
-                if await setEnabled(true, userId: line.id, appState: appState, loc: loc) != nil {
-                    failed.append(line.name)
-                }
+                let message = await setEnabled(true, userId: line.id, appState: appState, scope: scope, loc: loc)
+                if message != nil { failed.append(line.name) }
             }
         }
         return Self.activationSummary(enabled: enabledCount, refusedNames: refused, failedNames: failed, loc: loc)
     }
 
     /// Switches every enabled user off, each keeping the address already
-    /// stored — the admin's included.
-    func disableAll(appState: AppState) async {
-        let account = appState.activeAccountKey
+    /// stored — the admin's included. `nil` = all done, else who could not be.
+    func disableAll(appState: AppState, loc: LocalizationManager) async -> String? {
+        let scope = Scope(appState)
+        var failed: [String] = []
         for line in lines where line.isEnabled {
             do {
-                try await write(userId: line.id, appState: appState) {
+                try await write(userId: line.id, appState: appState, scope: scope) {
                     SeerrUserConfig(isEnabled: false, url: $0.url)
                 }
-                if appState.activeAccountKey == account { record(line.id, enabled: false) }
+                if appState.activeAccountKey == scope.account { record(line.id, enabled: false) }
+            } catch is CancellationError {
+                return nil
             } catch {
                 logger.notice("Seerr ▸ deactivation write failed")
+                failed.append(line.name)
             }
         }
+        return Self.failureSentence("seerr.activation.summary.disableFailed", failed, loc)
     }
 
     /// The admin changed the Seerr address: the admin's own entity and every
-    /// enabled user's carry it from now on. A disabled user is left alone.
-    func setAddress(_ url: URL, appState: AppState) async {
-        var targets = lines.filter(\.isEnabled).map(\.id)
-        if let adminId = appState.currentUserId, !targets.contains(adminId) { targets.append(adminId) }
-        for userId in targets {
+    /// enabled user's carry it from now on. A disabled user is left alone. The
+    /// remembered address only moves once the admin's own write succeeded.
+    func setAddress(_ url: URL, appState: AppState, loc: LocalizationManager) async -> String? {
+        let scope = Scope(appState)
+        let adminId = appState.currentUserId
+        var targets: [(id: String, name: String)] = []
+        if let adminId {
+            targets.append((adminId, lines.first { $0.id == adminId }?.name ?? ""))
+        }
+        for line in lines where line.isEnabled && line.id != adminId { targets.append((line.id, line.name)) }
+        var failed: [String] = []
+        var adminWritten = false
+        for target in targets {
             do {
-                try await write(userId: userId, appState: appState) { SeerrUserConfig(isEnabled: $0.isEnabled, url: url) }
+                try await write(userId: target.id, appState: appState, scope: scope) {
+                    SeerrUserConfig(isEnabled: $0.isEnabled, url: url)
+                }
+                if target.id == adminId { adminWritten = true }
+            } catch is CancellationError {
+                return nil
             } catch {
                 logger.notice("Seerr ▸ address write failed")
+                failed.append(target.name)
             }
         }
-        address = url
+        if adminWritten { address = url }
+        return Self.failureSentence("seerr.activation.summary.addressFailed", failed, loc)
+    }
+
+    private static func failureSentence(_ key: String, _ names: [String], _ loc: LocalizationManager) -> String? {
+        names.isEmpty ? nil : loc.localized(loc.pluralKey(key, names.count), names.joined(separator: ", "))
     }
 
     // MARK: Wording
