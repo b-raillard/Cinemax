@@ -886,29 +886,42 @@ struct ModalPresentationHostTests {
         presenter.present(.movie(film))
         #expect(presenter.draft(for: .root) == .movie(film))     // no modal: the root presents
 
-        presenter.draft = nil
-        presenter.modalHostAppeared()
+        presenter.modalChanged(isUp: true)
+        #expect(presenter.draft == nil)                           // a modal arriving takes no root draft in
         presenter.present(.movie(film))
         #expect(presenter.draft(for: .root) == nil)
         #expect(presenter.draft(for: .modal) == .movie(film))
 
         // The modal leaves with its request: the root never raises it afterwards.
-        presenter.modalHostDisappeared()
+        presenter.modalChanged(isUp: false)
         #expect(presenter.draft == nil)
         #expect(presenter.draft(for: .root) == nil)
         presenter.present(.movie(film))
         #expect(presenter.draft(for: .root) == .movie(film))
     }
 
-    @Test("a modal replacing a modal keeps the root stood down")
-    func overlappingModalsKeepTheRootDown() {
-        let presenter = SeerrRequestPresenter()
-        presenter.modalHostAppeared()       // the new fiche appears…
-        presenter.modalHostAppeared()
-        presenter.modalHostDisappeared()    // …before the old one's disappear
-        presenter.present(.movie(film))
-        #expect(presenter.draft(for: .root) == nil)
-        #expect(presenter.draft(for: .modal) == .movie(film))
+    /// The stand-down is an ASSIGNMENT from `MainTabView.deepLinkFallback`,
+    /// never a count of appear / disappear events: one unpaired appear left a
+    /// counter at 1 and silenced every root-hosted request until relaunch.
+    @Test("repeated « up » signals never leave the root silenced once the modal is gone")
+    func repeatedSignalsCannotStrandTheRoot() {
+        let seerr = SeerrRequestPresenter()
+        let playlists = AddToPlaylistPresenter()
+        for _ in 0..<3 {                      // a fiche replaced by another fiche, re-sent states
+            seerr.modalChanged(isUp: true)
+            playlists.modalChanged(isUp: true)
+        }
+        seerr.present(.movie(film))
+        playlists.present(itemId: "item", title: "Film")
+        #expect(seerr.draft(for: .root) == nil)
+        #expect(playlists.request(for: .root) == nil)
+
+        seerr.modalChanged(isUp: false)       // once, as `deepLinkFallback` goes nil
+        playlists.modalChanged(isUp: false)
+        seerr.present(.movie(film))
+        playlists.present(itemId: "item", title: "Film")
+        #expect(seerr.draft(for: .root) == .movie(film))
+        #expect(playlists.request(for: .root)?.itemId == "item")
     }
 
     @Test("« Ajouter à une playlist » follows the same rule")
@@ -917,13 +930,13 @@ struct ModalPresentationHostTests {
         presenter.present(itemId: "item", title: "Film")
         #expect(presenter.request(for: .root)?.itemId == "item")
 
-        presenter.request = nil
-        presenter.modalHostAppeared()
+        presenter.modalChanged(isUp: true)
+        #expect(presenter.request == nil)
         presenter.present(itemId: "item", title: "Film")
         #expect(presenter.request(for: .root) == nil)
         #expect(presenter.request(for: .modal)?.itemId == "item")
 
-        presenter.modalHostDisappeared()
+        presenter.modalChanged(isUp: false)
         #expect(presenter.request == nil)
         presenter.present(itemId: "item", title: "Film")
         #expect(presenter.request(for: .root)?.itemId == "item")

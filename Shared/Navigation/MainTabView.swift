@@ -194,6 +194,13 @@ struct MainTabView: View {
             deepLinkDetail(target)
         }
         #endif
+        // The root-hosted flows stand down while the modal is up, told by
+        // ASSIGNMENT from the one source of truth (`initial`: a remount never
+        // inherits a modal that is gone) — see `deepLinkDetail`.
+        .onChange(of: deepLinkFallback, initial: true) { _, target in
+            playlists.modalChanged(isUp: target != nil)
+            seerrRequests.modalChanged(isUp: target != nil)
+        }
         #if os(tvOS)
         .onAppear {
             // Initial seed — without this the bar is empty for one frame.
@@ -247,9 +254,10 @@ struct MainTabView: View {
     /// content that carries it.
     ///
     /// The playlist sheet and the Seerr request are hosted at the app's root,
-    /// which cannot present over this modal: a request raised in here showed
-    /// nothing. While the modal is up it hosts both itself (`host: .modal`)
-    /// and the root stands down (`PresentationHost`) — one presentation
+    /// which cannot present over this modal: on tvOS the root's dialog tore
+    /// this fiche down and came up over Accueil. While the modal is up it
+    /// hosts both itself (`host: .modal`) and the root stands down
+    /// (`PresentationHost`, told from `deepLinkFallback`) — one presentation
     /// context at a time, one presenter.
     @ViewBuilder
     private func deepLinkDetail(_ target: DeepLinkFallback) -> some View {
