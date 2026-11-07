@@ -42,6 +42,39 @@ final class SeerrRequestPresenter {
 
     func present(_ draft: SeerrRequestDraft) { self.draft = draft }
 
+    /// A missing title's card was tapped (search, actor page): a film opens
+    /// the request at once; a series first asks Seerr for its seasons — the
+    /// library has none of them, so every season Seerr lacks is offered, all
+    /// ticked. A failed lookup says so quietly, never naming Seerr; an account
+    /// change on the way says nothing.
+    func request(_ title: SeerrTitle, session: SeerrSession, loc: LocalizationManager, toasts: ToastCenter) async {
+        guard title.kind == .tv else {
+            present(.movie(title))
+            return
+        }
+        let tmdbId = title.tmdbId
+        let details: SeerrTVDetails
+        do {
+            details = try await session.perform { client, credential in
+                try await client.tv(tmdbId: tmdbId, credential)
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            toasts.error(loc.localized("seerr.request.seasonsUnavailable"))
+            return
+        }
+        let seasons = SeerrMissing.seasons(
+            details, ownedSeasonNumbers: [],
+            includeSpecials: session.publicSettings?.enableSpecialEpisodes ?? false
+        ).map(\.seasonNumber).sorted()
+        guard !seasons.isEmpty else {
+            toasts.error(loc.localized("seerr.request.noSeasons"))
+            return
+        }
+        present(.series(title, seasons: seasons, preselected: Set(seasons)))
+    }
+
     /// The account changed: another profile's requests are not this one's.
     func reset() {
         overrides = [:]

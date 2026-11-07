@@ -382,9 +382,9 @@ extension JellyfinAPIClient {
     public func searchItems(
         userId: String,
         searchTerm: String,
-        includeItemTypes: [BaseItemKind] = [.movie, .series, .episode],
-        limit: Int = 20,
-        enableTotalRecordCount: Bool = true
+        includeItemTypes: [BaseItemKind],
+        limit: Int,
+        extras: SearchItemsExtras
     ) async throws -> [BaseItemDto] {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
@@ -397,9 +397,12 @@ extension JellyfinAPIClient {
                 searchTerm: searchTerm,
                 includeItemTypes: includeItemTypes
             )
-            params.enableTotalRecordCount = enableTotalRecordCount
+            params.enableTotalRecordCount = extras.contains(.totalRecordCount)
             params.enableImageTypes = [.primary]
             params.imageTypeLimit = 1
+            // The TMDb id, only while the search screen's Seerr section is
+            // visible: what tells an owned title from a missing one.
+            if extras.contains(.providerIds) { params.fields = [.providerIDs] }
             let response = try await client.send(Paths.getItems(parameters: params))
             // Defense in depth on top of `maxOfficialRating`: search feeds Siri
             // as well as the screen, and — unlike the paginated grids, whose

@@ -1657,3 +1657,7 @@
 "seerr.badge.declined" = "Abgelehnt";
 "seerr.missing.title" = "Noch nicht in deiner Bibliothek";
 "seerr.missing.a11y" = "%@, noch nicht in deiner Bibliothek, %@";
+"seerr.searchPrompt.title" = "Fehlt dir ein Titel?";
+"seerr.searchPrompt.body" = "Dein Server nutzt Seerr für Anfragen. Melde dich einmal mit deinem Jellyfin-Konto an: nichts zu tippen.";
+"seerr.searchPrompt.later" = "Später";
+"seerr.request.seasonsUnavailable" = "Die Staffeln konnten nicht geladen werden";

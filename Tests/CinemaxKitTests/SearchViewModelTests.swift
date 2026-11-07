@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 import JellyfinAPI
-import CinemaxKit
+@testable import CinemaxKit
 @testable import Cinemax
 
 @MainActor
@@ -195,5 +195,299 @@ struct SearchViewModelTests {
         let result = await vm.fetchRandomMovie(using: makeAppState(api: api))
 
         #expect(result == nil)
+    }
+}
+
+// MARK: - Seerr section
+
+private let searchSeerrURL = URL(string: "http://192.168.1.20:5055")!
+
+/// Seerr's `/search` for « dune »: the 2021 film (owned by the bench library
+/// below), the 1984 film, a series, and a person (dropped by the decoder).
+private let duneSearchBody = """
+{"page":1,"totalPages":1,"totalResults":4,"results":[
+{"mediaType":"movie","id":438631,"title":"Dune","releaseDate":"2021-09-15"},
+{"mediaType":"movie","id":841,"title":"Dune","releaseDate":"1984-12-14"},
+{"mediaType":"tv","id":90228,"name":"Dune: Prophecy","firstAirDate":"2024-11-17"},
+{"mediaType":"person","id":1,"name":"Frank Herbert"}]}
+"""
+
+/// A deadline that never fires (the tests hold Seerr with a latch instead),
+/// released when the race cancels it.
+private let neverExpires: @Sendable () async throws -> Void = {
+    let never = TestLatch()
+    await withTaskCancellationHandler { await never.wait() } onCancel: { never.open() }
+}
+
+/// Answers Seerr by path: the session's reload (`/settings/public`,
+/// `/auth/me`), then `/search` — held by `gate` when one is given.
+private final class SearchSeerrTransport: SeerrTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var sent: [URLRequest] = []
+    private let searchReply: StubSeerrTransport.Reply
+    private let gate: TestLatch?
+    /// Opens when a `/search` request reaches the transport.
+    let searchArrived = TestLatch()
+
+    init(search: StubSeerrTransport.Reply, gate: TestLatch? = nil) {
+        self.searchReply = search
+        self.gate = gate
+    }
+
+    var requests: [URLRequest] { lock.withLock { sent } }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        lock.withLock { sent.append(request) }
+        let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
+        let reply: StubSeerrTransport.Reply
+        switch path {
+        case "/settings/public":
+            reply = .response(status: 200, body: #"{"mediaServerType":2,"partialRequestsEnabled":true}"#)
+        case "/auth/me":
+            reply = .response(status: 200, body: #"{"id":7,"permissions":32,"jellyfinUserId":"A","displayName":"Alice"}"#)
+        case "/search":
+            searchArrived.open()
+            if let gate { await gate.wait() }
+            reply = searchReply
+        default:
+            throw StubSeerrTransport.Exhausted()
+        }
+        switch reply {
+        case .failure(let error):
+            throw error
+        case .response(let status, let headers, let body):
+            let url = request.url ?? searchSeerrURL
+            let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!
+            return (Data(body.utf8), response)
+        }
+    }
+}
+
+/// Signed in as « A » on server S1, Seerr enabled for them, and a session
+/// connected through a stored cookie — the state a search starts from.
+@MainActor
+private func seerrBench(api: MockAPIClient, transport: SearchSeerrTransport) async -> (AppState, SeerrSession) {
+    let jellyfin = URL(string: "https://maison.local")!
+    api.displayPreferences["me|\(SeerrUserConfig.preferencesId)|\(SeerrUserConfig.client)"] =
+        SeerrUserConfig.merged(SeerrUserConfig(isEnabled: true, url: searchSeerrURL), into: nil)
+    let keychain = MockKeychain()
+    keychain.savedServers = [ServerEntry(
+        id: "S1", name: "Maison", url: jellyfin, serverID: "srv",
+        accessToken: "tokA", userId: "A", username: "A", lastUsedAt: Date(timeIntervalSince1970: 1_000))]
+    keychain.savedActiveServerId = "S1"
+    let app = AppState(apiClient: api, keychain: keychain)
+    app.settingsDefaults = .isolatedForTesting()
+    app.loadServersFromKeychain()
+    app.serverURL = jellyfin
+    app.hasServer = true
+    app.isAuthenticated = true
+    app.accessToken = "tokA"
+    app.currentUserId = "A"
+    var user = UserDto()
+    user.id = "A"
+    user.policy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
+    app.currentUser = user
+
+    let storage = MockKeychain()
+    storage.saveSeerrSessions(["S1|A": SeerrBoundSecret(value: "abc", origin: searchSeerrURL)])
+    let session = SeerrSession(storage: storage, defaults: .isolatedForTesting(), transport: transport, signInPause: {})
+    session.proAllowsProvider = { true }
+    session.activeAccountKeyProvider = { [app] in app.activeAccountKey }
+    await session.reload(appState: app)
+    return (app, session)
+}
+
+/// A library item carrying its TMDb id, as `searchItems` returns it when
+/// asked for provider ids.
+private func libraryItem(id: String, name: String, type: BaseItemKind, tmdb: String) -> BaseItemDto {
+    var item = BaseItemDto()
+    item.id = id
+    item.name = name
+    item.type = type
+    item.providerIDs = ["Tmdb": tmdb]
+    return item
+}
+
+@MainActor
+@Suite("Search — Seerr section")
+struct SearchSeerrSectionTests {
+
+    private func makeViewModel(_ session: SeerrSession, allowed: Bool = true) -> SearchViewModel {
+        let vm = SearchViewModel(defaults: .isolatedForTesting())
+        vm.seerr = session
+        vm.allowsSeerr = { allowed }
+        vm.seerrDeadline = neverExpires
+        return vm
+    }
+
+    @Test("the library results are on screen before Seerr answers, then the section follows")
+    func seerrSectionAfterLibraryResults() async {
+        let gate = TestLatch()
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody), gate: gate)
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [libraryItem(id: "lib-dune", name: "Dune", type: .movie, tmdb: "438631")]
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        #expect(session.isVisible(proAllows: true, isOnline: true))
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        await transport.searchArrived.wait()
+
+        // Seerr is held: the library is already written, the spinner gone,
+        // and the section is a skeleton.
+        #expect(vm.results.map(\.id) == ["lib-dune"])
+        #expect(vm.hasSearched)
+        #expect(!vm.isSearching)
+        #expect(vm.seerrSection == .loading)
+        // The TMDb ids were asked for, since the section was going to load.
+        #expect(!api.searchProviderIdFlags.isEmpty)
+        #expect(api.searchProviderIdFlags.allSatisfy { $0 })
+
+        gate.open()
+        await vm.searchTask?.value
+
+        guard case .loaded(let missing) = vm.seerrSection else {
+            Issue.record("expected a loaded section, got \(vm.seerrSection)")
+            return
+        }
+        #expect(missing.map(\.id) == ["movie-841", "tv-90228"])
+        #expect(vm.seerrSection(for: session.snapshot()) == vm.seerrSection)
+    }
+
+    @Test("a title the library owns is not listed again; ownership is per kind")
+    func ownedTitleNotListedTwice() async {
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody))
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [
+            libraryItem(id: "lib-dune", name: "Dune", type: .movie, tmdb: "438631"),
+            // A SERIES with the 1984 film's TMDb id: TV and movie ids overlap,
+            // so the film stays missing.
+            libraryItem(id: "lib-other", name: "Dune", type: .series, tmdb: "841"),
+        ]
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        await vm.searchTask?.value
+
+        guard case .loaded(let missing) = vm.seerrSection else {
+            Issue.record("expected a loaded section, got \(vm.seerrSection)")
+            return
+        }
+        #expect(!missing.contains { $0.id == "movie-438631" })
+        #expect(missing.map(\.id) == ["movie-841", "tv-90228"])
+    }
+
+    @Test("the scope chips filter the Seerr kinds too")
+    func scopeFiltersSeerrKinds() async {
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody))
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [libraryItem(id: "lib-show", name: "Dune", type: .series, tmdb: "1")]
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.scope = .series
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        await vm.searchTask?.value
+
+        #expect(vm.seerrSection == .loaded([
+            SeerrMissingTitle(title: SeerrTitle(kind: .tv, tmdbId: 90228, title: "Dune: Prophecy", year: 2024), badge: .request),
+        ]))
+    }
+
+    @Test("an unreachable Seerr shows nothing and leaves the library results alone")
+    func unreachableSeerrShowsNothing() async {
+        let transport = SearchSeerrTransport(search: .failure(URLError(.cannotConnectToHost)))
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [libraryItem(id: "lib-dune", name: "Dune", type: .movie, tmdb: "438631")]
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        await vm.searchTask?.value
+
+        #expect(vm.seerrSection == .hidden)
+        #expect(vm.results.map(\.id) == ["lib-dune"])
+        #expect(!vm.searchFailed)
+    }
+
+    @Test("a profile switch while Seerr answers drops the section")
+    func profileSwitchDropsSeerrSection() async {
+        let gate = TestLatch()
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody), gate: gate)
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [libraryItem(id: "lib-dune", name: "Dune", type: .movie, tmdb: "438631")]
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        await transport.searchArrived.wait()
+        #expect(vm.seerrSection == .loading)
+
+        // Another profile of the same server takes over, its reload runs.
+        app.currentUserId = "B"
+        await session.reload(appState: app)
+        gate.open()
+        await vm.searchTask?.value
+
+        // Never loaded: the answer belonged to the previous profile — and the
+        // skeleton does not wait for the next one to become visible.
+        #expect(vm.seerrSection == .hidden)
+    }
+
+    @Test("a section is drawn only for the account it was loaded for")
+    func sectionShownOnlyToItsAccount() async {
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody))
+        let api = MockAPIClient()
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        await vm.searchTask?.value
+
+        #expect(vm.seerrSection != .hidden)
+        #expect(vm.seerrSection(for: SeerrSession.Snapshot(accountKey: "S1|B", generation: 99)) == .hidden)
+        #expect(vm.seerrSection(for: nil) == .hidden)
+    }
+
+    @Test("not allowed: no Seerr call at all, no TMDb ids asked for")
+    func notAllowedMakesNoSeerrCall() async {
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody))
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [libraryItem(id: "lib-dune", name: "Dune", type: .movie, tmdb: "438631")]
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let afterReload = transport.requests.count
+        let vm = makeViewModel(session, allowed: false)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        await vm.searchTask?.value
+
+        #expect(vm.results.map(\.id) == ["lib-dune"])
+        #expect(vm.seerrSection == .hidden)
+        #expect(transport.requests.count == afterReload)
+        #expect(api.searchProviderIdFlags.allSatisfy { !$0 })
+    }
+
+    @Test("emptying the query hides the section")
+    func emptyQueryHidesSection() async {
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody))
+        let (app, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+        vm.search(using: app)
+        await vm.searchTask?.value
+        #expect(vm.seerrSection != .hidden)
+
+        vm.searchText = ""
+        vm.search(using: app)
+
+        #expect(vm.seerrSection == .hidden)
     }
 }

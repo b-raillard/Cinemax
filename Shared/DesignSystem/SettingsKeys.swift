@@ -110,6 +110,16 @@ enum SettingsKey {
         "search.recentQueriesAccountMigratedTo.\(serverId)"
     }
 
+    /// Prefix of `seerr.searchPromptDismissed.<accountKey>` — `true` once that
+    /// account answered « Plus tard » to the search screen's invitation to
+    /// sign in to Seerr: hidden from search for it on this device (Réglages →
+    /// Demandes still offers the sign-in). Built by
+    /// `seerrSearchPromptDismissed(accountKey:)`.
+    static let seerrSearchPromptDismissedPrefix = "seerr.searchPromptDismissed."
+    static func seerrSearchPromptDismissed(accountKey: String) -> String {
+        seerrSearchPromptDismissedPrefix + accountKey
+    }
+
     // Library landing (iOS + tvOS)
     /// `"browse"` (default) shows the cinematic hero + genre rows ("By genre");
     /// `"grid"` shows a flat poster grid using the default sort ("Show all").

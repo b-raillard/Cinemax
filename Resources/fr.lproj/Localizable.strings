@@ -1659,3 +1659,7 @@
 "seerr.badge.declined" = "Refusée";
 "seerr.missing.title" = "Pas encore dans ta bibliothèque";
 "seerr.missing.a11y" = "%@, pas encore dans ta bibliothèque, %@";
+"seerr.searchPrompt.title" = "Il te manque un titre ?";
+"seerr.searchPrompt.body" = "Ton serveur utilise Seerr pour les demandes. Connecte-toi une fois avec ton compte Jellyfin : rien à taper.";
+"seerr.searchPrompt.later" = "Plus tard";
+"seerr.request.seasonsUnavailable" = "Impossible de charger les saisons";

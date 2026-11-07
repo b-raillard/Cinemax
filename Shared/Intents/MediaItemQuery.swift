@@ -60,6 +60,7 @@ struct MediaItemQuery: EntityStringQuery {
             query: query,
             userId: session.context.userId,
             includeItemTypes: Self.searchableKinds,
+            includeProviderIds: false,
             api: session.api
         )
         return outcome.items
