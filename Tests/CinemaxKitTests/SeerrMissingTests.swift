@@ -161,17 +161,20 @@ struct SeerrMissingTests {
         let (session, _) = await connectedSession()
         let started = TestLatch()
         let release = TestLatch()
+        let returned = CallFlag()
 
         let load = Task {
             await session.loadSection(deadline: {}) { _, _ -> [Int] in
                 started.open()
                 await release.wait()
+                returned.fire()
                 return [1]
             }
         }
         await started.wait()
 
         #expect(await load.value == .hidden)
+        #expect(!returned.didFire)
         release.open()
     }
 
@@ -282,6 +285,11 @@ struct SeerrMissingTests {
             requests: [done, .init(id: 2, status: .pending, seasons: [3])])
         #expect(SeerrMissing.seasons(show(seasons: [3], info: again), ownedSeasonNumbers: [], includeSpecials: false)
             .map(\.badge) == [.pending])
+        let older = SeerrMediaInfo(
+            status: .partiallyAvailable, seasons: [.init(seasonNumber: 3, status: .deleted)],
+            requests: [.init(id: 1, status: .declined, seasons: [3]), .init(id: 2, status: .completed, seasons: [3])])
+        #expect(SeerrMissing.seasons(show(seasons: [3], info: older), ownedSeasonNumbers: [], includeSpecials: false)
+            .map(\.badge) == [.request])
     }
 
     @Test("a failed season request reads as processing")

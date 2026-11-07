@@ -116,14 +116,17 @@ enum SeerrMissing {
         return result
     }
 
-    /// Per season: a COMPLETED request is left out (Seerr completes approved
-    /// and failed requests when a season becomes deleted, and accepts a new
-    /// one); a FAILED latest request reads as processing (Seerr refuses a new
+    /// Per season: the latest request over all of them decides, and a COMPLETED one
+    /// means no badge (Seerr completes approved and failed requests when a
+    /// season becomes deleted, and accepts a new one); a FAILED latest request reads as processing (Seerr refuses a new
     /// request for it with 202).
     private static func seasonBadge(for requests: [SeerrRequestSummary]) -> SeerrBadge? {
-        let live = requests.filter { $0.status != .completed }
-        if let latest = live.max(by: { $0.id < $1.id }), latest.status == .failed { return .processing }
-        return badge(for: live)
+        guard let latest = requests.max(by: { $0.id < $1.id }) else { return nil }
+        switch latest.status {
+        case .completed: return nil
+        case .failed: return .processing
+        default: return badge(for: [latest])
+        }
     }
 
     /// The most recent request decides; a failed one says nothing.
