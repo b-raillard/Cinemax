@@ -493,6 +493,7 @@
 		9CACAE33A8F87B0F5DB0EF28 /* AdminItemMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 592DF5F22CD8B9D9D263F7FD /* AdminItemMenu.swift */; };
 		9CCCA4A247BE9433C414A122 /* MenuSettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F59E7E97CEC6588B7625C2 /* MenuSettingsScreen.swift */; };
 		9D7DC4B535360291C3465976 /* VideoPlayerCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B14D3FE509DDFB9EA6569161 /* VideoPlayerCoordinator.swift */; };
+		9D82D96962599EEBBA0CF8BC /* SeerrClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E216C89149045702E9FA6C8 /* SeerrClientTests.swift */; };
 		9EF88DCE280B7911F2FBD125 /* WhatsNewDuoScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E6ABA2067D1592776041CEF /* WhatsNewDuoScene.swift */; };
 		9F4E23E8D1FF5B730B545655 /* SyncPlayHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = A350CFA644A65DA91D2A002D /* SyncPlayHUD.swift */; };
 		9F7E13CC3312F27A84915032 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 280786386ED204F8AAAF36B6 /* Assets.xcassets */; };
@@ -682,6 +683,7 @@
 		E0F705B2946022AA8BDF92A5 /* SwiftVLC in Frameworks */ = {isa = PBXBuildFile; productRef = 8D7F6852C615693ED7D592BA /* SwiftVLC */; };
 		E15E2925AE4F5DBA5862BD5D /* AccountUnlockSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 245AC9290B5C84E45108BE92 /* AccountUnlockSheet.swift */; };
 		E283DEC1BE44B3671AEF1E74 /* CardActionPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C683E40EA41CFFB115C0AD25 /* CardActionPresenter.swift */; };
+		E31324BDCF85E6005FC82CCF /* SeerrClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E216C89149045702E9FA6C8 /* SeerrClientTests.swift */; };
 		E33B8B9DA68A84DFEE1E03EF /* TVBackNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F3FB6BF53E15B2FC37932C6 /* TVBackNavigationTests.swift */; };
 		E37C4E1A902805EAE8650D5C /* SeasonalPaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4488B1840E82BB0065E338E1 /* SeasonalPaletteTests.swift */; };
 		E3D7CFB7D02DF9F2D4A3F890 /* ReviewPromptPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE7D2FCE0D1E553996F8787 /* ReviewPromptPolicy.swift */; };
@@ -857,6 +859,7 @@
 		0B79F879DA7A6AF02AB6D780 /* IdentifyFlowModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdentifyFlowModel.swift; sourceTree = "<group>"; };
 		0BB0CBCFC322E533A14A4EBB /* SleepTimerOption.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepTimerOption.swift; sourceTree = "<group>"; };
 		0CC9FEFF022E1379C8523576 /* SeekCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeekCoalescer.swift; sourceTree = "<group>"; };
+		0E216C89149045702E9FA6C8 /* SeerrClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeerrClientTests.swift; sourceTree = "<group>"; };
 		0E5C1E6AA06EF0B35E4B4CD2 /* ToastOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastOverlay.swift; sourceTree = "<group>"; };
 		0E6386886CB94DB7929168B0 /* EpisodeRefsPayloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeRefsPayloadTests.swift; sourceTree = "<group>"; };
 		0E8781EB49CEE6EFE3A6560A /* ContentRatingClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentRatingClassifierTests.swift; sourceTree = "<group>"; };
@@ -1646,6 +1649,7 @@
 				53E3E989946C44C0AAA0640F /* SeekCoalescerTests.swift */,
 				1E8DDA2E395A546CDBD89187 /* SeekMachineTests.swift */,
 				39BC644E17A2B44D0C1F6083 /* SeekSettleTrackerTests.swift */,
+				0E216C89149045702E9FA6C8 /* SeerrClientTests.swift */,
 				2D8EAA5073DE7C2A30883C92 /* SeerrModelTests.swift */,
 				086F2BCEE4A1ACF27D6D1AA5 /* ServerCertificateTrustTests.swift */,
 				81CA48534F99E448DA5327ED /* ServerCompatibilityTests.swift */,
@@ -2417,6 +2421,7 @@
 				71B23336490FEFD9143B5D99 /* SeekCoalescerTests.swift in Sources */,
 				49370FA71D4E1FBD9A687587 /* SeekMachineTests.swift in Sources */,
 				F8AA97FB6ABA8B0BDDC63B24 /* SeekSettleTrackerTests.swift in Sources */,
+				E31324BDCF85E6005FC82CCF /* SeerrClientTests.swift in Sources */,
 				48F7FC4B53A05CE2B70E8EEA /* SeerrModelTests.swift in Sources */,
 				1A283D6D5420910F77EDEC1A /* ServerCertificateTrustTests.swift in Sources */,
 				CF365DC49B58C4C38ADB95A8 /* ServerCompatibilityTests.swift in Sources */,
@@ -2812,6 +2817,7 @@
 				E7716088FB4DEE5121D1ABB2 /* SeekCoalescerTests.swift in Sources */,
 				1DE486C92788414E0DFDC648 /* SeekMachineTests.swift in Sources */,
 				AAEF60BDBE78467FBFBE4846 /* SeekSettleTrackerTests.swift in Sources */,
+				9D82D96962599EEBBA0CF8BC /* SeerrClientTests.swift in Sources */,
 				2AAECDA7DA06BFB5EC13C66E /* SeerrModelTests.swift in Sources */,
 				EDDA897C48059CA42D6EF2DD /* ServerCertificateTrustTests.swift in Sources */,
 				99ED66FD6943F914BE90AD18 /* ServerCompatibilityTests.swift in Sources */,
