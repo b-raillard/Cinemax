@@ -103,11 +103,14 @@ enum SeerrMissing {
     }
 
     /// The person's TMDb credits an actor page offers: the cast, and the crew
-    /// too only when the person is not primarily an actor
-    /// (`knownForDepartment` other than « Acting »). One entry per title —
+    /// too only when the person is KNOWN to be primarily crew
+    /// (`knownForDepartment` present, non-empty, other than « Acting »; an
+    /// unknown department ⇒ cast only, fail closed). One entry per title —
     /// kind and id, a film and a series may share a number — in Seerr's order.
     static func creditTitles(_ credits: SeerrCombinedCredits, person: SeerrPerson) -> [SeerrTitle] {
-        let candidates = person.knownForDepartment == "Acting" ? credits.cast : credits.cast + credits.crew
+        let department = person.knownForDepartment ?? ""
+        let primarilyCrew = !department.isEmpty && department != "Acting"
+        let candidates = primarilyCrew ? credits.cast + credits.crew : credits.cast
         var seen = Set<SeerrOwnedKey>()
         return candidates.filter { seen.insert(SeerrOwnedKey(kind: $0.kind, tmdbId: $0.tmdbId)).inserted }
     }

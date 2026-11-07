@@ -372,6 +372,14 @@ struct SeerrMissingTests {
         #expect(titles.map(creditKey) == ["movie-3", "movie-7", "tv-3", "tv-9"])
     }
 
+    @Test("an unknown or empty department: the cast only (fail closed)")
+    func unknownDepartmentIsCastOnly() {
+        let credits = SeerrCombinedCredits(cast: [movie(3)], crew: [movie(7)])
+        #expect(SeerrMissing.creditTitles(credits, person: SeerrPerson()).map(creditKey) == ["movie-3"])
+        #expect(SeerrMissing.creditTitles(credits, person: SeerrPerson(knownForDepartment: "")).map(creditKey)
+            == ["movie-3"])
+    }
+
     @Test("the person's owned titles are dropped, per kind; what Seerr has available too")
     func ownedDropped() {
         let credits = SeerrCombinedCredits(
@@ -701,6 +709,23 @@ struct PersonDetailSeerrModelTests {
         await model.task?.value
 
         #expect(personEntries(model.section) == ["movie-4", "movie-6", "tv-7"])
+    }
+
+    @Test("the filmography: 200 titles with their TMDb ids while the section may show, the page's 60 lean otherwise")
+    func filmographyOwnedSetIsWhole() async throws {
+        let api = MockAPIClient()
+        let allowed = PersonDetailSeerrModel()
+        allowed.allowsSeerr = { true }
+        let refused = PersonDetailSeerrModel()
+
+        let shown = try await allowed.filmography(personId: "p", userId: "A", using: api)
+        let hidden = try await refused.filmography(personId: "p", userId: "A", using: api)
+
+        // Newest first: a 60 cap would offer a prolific person's older owned titles.
+        #expect(api.personItemsLimits == [PersonDetailSeerrModel.ownedSetLimit, PersonDetailSeerrModel.pageLimit])
+        #expect(api.personItemsLimits == [200, 60])
+        #expect(api.personItemsProviderIdFlags == [true, false])
+        #expect(shown.withProviderIds && !hidden.withProviderIds)
     }
 
     @Test("no TMDb id on the person: no Seerr call, nothing shown")

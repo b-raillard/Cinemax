@@ -644,6 +644,9 @@ final class MediaDetailViewModel {
     /// answer: Jellyfin decides what is « in the library ».
     private func loadCollectionChildren(of boxSet: BaseItemDto, using appState: AppState, generation: Int) async {
         guard let userId = appState.currentUserId, let id = boxSet.id else { return }
+        // ONE decision per pass: the members' fields and whether the saga is
+        // asked at all — members fetched without their TMDb ids prove nothing.
+        let sagaMayShow = allowsSeerr()
         let members = try? await appState.apiClient.getItems(
             userId: userId,
             parentId: id,
@@ -651,13 +654,14 @@ final class MediaDetailViewModel {
             sortOrder: [.ascending],
             limit: 100,
             enableTotalRecordCount: false,
-            fieldSet: memberFieldSet
+            fieldSet: Self.memberFieldSet(sagaMayShow: sagaMayShow)
         ).items
         guard !Task.isCancelled, sideTaskGeneration == generation, let members else { return }
         if !members.isEmpty { collectionChildren = members }
         await loadSeerrSaga(
             collectionId: SeerrMissing.tmdbCollectionId(of: boxSet),
-            owned: SeerrMissing.ownedTmdbIds(collectionChildren), generation: generation)
+            owned: SeerrMissing.ownedTmdbIds(collectionChildren), fetchedProviderIds: sagaMayShow,
+            generation: generation)
     }
 
     /// The BoxSet holding this film (« Fait partie de ») and its other members,
@@ -666,6 +670,9 @@ final class MediaDetailViewModel {
     /// `loadCollectionChildren`.
     private func loadCollection(of movie: BaseItemDto, using appState: AppState, generation: Int) async {
         guard let userId = appState.currentUserId, let id = movie.id else { return }
+        // ONE decision per pass (see `loadCollectionChildren`): the members'
+        // limit and fields, and whether the saga is asked.
+        let sagaMayShow = allowsSeerr()
         let tmdbCollectionId = movie.providerIDs?
             .first { $0.key.caseInsensitiveCompare("TmdbCollection") == .orderedSame }?
             .value
@@ -682,9 +689,9 @@ final class MediaDetailViewModel {
                 parentId: boxsetId,
                 sortBy: [.premiereDate],
                 sortOrder: [.ascending],
-                limit: allowsSeerr() ? 100 : 20,
+                limit: sagaMayShow ? 100 : 20,
                 enableTotalRecordCount: false,
-                fieldSet: memberFieldSet
+                fieldSet: Self.memberFieldSet(sagaMayShow: sagaMayShow)
             ).items
             guard !Task.isCancelled, sideTaskGeneration == generation, let members else { return }
             let others = members.filter { $0.id != id }
@@ -695,22 +702,26 @@ final class MediaDetailViewModel {
         }
         await loadSeerrSaga(
             collectionId: SeerrMissing.tmdbCollectionId(of: movie),
-            owned: SeerrMissing.ownedTmdbIds(collectionItems + [movie]), generation: generation)
+            owned: SeerrMissing.ownedTmdbIds(collectionItems + [movie]), fetchedProviderIds: sagaMayShow,
+            generation: generation)
     }
 
     /// A collection's members carry their TMDb ids only while the saga may
     /// show (`ProviderIds` costs every member's payload); otherwise the lean
     /// card set — nothing reads their synopsis or genres.
-    private var memberFieldSet: ItemFieldSet {
-        allowsSeerr() ? .cardWithProviderIds : .card
+    private static func memberFieldSet(sagaMayShow: Bool) -> ItemFieldSet {
+        sagaMayShow ? .cardWithProviderIds : .card
     }
 
     /// The saga's films the library lacks — after the owned ones, never
-    /// instead of them. Silent like `loadSeerrSeasons`: no TMDb collection id
-    /// ⇒ no call; an error or the deadline hides it.
-    private func loadSeerrSaga(collectionId: Int?, owned: Set<SeerrOwnedKey>, generation: Int) async {
+    /// instead of them. Silent like `loadSeerrSeasons`: no TMDb collection id,
+    /// or members fetched without their TMDb ids (`fetchedProviderIds`) ⇒ no
+    /// call; an error or the deadline hides it.
+    private func loadSeerrSaga(
+        collectionId: Int?, owned: Set<SeerrOwnedKey>, fetchedProviderIds: Bool, generation: Int
+    ) async {
         guard !Task.isCancelled, sideTaskGeneration == generation else { return }
-        guard let collectionId, allowsSeerr(), let seerr, let snapshot = seerr.snapshot() else {
+        guard fetchedProviderIds, let collectionId, allowsSeerr(), let seerr, let snapshot = seerr.snapshot() else {
             setSeerrSaga(.hidden, name: nil, snapshot: nil)
             return
         }

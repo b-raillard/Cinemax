@@ -1178,6 +1178,12 @@ private func sagaBoxSetAPI(
     return api
 }
 
+/// `allowsSeerr`'s answer, flipped by a test mid-pass.
+@MainActor
+private final class VisibilityBox {
+    var isOn = false
+}
+
 /// The section's titles as `kind-tmdbId` + badge, `nil` unless loaded.
 private func sagaEntries(_ section: MissingSection<SeerrMissingTitle>) -> [String]? {
     guard case .loaded(let missing) = section else { return nil }
@@ -1351,6 +1357,31 @@ struct MediaDetailSagaTests {
         #expect(transport.collectionRequestCount == 0)
         #expect(api.getItemsQueries.last?.fieldSet == .card)
         #expect(api.getItemsQueries.last?.limit == 20)
+    }
+
+    @Test("one decision per pass: Seerr turning visible mid-pass asks nothing — members fetched without their TMDb ids prove nothing")
+    func sagaDecidedOncePerPass() async {
+        let gate = TestLatch()
+        let arrived = TestLatch()
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: sagaBody])
+        let api = sagaMovieAPI(collectionsGate: gate, collectionsArrived: arrived)
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let visible = VisibilityBox()
+        let vm = makeViewModel(session)
+        vm.allowsSeerr = { visible.isOn }
+
+        await vm.load(using: app, loc: loc)
+        await arrived.wait()
+        // Back online / Pro granted while the BoxSet lookup is in flight.
+        visible.isOn = true
+        gate.open()
+        await vm.collectionTask?.value
+
+        #expect(vm.collectionItems.compactMap(\.id) == ["movie-672"])
+        #expect(api.getItemsQueries.last?.fieldSet == .card)
+        #expect(api.getItemsQueries.last?.limit == 20)
+        #expect(vm.seerrSaga == .hidden)
+        #expect(transport.collectionRequestCount == 0)
     }
 
     @Test("an unreachable Seerr hides the saga and leaves the collection row alone")

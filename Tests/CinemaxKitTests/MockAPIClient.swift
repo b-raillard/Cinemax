@@ -815,10 +815,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func markItemUnplayed(itemId: String, userId: String) async throws { recordLock.withLock { markUnplayedCalls.append(itemId) } }
     func markItemPlayed(itemId: String, userId: String) async throws { recordLock.withLock { markPlayedCalls.append(itemId) } }
     func setFavorite(itemId: String, userId: String, favorite: Bool) async throws {}
-    /// `includeProviderIds` of every `getPersonItems` call, in order.
+    /// `includeProviderIds` / `limit` of every `getPersonItems` call, in order.
     private(set) var personItemsProviderIdFlags: [Bool] = []
+    private(set) var personItemsLimits: [Int] = []
     func getPersonItems(personId: String, userId: String, limit: Int, includeProviderIds: Bool) async throws -> [BaseItemDto] {
-        recordLock.withLock { personItemsProviderIdFlags.append(includeProviderIds) }
+        recordLock.withLock {
+            personItemsProviderIdFlags.append(includeProviderIds)
+            personItemsLimits.append(limit)
+        }
         return []
     }
     /// Answers `getCollections` when set (a movie's « Fait partie de »): the

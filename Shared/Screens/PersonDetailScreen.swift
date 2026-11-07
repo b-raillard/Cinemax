@@ -231,17 +231,16 @@ struct PersonDetailScreen: View {
         isLoading = true
         errorMessage = nil
         seerrModel.reset()
-        // The TMDb ids only while the Seerr section may show: what tells an
-        // owned title from a missing one.
-        let withProviderIds = seerrModel.allowsSeerr()
+        let withProviderIds: Bool
         do {
             async let personTask = appState.apiClient.getItem(userId: userId, itemId: personId)
-            async let itemsTask = appState.apiClient.getPersonItems(
-                personId: personId, userId: userId, includeProviderIds: withProviderIds)
+            async let filmographyTask = seerrModel.filmography(
+                personId: personId, userId: userId, using: appState.apiClient)
             person = try? await personTask
-            let items = try await itemsTask
-            movies = items.filter { $0.type == .movie }
-            series = items.filter { $0.type == .series }
+            let filmography = try await filmographyTask
+            withProviderIds = filmography.withProviderIds
+            movies = filmography.items.filter { $0.type == .movie }
+            series = filmography.items.filter { $0.type == .series }
         } catch {
             // Jellyfin decides what is « in the library »: no answer, no Seerr.
             errorMessage = loc.userFacingMessage(for: error)
@@ -327,6 +326,28 @@ final class PersonDetailSeerrModel {
         let section = self.section
         guard let current, current == snapshot else { return .hidden }
         return section
+    }
+
+    /// The owned set must be WHOLE while the section may show — Jellyfin
+    /// answers newest first, so a cap would offer a prolific person's older
+    /// owned titles as « Demander » (same flaw as a saga's 20-film row).
+    static let ownedSetLimit = 200
+    /// The page's own cap when Seerr is out of the picture.
+    static let pageLimit = 60
+
+    /// The page's filmography, ONE decision for it: while the section may
+    /// show, up to `ownedSetLimit` titles with their TMDb ids (what tells an
+    /// owned title from a missing one); otherwise `pageLimit`, lean.
+    /// `withProviderIds` goes back to `load` as `fetchedProviderIds`.
+    func filmography(
+        personId: String, userId: String, using api: any LibraryAPI
+    ) async throws -> (items: [BaseItemDto], withProviderIds: Bool) {
+        let withProviderIds = allowsSeerr()
+        let items = try await api.getPersonItems(
+            personId: personId, userId: userId,
+            limit: withProviderIds ? Self.ownedSetLimit : Self.pageLimit,
+            includeProviderIds: withProviderIds)
+        return (items, withProviderIds)
     }
 
     /// Hides the section; the pass in flight, if any, writes nothing.
