@@ -253,7 +253,7 @@ struct RequestsSettingsScreen: View {
             ForEach(report.verified, id: \.self) { line in
                 reportLine(icon: "checkmark.circle.fill", tint: CinemaColor.success, title: line, detail: nil)
             }
-            if let warning = report.warning {
+            ForEach(report.warnings, id: \.self) { warning in
                 reportLine(icon: "exclamationmark.triangle.fill", tint: themeManager.accent, title: warning, detail: nil)
             }
             if let failure = report.failure {

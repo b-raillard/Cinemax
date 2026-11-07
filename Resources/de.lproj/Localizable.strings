@@ -1578,6 +1578,7 @@
 "seerr.test.ok.role.manage" = "kann Anfragen genehmigen";
 "seerr.test.ok.role.request" = "kann anfragen";
 "seerr.test.warning.cannotManage" = "Dein Seerr-Konto kann keine Anfragen genehmigen: gib ihm in Seerr das Recht „Anfragen verwalten“.";
+"seerr.test.warning.httpSeerr" = "Seerr nutzt HTTP, dein Jellyfin-Server aber HTTPS: Die erneute Anmeldung erfolgt von Hand über „Bei Seerr anmelden“.";
 "seerr.activation.refused.capped" = "%@ konnte nicht aktiviert werden: das Konto hat eine Altersgrenze. Entferne sie in Jellyfin, um die Anfragen freizugeben.";
 "seerr.activation.noAddress" = "Gib zuerst die Adresse von Seerr ein.";
 "seerr.activation.failed.enable" = "%@ konnte nicht aktiviert werden: der Server hat nicht geantwortet.";
