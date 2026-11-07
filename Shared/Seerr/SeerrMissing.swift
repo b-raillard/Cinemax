@@ -1,0 +1,115 @@
+import Foundation
+import CinemaxKit
+import JellyfinAPI
+
+/// What a « missing » title or season offers: ask for it, or where the
+/// request stands.
+enum SeerrBadge: Equatable, Sendable {
+    case request, pending, processing, declined
+}
+
+struct SeerrMissingTitle: Identifiable, Equatable, Sendable {
+    let title: SeerrTitle
+    let badge: SeerrBadge
+    var id: String { "\(title.kind.rawValue)-\(title.tmdbId)" }
+}
+
+struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
+    let seriesTmdbId: Int
+    let seasonNumber: Int
+    let badge: SeerrBadge
+    var id: String { "tv-\(seriesTmdbId)-s\(seasonNumber)" }
+}
+
+/// A Seerr section of a browse surface. `loaded([])` renders NOTHING, like
+/// `hidden`; `loading` is the skeleton, bounded by `loadSection`'s deadline.
+enum MissingSection<Element: Equatable & Sendable>: Equatable {
+    case hidden, loading, loaded([Element])
+}
+
+enum SeerrImages {
+    /// Seerr's image proxy (sub-path kept) when `cacheImages`, TMDb otherwise.
+    static func posterURL(path: String?, seerrBase: URL, cacheImages: Bool) -> URL? {
+        guard let path, !path.isEmpty else { return nil }
+        let suffix = path.hasPrefix("/") ? path : "/" + path
+        if cacheImages {
+            return SeerrAddress.endpoint("/imageproxy/tmdb/t/p/w300" + suffix, on: seerrBase)
+        }
+        return URL(string: "https://image.tmdb.org/t/p/w300" + suffix)
+    }
+}
+
+/// Pure: what the Jellyfin library lacks, and how each missing item stands.
+enum SeerrMissing {
+    /// The TMDb ids of owned items (provider key matched case-insensitively;
+    /// non-numeric values ignored).
+    static func ownedTmdbIds(_ items: [BaseItemDto]) -> Set<Int> {
+        var ids = Set<Int>()
+        for item in items {
+            guard let value = item.providerIDs?.first(where: { $0.key.lowercased() == "tmdb" })?.value,
+                  let id = Int(value) else { continue }
+            ids.insert(id)
+        }
+        return ids
+    }
+
+    /// Candidates minus what Jellyfin owns and what Seerr has (partially)
+    /// available or blocklisted; deleted stays missing. Seerr's order kept.
+    static func titles(_ candidates: [SeerrTitle], owned: Set<Int>) -> [SeerrMissingTitle] {
+        var seen = Set<String>()
+        var result: [SeerrMissingTitle] = []
+        for candidate in candidates {
+            guard !owned.contains(candidate.tmdbId) else { continue }
+            switch candidate.mediaInfo?.status {
+            case .partiallyAvailable, .available, .blocklisted: continue
+            default: break
+            }
+            let entry = SeerrMissingTitle(title: candidate, badge: badge(candidate.mediaInfo))
+            if seen.insert(entry.id).inserted { result.append(entry) }
+        }
+        return result
+    }
+
+    static func badge(_ info: SeerrMediaInfo?) -> SeerrBadge {
+        guard let info, info.status != .deleted else { return .request }
+        if let badge = badge(for: info.requests) { return badge }
+        switch info.status {
+        case .processing: return .processing
+        case .pending: return .pending
+        default: return .request
+        }
+    }
+
+    /// Seasons the series lacks, each with its own badge. Season 0 only when
+    /// `includeSpecials`. A season Seerr has available or partially is dropped.
+    static func seasons(
+        _ tv: SeerrTVDetails, ownedSeasonNumbers: Set<Int>, includeSpecials: Bool
+    ) -> [SeerrMissingSeason] {
+        let info = tv.mediaInfo
+        var seen = Set<Int>()
+        var result: [SeerrMissingSeason] = []
+        for season in tv.seasons {
+            let number = season.seasonNumber
+            guard includeSpecials || number != 0,
+                  !ownedSeasonNumbers.contains(number),
+                  seen.insert(number).inserted else { continue }
+            let seerrStatus = info?.seasons.first { $0.seasonNumber == number }?.status
+            if seerrStatus == .available || seerrStatus == .partiallyAvailable { continue }
+            let badge = info.flatMap { badge(for: $0.requests.filter { $0.seasons.contains(number) }) }
+                ?? (seerrStatus == .processing ? .processing : .request)
+            result.append(SeerrMissingSeason(seriesTmdbId: tv.tmdbId, seasonNumber: number, badge: badge))
+        }
+        return result
+    }
+
+    /// The most recent request decides; a failed one says nothing.
+    private static func badge(for requests: [SeerrRequestSummary]) -> SeerrBadge? {
+        guard let latest = requests.max(by: { $0.id < $1.id }) else { return nil }
+        switch latest.status {
+        case .declined: return .declined
+        case .pending: return .pending
+        case .approved, .completed: return .processing
+        case .failed: return nil
+        }
+    }
+}
