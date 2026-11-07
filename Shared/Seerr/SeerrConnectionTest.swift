@@ -109,10 +109,13 @@ enum SeerrConnectionTest {
     private static func stop(at error: Error, in report: SeerrTestReport) -> SeerrTestReport {
         var report = report
         if error is CancellationError { return SeerrTestReport() }
+        // Only a transport failure is « nothing answers ». Any HTTP answer
+        // that is not Seerr's — Jellyfin's own empty 404 on `/api/v1/status`
+        // when the port is 8096 — is « a server answers, but not Seerr ».
         switch error as? SeerrError {
         case .redirected: report.failure = .redirected
-        case .notSeerr: report.failure = .notSeerr
-        default: report.failure = .unreachable
+        case .unreachable, nil: report.failure = .unreachable
+        case .some: report.failure = .notSeerr
         }
         return report
     }

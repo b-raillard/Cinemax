@@ -1330,6 +1330,16 @@ struct SeerrConnectionTestTests {
         #expect(await run(redirected, app2).failure == .redirected)
     }
 
+    /// Jellyfin itself answers `/api/v1/status` with an empty 404 (bench,
+    /// 2026-11-07): something answers, so it is the port, not a dead host.
+    @Test("an HTTP error from /status is « not Seerr », never « unreachable »")
+    func httpErrorFromStatusIsNotSeerr() async {
+        let (_, notFound, app, _) = await accountMode([.response(status: 404, body: "")])
+        #expect(await run(notFound, app).failure == .notSeerr)
+        let (_, serverError, app2, _) = await accountMode([.response(status: 500, body: "oops")])
+        #expect(await run(serverError, app2).failure == .notSeerr)
+    }
+
     @Test("a Seerr older than 3.4 is « too old »")
     func reportsTooOld() async {
         let (stub, session, app, _) = await accountMode([.response(status: 200, body: #"{"version":"3.3.2"}"#)])
