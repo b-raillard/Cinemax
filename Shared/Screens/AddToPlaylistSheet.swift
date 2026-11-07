@@ -41,16 +41,15 @@ final class AddToPlaylistPresenter {
     /// The request as `host` should present it: while the deep-link modal is
     /// up it is the one presenter (the root cannot present over it).
     func request(for host: PresentationHost) -> AddToPlaylistRequest? {
-        host == .modal || modalHosts == 0 ? request : nil
+        host == .modal || !modalIsUp ? request : nil
     }
 
-    /// Deep-link modals on screen (a counter: a new one may appear before
-    /// the old one's disappear).
-    private(set) var modalHosts = 0
-    func modalHostAppeared() { modalHosts += 1 }
-    /// The modal leaves with its request: the root never raises it afterwards.
-    func modalHostDisappeared() {
-        modalHosts = max(0, modalHosts - 1)
+    /// Whether the deep-link modal fiche is up — assigned by `MainTabView`
+    /// from `deepLinkFallback`, as `SeerrRequestPresenter.modalIsUp`.
+    private(set) var modalIsUp = false
+    /// The modal came, went or was replaced: the open request goes with it.
+    func modalChanged(isUp: Bool) {
+        modalIsUp = isUp
         request = nil
     }
 }
@@ -354,8 +353,6 @@ struct AddToPlaylistPresentation: ViewModifier {
 
     func body(content: Content) -> some View {
         presented(content)
-            .onAppear { if host == .modal { presenter.modalHostAppeared() } }
-            .onDisappear { if host == .modal { presenter.modalHostDisappeared() } }
     }
 
     @ViewBuilder

@@ -56,16 +56,18 @@ final class SeerrRequestPresenter {
     /// it is the one presenter (the root cannot present over it); otherwise
     /// the root is.
     func draft(for host: PresentationHost) -> SeerrRequestDraft? {
-        host == .modal || modalHosts == 0 ? draft : nil
+        host == .modal || !modalIsUp ? draft : nil
     }
 
-    /// Deep-link modals on screen (a counter: a new one may appear before
-    /// the old one's disappear).
-    private(set) var modalHosts = 0
-    func modalHostAppeared() { modalHosts += 1 }
-    /// The modal leaves with its request: the root never raises it afterwards.
-    func modalHostDisappeared() {
-        modalHosts = max(0, modalHosts - 1)
+    /// Whether the deep-link modal fiche is up. ASSIGNED by `MainTabView` from
+    /// `deepLinkFallback`, its one source of truth — never counted from
+    /// appear / disappear events, which an unpaired one would leave stranded,
+    /// silencing the root until relaunch.
+    private(set) var modalIsUp = false
+    /// The modal came, went or was replaced: the open request belongs to the
+    /// context it was raised in, so it goes (the root never raises it afterwards).
+    func modalChanged(isUp: Bool) {
+        modalIsUp = isUp
         draft = nil
     }
 
@@ -401,13 +403,6 @@ struct SeerrRequestPresentation: ViewModifier {
     var host: PresentationHost = .root
 
     func body(content: Content) -> some View {
-        presented(content)
-            .onAppear { if host == .modal { presenter.modalHostAppeared() } }
-            .onDisappear { if host == .modal { presenter.modalHostDisappeared() } }
-    }
-
-    @ViewBuilder
-    private func presented(_ content: Content) -> some View {
         #if os(tvOS)
         content.confirmationDialog(
             dialogTitle,
