@@ -55,18 +55,22 @@ enum SeerrConnectionTest {
         if !key.isEmpty {
             // 4a. Key mode: the key is accepted, the user is imported, and the
             // Jellyfin Seerr talks to is this one.
-            guard let userId = appState.currentUserId else { return report }
+            guard let userId = appState.currentUserId else { return SeerrTestReport() }
             do {
+                // The server id first: a Seerr linked to another Jellyfin must
+                // say so, not « not in Seerr ». Unknown on our side ⇒ closed.
+                let seerrServerId = try await client.jellyfinServerId(adminKey: key)
+                let own = appState.serverInfo?.serverID
+                    ?? appState.servers.first { $0.id == appState.activeServerId }?.serverID
+                guard let own, !own.isEmpty, seerrServerId == own else {
+                    report.failure = .otherJellyfin
+                    return report
+                }
                 guard let found = try await client.user(forJellyfinUserId: userId, auth: .adminKey(key)) else {
                     report.failure = .notInSeerr
                     return report
                 }
                 user = found
-                let seerrServerId = try await client.jellyfinServerId(adminKey: key)
-                if let own = appState.serverInfo?.serverID, seerrServerId != own {
-                    report.failure = .otherJellyfin
-                    return report
-                }
             } catch SeerrError.forbidden {
                 report.failure = .keyRefused
                 return report
