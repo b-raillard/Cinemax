@@ -1338,6 +1338,9 @@ struct SeerrConnectionTestTests {
         #expect(await run(notFound, app).failure == .notSeerr)
         let (_, serverError, app2, _) = await accountMode([.response(status: 500, body: "oops")])
         #expect(await run(serverError, app2).failure == .notSeerr)
+        // Past /status, Seerr HAS answered: a later HTTP error is not « the port ».
+        let (_, later, app3, _) = await accountMode([statusReply, .response(status: 500, body: "oops")])
+        #expect(await run(later, app3).failure == .unreachable)
     }
 
     @Test("a Seerr older than 3.4 is « too old »")

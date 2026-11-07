@@ -32,7 +32,7 @@ enum SeerrConnectionTest {
         do {
             status = try await client.status()
         } catch {
-            return stop(at: error, in: report)
+            return stop(at: error, in: report, atStatus: true)
         }
         // 2. Recent enough.
         guard let version = ServerVersion(status.version), version >= minimumVersion else {
@@ -106,16 +106,18 @@ enum SeerrConnectionTest {
         return report
     }
 
-    private static func stop(at error: Error, in report: SeerrTestReport) -> SeerrTestReport {
+    /// `atStatus`: the first call. Only there is any HTTP answer that is not
+    /// Seerr's — Jellyfin's own empty 404 on `/api/v1/status` when the port is
+    /// 8096 — « a server answers, but not Seerr »; once `/status` has answered
+    /// as Seerr, a later error is not the port's.
+    private static func stop(at error: Error, in report: SeerrTestReport, atStatus: Bool = false) -> SeerrTestReport {
         var report = report
         if error is CancellationError { return SeerrTestReport() }
-        // Only a transport failure is « nothing answers ». Any HTTP answer
-        // that is not Seerr's — Jellyfin's own empty 404 on `/api/v1/status`
-        // when the port is 8096 — is « a server answers, but not Seerr ».
         switch error as? SeerrError {
         case .redirected: report.failure = .redirected
+        case .notSeerr: report.failure = .notSeerr
         case .unreachable, nil: report.failure = .unreachable
-        case .some: report.failure = .notSeerr
+        case .some: report.failure = atStatus ? .notSeerr : .unreachable
         }
         return report
     }
