@@ -66,6 +66,22 @@ struct LogScrubberExportMarkerTests {
         #expect(LogScrubber.scrubbed("api_key=\"abc\"&x=1") == "api_key=\"***\"&x=1")
     }
 
+    @Test("Seerr secrets: X-Api-Key, connect.sid cookie (percent-encoded value), Quick Connect secret")
+    func scrubsSeerrSecrets() {
+        let key = LogScrubber.scrubbed("X-Api-Key: abc")
+        #expect(!key.contains("abc"))
+        let cookie = LogScrubber.scrubbed("Cookie: connect.sid=s%3AsessXYZ.sigABC")
+        #expect(!cookie.contains("sessXYZ"))
+        #expect(!cookie.contains("sigABC"))
+        let encoded = LogScrubber.scrubbed("redirect?c=connect.sid%3Ds%3AsessXYZ.sigABC&x=1")
+        #expect(!encoded.contains("sessXYZ"))
+        #expect(!encoded.contains("sigABC"))
+        #expect(encoded.hasSuffix("&x=1"))
+        let secret = LogScrubber.scrubbed("check?secret=deadbeef")
+        #expect(!secret.contains("deadbeef"))
+        #expect(!LogScrubber.scrubbed("check?secret%3Ddeadbeef").contains("deadbeef"))
+    }
+
     @Test("text that merely mentions tokens is left alone")
     func mentionsAreUntouched() {
         let message = "session tokens are refreshed on foreground"
