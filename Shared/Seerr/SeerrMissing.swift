@@ -8,6 +8,12 @@ enum SeerrBadge: Equatable, Sendable {
     case request, pending, processing, declined
 }
 
+/// TMDb movie and TV ids overlap: ownership is per kind.
+struct SeerrOwnedKey: Hashable, Sendable {
+    let kind: SeerrMediaKind
+    let tmdbId: Int
+}
+
 struct SeerrMissingTitle: Identifiable, Equatable, Sendable {
     let title: SeerrTitle
     let badge: SeerrBadge
@@ -41,25 +47,31 @@ enum SeerrImages {
 
 /// Pure: what the Jellyfin library lacks, and how each missing item stands.
 enum SeerrMissing {
-    /// The TMDb ids of owned items (provider key matched case-insensitively;
-    /// non-numeric values ignored).
-    static func ownedTmdbIds(_ items: [BaseItemDto]) -> Set<Int> {
-        var ids = Set<Int>()
+    /// The owned (kind, TMDb id) pairs: movies and series only; provider key
+    /// matched case-insensitively, non-numeric values ignored.
+    static func ownedTmdbIds(_ items: [BaseItemDto]) -> Set<SeerrOwnedKey> {
+        var ids = Set<SeerrOwnedKey>()
         for item in items {
+            let kind: SeerrMediaKind
+            switch item.type {
+            case .movie: kind = .movie
+            case .series: kind = .tv
+            default: continue
+            }
             guard let value = item.providerIDs?.first(where: { $0.key.lowercased() == "tmdb" })?.value,
                   let id = Int(value) else { continue }
-            ids.insert(id)
+            ids.insert(SeerrOwnedKey(kind: kind, tmdbId: id))
         }
         return ids
     }
 
     /// Candidates minus what Jellyfin owns and what Seerr has (partially)
     /// available or blocklisted; deleted stays missing. Seerr's order kept.
-    static func titles(_ candidates: [SeerrTitle], owned: Set<Int>) -> [SeerrMissingTitle] {
+    static func titles(_ candidates: [SeerrTitle], owned: Set<SeerrOwnedKey>) -> [SeerrMissingTitle] {
         var seen = Set<String>()
         var result: [SeerrMissingTitle] = []
         for candidate in candidates {
-            guard !owned.contains(candidate.tmdbId) else { continue }
+            guard !owned.contains(SeerrOwnedKey(kind: candidate.kind, tmdbId: candidate.tmdbId)) else { continue }
             switch candidate.mediaInfo?.status {
             case .partiallyAvailable, .available, .blocklisted: continue
             default: break
@@ -70,6 +82,8 @@ enum SeerrMissing {
         return result
     }
 
+    /// Deleted media shows « Demander » even if it still holds a pending
+    /// request (Seerr would answer 409; rare).
     static func badge(_ info: SeerrMediaInfo?) -> SeerrBadge {
         guard let info, info.status != .deleted else { return .request }
         if let badge = badge(for: info.requests) { return badge }
@@ -95,11 +109,21 @@ enum SeerrMissing {
                   seen.insert(number).inserted else { continue }
             let seerrStatus = info?.seasons.first { $0.seasonNumber == number }?.status
             if seerrStatus == .available || seerrStatus == .partiallyAvailable { continue }
-            let badge = info.flatMap { badge(for: $0.requests.filter { $0.seasons.contains(number) }) }
+            let badge = info.flatMap { seasonBadge(for: $0.requests.filter { $0.seasons.contains(number) }) }
                 ?? (seerrStatus == .processing ? .processing : .request)
             result.append(SeerrMissingSeason(seriesTmdbId: tv.tmdbId, seasonNumber: number, badge: badge))
         }
         return result
+    }
+
+    /// Per season: a COMPLETED request is left out (Seerr completes approved
+    /// and failed requests when a season becomes deleted, and accepts a new
+    /// one); a FAILED latest request reads as processing (Seerr refuses a new
+    /// request for it with 202).
+    private static func seasonBadge(for requests: [SeerrRequestSummary]) -> SeerrBadge? {
+        let live = requests.filter { $0.status != .completed }
+        if let latest = live.max(by: { $0.id < $1.id }), latest.status == .failed { return .processing }
+        return badge(for: live)
     }
 
     /// The most recent request decides; a failed one says nothing.

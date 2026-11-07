@@ -33,7 +33,8 @@ public enum SeerrAddress {
     }
 
     /// `endpoint` (starting with `/`) under `base`, keeping the sub-path of a
-    /// Seerr hosted at `https://host/seerr` (`setEndpointPath`).
+    /// Seerr hosted at `https://host/seerr` (`setEndpointPath`). The endpoint is NOT percent-escaped: for fixed root
+    /// routes outside `/api/v1` (e.g. the image proxy) only.
     public static func endpoint(_ endpoint: String, on base: URL) -> URL? {
         guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return nil }
         components.setEndpointPath(endpoint, preservingBasePathOf: base)

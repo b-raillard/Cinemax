@@ -20,8 +20,9 @@ private func show(
         mediaInfo: info)
 }
 
-private func owned(_ providers: [String: String]) -> BaseItemDto {
+private func owned(_ providers: [String: String], _ type: BaseItemKind = .movie) -> BaseItemDto {
     var item = BaseItemDto()
+    item.type = type
     item.providerIDs = providers
     return item
 }
@@ -155,11 +156,30 @@ struct SeerrMissingTests {
         #expect(!called.didFire)
     }
 
+    @Test("a deadline bounds an op that ignores cancellation", .timeLimit(.minutes(1)))
+    func deadlineBoundsAnOpThatIgnoresCancellation() async {
+        let (session, _) = await connectedSession()
+        let started = TestLatch()
+        let release = TestLatch()
+
+        let load = Task {
+            await session.loadSection(deadline: {}) { _, _ -> [Int] in
+                started.open()
+                await release.wait()
+                return [1]
+            }
+        }
+        await started.wait()
+
+        #expect(await load.value == .hidden)
+        release.open()
+    }
+
     // MARK: Missing titles
 
     @Test("Jellyfin wins by TMDb id")
     func jellyfinWinsByTmdbId() {
-        let result = SeerrMissing.titles([movie(1), movie(2)], owned: [1])
+        let result = SeerrMissing.titles([movie(1), movie(2)], owned: [SeerrOwnedKey(kind: .movie, tmdbId: 1)])
         #expect(result.map(\.title.tmdbId) == [2])
     }
 
@@ -186,10 +206,10 @@ struct SeerrMissingTests {
     @Test("the owned ids read a lowercase provider key and skip non-numbers")
     func ownedIdsReadLowercaseKey() {
         let ids = SeerrMissing.ownedTmdbIds([
-            owned(["tmdb": "10"]), owned(["Tmdb": "11"]), owned(["TMDB": "12"]),
-            owned(["Tmdb": "tt1"]), owned(["Imdb": "13"]), BaseItemDto(),
+            owned(["tmdb": "10"]), owned(["Tmdb": "11"], .series), owned(["TMDB": "12"]),
+            owned(["Tmdb": "tt1"]), owned(["Imdb": "13"]), owned(["Tmdb": "14"], .episode), BaseItemDto(),
         ])
-        #expect(ids == [10, 11, 12])
+        #expect(ids == [.init(kind: .movie, tmdbId: 10), .init(kind: .tv, tmdbId: 11), .init(kind: .movie, tmdbId: 12)])
     }
 
     // MARK: Badges
@@ -249,6 +269,39 @@ struct SeerrMissingTests {
             show(seasons: [1, 2, 3, 4, 5], info: info), ownedSeasonNumbers: [1], includeSpecials: false)
         #expect(result.map(\.seasonNumber) == [4, 5])
         #expect(result.map(\.badge) == [.processing, .request])
+    }
+
+    @Test("a deleted season can be requested again, past its completed request")
+    func deletedSeasonIsRequestable() {
+        let done = SeerrRequestSummary(id: 1, status: .completed, seasons: [3])
+        let deleted = SeerrMediaInfo(status: .partiallyAvailable, seasons: [.init(seasonNumber: 3, status: .deleted)], requests: [done])
+        #expect(SeerrMissing.seasons(show(seasons: [3], info: deleted), ownedSeasonNumbers: [], includeSpecials: false)
+            .map(\.badge) == [.request])
+        let again = SeerrMediaInfo(
+            status: .partiallyAvailable, seasons: [.init(seasonNumber: 3, status: .deleted)],
+            requests: [done, .init(id: 2, status: .pending, seasons: [3])])
+        #expect(SeerrMissing.seasons(show(seasons: [3], info: again), ownedSeasonNumbers: [], includeSpecials: false)
+            .map(\.badge) == [.pending])
+    }
+
+    @Test("a failed season request reads as processing")
+    func failedSeasonRequestIsProcessing() {
+        let info = SeerrMediaInfo(status: .pending, requests: [.init(id: 1, status: .failed, seasons: [1])])
+        #expect(SeerrMissing.seasons(show(seasons: [1], info: info), ownedSeasonNumbers: [], includeSpecials: false)
+            .map(\.badge) == [.processing])
+    }
+
+    @Test("ownership is per kind")
+    func ownershipIsPerKind() {
+        let series = SeerrTitle(kind: .tv, tmdbId: 42, title: "T")
+        let result = SeerrMissing.titles([series, movie(42)], owned: [SeerrOwnedKey(kind: .movie, tmdbId: 42)])
+        #expect(result.map(\.id) == ["tv-42"])
+    }
+
+    @Test("a deleted title with old completed requests is requestable")
+    func deletedWithOldRequestsIsRequestable() {
+        let info = SeerrMediaInfo(status: .deleted, requests: [.init(id: 1, status: .completed, seasons: [])])
+        #expect(SeerrMissing.badge(info) == .request)
     }
 
     // MARK: Poster
