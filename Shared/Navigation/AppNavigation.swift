@@ -466,9 +466,6 @@ struct AppNavigation: View {
         .environment(earlyAdopter)
         .environment(proStore)
         .environment(accountLocks)
-        // Every Seerr link of this chain lives in ONE modifier — see
-        // `SeerrRootWiring`, and keep new ones there.
-        .modifier(SeerrRootWiring(seerr: seerr, appState: appState, proAccess: proAccess))
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         #if os(iOS)
         .environment(reviewPrompt)
@@ -497,16 +494,12 @@ struct AppNavigation: View {
             loc: loc,
             toast: toasts
         ))
-        // The Seerr request flow: raised from cards in lazy grids, so it is
-        // hosted once here too.
-        .environment(seerrRequests)
-        .modifier(SeerrRequestPresentation(
-            presenter: seerrRequests,
-            session: seerr,
-            appState: appState,
-            themeManager: themeManager,
-            loc: loc,
-            toasts: toasts
+        // Every Seerr link of this chain lives in ONE modifier — see
+        // `SeerrRootWiring`, and keep new ones there. It also hosts the Seerr
+        // request flow, raised from cards in lazy grids like the playlist sheet.
+        .modifier(SeerrRootWiring(
+            seerr: seerr, requests: seerrRequests, appState: appState, proAccess: proAccess,
+            themeManager: themeManager, loc: loc, toasts: toasts
         ))
         .environment(cardActions)
         .environment(proAccess)
@@ -934,8 +927,12 @@ private extension AppNavigation {
 /// language, the network); the hooks are wired in `bootstrap()`.
 private struct SeerrRootWiring: ViewModifier {
     let seerr: SeerrSession
+    let requests: SeerrRequestPresenter
     let appState: AppState
     let proAccess: ProFeatureAccess
+    let themeManager: ThemeManager
+    let loc: LocalizationManager
+    let toasts: ToastCenter
 
     func body(content: Content) -> some View {
         content
@@ -945,5 +942,16 @@ private struct SeerrRootWiring: ViewModifier {
             .onChange(of: proAccess.allows(.requests)) { _, _ in
                 Task { await seerr.reload(appState: appState) }
             }
+            // The Seerr request flow: raised from cards in lazy grids, so it
+            // is hosted once here (same reason as the playlist sheet).
+            .environment(requests)
+            .modifier(SeerrRequestPresentation(
+                presenter: requests,
+                session: seerr,
+                appState: appState,
+                themeManager: themeManager,
+                loc: loc,
+                toasts: toasts
+            ))
     }
 }
