@@ -83,7 +83,33 @@ struct MissingTitlesRow<Element: Identifiable & Equatable & Sendable, Card: View
         }
     }
 
+    @ViewBuilder
     private func header(count: String?, action: MissingHeaderAction?) -> some View {
+        #if os(tvOS)
+        titleLine(count: count)
+        #else
+        if let action {
+            // Title and action on one line when both fit; otherwise the action
+            // goes under the title — never a truncated title (« Pas encore
+            // dans ta… » beside « Demander les 3 » on an iPhone, in French).
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
+                    titleLine(count: count)
+                    Spacer(minLength: CinemaSpacing.spacing2)
+                    actionButton(action)
+                }
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                    titleLine(count: count)
+                    actionButton(action)
+                }
+            }
+        } else {
+            titleLine(count: count)
+        }
+        #endif
+    }
+
+    private func titleLine(count: String?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
             Text(title)
                 .font(titleFont)
@@ -97,19 +123,20 @@ struct MissingTitlesRow<Element: Identifiable & Equatable & Sendable, Card: View
                     .foregroundStyle(CinemaColor.onSurfaceMuted)
                     .lineLimit(1)
             }
-            Spacer()
-            #if !os(tvOS)
-            if let action {
-                Button(action: action.perform) {
-                    Text(action.label)
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(themeManager.accent)
-                }
-                .buttonStyle(.plain)
-            }
-            #endif
         }
     }
+
+    #if !os(tvOS)
+    private func actionButton(_ action: MissingHeaderAction) -> some View {
+        Button(action: action.perform) {
+            Text(action.label)
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(themeManager.accent)
+                .lineLimit(1)
+        }
+        .buttonStyle(.plain)
+    }
+    #endif
 
     private enum RowItem: Identifiable {
         case card(Element)
