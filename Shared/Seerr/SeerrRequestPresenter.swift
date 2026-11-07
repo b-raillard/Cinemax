@@ -18,11 +18,12 @@ enum SeerrRequestDraft: Identifiable, Equatable {
     }
 
     /// The numbers the sheet ticks by default: every season / film.
-    var defaultSelection: Set<Int> {
+    /// Without partial requests Seerr takes the whole series: all seasons.
+    func defaultSelection(partial: Bool) -> Set<Int> {
         switch self {
         case .movie: return []
         case .series(_, let seasons, let preselected):
-            return preselected.isEmpty ? Set(seasons) : preselected.intersection(seasons)
+            return preselected.isEmpty || !partial ? Set(seasons) : preselected.intersection(seasons)
         case .films(let titles): return Set(titles.map(\.tmdbId))
         }
     }
@@ -41,6 +42,12 @@ final class SeerrRequestPresenter {
 
     func present(_ draft: SeerrRequestDraft) { self.draft = draft }
 
+    /// The account changed: another profile's requests are not this one's.
+    func reset() {
+        overrides = [:]
+        draft = nil
+    }
+
     func badge(for id: String, default fallback: SeerrBadge) -> SeerrBadge {
         overrides[id] ?? fallback
     }
@@ -48,6 +55,13 @@ final class SeerrRequestPresenter {
     /// « Le téléchargement démarre tout de suite » or « l'admin doit valider ».
     static func nextStepKey(permissions: SeerrPermissions, kind: SeerrMediaKind) -> String {
         permissions.autoApproves(kind) ? "seerr.request.next.auto" : "seerr.request.next.approval"
+    }
+
+    /// What `submit` will really send for `selection`: with partial requests
+    /// off, every requestable season whatever was picked. Labels read this.
+    static func effectiveSelection(_ draft: SeerrRequestDraft, _ selection: Set<Int>, partial: Bool) -> Set<Int> {
+        if case .series(_, let seasons, _) = draft, !partial { return Set(seasons) }
+        return selection
     }
 
     // MARK: Labels
@@ -70,10 +84,11 @@ final class SeerrRequestPresenter {
         switch draft {
         case .movie:
             return loc.localized("seerr.request.action.movie")
-        case .series(_, let seasons, _):
+        case .series:
             #if os(tvOS)
             return seasonsActionTitle(selection.sorted(), loc: loc)
             #else
+            guard case .series(_, let seasons, _) = draft else { return "" }
             if selection.count == seasons.count { return loc.localized("seerr.request.action.series") }
             return loc.counted("seerr.request.action.seasons", selection.count)
             #endif
@@ -112,8 +127,11 @@ final class SeerrRequestPresenter {
         var permissions = SeerrPermissions()
         if case .connected(let user) = session.connection { permissions = user.permissions }
 
+        // Films 2…n must never go out under another account.
+        let account = session.activeAccountKeyProvider()
         var outcomes: [Result] = []
         for job in jobs {
+            guard session.activeAccountKeyProvider() == account else { return }
             let request = job.request
             do {
                 _ = try await session.perform { client, credential in
@@ -215,7 +233,9 @@ struct SeerrRequestPresentation: ViewModifier {
             titleVisibility: .visible,
             presenting: presenter.draft
         ) { draft in
-            let selection = draft.defaultSelection
+            let partial = session.publicSettings?.partialRequestsEnabled ?? true
+            let selection = SeerrRequestPresenter.effectiveSelection(
+                draft, draft.defaultSelection(partial: partial), partial: partial)
             Button(SeerrRequestPresenter.actionTitle(for: draft, selection: selection, loc: loc)) {
                 Task { await presenter.submit(draft, selection: selection, session: session, loc: loc, toasts: toasts) }
             }
@@ -238,7 +258,8 @@ struct SeerrRequestPresentation: ViewModifier {
     private var dialogTitle: String {
         switch presenter.draft {
         case .movie(let title), .series(let title, _, _): title.title
-        case .films, nil: ""
+        case .films(let titles): loc.counted("seerr.request.films.header", titles.count)
+        case nil: ""
         }
     }
     #endif
@@ -262,7 +283,7 @@ struct SeerrRequestSheet: View {
 
     init(draft: SeerrRequestDraft) {
         self.draft = draft
-        _selection = State(initialValue: draft.defaultSelection)
+        _selection = State(initialValue: draft.defaultSelection(partial: true))
     }
 
     var body: some View {
@@ -273,7 +294,7 @@ struct SeerrRequestSheet: View {
                     choices
                     nextStep
                     CinemaButton(
-                        title: SeerrRequestPresenter.actionTitle(for: draft, selection: selection, loc: loc),
+                        title: SeerrRequestPresenter.actionTitle(for: draft, selection: effective, loc: loc),
                         style: .accent, isLoading: sending
                     ) { send() }
                     .disabled(!canSend)
@@ -291,9 +312,15 @@ struct SeerrRequestSheet: View {
         .presentationDetents([.medium, .large])
     }
 
+    /// The ticks are hidden without partial requests: everything goes.
+    private var effective: Set<Int> {
+        SeerrRequestPresenter.effectiveSelection(
+            draft, selection, partial: session.publicSettings?.partialRequestsEnabled ?? true)
+    }
+
     private var canSend: Bool {
         if case .movie = draft { return !sending }
-        return !selection.isEmpty && !sending
+        return !effective.isEmpty && !sending
     }
 
     private var leadTitle: SeerrTitle? {
@@ -381,6 +408,7 @@ struct SeerrRequestSheet: View {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: CinemaScale.pt(22), weight: .semibold))
                     .foregroundStyle(isOn ? themeManager.accent : CinemaColor.onSurfaceMuted)
+                    .accessibilityHidden(true)
                 Text(label)
                     .font(CinemaFont.dynamicBody)
                     .foregroundStyle(CinemaColor.onSurface)
@@ -406,7 +434,7 @@ struct SeerrRequestSheet: View {
 
     private func send() {
         sending = true
-        let chosen = selection
+        let chosen = effective
         Task {
             await presenter.submit(draft, selection: chosen, session: session, loc: loc, toasts: toasts)
             sending = false

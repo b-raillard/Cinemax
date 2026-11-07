@@ -468,4 +468,63 @@ struct SeerrRequestFlowTests {
         #expect(label([4, 5, 6]) == loc.localized("seerr.request.action.seasonRange", 4, 6))
         #expect(label([1, 3]) == loc.counted("seerr.request.action.seasons", 2))
     }
+
+    @Test("without partial requests the label names what is sent")
+    func nonPartialLabelMatchesPayload() async {
+        let bench = await requestBench(partialRequests: false)
+        bench.stub.enqueue(created("tv"))
+        let draft = SeerrRequestDraft.series(series, seasons: [2, 3, 4], preselected: [4])
+        let effective = SeerrRequestPresenter.effectiveSelection(draft, draft.defaultSelection(partial: false), partial: false)
+        #expect(effective == [2, 3, 4])
+        #expect(draft.defaultSelection(partial: true) == [4])
+        // Even a stray selection of one season labels the whole.
+        #expect(SeerrRequestPresenter.effectiveSelection(draft, [4], partial: false) == [2, 3, 4])
+        #expect(SeerrRequestPresenter.actionTitle(for: draft, selection: effective, loc: loc)
+                != SeerrRequestPresenter.actionTitle(for: draft, selection: [4], loc: loc))
+        await SeerrRequestPresenter().submit(
+            draft, selection: effective, session: bench.session, loc: loc, toasts: ToastCenter())
+        #expect(sentBody(bench.stub, 0)?["seasons"] as? [Int] == [2, 3, 4])
+    }
+
+    @Test("films stop going out once the account changed")
+    func filmsStopOnAccountSwitch() async {
+        let bench = await requestBench()
+        let box = KeyBox("S1|A")
+        bench.session.activeAccountKeyProvider = { box.value }
+        bench.stub.enqueue(created())
+        bench.stub.enqueue(created())
+        bench.stub.onSend = { box.value = "S1|B" }
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        let films = (1...3).map { SeerrTitle(kind: .movie, tmdbId: $0, title: "F\($0)") }
+        await presenter.submit(.films(films), selection: [1, 2, 3], session: bench.session, loc: loc, toasts: toasts)
+        #expect(bench.stub.requests.filter { $0.httpMethod == "POST" }.count == 1)
+        #expect(presenter.badge(for: "movie-1", default: .request) == .request)
+        #expect(toasts.current == nil)
+    }
+
+    @Test("an account change forgets the overrides and any open draft")
+    func resetClearsOverrides() async {
+        let bench = await requestBench()
+        bench.stub.enqueue(created())
+        let presenter = SeerrRequestPresenter()
+        let film = SeerrTitle(kind: .movie, tmdbId: 5, title: "Film")
+        presenter.present(.movie(film))
+        await presenter.submit(.movie(film), selection: [], session: bench.session, loc: loc, toasts: ToastCenter())
+        #expect(presenter.badge(for: "movie-5", default: .request) == .pending)
+        presenter.present(.movie(film))
+        presenter.reset()
+        #expect(presenter.badge(for: "movie-5", default: .request) == .request)
+        #expect(presenter.draft == nil)
+    }
+}
+
+private final class KeyBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var key: String
+    init(_ key: String) { self.key = key }
+    var value: String {
+        get { lock.withLock { key } }
+        set { lock.withLock { key = newValue } }
+    }
 }

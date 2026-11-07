@@ -644,6 +644,7 @@ struct AppNavigation: View {
             // screen. `reload` repeats it before its first `await` — this is
             // the early close, not the only one.
             seerr.accountDidChange(to: newKey)
+            seerrRequests.reset()
             // Signed out (`nil`): keep the loaded profile, as `activate(nil)`
             // always did — re-signing in must find it intact.
             guard let newKey else { return }
