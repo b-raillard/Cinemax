@@ -870,3 +870,62 @@ struct PersonDetailSeerrModelTests {
         #expect(transport.personRequestCount == 0)
     }
 }
+
+// MARK: - One presentation context at a time (I3)
+
+/// The deep-link fiche is a modal over the tabs: the root-hosted sheets cannot
+/// present over it, so it hosts its own — and the root stands down meanwhile.
+@MainActor
+@Suite("Root-hosted flows inside the deep-link modal")
+struct ModalPresentationHostTests {
+    private let film = SeerrTitle(kind: .movie, tmdbId: 5, title: "Film")
+
+    @Test("a Seerr request raised while the modal is up is presented by the modal only")
+    func seerrRequestHasOneHost() {
+        let presenter = SeerrRequestPresenter()
+        presenter.present(.movie(film))
+        #expect(presenter.draft(for: .root) == .movie(film))     // no modal: the root presents
+
+        presenter.draft = nil
+        presenter.modalHostAppeared()
+        presenter.present(.movie(film))
+        #expect(presenter.draft(for: .root) == nil)
+        #expect(presenter.draft(for: .modal) == .movie(film))
+
+        // The modal leaves with its request: the root never raises it afterwards.
+        presenter.modalHostDisappeared()
+        #expect(presenter.draft == nil)
+        #expect(presenter.draft(for: .root) == nil)
+        presenter.present(.movie(film))
+        #expect(presenter.draft(for: .root) == .movie(film))
+    }
+
+    @Test("a modal replacing a modal keeps the root stood down")
+    func overlappingModalsKeepTheRootDown() {
+        let presenter = SeerrRequestPresenter()
+        presenter.modalHostAppeared()       // the new fiche appears…
+        presenter.modalHostAppeared()
+        presenter.modalHostDisappeared()    // …before the old one's disappear
+        presenter.present(.movie(film))
+        #expect(presenter.draft(for: .root) == nil)
+        #expect(presenter.draft(for: .modal) == .movie(film))
+    }
+
+    @Test("« Ajouter à une playlist » follows the same rule")
+    func playlistRequestHasOneHost() {
+        let presenter = AddToPlaylistPresenter()
+        presenter.present(itemId: "item", title: "Film")
+        #expect(presenter.request(for: .root)?.itemId == "item")
+
+        presenter.request = nil
+        presenter.modalHostAppeared()
+        presenter.present(itemId: "item", title: "Film")
+        #expect(presenter.request(for: .root) == nil)
+        #expect(presenter.request(for: .modal)?.itemId == "item")
+
+        presenter.modalHostDisappeared()
+        #expect(presenter.request == nil)
+        presenter.present(itemId: "item", title: "Film")
+        #expect(presenter.request(for: .root)?.itemId == "item")
+    }
+}

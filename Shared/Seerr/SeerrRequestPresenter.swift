@@ -52,6 +52,23 @@ final class SeerrRequestPresenter {
 
     func present(_ draft: SeerrRequestDraft) { self.draft = draft }
 
+    /// The draft as `host` should present it. While the deep-link modal is up
+    /// it is the one presenter (the root cannot present over it); otherwise
+    /// the root is.
+    func draft(for host: PresentationHost) -> SeerrRequestDraft? {
+        host == .modal || modalHosts == 0 ? draft : nil
+    }
+
+    /// Deep-link modals on screen (a counter: a new one may appear before
+    /// the old one's disappear).
+    private(set) var modalHosts = 0
+    func modalHostAppeared() { modalHosts += 1 }
+    /// The modal leaves with its request: the root never raises it afterwards.
+    func modalHostDisappeared() {
+        modalHosts = max(0, modalHosts - 1)
+        draft = nil
+    }
+
     /// A missing title's card was tapped (search, fiches, saga, actor page).
     /// Already asked for — the EFFECTIVE badge (`badge(for:default:)`) is
     /// pending or in preparation — ⇒ an info toast, nothing opens; declined or
@@ -379,14 +396,24 @@ struct SeerrRequestPresentation: ViewModifier {
     let themeManager: ThemeManager
     let loc: LocalizationManager
     let toasts: ToastCenter
+    /// `.modal`: hosted inside the deep-link fiche (`MainTabView`), which
+    /// then presents instead of the root — see `PresentationHost`.
+    var host: PresentationHost = .root
 
     func body(content: Content) -> some View {
+        presented(content)
+            .onAppear { if host == .modal { presenter.modalHostAppeared() } }
+            .onDisappear { if host == .modal { presenter.modalHostDisappeared() } }
+    }
+
+    @ViewBuilder
+    private func presented(_ content: Content) -> some View {
         #if os(tvOS)
         content.confirmationDialog(
             dialogTitle,
-            isPresented: Binding(get: { presenter.draft != nil }, set: { if !$0 { presenter.draft = nil } }),
+            isPresented: Binding(get: { presenter.draft(for: host) != nil }, set: { if !$0 { presenter.draft = nil } }),
             titleVisibility: .visible,
-            presenting: presenter.draft
+            presenting: presenter.draft(for: host)
         ) { draft in
             let partial = session.publicSettings?.partialRequestsEnabled ?? true
             let selection = SeerrRequestPresenter.effectiveSelection(
@@ -405,7 +432,7 @@ struct SeerrRequestPresentation: ViewModifier {
             Button(loc.localized("action.cancel"), role: .cancel) {}
         }
         #else
-        content.sheet(item: Binding(get: { presenter.draft }, set: { presenter.draft = $0 })) { draft in
+        content.sheet(item: Binding(get: { presenter.draft(for: host) }, set: { presenter.draft = $0 })) { draft in
             SeerrRequestSheet(draft: draft)
                 .environment(appState)
                 .environment(themeManager)

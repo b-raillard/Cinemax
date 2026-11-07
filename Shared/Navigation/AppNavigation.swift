@@ -488,7 +488,7 @@ struct AppNavigation: View {
         // out. Hosting it once at the root also lets every grid, the search
         // results and the detail screen share one sheet with no plumbing.
         .modifier(AddToPlaylistPresentation(
-            request: $playlistPresenter.request,
+            presenter: playlistPresenter,
             appState: appState,
             themeManager: themeManager,
             loc: loc,
