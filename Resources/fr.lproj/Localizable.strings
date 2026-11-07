@@ -1634,6 +1634,8 @@
 "seerr.request.refusedCount" = "%d refusées";
 "seerr.request.refusedCount.one" = "%d refusée";
 "seerr.request.duplicate" = "Déjà demandé";
+"seerr.request.already.pending" = "En attente de validation";
+"seerr.request.already.processing" = "En préparation";
 "seerr.request.forbidden.title" = "La demande a été refusée";
 "seerr.request.forbidden.fix" = "Tes droits ou ton quota ne le permettent pas. Demande à l'admin de vérifier dans Seerr.";
 "seerr.request.noSeasons" = "Aucune saison à demander";

@@ -1632,6 +1632,8 @@
 "seerr.request.refusedCount" = "%d abgelehnt";
 "seerr.request.refusedCount.one" = "%d abgelehnt";
 "seerr.request.duplicate" = "Bereits angefragt";
+"seerr.request.already.pending" = "Wartet auf Freigabe";
+"seerr.request.already.processing" = "In Vorbereitung";
 "seerr.request.forbidden.title" = "Die Anfrage wurde abgelehnt";
 "seerr.request.forbidden.fix" = "Deine Berechtigungen oder dein Kontingent erlauben es nicht. Bitte den Admin, in Seerr nachzusehen.";
 "seerr.request.noSeasons" = "Keine Staffel zum Anfragen";

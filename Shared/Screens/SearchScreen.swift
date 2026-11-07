@@ -418,7 +418,7 @@ struct SearchScreen: View {
                 isSigningInToSeerr: isSigningInToSeerr,
                 onGoToSeries: { seriesDestination = SeriesDestination(id: $0) },
                 onRequest: { missing in
-                    Task { await seerrRequests.request(missing.title, session: seerr, loc: loc, toasts: toasts) }
+                    Task { await seerrRequests.request(missing, session: seerr, loc: loc, toasts: toasts) }
                 },
                 onSeerrSignIn: { Task { await signInToSeerr() } },
                 onSeerrLater: dismissSeerrPrompt
@@ -981,6 +981,9 @@ private struct SeerrSearchPromptCard: View {
     let onLater: () -> Void
 
     @Environment(LocalizationManager.self) private var loc
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
@@ -1011,11 +1014,13 @@ private struct SeerrSearchPromptCard: View {
         .glassPanel()
     }
 
+    /// The prose measure: capped on a wide iPad and on tvOS, the full
+    /// column on an iPhone.
     private var maxWidth: CGFloat {
         #if os(tvOS)
         CinemaTVLayout.readingMaxWidth
         #else
-        560
+        AdaptiveLayout.readingMaxWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass)) ?? .infinity
         #endif
     }
 }

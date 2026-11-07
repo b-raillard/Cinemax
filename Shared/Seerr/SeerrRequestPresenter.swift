@@ -39,19 +39,38 @@ final class SeerrRequestPresenter {
     /// Keyed by `SeerrMissingTitle.id` (`"tv-90228"`) or, for a season,
     /// `"tv-90228-s4"`.
     private(set) var overrides: [String: SeerrBadge] = [:]
+    /// Series whose seasons are being looked up (`SeerrMissingTitle.id`):
+    /// repeated taps do not fire repeated `/tv/{id}` calls.
+    @ObservationIgnored private var lookingUp: Set<String> = []
 
     func present(_ draft: SeerrRequestDraft) { self.draft = draft }
 
-    /// A missing title's card was tapped (search, actor page): a film opens
-    /// the request at once; a series first asks Seerr for its seasons — the
-    /// library has none of them, so every season Seerr lacks is offered, all
-    /// ticked. A failed lookup says so quietly, never naming Seerr; an account
-    /// change on the way says nothing.
-    func request(_ title: SeerrTitle, session: SeerrSession, loc: LocalizationManager, toasts: ToastCenter) async {
+    /// A missing title's card was tapped (search, fiches, saga, actor page).
+    /// Already asked for — the EFFECTIVE badge (`badge(for:default:)`) is
+    /// pending or in preparation — ⇒ an info toast, nothing opens; declined or
+    /// never asked ⇒ the request. A film opens it at once; a series first asks
+    /// Seerr for its seasons — the library has none of them, so every season
+    /// Seerr lacks is offered, all ticked — one lookup per series at a time. A
+    /// failed lookup says so quietly, never naming Seerr; an account change on
+    /// the way says nothing.
+    func request(_ missing: SeerrMissingTitle, session: SeerrSession, loc: LocalizationManager, toasts: ToastCenter) async {
+        switch badge(for: missing.id, default: missing.badge) {
+        case .pending:
+            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.pending"))
+            return
+        case .processing:
+            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.processing"))
+            return
+        case .request, .declined:
+            break
+        }
+        let title = missing.title
         guard title.kind == .tv else {
             present(.movie(title))
             return
         }
+        guard lookingUp.insert(missing.id).inserted else { return }
+        defer { lookingUp.remove(missing.id) }
         let tmdbId = title.tmdbId
         let details: SeerrTVDetails
         do {

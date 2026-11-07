@@ -342,8 +342,11 @@ final class SearchViewModel {
     /// (`SeerrSession.snapshot()`): another profile's never shows, even once
     /// that profile's own Seerr is connected.
     func seerrSection(for current: SeerrSession.Snapshot?) -> MissingSection<SeerrMissingTitle> {
+        // Read FIRST, whatever the guard says: the view must observe the
+        // section, or it never re-renders once the section changes.
+        let section = seerrSection
         guard let current, current == seerrSnapshot else { return .hidden }
-        return seerrSection
+        return section
     }
 
     private func setSeerrSection(_ section: MissingSection<SeerrMissingTitle>, snapshot: SeerrSession.Snapshot?) {
