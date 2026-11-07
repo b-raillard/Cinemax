@@ -36,6 +36,15 @@ private struct LossyPart: Decodable {
     }
 }
 
+/// `/movie/{id}`: Seerr serves it WITHOUT `mediaType` (measured on 3.5.1,
+/// 2026-11-07) — only search results and credits carry one.
+struct SeerrMovieDetails: Decodable {
+    let title: SeerrTitle
+    init(from decoder: Decoder) throws {
+        title = try SeerrTitle(from: decoder, defaultKind: .movie)
+    }
+}
+
 // MARK: - Server
 
 public struct SeerrStatusInfo: Sendable, Equatable, Decodable {
@@ -346,15 +355,21 @@ public struct SeerrTVDetails: Sendable, Equatable, Decodable {
     public let name: String
     public let seasons: [SeerrSeason]
     public let mediaInfo: SeerrMediaInfo?
+    /// The TMDb poster path (Mes demandes' rows).
+    public let posterPath: String?
 
-    public init(tmdbId: Int, name: String, seasons: [SeerrSeason], mediaInfo: SeerrMediaInfo? = nil) {
+    public init(
+        tmdbId: Int, name: String, seasons: [SeerrSeason], mediaInfo: SeerrMediaInfo? = nil,
+        posterPath: String? = nil
+    ) {
         self.tmdbId = tmdbId
         self.name = name
         self.seasons = seasons
         self.mediaInfo = mediaInfo
+        self.posterPath = posterPath
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, seasons, mediaInfo }
+    private enum CodingKeys: String, CodingKey { case id, name, seasons, mediaInfo, posterPath }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -362,6 +377,7 @@ public struct SeerrTVDetails: Sendable, Equatable, Decodable {
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         seasons = try c.decodeIfPresent([SeerrSeason].self, forKey: .seasons) ?? []
         mediaInfo = try c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
+        posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
     }
 }
 

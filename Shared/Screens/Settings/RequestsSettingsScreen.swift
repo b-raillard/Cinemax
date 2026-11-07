@@ -1,8 +1,9 @@
 import SwiftUI
 import CinemaxKit
 
-/// Réglages → Demandes (Seerr, spec 2026-11-06), iOS AND tvOS. Three sections,
-/// in this order: **Connexion** (everyone who sees the page), then — Jellyfin
+/// Réglages → Demandes (Seerr, spec 2026-11-06), iOS AND tvOS. Four sections,
+/// in this order: **Mes demandes** (an enabled account signed in to Seerr,
+/// admin or not), **Connexion** (everyone who sees the page), then — Jellyfin
 /// admin only — **Configuration** (the address, « Tester la connexion » and its
 /// report, who may request) and **Sur cet appareil** (the optional API key).
 ///
@@ -29,6 +30,13 @@ struct RequestsSettingsScreen: View {
     @State private var keyText = ""
     /// The last report worth showing — an empty one (R19) never replaces it.
     @State private var report: SeerrTestReport?
+    /// The address `report` describes: an edit naming another one clears it.
+    @State private var reportAddress: URL?
+    /// Replaced on an account change, like `activation`.
+    @State private var myRequests = SeerrMyRequestsModel()
+    /// What « Mes demandes » was last loaded for (the tvOS `.task` re-fire
+    /// guard, as `loadedTrigger`).
+    @State private var myRequestsLoadedFor: MyRequestsTrigger?
     @State private var isTesting = false
     @State private var isSigningIn = false
     @State private var isBulkUpdating = false
@@ -62,6 +70,21 @@ struct RequestsSettingsScreen: View {
                     connection: seerr.connection, usesDeviceKey: seerr.usesDeviceKey, url: seerr.config?.url)
     }
 
+    /// Who « Mes demandes » lists, toward which Seerr.
+    private struct MyRequestsTrigger: Equatable {
+        let account: String?
+        let user: SeerrUserID
+        let url: URL?
+    }
+
+    /// `nil` = the section is not shown: an account Seerr is not enabled for
+    /// (an admin setting it up), or not signed in — the Connexion section
+    /// already invites to sign in.
+    private var myRequestsTrigger: MyRequestsTrigger? {
+        guard seerr.config?.isEnabled == true, case .connected(let user) = seerr.connection else { return nil }
+        return MyRequestsTrigger(account: appState.activeAccountKey, user: user.id, url: seerr.config?.url)
+    }
+
     /// Re-read at render: an account switch to a capped (or not enabled)
     /// profile while the page is open shows nothing of Seerr.
     private var isVisible: Bool {
@@ -85,6 +108,9 @@ struct RequestsSettingsScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             if isVisible {
+                if myRequestsTrigger != nil {
+                    myRequestsSection
+                }
                 connectionSection
                 if appState.isAdministrator {
                     configurationSection
@@ -95,11 +121,20 @@ struct RequestsSettingsScreen: View {
             }
         }
         .task(id: trigger) { await loadLinesIfNeeded() }
+        .task(id: myRequestsTrigger) { await loadMyRequestsIfNeeded() }
         .onAppear {
             seedAddress()
             refreshStoredKey()
         }
         .onChange(of: seerr.config?.url) { _, _ in seedAddress() }
+        // A report says what one address answered: editing the field to name
+        // another takes it away (recette R27).
+        .onChange(of: addressText) { _, typed in
+            if report != nil, !SeerrTestReport.stillApplies(typed: typed, testedAddress: reportAddress) {
+                report = nil
+                reportAddress = nil
+            }
+        }
         .onChange(of: appState.activeAccountKey) { _, _ in resetForAccountChange() }
         .alert(loc.localized("seerr.settings.disableAll"), isPresented: $showsDisableAllConfirm) {
             Button(loc.localized("seerr.settings.disableAll"), role: .destructive) {
@@ -109,6 +144,160 @@ struct RequestsSettingsScreen: View {
         } message: {
             Text(loc.localized("seerr.settings.disableAll.confirm"))
         }
+    }
+
+    // MARK: - Mes demandes
+
+    private var myRequestsSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            sectionHeader(loc.localized("seerr.settings.section.myRequests"))
+            myRequestsContent
+        }
+    }
+
+    @ViewBuilder
+    private var myRequestsContent: some View {
+        switch myRequests.phase {
+        case .idle, .loading:
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, CinemaSpacing.spacing3)
+        case .failed:
+            panel {
+                infoRow(icon: "info.circle", text: loc.localized("seerr.settings.connection.unavailable"))
+            }
+        case .loaded:
+            let rows = myRequests.rows
+            panel {
+                if rows.isEmpty {
+                    infoRow(icon: "tray", text: loc.localized("seerr.myRequests.empty"))
+                }
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    requestRow(row)
+                    if index < rows.count - 1 || myRequests.canLoadMore { divider }
+                }
+                if myRequests.canLoadMore {
+                    // Never `.disabled` while it loads: on tvOS that would
+                    // throw focus off the row being pressed; the model ignores
+                    // a second press itself.
+                    actionRow(id: "seerr.requests.more", icon: "ellipsis.circle",
+                              label: loc.localized("seerr.myRequests.more"), isBusy: myRequests.isLoadingMore) {
+                        Task { await myRequests.loadNextPage(session: seerr) }
+                    }
+                }
+            }
+        }
+    }
+
+    /// One request. tvOS: ONE focusable unit per row, an inert one included —
+    /// the remote scrolls by focus, so a row nobody can focus could not be
+    /// reached; Select opens an arrived title. iOS: only an arrived title is a
+    /// button.
+    @ViewBuilder
+    private func requestRow(_ row: SeerrRequestRow) -> some View {
+        let id = "seerr.request.\(row.id)"
+        let canWatch = SeerrMyRequestsModel.watchTarget(row.request) != nil
+        #if os(tvOS)
+        Button {
+            SeerrMyRequestsModel.watch(row.request, appState: appState)
+        } label: {
+            rowChrome(id: id) { requestRowContent(row, canWatch: canWatch) }
+        }
+        .buttonStyle(.plain)
+        .modifier(RowFocus(id: id, focus: focusBinding))
+        .accessibilityElement(children: .combine)
+        #else
+        if canWatch {
+            Button {
+                SeerrMyRequestsModel.watch(row.request, appState: appState)
+            } label: {
+                rowChrome(id: id) { requestRowContent(row, canWatch: true) }
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+        } else {
+            rowChrome(id: id) { requestRowContent(row, canWatch: false) }
+                .accessibilityElement(children: .combine)
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private func requestRowContent(_ row: SeerrRequestRow, canWatch: Bool) -> some View {
+        let text = HStack(spacing: CinemaSpacing.spacing3) {
+            requestPoster(row)
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                Text(requestTitle(row))
+                    .font(rowLabelFont)
+                    .foregroundStyle(row.title == nil ? CinemaColor.onSurfaceVariant : CinemaColor.onSurface)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .redacted(reason: row.isTitlePending ? .placeholder : [])
+                    .accessibilityHidden(row.isTitlePending)
+                Text(loc.localized(SeerrMyRequestsModel.statusKey(row.request)))
+                    .font(rowDetailFont)
+                    .foregroundStyle(statusTint(row.request))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        let watch = Group {
+            if canWatch {
+                Label(loc.localized("seerr.myRequests.watch"), systemImage: "play.fill")
+                    .font(rowDetailFont.weight(.semibold))
+                    .foregroundStyle(themeManager.accent)
+            }
+        }
+        #if os(tvOS)
+        HStack(spacing: CinemaSpacing.spacing3) {
+            text.padding(.vertical, CinemaSpacing.spacing2)
+            Spacer(minLength: CinemaSpacing.spacing3)
+            watch
+        }
+        #else
+        SettingsRowAdaptiveLayout {
+            text
+        } control: {
+            watch
+        }
+        #endif
+    }
+
+    /// The title, or « Titre indisponible » once its lookup failed (a bar
+    /// while it is on its way); a series adds its seasons.
+    private func requestTitle(_ row: SeerrRequestRow) -> String {
+        let title = row.title ?? loc.localized("seerr.myRequests.titleUnavailable")
+        guard let seasons = SeerrMyRequestsModel.seasonsSuffix(row.request, loc: loc) else { return title }
+        return "\(title) · \(seasons)"
+    }
+
+    private func statusTint(_ request: SeerrRequest) -> Color {
+        switch SeerrMyRequestsModel.statusKey(request) {
+        case "seerr.myRequests.status.available": CinemaColor.success
+        case "seerr.myRequests.status.declined": CinemaColor.error
+        default: CinemaColor.onSurfaceVariant
+        }
+    }
+
+    private func requestPoster(_ row: SeerrRequestRow) -> some View {
+        let url = seerr.client.flatMap {
+            SeerrImages.posterURL(path: row.posterPath, seerrBase: $0.baseURL,
+                                  cacheImages: seerr.publicSettings?.cacheImages ?? false)
+        }
+        return Color.clear
+            .frame(width: requestPosterWidth, height: requestPosterWidth * 1.5)
+            .overlay {
+                CinemaLazyImage(url: url, fallbackIcon: row.request.kind == .movie ? "film" : "tv")
+            }
+            .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.small))
+            .contentShape(Rectangle())
+            .accessibilityHidden(true)
+    }
+
+    private var requestPosterWidth: CGFloat {
+        #if os(tvOS)
+        CinemaScale.pt(60)
+        #else
+        CinemaScale.pt(44)
+        #endif
     }
 
     // MARK: - Connexion
@@ -327,7 +516,8 @@ struct RequestsSettingsScreen: View {
                     }
                 }
             } else {
-                GlassTextField(label: loc.localized("seerr.settings.key"), text: $keyText, icon: "key", isSecure: true)
+                GlassTextField(label: loc.localized("seerr.settings.key"), text: $keyText,
+                               placeholder: loc.localized("seerr.settings.key.placeholder"), icon: "key", isSecure: true)
                 panel {
                     actionRow(id: "seerr.key.save", icon: "square.and.arrow.down", label: loc.localized("seerr.settings.key.save")) {
                         Task { await saveKey() }
@@ -351,7 +541,10 @@ struct RequestsSettingsScreen: View {
     private func resetForAccountChange() {
         activation = SeerrActivationModel()
         loadedTrigger = nil
+        myRequests = SeerrMyRequestsModel()
+        myRequestsLoadedFor = nil
         report = nil
+        reportAddress = nil
         keyText = ""
         // Emptied, then refilled by `seedAddress` once the new account's
         // configuration is read — never the previous account's address.
@@ -373,6 +566,21 @@ struct RequestsSettingsScreen: View {
         loadedTrigger = current
     }
 
+    /// « Mes demandes » is (re)loaded each time who is asking, as whom or
+    /// toward which Seerr moves — not on a mere re-presentation. Leaving the
+    /// section (signed out) forgets what it was loaded for, so signing in
+    /// again reads the list afresh.
+    private func loadMyRequestsIfNeeded() async {
+        guard let current = myRequestsTrigger else {
+            myRequestsLoadedFor = nil
+            return
+        }
+        guard current != myRequestsLoadedFor else { return }
+        await myRequests.loadFirstPage(session: seerr)
+        guard !Task.isCancelled else { return }
+        myRequestsLoadedFor = current
+    }
+
     /// « Tester la connexion »: on the TYPED address (R18), in key mode when
     /// the key field holds one — or, empty, when this device's stored key was
     /// entered for that address (never displayed). The address is saved only
@@ -386,6 +594,7 @@ struct RequestsSettingsScreen: View {
         let result = await SeerrConnectionTest.run(
             address: address, deviceKey: key, session: seerr, appState: appState, loc: loc)
         guard result != SeerrTestReport() else { return }
+        reportAddress = address
         report = result
         guard result.failure == nil else { return }
         addressText = address.absoluteString

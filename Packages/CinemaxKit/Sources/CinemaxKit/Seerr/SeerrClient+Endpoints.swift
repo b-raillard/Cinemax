@@ -98,7 +98,9 @@ extension SeerrClient {
     }
 
     public func movie(tmdbId: Int, _ credential: SeerrCredential) async throws -> SeerrTitle {
-        try await get("/movie/\(tmdbId)", query: [], auth: .credential(credential), localized: true)
+        let details: SeerrMovieDetails = try await get(
+            "/movie/\(tmdbId)", query: [], auth: .credential(credential), localized: true)
+        return details.title
     }
 
     public func tv(tmdbId: Int, _ credential: SeerrCredential) async throws -> SeerrTVDetails {

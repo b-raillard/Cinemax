@@ -1941,3 +1941,270 @@ struct SeerrActivationTests {
         #expect(two.contains(loc.localized(loc.pluralKey("seerr.activation.summary.refused", 2), "Tom, Zoé")))
     }
 }
+
+// MARK: - Mes demandes (Settings → Demandes)
+
+private func requestJSON(
+    _ id: Int, status: Int = 1, type: String = "movie", seasons: [Int] = [],
+    tmdbId: Int = 11, mediaStatus: Int = 2, jellyfinId: String? = nil
+) -> String {
+    let seasonList = seasons.map { #"{"seasonNumber":\#($0)}"# }.joined(separator: ",")
+    let jellyfin = jellyfinId.map { #","jellyfinMediaId":"\#($0)""# } ?? ""
+    return #"{"id":\#(id),"status":\#(status),"type":"\#(type)","seasons":[\#(seasonList)],"#
+        + #""createdAt":"2026-11-01T10:00:00.000Z","updatedAt":"2026-11-02T10:00:00.000Z","#
+        + #""requestedBy":\#(aliceJSON),"media":{"tmdbId":\#(tmdbId),"status":\#(mediaStatus)\#(jellyfin)}}"#
+}
+
+private func requestPage(_ items: [String], total: Int) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"pageInfo":{"pages":2,"pageSize":20,"results":\#(total),"page":1},"#
+        + #""results":[\#(items.joined(separator: ","))]}"#)
+}
+
+/// `/movie/{id}` as Seerr 3.5.1 serves it: no `mediaType` (measured on the bench).
+private func movieReply(_ id: Int, _ title: String) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"id":\#(id),"title":"\#(title)","posterPath":"/m\#(id).jpg"}"#)
+}
+
+private func tvReply(_ id: Int, _ name: String) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"id":\#(id),"name":"\#(name)","posterPath":"/t\#(id).jpg","seasons":[]}"#)
+}
+
+private func myRequest(
+    status: SeerrRequestStatus = .pending, kind: SeerrMediaKind = .movie, seasons: [Int] = [],
+    media: SeerrMediaStatus = .pending, jellyfinId: String? = nil
+) -> SeerrRequest {
+    SeerrRequest(
+        id: 1, status: status, kind: kind, seasons: seasons, createdAt: .distantPast, updatedAt: .distantPast,
+        requestedBy: alice, media: SeerrRequestMedia(tmdbId: 1, status: media, jellyfinMediaId: jellyfinId))
+}
+
+private func isRequestList(_ request: URLRequest) -> Bool {
+    request.url?.path.hasSuffix("/request") == true
+}
+
+private func queryValue(_ name: String, in request: URLRequest?) -> String? {
+    request?.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems }?
+        .first { $0.name == name }?.value
+}
+
+/// Signed in to Seerr (account mode) as Alice — Seerr id 7, with
+/// `permissions` — plus whatever `routes` the test answers.
+@MainActor
+private func myRequestsWorld(
+    permissions: Int = 32, routes: [String: [StubSeerrTransport.Reply]]
+) async -> (SeerrSession, AppState, RoutedSeerrTransport) {
+    var all = routes
+    all["/settings/public"] = [settingsReply]
+    all["/auth/me"] = [userReply(#"{"id":7,"permissions":\#(permissions),"jellyfinUserId":"A","displayName":"Alice"}"#)]
+    let transport = RoutedSeerrTransport(all)
+    let storage = MockKeychain()
+    storage.saveSeerrSessions(["S1|A": bound("abc")])
+    let (app, _) = signedIn()
+    let session = makeSession(transport, storage: storage, following: app)
+    await session.reload(appState: app)
+    return (session, app, transport)
+}
+
+@MainActor
+@Suite("Seerr — Mes demandes")
+struct SeerrMyRequestsTests {
+    private let pending = "seerr.myRequests.status.pending"
+    private let approved = "seerr.myRequests.status.approved"
+    private let declined = "seerr.myRequests.status.declined"
+    private let available = "seerr.myRequests.status.available"
+
+    @Test("only my requests: requestedBy is my Seerr id, even for a manager; a first page of 20")
+    func onlyMyRequests() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, tmdbId: 11)], total: 1)],
+            "/movie/11": [movieReply(11, "Dune")],
+        ])
+        #expect(session.connection == .connected(SeerrUser(
+            id: SeerrUserID(rawValue: 7), permissions: [.manageRequests, .request],
+            jellyfinUserId: "A", displayName: "Alice")))
+
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("requestedBy", in: sent) == "7")
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(queryValue("filter", in: sent) == "all")
+        #expect(model.rows.map(\.id) == [1])
+        #expect(model.rows.first?.title == "Dune")
+        #expect(!model.canLoadMore)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("the status line: arrived first, then refused, waiting, else approved")
+    func statusLines() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.statusKey(myRequest(status: .pending)) == pending)
+        // Someone else's request moved the media: mine still waits.
+        #expect(Model.statusKey(myRequest(status: .pending, media: .processing)) == pending)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .processing)) == approved)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .pending)) == approved)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .partiallyAvailable)) == approved)
+        // Sending it to the downloader failed: still approved, the admin retries.
+        #expect(Model.statusKey(myRequest(status: .failed, media: .processing)) == approved)
+        #expect(Model.statusKey(myRequest(status: .declined)) == declined)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .available)) == available)
+        #expect(Model.statusKey(myRequest(status: .pending, media: .available)) == available)
+        // A series whose requested seasons all arrived, others still missing.
+        #expect(Model.statusKey(myRequest(status: .completed, kind: .tv, media: .partiallyAvailable)) == available)
+        let loc = LocalizationManager()
+        for key in [pending, approved, declined, available] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
+    }
+
+    @Test("a series names its seasons, ascending, once each; a film names none")
+    func seasonsSuffix() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.seasonList(myRequest(kind: .tv, seasons: [5, 4, 4])) == "4, 5")
+        #expect(Model.seasonList(myRequest(kind: .tv, seasons: [])) == nil)
+        #expect(Model.seasonList(myRequest(kind: .movie, seasons: [1])) == nil)
+        let loc = LocalizationManager()
+        #expect(Model.seasonsSuffix(myRequest(kind: .tv, seasons: [5, 4]), loc: loc)
+                == loc.localized(loc.pluralKey("seerr.myRequests.seasons", 2), "4, 5"))
+        #expect(Model.seasonsSuffix(myRequest(kind: .tv, seasons: [4]), loc: loc)
+                == loc.localized(loc.pluralKey("seerr.myRequests.seasons", 1), "4"))
+        #expect(Model.seasonsSuffix(myRequest(kind: .movie), loc: loc) == nil)
+        #expect(loc.localized("seerr.myRequests.seasons.one", "4") != loc.localized("seerr.myRequests.seasons", "4"))
+    }
+
+    @Test("paging: 20, then the rest, then nothing once the total is reached")
+    func pagingStopsAtTotal() async {
+        let first = (1...20).map { requestJSON($0, tmdbId: 11) }
+        let second = (21...25).map { requestJSON($0, tmdbId: 11) }
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [requestPage(first, total: 25), requestPage(second, total: 25)],
+            "/movie/11": Array(repeating: movieReply(11, "Dune"), count: 25),
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.rows.count == 20)
+        #expect(model.canLoadMore)
+
+        await model.loadNextPage(session: session)
+        #expect(model.rows.map(\.id) == Array(1...25))
+        #expect(model.rows.allSatisfy { $0.title == "Dune" })
+        #expect(!model.canLoadMore)
+        let pages = transport.requests.filter(isRequestList)
+        #expect(pages.count == 2)
+        #expect(queryValue("skip", in: pages.last) == "20")
+        #expect(queryValue("requestedBy", in: pages.last) == "7")
+
+        // Past the total, « Afficher plus » asks for nothing.
+        await model.loadNextPage(session: session)
+        #expect(transport.requests.filter(isRequestList).count == 2)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a request already listed is not listed twice when the order moved between pages")
+    func pagingDeduplicates() async {
+        let first = (1...20).map { requestJSON($0, tmdbId: 11) }
+        // Request 20 was modified meanwhile: the second page repeats it.
+        let second = (20...24).map { requestJSON($0, tmdbId: 11) }
+        let (session, _, _) = await myRequestsWorld(routes: [
+            "/request": [requestPage(first, total: 25), requestPage(second, total: 25)],
+            "/movie/11": Array(repeating: movieReply(11, "Dune"), count: 24),
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        await model.loadNextPage(session: session)
+        #expect(model.rows.map(\.id) == Array(1...24))
+        // 25 rows were served: the total is reached, nothing more to ask.
+        #expect(!model.canLoadMore)
+    }
+
+    @Test("titles load row by row: a failed one reads unavailable, and the list never waits for them")
+    func titlesPerRow() async {
+        let held = TestLatch()
+        let asked = TestLatch()
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [requestPage([
+                requestJSON(1, tmdbId: 11), requestJSON(2, type: "tv", seasons: [4, 5], tmdbId: 22),
+                requestJSON(3, tmdbId: 33),
+            ], total: 3)],
+            "/movie/11": [movieReply(11, "Dune")],
+            "/tv/22": [tvReply(22, "The Expanse")],
+            "/movie/33": [notFoundReply],
+        ])
+        transport.onRequest { path, _ in
+            guard path == "/movie/11" else { return }
+            asked.open()
+            await held.wait()
+        }
+        let model = SeerrMyRequestsModel()
+        let load = Task { await model.loadFirstPage(session: session) }
+        await asked.wait()
+        // The rows are on screen while a title is still on its way.
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.rows.first?.isTitlePending == true)
+        held.open()
+        await load.value
+
+        #expect(model.rows[0].title == "Dune")
+        #expect(model.rows[0].posterPath == "/m11.jpg")
+        #expect(model.rows[1].title == "The Expanse")
+        #expect(model.rows[1].posterPath == "/t22.jpg")
+        #expect(model.rows[2].title == nil)
+        #expect(model.rows[2].isTitlePending == false)
+        #expect(model.phase == .loaded)
+    }
+
+    @Test("no request yet: loaded and empty")
+    func emptyList() async {
+        let (session, _, _) = await myRequestsWorld(routes: ["/request": [requestPage([], total: 0)]])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.phase == .loaded)
+        #expect(model.rows.isEmpty)
+        #expect(!model.canLoadMore)
+    }
+
+    @Test("a list Seerr does not serve ends in a failure, never a stranded spinner")
+    func failedList() async {
+        let (session, _, _) = await myRequestsWorld(routes: [
+            "/request": [.response(status: 500, body: #"{"message":"boom"}"#)],
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.phase == .failed)
+        #expect(model.rows.isEmpty)
+    }
+
+    @Test("« Regarder » opens the Jellyfin item, and only once the title has arrived")
+    func watchUsesJellyfinId() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .available, jellyfinId: "jf1")) == "jf1")
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .available)) == nil)
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .processing, jellyfinId: "jf1")) == nil)
+        #expect(Model.watchTarget(myRequest(status: .completed, media: .partiallyAvailable, jellyfinId: "jf1")) == nil)
+
+        let (app, _) = signedIn()
+        #expect(Model.watch(myRequest(media: .available, jellyfinId: "jf1"), appState: app))
+        #expect(app.pendingDeepLinkItemId == "jf1")
+        app.pendingDeepLinkItemId = nil
+        #expect(!Model.watch(myRequest(media: .processing, jellyfinId: "jf1"), appState: app))
+        #expect(app.pendingDeepLinkItemId == nil)
+    }
+}
+
+@Suite("Seerr settings — connection report")
+struct SeerrConnectionReportTests {
+    @Test("the report stays while the field names the tested address, and goes as soon as it names another")
+    func reportFollowsTheField() throws {
+        let tested = try #require(URL(string: "http://127.0.0.1:5055"))
+        #expect(SeerrTestReport.stillApplies(typed: "http://127.0.0.1:5055", testedAddress: tested))
+        // `runTest` writes the normalized form back into the field.
+        #expect(SeerrTestReport.stillApplies(typed: tested.absoluteString, testedAddress: tested))
+        #expect(SeerrTestReport.stillApplies(typed: "127.0.0.1:5055/", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "http://127.0.0.1:505", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "http://127.0.0.1:8096", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "http://127.0.0.1:5055", testedAddress: nil))
+    }
+}

@@ -342,6 +342,22 @@ struct SeerrClientEndpointTests {
         request?.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.percentEncodedQuery }
     }
 
+    /// Measured on the bench (Seerr 3.5.1, 2026-11-07): `/movie/{id}` carries
+    /// no `mediaType` — only the search results and credits do.
+    @Test("a movie's details decode without a mediaType, and a series' carry its poster")
+    func detailsWithoutMediaType() async throws {
+        let stub = StubSeerrTransport([
+            .response(status: 200, body: #"{"id":438631,"title":"Dune","posterPath":"/d.jpg","releaseDate":"2021-09-15"}"#),
+            .response(status: 200, body: #"{"id":90228,"name":"Dune : Prophecy","posterPath":"/p.jpg","seasons":[]}"#),
+        ])
+        let movie = try await client(stub).movie(tmdbId: 438631, key)
+        #expect(movie.kind == .movie)
+        #expect(movie.title == "Dune")
+        #expect(movie.posterPath == "/d.jpg")
+        let series = try await client(stub).tv(tmdbId: 90228, key)
+        #expect(series.posterPath == "/p.jpg")
+    }
+
     @Test("GET /request always sorts by modified, requestedBy only when given")
     func requestsQuery() async throws {
         let page = #"{"pageInfo":{"results":0},"results":[]}"#

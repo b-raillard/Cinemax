@@ -1618,6 +1618,7 @@
 "seerr.settings.disableAll.done" = "Anfragen für alle deaktiviert.";
 "seerr.settings.footnote" = "Ein später in Jellyfin angelegter Benutzer muss hier aktiviert werden. Was jeder anfragen darf, wird in Seerr eingestellt.";
 "seerr.settings.key" = "API-Schlüssel (optional)";
+"seerr.settings.key.placeholder" = "Seerr-Schlüssel einfügen";
 "seerr.settings.key.explanation" = "Der Schlüssel bleibt im Schlüsselbund dieses Geräts und wird nie an andere gesendet. Er gibt alle Rechte über Seerr: verwende ihn nur auf vertrauenswürdigen Geräten wie dem Apple TV im Wohnzimmer. Anfragen werden dem aktiven Profil zugeordnet.";
 "seerr.settings.key.save" = "Schlüssel speichern";
 "seerr.settings.key.saved" = "Schlüssel gespeichert";
@@ -1671,3 +1672,14 @@
 "seerr.searchPrompt.body" = "Dein Server nutzt Seerr für Anfragen. Melde dich einmal mit deinem Jellyfin-Konto an: nichts zu tippen.";
 "seerr.searchPrompt.later" = "Später";
 "seerr.request.seasonsUnavailable" = "Die Staffeln konnten nicht geladen werden";
+"seerr.settings.section.myRequests" = "Meine Anfragen";
+"seerr.myRequests.empty" = "Noch keine Anfragen";
+"seerr.myRequests.titleUnavailable" = "Titel nicht verfügbar";
+"seerr.myRequests.status.pending" = "Wartet auf Freigabe";
+"seerr.myRequests.status.approved" = "Genehmigt · wird heruntergeladen";
+"seerr.myRequests.status.declined" = "Abgelehnt";
+"seerr.myRequests.status.available" = "In deiner Bibliothek angekommen";
+"seerr.myRequests.seasons" = "Staffeln %@";
+"seerr.myRequests.seasons.one" = "Staffel %@";
+"seerr.myRequests.watch" = "Ansehen";
+"seerr.myRequests.more" = "Mehr anzeigen";

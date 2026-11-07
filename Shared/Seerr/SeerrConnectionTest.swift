@@ -7,6 +7,13 @@ struct SeerrTestReport: Equatable {
     var verified: [String] = []
     var warning: String?
     var failure: SeerrTestFailure?
+
+    /// A report describes the address it tested: it stays on screen while the
+    /// field still names that address (the normalized form the test writes
+    /// back included) and goes as soon as the field names another one.
+    static func stillApplies(typed: String, testedAddress: URL?) -> Bool {
+        SeerrAddress.sameOrigin(SeerrAddress.normalize(typed), testedAddress)
+    }
 }
 
 /// Checks a Seerr address in a fixed order and stops at the first failure,

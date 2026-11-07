@@ -295,6 +295,7 @@
 		55DDC66E0CC921159717737F /* ServersScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */; };
 		562ECFF99482CFF3CEC6435D /* CinemaxKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223258AFA0F2668369423520 /* CinemaxKitTests.swift */; };
 		5696ECB7B9811A5CD17279E7 /* AdminRelativeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54A9FC0F398EBC3E87764B50 /* AdminRelativeFormatter.swift */; };
+		569C028380AE81C84093C271 /* SeerrMyRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6BA480582DB6240B438DF2 /* SeerrMyRequests.swift */; };
 		56AE0D76B3B5271C859CA20F /* AccountLockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9104FBBF825F55A5F637BAB /* AccountLockStore.swift */; };
 		574B9D39C15D539DEC66C125 /* AdminTabbedScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FE7EDAE1CB51A7F06D6BD83 /* AdminTabbedScreen.swift */; };
 		575A596CB9AB11EAB858E4F5 /* SleepTimerOption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BB0CBCFC322E533A14A4EBB /* SleepTimerOption.swift */; };
@@ -410,6 +411,7 @@
 		7E2D4D829FBE580AC7B23A9E /* MediaDetailViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B171C71911F6E759AB1A0EDB /* MediaDetailViewModelTests.swift */; };
 		7EACAC847E87AA5015C136A5 /* AccountSwitchFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 636102BE1235D1931CB0B026 /* AccountSwitchFlow.swift */; };
 		7EBA370BF944C1F3434F41E9 /* MetadataRemoteImagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F07644595CAB3060CA6E9C3 /* MetadataRemoteImagePicker.swift */; };
+		7F5B61497E413157926E65F3 /* SeerrMyRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6BA480582DB6240B438DF2 /* SeerrMyRequests.swift */; };
 		7F6D160EABA133540130AABC /* MediaLibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE7B27B99DB58FF2CAC5D765 /* MediaLibraryViewModel.swift */; };
 		7FB1C0EDE50B3335093F475C /* ThemeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61944A0EB692FE3706F500B /* ThemeManager.swift */; };
 		8003A34BD456561198A70B9E /* AccountSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2572067930833AF233E9A6DB /* AccountSettingsStore.swift */; };
@@ -1256,6 +1258,7 @@
 		E92DA34832DA62A5B0A010C5 /* SkeletonViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonViews.swift; sourceTree = "<group>"; };
 		E9A353B49C5117D5F686F07B /* GlassModifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassModifiers.swift; sourceTree = "<group>"; };
 		E9B0EBFA7FD313F6CEB0E3A2 /* RemoteImageCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteImageCatalogTests.swift; sourceTree = "<group>"; };
+		EA6BA480582DB6240B438DF2 /* SeerrMyRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeerrMyRequests.swift; sourceTree = "<group>"; };
 		EA980637A2C18CE127E6C9AD /* MetadataRemoteImagePickerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataRemoteImagePickerTests.swift; sourceTree = "<group>"; };
 		EAEC7B9C5388FF38DAC9FE9A /* boot.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = boot.c; sourceTree = "<group>"; };
 		EB7FA28DFA0088FAC846EED1 /* WhatsNewHalloweenScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewHalloweenScene.swift; sourceTree = "<group>"; };
@@ -2120,6 +2123,7 @@
 				D508AB1744CFF8B6AE7AA4D2 /* SeerrActivation.swift */,
 				2682C02D4BED0BAC8806A8ED /* SeerrConnectionTest.swift */,
 				A724486926C96E7754CB938C /* SeerrMissing.swift */,
+				EA6BA480582DB6240B438DF2 /* SeerrMyRequests.swift */,
 				BC748A6943207308BBA9C3BF /* SeerrRequestPresenter.swift */,
 				338AFCFCF58821A6F9985A29 /* SeerrSession.swift */,
 				DC65E6A69CE621C1D2272944 /* SeerrSession+Sections.swift */,
@@ -2747,6 +2751,7 @@
 				3FC65ECB11823AD0BF4FAB40 /* SeerrActivation.swift in Sources */,
 				B5383C5D1C73882CAD8AD464 /* SeerrConnectionTest.swift in Sources */,
 				6FF057B7A7AE7E5DA849977B /* SeerrMissing.swift in Sources */,
+				569C028380AE81C84093C271 /* SeerrMyRequests.swift in Sources */,
 				355B852E5A5997341AB9DE5C /* SeerrRequestPresenter.swift in Sources */,
 				DF2BB98A8A3BDD7D85F5300B /* SeerrSession+Sections.swift in Sources */,
 				73B71FECA44B9116E94F386F /* SeerrSession.swift in Sources */,
@@ -3158,6 +3163,7 @@
 				2F2665924782406A6D4F6012 /* SeerrActivation.swift in Sources */,
 				947BFE51B554134163A8782C /* SeerrConnectionTest.swift in Sources */,
 				C3B79346EF0504B73BF700FD /* SeerrMissing.swift in Sources */,
+				7F5B61497E413157926E65F3 /* SeerrMyRequests.swift in Sources */,
 				275FAAF5843484210BFE3EA1 /* SeerrRequestPresenter.swift in Sources */,
 				3B87D62659E7EB29A4E15D6B /* SeerrSession+Sections.swift in Sources */,
 				5EDCD7A1259F24135D153BB3 /* SeerrSession.swift in Sources */,
