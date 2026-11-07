@@ -30,6 +30,10 @@ import Foundation
 /// - `ApiKey%3D` / `api_key%3D` / `token%3D` — the same query items once
 ///   percent-encoded inside another URL (a redirect target, a `url=` parameter);
 ///   `%` ends such a value, a token never containing one (audit 2026-09-22, S11).
+/// - `X-Api-Key:` / `connect.sid=` / `connect.sid%3D` / `secret=` / `secret%3D` —
+///   Seerr: its API key header, its session cookie, the Quick Connect secret.
+///   A cookie is `s%3A<sid>.<signature>`, the `%` INSIDE the value, so for the
+///   `connect.sid` markers (`percentTolerantMarkers`) a `%` does not end it.
 ///
 /// A value opening with a quote runs to the matching quote (`Token="abc"` →
 /// `Token="***"`); otherwise it runs to the first `valueTerminators` character.

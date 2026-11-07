@@ -24,8 +24,8 @@
 - Chaînes via `loc.localized` / `loc.counted` en fr / en / de (parité CI) ; tvOS : aucune saisie hors adresse et clé de l'admin.
 - Nouveaux fichiers sous `Shared/` ou `Tests/` ⇒ `xcodegen generate` ; aucun test n'écrit `UserDefaults.standard` ni ne dort (sauf un délai mesuré, comme l'échéance des squelettes) ; tests complets iOS ET tvOS (`-only-testing` exécute 0 test swift-testing).
 - Commandes de vérification (les deux, en série, jamais en parallèle) :
-  - `set -o pipefail; xcodebuild test -project Cinemax.xcodeproj -scheme Cinemax -destination 'platform=iOS Simulator,id=5AB90411-C80E-4060-A3C0-996579E229B9' -skipPackagePluginValidation 2>&1 | tee "$TMPDIR/ios-test.log" | grep -E '✘|✔ Test run|error:'` → attendu `✔ Test run with N tests … passed`
-  - idem `-scheme CinemaxTV -destination 'platform=tvOS Simulator,id=699CCA2B-3C12-4BDC-B06A-B1C584B14CC9'`
+  - `set -o pipefail; xcodebuild test -project Cinemax.xcodeproj -scheme Cinemax -destination 'platform=iOS Simulator,id=100C3BBA-9C66-4671-85E5-31E6C7DDBE27' -skipPackagePluginValidation 2>&1 | tee "$TMPDIR/ios-test.log" | grep -E '✘|✔ Test run|error:'` → attendu `✔ Test run with N tests … passed`
+  - idem `-scheme CinemaxTV -destination 'platform=tvOS Simulator,id=F4886AAA-D6B7-4BB1-8DED-9A495DB53E52'`
 - SwiftLint `--strict` bloque ; commits terminés par `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`, `git add` chemin par chemin ; aucune fusion sans demande explicite pour CETTE PR.
 
 ## Review Focus
@@ -321,7 +321,7 @@
 - [ ] **Step 2: Lancer** → échec.
 - [ ] **Step 3: Implémenter** le cas Pro, la catégorie, l'écran et les chaînes ; `xcodegen generate`.
 - [ ] **Step 4: Relancer iOS puis tvOS** → vertes, `localize-check` sans écart, `scripts/check-localization-parity.py` OK.
-- [ ] **Step 5: Vérifier au simulateur de test** (5AB90411 / 699CCA2B, jamais un simulateur personnel ou de démo) contre le banc de l'essai (`docker start jf-bench seerr-spike`, Seerr `http://127.0.0.1:5055`, comptes de `~/seerr-spike/users.txt`) : test OK, test en erreur (port 8096 ⇒ « ne mène pas à Seerr »), activation de Tom refusée avec son message, connexion de Léa en un geste. Captures dans `_artifacts/seerr-lot1a/`.
+- [ ] **Step 5: Vérifier au simulateur de test** (100C3BBA « Cinemax tests Seerr » / F4886AAA « Cinemax tests Seerr TV », sans session — jamais un autre simulateur) contre le banc de l'essai (`docker start jf-bench seerr-spike`, Seerr `http://127.0.0.1:5055`, comptes de `~/seerr-spike/users.txt`) : test OK, test en erreur (port 8096 ⇒ « ne mène pas à Seerr »), activation de Tom refusée avec son message, connexion de Léa en un geste. Captures dans `_artifacts/seerr-lot1a/`.
 - [ ] **Step 6: Commit** — `feat(seerr): Réglages → Demandes, configuration et connexion (iOS + tvOS)`.
 
 ### Task 11: Règles, documentation, PR 1
