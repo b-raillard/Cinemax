@@ -503,3 +503,10 @@ public struct SeerrQuickConnectCode: Sendable, Equatable, Decodable {
         self.secret = secret
     }
 }
+
+// The `secret` is never logged (Seerr RULE): like the credentials, the
+// descriptions print nothing of the values (`dump` / `Mirror` still would).
+extension SeerrQuickConnectCode: CustomStringConvertible, CustomDebugStringConvertible {
+    public var description: String { "SeerrQuickConnectCode(…)" }
+    public var debugDescription: String { description }
+}

@@ -90,6 +90,9 @@ final class SeerrSession {
     @ObservationIgnored private var reloadPass = 0
     @ObservationIgnored private var accountKey: String?
     @ObservationIgnored private var jellyfinUserId: String?
+    /// The Jellyfin server the approvals go to, as of the last `reload`: from
+    /// an HTTPS one, a plain-HTTP Seerr gets no silent sign-in.
+    @ObservationIgnored private var jellyfinURL: URL?
     /// As stored — `credential()` uses each only toward its own address.
     @ObservationIgnored private var cookie: SeerrBoundSecret?
     @ObservationIgnored private var deviceKey: SeerrBoundSecret?
@@ -146,6 +149,7 @@ final class SeerrSession {
         pendingReSignIn = nil
         accountKey = nil
         jellyfinUserId = nil
+        jellyfinURL = nil
         cookie = nil
         deviceKey = nil
         approve = nil
@@ -185,6 +189,7 @@ final class SeerrSession {
         guard let key, let userId = appState.currentUserId, let serverId = appState.activeServerId else { return }
         accountKey = key
         jellyfinUserId = userId
+        jellyfinURL = appState.serverURL
         reloadPass &+= 1
         let pass = (generation: generation, reload: reloadPass)
         approve = Self.makeApprover(appState: appState, accountKey: key)
@@ -412,9 +417,11 @@ final class SeerrSession {
 
     /// The silent sign-in after a dead session: ONE per generation, every
     /// concurrent caller awaits the same one. Only against the configured
-    /// address, with this account's approver. Its outcome is written here; a
-    /// failure never overwrites a fresher session (a manual sign-in that
-    /// landed meanwhile).
+    /// address, with this account's approver, and never from an HTTPS Jellyfin
+    /// to a plain-HTTP Seerr (`SeerrAccess.downgradesFromHTTPS`: the dead
+    /// session is given up, « Se connecter à Seerr » stays). Its outcome is
+    /// written here; a failure never overwrites a fresher session (a manual
+    /// sign-in that landed meanwhile).
     private func reSignInOnce(client: SeerrClient, deadCookie: String) async -> ReSignIn {
         guard let key = accountKey else { return .stale }
         if let cookie, cookie.value != deadCookie, cookie.isBound(to: client.baseURL) {
@@ -423,7 +430,8 @@ final class SeerrSession {
         if let pending = pendingReSignIn, pending.ticket.generation == generation {
             return await pending.task.value
         }
-        guard let approve, SeerrAddress.sameOrigin(client.baseURL, config?.url) else {
+        guard let approve, SeerrAddress.sameOrigin(client.baseURL, config?.url),
+              !SeerrAccess.downgradesFromHTTPS(jellyfin: jellyfinURL, seerr: client.baseURL) else {
             abandonSession(deadCookie: deadCookie, for: key)
             return .failed
         }

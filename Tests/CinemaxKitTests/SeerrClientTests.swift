@@ -555,8 +555,9 @@ struct SeerrClientEndpointTests {
 
     @Test("Credentials never print their secrets")
     func credentialsNeverPrintSecrets() {
-        let secrets = ["TOPSECRETKEY", "SESSIONCOOKIE", "CSRFTOKEN"]
+        let secrets = ["TOPSECRETKEY", "SESSIONCOOKIE", "CSRFTOKEN", "QCSECRET", "QCCODE"]
         let values: [Any] = [
+            SeerrQuickConnectCode(code: "QCCODE", secret: "QCSECRET"),
             SeerrCredential.apiKey(key: "TOPSECRETKEY", user: SeerrUserID(rawValue: 3)),
             SeerrCredential.session(cookie: "SESSIONCOOKIE"),
             SeerrLookupAuth.adminKey("TOPSECRETKEY"),

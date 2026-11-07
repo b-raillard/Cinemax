@@ -2,10 +2,10 @@ import Foundation
 import CinemaxKit
 
 /// What « Tester la connexion » found: the lines it verified (already
-/// localized), a warning that does not block saving, or the first failure.
+/// localized), the warnings that do not block saving, or the first failure.
 struct SeerrTestReport: Equatable {
     var verified: [String] = []
-    var warning: String?
+    var warnings: [String] = []
     var failure: SeerrTestFailure?
 }
 
@@ -80,7 +80,18 @@ enum SeerrConnectionTest {
             report.verified.append(loc.localized("seerr.test.ok.server", appState.activeServerDisplayName))
         } else {
             // 4b. Account mode: the one-gesture sign-in works end to end.
-            guard (try? await appState.apiClient.isQuickConnectEnabled()) == true else {
+            // Without Quick Connect, Jellyfin's refusal would read as a device
+            // one; a probe that does not get through says nothing about it.
+            let quickConnectOn: Bool
+            do {
+                quickConnectOn = try await appState.apiClient.isQuickConnectEnabled()
+            } catch is CancellationError {
+                return SeerrTestReport()
+            } catch {
+                report.failure = .unreachable
+                return report
+            }
+            guard quickConnectOn else {
                 report.failure = .quickConnectOff
                 return report
             }
@@ -97,11 +108,17 @@ enum SeerrConnectionTest {
             }
             report.verified.append(loc.localized("seerr.test.ok.server", appState.activeServerDisplayName))
             report.verified.append(loc.localized("seerr.test.ok.quickConnect"))
+            // From an HTTPS Jellyfin, this session will only ever be renewed
+            // by the visible sign-in (`SeerrAccess.downgradesFromHTTPS`). Key
+            // mode renews nothing: no warning there.
+            if SeerrAccess.downgradesFromHTTPS(jellyfin: appState.serverURL, seerr: address) {
+                report.warnings.append(loc.localized("seerr.test.warning.httpSeerr"))
+            }
         }
 
         report.verified.append(loc.localized("seerr.test.ok.account", roles(of: user.permissions, loc: loc)))
         if !user.permissions.canManageRequests {
-            report.warning = loc.localized("seerr.test.warning.cannotManage")
+            report.warnings.append(loc.localized("seerr.test.warning.cannotManage"))
         }
         return report
     }

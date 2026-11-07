@@ -143,7 +143,7 @@ struct RequestsSettingsScreen: View {
                       label: loc.localized("seerr.settings.signIn"), isBusy: isSigningIn) {
                 Task { await signIn() }
             }
-            .disabled(isSigningIn)
+            .disabled(busy(isSigningIn))
         case .notLinked:
             failureRow(.notInSeerr)
         case .keyRefused:
@@ -167,7 +167,7 @@ struct RequestsSettingsScreen: View {
                           isBusy: isTesting) {
                     Task { await runTest() }
                 }
-                .disabled(isTesting || typedAddress == nil)
+                .disabled(busy(isTesting) || typedAddress == nil)
             }
 
             // Account mode signs the admin in: say what that leaves behind.
@@ -222,13 +222,14 @@ struct RequestsSettingsScreen: View {
                           isBusy: isBulkUpdating) {
                     Task { await enableAll() }
                 }
-                .disabled(isBulkUpdating)
+                .disabled(busy(isBulkUpdating))
                 divider
                 actionRow(id: "seerr.disableAll", icon: "person.3", label: loc.localized("seerr.settings.disableAll"),
                           tint: CinemaColor.error) {
+                    guard !isBulkUpdating else { return }
                     showsDisableAllConfirm = true
                 }
-                .disabled(isBulkUpdating || activation.enabledCount == 0)
+                .disabled(busy(isBulkUpdating) || activation.enabledCount == 0)
             }
         }
 
@@ -253,7 +254,7 @@ struct RequestsSettingsScreen: View {
             ForEach(report.verified, id: \.self) { line in
                 reportLine(icon: "checkmark.circle.fill", tint: CinemaColor.success, title: line, detail: nil)
             }
-            if let warning = report.warning {
+            ForEach(report.warnings, id: \.self) { warning in
                 reportLine(icon: "exclamationmark.triangle.fill", tint: themeManager.accent, title: warning, detail: nil)
             }
             if let failure = report.failure {
@@ -478,6 +479,18 @@ struct RequestsSettingsScreen: View {
     }
 
     // MARK: - Row building blocks (one look per platform)
+
+    /// Whether an action in flight disables its row. iOS: yes (dimmed, with
+    /// its spinner). tvOS: never — disabling the FOCUSED row throws focus
+    /// (Seerr RULE); the row keeps its spinner and the action's own
+    /// `guard !isX` ignores the press. Only data conditions disable there.
+    private func busy(_ inFlight: Bool) -> Bool {
+        #if os(tvOS)
+        false
+        #else
+        inFlight
+        #endif
+    }
 
     private var rowLabelFont: Font {
         #if os(tvOS)
