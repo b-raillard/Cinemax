@@ -79,6 +79,29 @@ enum SeerrMissing {
         item.providerIDs?.first { $0.key.lowercased() == "tmdb" }.flatMap { Int($0.value) }
     }
 
+    /// The TMDb collection (saga) the item names: `TmdbCollection` — a film's
+    /// saga, or the BoxSet built from it — matched case-insensitively. On a
+    /// BoxSet only, `Tmdb` counts too: a box set's TMDb id can only be a
+    /// collection's, whereas a film's `Tmdb` is the FILM. Non-numeric ⇒ ignored.
+    static func tmdbCollectionId(of item: BaseItemDto) -> Int? {
+        func provider(_ key: String) -> Int? {
+            item.providerIDs?.first { $0.key.caseInsensitiveCompare(key) == .orderedSame }.flatMap { Int($0.value) }
+        }
+        if let id = provider("TmdbCollection") { return id }
+        return item.type == .boxSet ? provider("Tmdb") : nil
+    }
+
+    /// The saga's films the library lacks (`titles`), in release order — the
+    /// one order a saga has, the owned row's too; same year ⇒ Seerr's order.
+    static func saga(_ collection: SeerrCollection, owned: Set<SeerrOwnedKey>) -> [SeerrMissingTitle] {
+        titles(collection.parts, owned: owned).enumerated()
+            .sorted { lhs, rhs in
+                let (left, right) = (lhs.element.title.year ?? .max, rhs.element.title.year ?? .max)
+                return left != right ? left < right : lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
     /// Candidates minus what Jellyfin owns and what Seerr has (partially)
     /// available or blocklisted; deleted stays missing. Seerr's order kept.
     static func titles(_ candidates: [SeerrTitle], owned: Set<SeerrOwnedKey>) -> [SeerrMissingTitle] {

@@ -221,7 +221,11 @@ extension JellyfinAPIClient {
             params.isFavorite = isFavorite
             params.tags = tags
             params.nameStartsWithOrGreater = nameStartsWithOrGreater
-            params.fields = fieldSet == .card ? [.childCount] : [.overview, .genres, .childCount]
+            switch fieldSet {
+            case .detail: params.fields = [.overview, .genres, .childCount]
+            case .card: params.fields = [.childCount]
+            case .cardWithProviderIds: params.fields = [.childCount, .providerIDs]
+            }
             params.enableUserData = true
             params.enableImageTypes = [.primary, .backdrop, .thumb]
             params.imageTypeLimit = 1

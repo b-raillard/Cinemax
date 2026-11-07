@@ -182,6 +182,15 @@ enum CinemaTVLayout {
     /// The square poster-stack cover heading a playlist's own page.
     static let playlistCoverSide: CGFloat = 320
 
+    // MARK: Season pills (detail fiche)
+
+    /// The season pills' rhythm, shared by the owned pills and Seerr's dashed
+    /// ones appended after them (`MediaDetailMissingSeasonPills`) so the two
+    /// kinds read as one row: the gap between pills, and a pill's vertical
+    /// padding.
+    static let seasonPillSpacing: CGFloat = 8
+    static let seasonPillVerticalPadding: CGFloat = 8
+
     // MARK: Pro page (design C, 2026-10-24)
 
     /// The Gratuit and Pro columns of the comparison table.

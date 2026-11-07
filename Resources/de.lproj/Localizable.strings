@@ -1649,6 +1649,7 @@
 "seerr.request.action.series" = "Die Serie anfragen";
 "seerr.request.action.season" = "Staffel %d anfragen";
 "seerr.request.action.seasonRange" = "Staffeln %d bis %d anfragen";
+"seerr.request.action.specials" = "Specials anfragen";
 "seerr.request.action.seasons" = "%d Staffeln anfragen";
 "seerr.request.action.seasons.one" = "%d Staffel anfragen";
 "seerr.request.action.films" = "Alle %d Filme anfragen";
@@ -1662,6 +1663,10 @@
 "seerr.missing.requestAll" = "Alle %d anfragen";
 "seerr.missing.requestAll.one" = "Staffel anfragen";
 "seerr.season.specials" = "Specials";
+"seerr.saga.title" = "Die Saga vervollständigen";
+"seerr.saga.titleNamed" = "Die Saga vervollständigen: %@";
+"seerr.saga.requestAll" = "Alle %d anfragen";
+"seerr.saga.requestAll.one" = "Diesen Film anfragen";
 "seerr.searchPrompt.title" = "Fehlt dir ein Titel?";
 "seerr.searchPrompt.body" = "Dein Server nutzt Seerr für Anfragen. Melde dich einmal mit deinem Jellyfin-Konto an: nichts zu tippen.";
 "seerr.searchPrompt.later" = "Später";

@@ -252,8 +252,8 @@ struct PluralRuleTests {
                     "seerr.activation.summary.enabled", "seerr.activation.summary.refused",
                     "seerr.activation.summary.failed", "seerr.activation.summary.disableFailed",
                     "seerr.activation.summary.addressFailed",
-                    // Seerr missing seasons (series fiche).
-                    "seerr.missing.requestAll"]
+                    // Seerr missing seasons (series fiche), missing films (saga).
+                    "seerr.missing.requestAll", "seerr.saga.requestAll"]
         for language in AppLanguage.supported {
             let bundle = Bundle.localizedBundle(for: language)
             for key in keys {

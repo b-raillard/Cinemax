@@ -159,9 +159,13 @@ public protocol AuthAPI: Sendable {
 /// by far the heaviest field of a `BaseItemDto`. Only pass `.card` from a
 /// query whose items are drawn as cards and nothing else — the detail screen
 /// always re-fetches its own item by id, so a card's lean DTO never reaches it.
+/// `.cardWithProviderIds` is `.card` plus `ProviderIds` (the TMDb id): asked
+/// only where a Seerr section must tell the owned cards from the missing ones
+/// (a fiche's collection rows), and only while that section may show.
 public enum ItemFieldSet: Sendable, Equatable {
     case detail
     case card
+    case cardWithProviderIds
 }
 
 /// What one `searchItems` pass asks for beyond the items themselves.

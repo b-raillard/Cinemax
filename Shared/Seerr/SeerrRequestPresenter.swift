@@ -128,6 +128,28 @@ final class SeerrRequestPresenter {
         .map(\.seasonNumber).sorted()
     }
 
+    /// A saga's « Demander les N » (BoxSet section, movie rows): every film
+    /// still requestable, all ticked (`.films`); none left ⇒ « Déjà demandé ».
+    func requestAll(films missing: [SeerrMissingTitle], loc: LocalizationManager, toasts: ToastCenter) {
+        let films = requestableFilms(missing)
+        guard !films.isEmpty else {
+            toasts.info(loc.localized("seerr.request.duplicate"))
+            return
+        }
+        present(.films(films.map(\.title)))
+    }
+
+    /// The films that may still be asked for — never asked, or declined — by
+    /// their EFFECTIVE badge, in the section's order.
+    func requestableFilms(_ missing: [SeerrMissingTitle]) -> [SeerrMissingTitle] {
+        missing.filter { film in
+            switch badge(for: film.id, default: film.badge) {
+            case .request, .declined: true
+            case .pending, .processing: false
+            }
+        }
+    }
+
     /// Pending / in preparation ⇒ « Déjà demandé » and `true`: nothing opens.
     private func refusesAlreadyRequested(_ badge: SeerrBadge, loc: LocalizationManager, toasts: ToastCenter) -> Bool {
         switch badge {
@@ -173,11 +195,15 @@ final class SeerrRequestPresenter {
 
     /// « Demander la saison 4 », « Demander les saisons 4 à 6 » (consecutive),
     /// « Demander 2 saisons » otherwise. `seasons` ascending.
+    /// Season 0 is « les épisodes spéciaux », never « la saison 0 »: alone it
+    /// has its own label, and a run starting at it takes the count.
     static func seasonsActionTitle(_ seasons: [Int], loc: LocalizationManager) -> String {
         if seasons.count == 1, let only = seasons.first {
-            return loc.localized("seerr.request.action.season", only)
+            return only == 0
+                ? loc.localized("seerr.request.action.specials")
+                : loc.localized("seerr.request.action.season", only)
         }
-        if let first = seasons.first, let last = seasons.last, seasons.count > 1,
+        if let first = seasons.first, let last = seasons.last, seasons.count > 1, first != 0,
            last - first == seasons.count - 1 {
             return loc.localized("seerr.request.action.seasonRange", first, last)
         }

@@ -558,7 +558,8 @@ struct MediaDetailScreen: View {
             seasonsSection(item)
         }
 
-        // Collection ("Part of: …") — movies that share a BoxSet
+        // Collection ("Part of: …") — movies that share a BoxSet. The saga's
+        // missing films go at its END: no owned card moves when Seerr answers.
         if !viewModel.collectionItems.isEmpty {
             MediaDetailSimilarSection(
                 items: viewModel.collectionItems,
@@ -566,7 +567,10 @@ struct MediaDetailScreen: View {
                 titleOverride: String(
                     format: loc.localized("detail.partOf"),
                     viewModel.collectionName ?? ""
-                )
+                ),
+                trailing: viewModel.sagaPlacement == .appendedToPartOfRow ? missingSaga : .hidden,
+                onRequestMissing: requestSagaFilm,
+                onRequestAllMissing: requestAllSagaFilms
             ).equatable()
             .cardZoomScope(zoomNamespace, surface: "detail.partOf")
         }
@@ -584,10 +588,23 @@ struct MediaDetailScreen: View {
             .cardZoomScope(zoomNamespace, surface: "detail.contents")
         }
 
+        // The films of the saga the collection lacks: right after what it
+        // contains, never above it.
+        if viewModel.sagaPlacement == .afterCollectionContents {
+            missingSagaRow(title: loc.localized("seerr.saga.title"))
+        }
+
         // Similar items
         if !viewModel.similarItems.isEmpty {
             MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
                 .cardZoomScope(zoomNamespace, surface: "detail.similar")
+        }
+
+        // A film with no « Fait partie de » row but a TMDb collection: its
+        // saga's films at the very END of the fiche, so nothing above moves.
+        if viewModel.sagaPlacement == .endOfFiche {
+            missingSagaRow(title: viewModel.sagaName.map { loc.localized("seerr.saga.titleNamed", $0) }
+                ?? loc.localized("seerr.saga.title"))
         }
     }
 
@@ -1719,7 +1736,7 @@ struct MediaDetailScreen: View {
             // tvOS: horizontal scroll of season pills (hidden when only one season)
             if showSeasonPicker {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: CinemaTVLayout.seasonPillSpacing) {
                         ForEach(viewModel.seasons, id: \.id) { season in
                             let isSelected = season.id == viewModel.selectedSeasonId
                             Button {
@@ -1731,7 +1748,7 @@ struct MediaDetailScreen: View {
                                     .font(.system(size: seasonTabFontSize, weight: isSelected ? .bold : .medium))
                                     .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
                                     .padding(.horizontal, CinemaSpacing.spacing3)
-                                    .padding(.vertical, 8)
+                                    .padding(.vertical, CinemaTVLayout.seasonPillVerticalPadding)
                                     .background(
                                         isSelected
                                             ? Capsule().fill(themeManager.accentContainer)
@@ -1924,6 +1941,45 @@ struct MediaDetailScreen: View {
         guard let seerrRequests, let series = viewModel.seerrSeriesTitle,
               case .loaded(let missing) = viewModel.seerrSeasons else { return }
         seerrRequests.requestAll(missing, of: series, loc: loc, toasts: toast)
+    }
+
+    // MARK: - Missing films of the saga (Seerr)
+
+    /// The saga's missing films as this account may see them right now — the
+    /// same render-time re-read as `missingSeasons`.
+    private var missingSaga: MissingSection<SeerrMissingTitle> {
+        guard let seerr, seerrRequests != nil else { return viewModel.seerrSaga(for: nil) }
+        let visible = seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+        return viewModel.seerrSaga(for: visible ? seerr.snapshot() : nil)
+    }
+
+    /// The BoxSet's section / the film's end row — a header of their own.
+    @ViewBuilder
+    private func missingSagaRow(title: String) -> some View {
+        let section = missingSaga
+        if !section.drawsNothing {
+            MediaDetailSagaRow(
+                title: title,
+                section: section,
+                cardWidth: similarCardWidth,
+                onRequest: requestSagaFilm,
+                onRequestAll: requestAllSagaFilms
+            )
+            .equatable()
+        }
+    }
+
+    /// A missing film's card: the request (« Demander ce film ») — or
+    /// « Déjà demandé ».
+    private func requestSagaFilm(_ film: SeerrMissingTitle) {
+        guard let seerr, let seerrRequests else { return }
+        Task { await seerrRequests.request(film, session: seerr, loc: loc, toasts: toast) }
+    }
+
+    /// « Demander les N »: every requestable film, all ticked.
+    private func requestAllSagaFilms() {
+        guard let seerrRequests, case .loaded(let missing) = viewModel.seerrSaga else { return }
+        seerrRequests.requestAll(films: missing, loc: loc, toasts: toast)
     }
 
     /// Season bulk "mark watched" affordance (F10). Opens a confirmation

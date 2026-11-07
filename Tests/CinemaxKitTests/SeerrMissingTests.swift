@@ -243,6 +243,18 @@ struct SeerrMissingTests {
         #expect(ids == [.init(kind: .movie, tmdbId: 10), .init(kind: .tv, tmdbId: 11), .init(kind: .movie, tmdbId: 12)])
     }
 
+    @Test("the TMDb collection id: `TmdbCollection` on a film or a BoxSet, Jellyfin's `Tmdb` on a BoxSet only")
+    func tmdbCollectionId() {
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["TmdbCollection": "1241", "Tmdb": "671"])) == 1241)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["tmdbcollection": "1241"])) == 1241)
+        // A film's `Tmdb` is the FILM's id, never its saga's.
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["Tmdb": "671"])) == nil)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["Tmdb": "1241"], .boxSet)) == 1241)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["Tmdb": "9", "TmdbCollection": "1241"], .boxSet)) == 1241)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["TmdbCollection": "x"], .boxSet)) == nil)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["Tmdb": "1241"], .series)) == nil)
+    }
+
     // MARK: Badges
 
     @Test("badge: no info, unknown or no request asks for the title")
@@ -467,6 +479,16 @@ struct SeerrRequestFlowTests {
         #expect(label([4]) == loc.localized("seerr.request.action.season", 4))
         #expect(label([4, 5, 6]) == loc.localized("seerr.request.action.seasonRange", 4, 6))
         #expect(label([1, 3]) == loc.counted("seerr.request.action.seasons", 2))
+    }
+
+    @Test("the confirmation reads « Épisodes spéciaux » for season 0 alone, a count for a run from 0")
+    func specialsLabels() {
+        func label(_ s: [Int]) -> String { SeerrRequestPresenter.seasonsActionTitle(s, loc: loc) }
+        #expect(label([0]) == loc.localized("seerr.request.action.specials"))
+        #expect(label([0]) != loc.localized("seerr.request.action.season", 0))
+        // « Demander les saisons 0 à 2 » would name a season 0 nobody calls that.
+        #expect(label([0, 1, 2]) == loc.counted("seerr.request.action.seasons", 3))
+        #expect(label([0, 2]) == loc.counted("seerr.request.action.seasons", 2))
     }
 
     @Test("without partial requests the label names what is sent")

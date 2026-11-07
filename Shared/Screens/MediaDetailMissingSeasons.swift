@@ -85,7 +85,7 @@ struct MediaDetailMissingSeasonPills: View, Equatable {
     private static let skeletonCount = 2
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: CinemaTVLayout.seasonPillSpacing) {
             switch section {
             case .hidden:
                 EmptyView()
@@ -118,7 +118,7 @@ struct MediaDetailMissingSeasonPills: View, Equatable {
             .font(.system(size: fontSize, weight: .medium))
             .lineLimit(1)
             .padding(.horizontal, CinemaSpacing.spacing3)
-            .padding(.vertical, 8)
+            .padding(.vertical, CinemaTVLayout.seasonPillVerticalPadding)
             // The design system's one dashed outline, on the missing-season
             // pill too (Shared/DesignSystem/CLAUDE.md): no fill, « not here yet ».
             .overlay {
@@ -138,7 +138,7 @@ struct MediaDetailMissingSeasonPills: View, Equatable {
         Text(SeerrRequestPresenter.seasonName(10, loc: loc))
             .font(.system(size: fontSize, weight: .medium))
             .padding(.horizontal, CinemaSpacing.spacing3)
-            .padding(.vertical, 8)
+            .padding(.vertical, CinemaTVLayout.seasonPillVerticalPadding)
             .hidden()
             .overlay { SkeletonBlock().clipShape(Capsule()) }
             .focusable(false)
