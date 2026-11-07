@@ -78,9 +78,11 @@ private func requestBench(
     return (session, app, stub)
 }
 
-private func created(_ type: String = "movie", id: Int = 1) -> StubSeerrTransport.Reply {
+/// `status`: 1 = pending (what an ordinary user's POST answers), 2 = approved
+/// (what Seerr answers a user it auto-approves).
+private func created(_ type: String = "movie", id: Int = 1, status: Int = 1) -> StubSeerrTransport.Reply {
     .response(status: 201, body: """
-    {"id":\(id),"status":1,"type":"\(type)","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-01T10:00:00Z",
+    {"id":\(id),"status":\(status),"type":"\(type)","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-01T10:00:00Z",
     "requestedBy":{"id":7,"permissions":32},"media":{"tmdbId":1,"status":3}}
     """)
 }
@@ -378,7 +380,7 @@ struct SeerrRequestFlowTests {
     @Test("with partial requests only the selection is sent, in order")
     func partialSendsTheSelection() async {
         let bench = await requestBench(permissions: 128)
-        bench.stub.enqueue(created("tv"))
+        bench.stub.enqueue(created("tv", status: 2))
         let presenter = SeerrRequestPresenter()
         await presenter.submit(
             .series(series, seasons: [2, 3, 4], preselected: []), selection: [4, 2],
@@ -415,6 +417,35 @@ struct SeerrRequestFlowTests {
         #expect(presenter.badge(for: "movie-5", default: .request) == .request)
         #expect(toasts.current?.title == loc.localized("seerr.request.forbidden.title"))
         #expect(toasts.current?.message == loc.localized("seerr.request.forbidden.fix"))
+        // A browse-surface toast never names Seerr, in any language.
+        for language in ["fr", "en", "de"] {
+            let fix = Bundle.localizedBundle(for: language)
+                .localizedString(forKey: "seerr.request.forbidden.fix", value: nil, table: nil)
+            #expect(fix != "seerr.request.forbidden.fix", "\(language)")
+            #expect(!fix.contains("Seerr"), "\(language): \(fix)")
+        }
+    }
+
+    @Test("after a request, the badge reads the status Seerr answered, not the permissions")
+    func badgeFollowsTheCreatedStatus() async {
+        // The permissions say « an admin approves »; Seerr approved at once.
+        let bench = await requestBench(permissions: 32)
+        bench.stub.enqueue(created(status: 2))
+        let presenter = SeerrRequestPresenter()
+        await presenter.submit(
+            .movie(SeerrTitle(kind: .movie, tmdbId: 5, title: "Film")), selection: [],
+            session: bench.session, loc: loc, toasts: ToastCenter())
+        #expect(presenter.badge(for: "movie-5", default: .request) == .processing)
+
+        // The permissions say « auto-approved »; Seerr kept it pending.
+        let auto = await requestBench(permissions: 128)
+        auto.stub.enqueue(created("tv", status: 1))
+        let autoPresenter = SeerrRequestPresenter()
+        await autoPresenter.submit(
+            .series(series, seasons: [2, 3], preselected: []), selection: [2, 3],
+            session: auto.session, loc: loc, toasts: ToastCenter())
+        #expect(autoPresenter.badge(for: "tv-90228", default: .request) == .pending)
+        #expect(autoPresenter.badge(for: "tv-90228-s3", default: .request) == .pending)
     }
 
     @Test("a 202 is a failure: nothing was available to request")

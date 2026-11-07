@@ -1636,7 +1636,7 @@
 "seerr.request.already.pending" = "Waiting for approval";
 "seerr.request.already.processing" = "Being prepared";
 "seerr.request.forbidden.title" = "The request was refused";
-"seerr.request.forbidden.fix" = "Your permissions or quota do not allow it. Ask the admin to check in Seerr.";
+"seerr.request.forbidden.fix" = "Your permissions or quota do not allow it. Ask the admin to check your request permissions.";
 "seerr.request.noSeasons" = "No season to request";
 "seerr.request.failed" = "The request did not go through";
 "seerr.request.next.auto" = "The download starts right away.";

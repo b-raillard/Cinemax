@@ -164,7 +164,24 @@ final class SeerrRequestPresenter {
     private struct Result {
         let job: Job
         let outcome: Outcome
+        /// `.sent`: what the created request's status says (`badge(afterCreating:)`).
+        var sentBadge: SeerrBadge?
         var error: Error?
+    }
+
+    /// The badge a card takes once its request is created — from the status
+    /// Seerr ANSWERED, never guessed from the permissions (an admin's
+    /// auto-approval rule, a quota, a per-user override all decide on the
+    /// server): pending ⇒ « En attente », declined ⇒ declined, anything else
+    /// (approved, and `failed` / `completed` — approved, then handed off) ⇒
+    /// in preparation. The permissions only phrase the sheet's « what
+    /// happens next » line (`nextStepKey`).
+    static func badge(afterCreating status: SeerrRequestStatus) -> SeerrBadge {
+        switch status {
+        case .pending: .pending
+        case .declined: .declined
+        case .approved, .failed, .completed: .processing
+        }
     }
 
     /// Sends the draft. `.films` sends one request per selected film, in
@@ -176,8 +193,6 @@ final class SeerrRequestPresenter {
     ) async {
         let jobs = Self.jobs(for: draft, selection: selection, partial: session.publicSettings?.partialRequestsEnabled ?? true)
         guard !jobs.isEmpty else { return }
-        var permissions = SeerrPermissions()
-        if case .connected(let user) = session.connection { permissions = user.permissions }
 
         // Films 2…n must never go out under another account.
         let account = session.activeAccountKeyProvider()
@@ -186,10 +201,10 @@ final class SeerrRequestPresenter {
             guard session.activeAccountKeyProvider() == account else { return }
             let request = job.request
             do {
-                _ = try await session.perform { client, credential in
+                let created = try await session.perform { client, credential in
                     try await client.createRequest(request, credential)
                 }
-                outcomes.append(Result(job: job, outcome: .sent))
+                outcomes.append(Result(job: job, outcome: .sent, sentBadge: Self.badge(afterCreating: created.status)))
             } catch is CancellationError {
                 return   // the account changed: nobody's to show
             } catch SeerrError.duplicate {
@@ -206,7 +221,7 @@ final class SeerrRequestPresenter {
         for result in outcomes {
             switch result.outcome {
             case .sent:
-                mark(result.job, as: permissions.autoApproves(result.job.kind) ? .processing : .pending)
+                mark(result.job, as: result.sentBadge ?? .pending)
             case .duplicate:
                 mark(result.job, as: .pending)
             default:
