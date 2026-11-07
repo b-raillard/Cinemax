@@ -66,6 +66,11 @@ struct AppNavigation: View {
     /// The per-account codes (multi-account) — a process singleton: it caches
     /// what it has read from the Keychain, per account.
     static let sharedAccountLocks = AccountLockStore()
+    /// The active account's Seerr identity — a process singleton: every Seerr
+    /// surface reads it at render, and its generation token is what keeps an
+    /// answer for one profile off the next profile's screen. Not `private`, for
+    /// the same reason as `sharedProAccess`. See `Shared/Seerr/SeerrSession.swift`.
+    static let sharedSeerrSession = SeerrSession()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -80,6 +85,7 @@ struct AppNavigation: View {
     @State private var proStore = Self.sharedProStore
     @State private var proAccess = Self.sharedProAccess
     @State private var accountLocks = Self.sharedAccountLocks
+    @State private var seerr = Self.sharedSeerrSession
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
@@ -260,6 +266,7 @@ struct AppNavigation: View {
         .environment(earlyAdopter)
         .environment(proStore)
         .environment(accountLocks)
+        .environment(seerr)
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         #if os(iOS)
         .environment(reviewPrompt)
@@ -275,6 +282,11 @@ struct AppNavigation: View {
         // forced Halloween comes or goes with it (lot C).
         .onChange(of: proAccess.allows(.seasonalAllYear)) { _, _ in
             seasonal.reevaluate()
+        }
+        // Seerr follows the tier too: refused ⇒ the session forgets its
+        // identity and makes no call; granted again ⇒ it comes back.
+        .onChange(of: proAccess.allows(.requests)) { _, _ in
+            Task { await seerr.reload(appState: appState) }
         }
         .environment(playlistPresenter)
         // "Add to a playlist" is raised from poster context menus inside lazy
@@ -404,6 +416,8 @@ struct AppNavigation: View {
         // previous locale's track titles for its TTL.
         .onChange(of: loc.languageCode) { _, code in
             appState.apiClient.setPreferredLanguage(code)
+            // Seerr takes the language as `language=`, not `Accept-Language`.
+            seerr.setLanguage(code)
         }
         .task {
             // The Pro purchase: listen to `Transaction.updates` (an « Ask to
@@ -426,13 +440,38 @@ struct AppNavigation: View {
             }
             appState.accountLockProvider = { [accountLocks] key in accountLocks.hasLock(key) }
             appState.parentalLockProvider = { [parentalLock] in parentalLock.isEnabled }
-            appState.onAccountForgotten = { [accountLocks] key in accountLocks.remove(key: key) }
+            appState.onAccountForgotten = { [accountLocks, seerr] key in
+                accountLocks.remove(key: key)
+                // Its Seerr session cookie goes with it.
+                seerr.forgetAccount(key)
+            }
+            // A removed server's Seerr API key (per device, per server) too.
+            appState.onServerForgotten = { [seerr] serverId in seerr.forgetServer(serverId) }
+            // Every `refreshCurrentUser` (sign-in, switch, restore, foreground,
+            // `UserUpdated`) re-reads the account's Seerr configuration and
+            // identity. Wired BEFORE `restoreSession`, whose background task
+            // runs the cold launch's first refresh. Both are process
+            // singletons: captured strongly, nothing to protect.
+            appState.onCurrentUserRefreshed = { [seerr, appState] in
+                Task { await seerr.reload(appState: appState) }
+            }
+            // Lifting the active account's age cap brings Seerr back at once.
+            appState.onAgeCapChanged = { [seerr, appState] in
+                Task { await seerr.reload(appState: appState) }
+            }
+            // The account the app is on RIGHT NOW: between `applyActiveServer`
+            // and the reset, the session serves nothing of the previous one.
+            seerr.activeAccountKeyProvider = { [appState] in appState.activeAccountKey }
+            // Seerr requests are a Pro feature: no Seerr call without it. Wired
+            // before `restoreSession`, whose refresh runs the first reload.
+            seerr.proAllowsProvider = { [proAccess] in proAccess.allows(.requests) }
             // The language rides every request as `Accept-Language` (Jellyfin
             // 12.0 localizes the media-stream titles the track pickers print
             // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds
             // the client, so the first authenticated request already carries
             // it; `onChange(of: loc.languageCode)` below keeps it current.
             appState.apiClient.setPreferredLanguage(loc.languageCode)
+            seerr.setLanguage(loc.languageCode)
             await appState.restoreSession()
             // An install that already knows a server is not a first run whatever
             // the flag says — it upgraded from a version without onboarding.
@@ -587,6 +626,12 @@ struct AppNavigation: View {
         // refresh owner. Keyed on the account, not the server, since
         // multi-account: a same-server switch never moves `activeServerId`.
         .onChange(of: appState.activeAccountKey) { _, newKey in
+            // FIRST, before anything else, sign-out (`nil`) included: the
+            // Seerr identity of the account being left is dropped
+            // synchronously, so no answer of a parent's can land on a child's
+            // screen. `reload` repeats it before its first `await` — this is
+            // the early close, not the only one.
+            seerr.accountDidChange(to: newKey)
             // Signed out (`nil`): keep the loaded profile, as `activate(nil)`
             // always did — re-signing in must find it intact.
             guard let newKey else { return }
@@ -741,6 +786,10 @@ struct AppNavigation: View {
             // is per-network, so re-run the transport probe.
             if online {
                 StreamTransportPolicy.shared.refresh()
+                // Seerr makes no call offline: back online, its identity is
+                // read again (an offline cold launch would otherwise keep it
+                // dark until the next foreground).
+                Task { await seerr.reload(appState: appState) }
             }
         }
         #if !DEBUG

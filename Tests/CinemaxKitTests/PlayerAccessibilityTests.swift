@@ -247,7 +247,11 @@ struct PluralRuleTests {
         let keys = ["library.itemCount", "detail.collection.count", "search.resultCount",
                     "home.remainingTime.minutes", "movies.count", "movies.titles", "tvShows.count",
                     "person.titleCount", "syncplay.participants", "syncplay.session.more",
-                    "settings.appIcon.proBanner"]
+                    "settings.appIcon.proBanner",
+                    // Seerr activation (Settings → Demandes).
+                    "seerr.activation.summary.enabled", "seerr.activation.summary.refused",
+                    "seerr.activation.summary.failed", "seerr.activation.summary.disableFailed",
+                    "seerr.activation.summary.addressFailed"]
         for language in AppLanguage.supported {
             let bundle = Bundle.localizedBundle(for: language)
             for key in keys {

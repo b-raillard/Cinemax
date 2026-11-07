@@ -6,6 +6,43 @@ import CinemaxKit
 
 final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
+    // MARK: - UserPreferencesAPI
+
+    /// Keyed `"\(userId ?? "me")|\(id)|\(client)"`.
+    var displayPreferences: [String: DisplayPreferencesDto] = [:]
+    private(set) var updateDisplayPreferencesCalls: [(id: String, client: String, userId: String?, prefs: DisplayPreferencesDto)] = []
+
+    private func displayPreferencesKey(_ id: String, _ client: String, _ userId: String?) -> String {
+        "\(userId ?? "me")|\(id)|\(client)"
+    }
+
+    /// Runs inside every `getDisplayPreferences` before it answers, so a test
+    /// can hold a read open with a `TestLatch` (the Seerr session's generations).
+    var onGetDisplayPreferences: (@Sendable () async -> Void)?
+
+    func getDisplayPreferences(id: String, client: String, userId: String?) async throws -> DisplayPreferencesDto {
+        if let hook = recordLock.withLock({ onGetDisplayPreferences }) { await hook() }
+        return recordLock.withLock { displayPreferences[displayPreferencesKey(id, client, userId)] }
+            ?? DisplayPreferencesDto(client: client, id: id)
+    }
+
+    /// Runs at the head of every `updateDisplayPreferences` (with the user id),
+    /// so a test can hold a write open.
+    var onUpdateDisplayPreferences: (@Sendable (String?) async -> Void)?
+    /// Users whose `updateDisplayPreferences` throws.
+    var failingUpdateUserIds: Set<String> = []
+
+    func updateDisplayPreferences(_ prefs: DisplayPreferencesDto, id: String, client: String, userId: String?) async throws {
+        if let hook = recordLock.withLock({ onUpdateDisplayPreferences }) { await hook(userId) }
+        if let userId, recordLock.withLock({ failingUpdateUserIds.contains(userId) }) {
+            throw URLError(.cannotConnectToHost)
+        }
+        recordLock.withLock {
+            displayPreferences[displayPreferencesKey(id, client, userId)] = prefs
+            updateDisplayPreferencesCalls.append((id, client, userId, prefs))
+        }
+    }
+
     // MARK: - Call tracking
 
     /// Serializes every mutation of the call-recording state below. View
@@ -109,7 +146,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedValidity
     }
 
-    func isQuickConnectEnabled() async throws -> Bool { false }
+    var stubbedQuickConnectEnabled = false
+    func isQuickConnectEnabled() async throws -> Bool { stubbedQuickConnectEnabled }
     func initiateQuickConnect() async throws -> QuickConnectRequest {
         if shouldThrow { throw stubbedError }
         return QuickConnectRequest(code: "123456", secret: "secret")
@@ -146,7 +184,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func getPublicUsers() async throws -> [UserDto] { [] }
-    func getUsers() async throws -> [UserDto] { [] }
+    /// The administrator's user list (`getUsers`).
+    var stubbedUsers: [UserDto] = []
+    var getUsersError: (any Error)?
+    func getUsers() async throws -> [UserDto] {
+        if let error = recordLock.withLock({ getUsersError }) { throw error }
+        return recordLock.withLock { stubbedUsers }
+    }
     var stubbedActiveSessions: [SessionInfoDto] = []
     /// Every `getActiveSessions` call's `controllableByUserId`, in order —
     /// `nil` entries are the unfiltered (admin) shape.
@@ -813,7 +857,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
 // MARK: - Mock Keychain
 
-final class MockKeychain: SecureStorageProtocol, @unchecked Sendable {
+final class MockKeychain: SecureStorageProtocol, SeerrSecretStorage, @unchecked Sendable {
+    private var storedSeerrSessions: [String: SeerrBoundSecret] = [:]
+    private var storedSeerrAPIKeys: [String: SeerrBoundSecret] = [:]
+    func seerrSessions() -> [String: SeerrBoundSecret] { storedSeerrSessions }
+    func saveSeerrSessions(_ s: [String: SeerrBoundSecret]) { storedSeerrSessions = s }
+    func seerrAPIKeys() -> [String: SeerrBoundSecret] { storedSeerrAPIKeys }
+    func saveSeerrAPIKeys(_ k: [String: SeerrBoundSecret]) { storedSeerrAPIKeys = k }
+
     var savedAccessToken: String?
     var savedServerURL: URL?
     var savedSession: UserSession?

@@ -1,0 +1,17 @@
+# Seerr requests
+
+> Loaded when you work under `Shared/Seerr/` or on `RequestsSettingsScreen`. Spec (the long stories, the spike measurements): `docs/superpowers/specs/2026-11-06-seerr-requests-design.md`. The client itself lives in `Packages/CinemaxKit/Sources/CinemaxKit/Seerr/` (see `Packages/CinemaxKit/CLAUDE.md`). Lot 1a ships the base and Réglages → Demandes; no browse surface exists yet.
+
+- **RULE — everything Seerr-only comes AFTER owned content, and the word « Seerr » appears only in Réglages and in the invitation to sign in.** Browse surfaces (search, Home, fiches) never name it; its rows sit below what the Jellyfin server owns.
+- **RULE — an age-capped account gets NOTHING from Seerr: no call, no UI.** Capped = the device cap `privacy.maxContentAge` > 0 OR the server's `maxParentalRating` (`SeerrAccess.isAgeCapped`). An unknown policy counts as capped (fail closed). Lifting the cap reloads at once (`AppState.onAgeCapChanged`).
+- **RULE — no Seerr call without Pro (`proAllowsProvider`, default fail closed), without `seerr.enabled`, or offline.** The one exception is the admin's own Réglages → Demandes page, which must work to enable it. Back online, a Pro tier change and a cap change all `reload`.
+- **RULE — a stale answer is dropped, never applied.** Every `perform` checks `isCurrent` after its await; reads go through `snapshot()`; the account comes from `activeAccountKeyProvider`. A reload for the SAME account never resets what is on screen.
+- **RULE — Seerr never answers 401 for a dead session: 403 ⇒ PROBE (`/auth/me`, or `/user/jellyfin/{id}` without `X-API-User`) before concluding.** A dead cookie and a refused key both answer 403. A dead cookie gets ONE silent re-sign-in (single-flight), and only to the configured address; never a second attempt in a row.
+- **RULE — the device API key and the session cookie are BOUND to the Seerr origin they were issued for (scheme+host+port+path) and never sent anywhere else.** A non-admin profile can rewrite its own `seerr.url`, so an unbound secret would be exfiltrated by typing an address. Mismatch ⇒ account mode, not an error.
+- **RULE — `X-API-User` is mandatory in key mode and enforced by the TYPE** (`SeerrCredential.apiKey` requires a `SeerrUserID`); never build the header by hand.
+- **RULE — CSRF is the client's job** (`_csrf` + `X-XSRF-TOKEN`, one refresh on a refusal); a call site never touches it.
+- **RULE — `HTTPCookie` silently drops `Secure` cookies served over `http://`: always read and write cookies through `SeerrClient.cookies(in:)`,** never `HTTPCookieStorage` directly.
+- **RULE — never logged: headers, cookies, the Quick Connect `secret`, the `/settings/jellyfin` body.** `LogScrubber` carries the markers as a net, not as permission.
+- **RULE — « Tester la connexion » tests the TYPED address and saves it only when the report has no failure** (`SeerrConnectionTest.run` never saves; `SeerrActivationModel.setAddress` does). The cookie the test's sign-in stores is thus always bound to the saved address.
+- **RULE — Quick Connect approval is only ever auto-given to the configured address.** Residual risk, accepted (spec § Trust): a LAN man-in-the-middle on a plain-HTTP Seerr could swap in a code it initiated. Never widen the auto-approval to any other address.
+- **RULE — a test never runs on a simulator holding a real session,** and never against the production server; the bench is the local Seerr + Jellyfin (`127.0.0.1`).

@@ -1,0 +1,505 @@
+import Foundation
+
+// MARK: - Decoding
+
+/// Decoding rules shared by every Seerr response: ISO 8601 dates, with or
+/// without fractional seconds (Seerr emits `2026-11-01T10:00:00.000Z`).
+public enum SeerrJSON {
+    public static func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            let withFractions = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+            if let date = try? withFractions.parse(string) { return date }
+            if let date = try? Date.ISO8601FormatStyle().parse(string) { return date }
+            throw DecodingError.dataCorruptedError(
+                in: container, debugDescription: "Unrecognised ISO 8601 date: \(string)")
+        }
+        return decoder
+    }
+}
+
+/// Decodes a `[SeerrTitle]`, dropping people / collections, and — for
+/// collection `parts` — reading a missing `mediaType` as a movie.
+private struct LossyTitle: Decodable {
+    let title: SeerrTitle?
+    init(from decoder: Decoder) throws {
+        title = try? SeerrTitle(from: decoder, defaultKind: nil)
+    }
+}
+
+private struct LossyPart: Decodable {
+    let title: SeerrTitle?
+    init(from decoder: Decoder) throws {
+        title = try? SeerrTitle(from: decoder, defaultKind: .movie)
+    }
+}
+
+// MARK: - Server
+
+public struct SeerrStatusInfo: Sendable, Equatable, Decodable {
+    public let version: String
+    public init(version: String) { self.version = version }
+}
+
+public struct SeerrPublicSettings: Sendable, Equatable, Decodable {
+    public let mediaServerType: Int
+    public let mediaServerLogin: Bool
+    public let newPlexLogin: Bool
+    public let partialRequestsEnabled: Bool
+    public let enableSpecialEpisodes: Bool
+    public let cacheImages: Bool
+
+    public var isJellyfin: Bool { mediaServerType == 2 }
+
+    public init(
+        mediaServerType: Int, mediaServerLogin: Bool = true, newPlexLogin: Bool = false,
+        partialRequestsEnabled: Bool = true, enableSpecialEpisodes: Bool = false,
+        cacheImages: Bool = false
+    ) {
+        self.mediaServerType = mediaServerType
+        self.mediaServerLogin = mediaServerLogin
+        self.newPlexLogin = newPlexLogin
+        self.partialRequestsEnabled = partialRequestsEnabled
+        self.enableSpecialEpisodes = enableSpecialEpisodes
+        self.cacheImages = cacheImages
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mediaServerType, mediaServerLogin, newPlexLogin
+        case partialRequestsEnabled, enableSpecialEpisodes, cacheImages
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        mediaServerType = try c.decodeIfPresent(Int.self, forKey: .mediaServerType) ?? 0
+        mediaServerLogin = try c.decodeIfPresent(Bool.self, forKey: .mediaServerLogin) ?? false
+        newPlexLogin = try c.decodeIfPresent(Bool.self, forKey: .newPlexLogin) ?? false
+        partialRequestsEnabled = try c.decodeIfPresent(Bool.self, forKey: .partialRequestsEnabled) ?? true
+        enableSpecialEpisodes = try c.decodeIfPresent(Bool.self, forKey: .enableSpecialEpisodes) ?? false
+        cacheImages = try c.decodeIfPresent(Bool.self, forKey: .cacheImages) ?? false
+    }
+}
+
+// MARK: - Users
+
+public enum SeerrMediaKind: String, Sendable, Equatable, Hashable, Decodable {
+    case movie, tv
+}
+
+public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decodable {
+    public let rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+
+    public static let admin = Self(rawValue: 2)
+    public static let manageRequests = Self(rawValue: 16)
+    public static let request = Self(rawValue: 32)
+    public static let autoApprove = Self(rawValue: 128)
+    public static let autoApproveMovie = Self(rawValue: 256)
+    public static let autoApproveTV = Self(rawValue: 512)
+    public static let requestView = Self(rawValue: 16384)
+    public static let requestMovie = Self(rawValue: 262144)
+    public static let requestTV = Self(rawValue: 524288)
+
+    /// Admins pass every check, as on the Seerr server.
+    public func allows(_ p: Self) -> Bool {
+        contains(.admin) || contains(p)
+    }
+
+    public var canManageRequests: Bool { allows(.manageRequests) }
+
+    public func autoApproves(_ kind: SeerrMediaKind) -> Bool {
+        if contains(.admin) || contains(.autoApprove) { return true }
+        switch kind {
+        case .movie: return contains(.autoApproveMovie)
+        case .tv: return contains(.autoApproveTV)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        rawValue = try decoder.singleValueContainer().decode(Int.self)
+    }
+}
+
+public struct SeerrUserID: Hashable, Sendable {
+    public let rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+}
+
+public struct SeerrUser: Sendable, Equatable, Decodable {
+    public let id: SeerrUserID
+    public let permissions: SeerrPermissions
+    public let jellyfinUserId: String?
+    public let displayName: String?
+
+    public init(
+        id: SeerrUserID, permissions: SeerrPermissions,
+        jellyfinUserId: String? = nil, displayName: String? = nil
+    ) {
+        self.id = id
+        self.permissions = permissions
+        self.jellyfinUserId = jellyfinUserId
+        self.displayName = displayName
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, permissions, jellyfinUserId, displayName, jellyfinUsername
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = SeerrUserID(rawValue: try c.decode(Int.self, forKey: .id))
+        permissions = SeerrPermissions(rawValue: try c.decodeIfPresent(Int.self, forKey: .permissions) ?? 0)
+        jellyfinUserId = try c.decodeIfPresent(String.self, forKey: .jellyfinUserId)
+        let display = try c.decodeIfPresent(String.self, forKey: .displayName)
+        let fallback = try c.decodeIfPresent(String.self, forKey: .jellyfinUsername)
+        displayName = (display?.isEmpty == false) ? display : fallback
+    }
+}
+
+// MARK: - Statuses
+
+public enum SeerrMediaStatus: Int, Sendable, Equatable, Hashable, Decodable {
+    case unknown = 1, pending, processing, partiallyAvailable, available, blocklisted, deleted
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(Int.self)
+        self = Self(rawValue: raw) ?? .unknown
+    }
+}
+
+public enum SeerrRequestStatus: Int, Sendable, Equatable, Hashable, Decodable {
+    case pending = 1, approved, declined, failed, completed
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(Int.self)
+        self = Self(rawValue: raw) ?? .pending
+    }
+}
+
+// MARK: - Media info
+
+public struct SeerrSeasonInfo: Sendable, Equatable, Decodable {
+    public let seasonNumber: Int
+    public let status: SeerrMediaStatus
+    public init(seasonNumber: Int, status: SeerrMediaStatus) {
+        self.seasonNumber = seasonNumber
+        self.status = status
+    }
+
+    private enum CodingKeys: String, CodingKey { case seasonNumber, status }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        seasonNumber = try c.decode(Int.self, forKey: .seasonNumber)
+        status = try c.decodeIfPresent(SeerrMediaStatus.self, forKey: .status) ?? .unknown
+    }
+}
+
+public struct SeerrRequestSummary: Sendable, Equatable, Decodable {
+    public let id: Int
+    public let status: SeerrRequestStatus
+    public let seasons: [Int]
+
+    public init(id: Int, status: SeerrRequestStatus, seasons: [Int] = []) {
+        self.id = id
+        self.status = status
+        self.seasons = seasons
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, status, seasons }
+    private struct SeasonNumber: Decodable { let seasonNumber: Int }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        status = try c.decodeIfPresent(SeerrRequestStatus.self, forKey: .status) ?? .pending
+        seasons = (try c.decodeIfPresent([SeasonNumber].self, forKey: .seasons) ?? []).map(\.seasonNumber)
+    }
+}
+
+public struct SeerrMediaInfo: Sendable, Equatable, Decodable {
+    public let status: SeerrMediaStatus
+    public let seasons: [SeerrSeasonInfo]
+    public let requests: [SeerrRequestSummary]
+    public let jellyfinMediaId: String?
+
+    public init(
+        status: SeerrMediaStatus, seasons: [SeerrSeasonInfo] = [],
+        requests: [SeerrRequestSummary] = [], jellyfinMediaId: String? = nil
+    ) {
+        self.status = status
+        self.seasons = seasons
+        self.requests = requests
+        self.jellyfinMediaId = jellyfinMediaId
+    }
+
+    private enum CodingKeys: String, CodingKey { case status, seasons, requests, jellyfinMediaId }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        status = try c.decodeIfPresent(SeerrMediaStatus.self, forKey: .status) ?? .unknown
+        seasons = try c.decodeIfPresent([SeerrSeasonInfo].self, forKey: .seasons) ?? []
+        requests = try c.decodeIfPresent([SeerrRequestSummary].self, forKey: .requests) ?? []
+        jellyfinMediaId = try c.decodeIfPresent(String.self, forKey: .jellyfinMediaId)
+    }
+}
+
+// MARK: - Titles
+
+public struct SeerrTitle: Sendable, Equatable, Decodable {
+    public let kind: SeerrMediaKind
+    public let tmdbId: Int
+    public let title: String
+    public let year: Int?
+    public let overview: String?
+    public let posterPath: String?
+    public let mediaInfo: SeerrMediaInfo?
+
+    public init(
+        kind: SeerrMediaKind, tmdbId: Int, title: String, year: Int? = nil,
+        overview: String? = nil, posterPath: String? = nil, mediaInfo: SeerrMediaInfo? = nil
+    ) {
+        self.kind = kind
+        self.tmdbId = tmdbId
+        self.title = title
+        self.year = year
+        self.overview = overview
+        self.posterPath = posterPath
+        self.mediaInfo = mediaInfo
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case mediaType, id, title, name, releaseDate, firstAirDate, overview, posterPath, mediaInfo
+    }
+
+    public init(from decoder: Decoder) throws {
+        try self.init(from: decoder, defaultKind: nil)
+    }
+
+    /// `defaultKind` stands in for a missing `mediaType` (collection `parts`).
+    /// A `person` / `collection` entry, or an unknown type, throws.
+    fileprivate init(from decoder: Decoder, defaultKind: SeerrMediaKind?) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let rawType = try c.decodeIfPresent(String.self, forKey: .mediaType)
+        let resolved: SeerrMediaKind?
+        if let rawType { resolved = SeerrMediaKind(rawValue: rawType) } else { resolved = defaultKind }
+        guard let resolved else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .mediaType, in: c, debugDescription: "Not a movie or a series")
+        }
+        kind = resolved
+        tmdbId = try c.decode(Int.self, forKey: .id)
+        let main = try c.decodeIfPresent(String.self, forKey: .title)
+        let alt = try c.decodeIfPresent(String.self, forKey: .name)
+        title = main ?? alt ?? ""
+        let date = try c.decodeIfPresent(String.self, forKey: .releaseDate)
+        let airDate = try c.decodeIfPresent(String.self, forKey: .firstAirDate)
+        let dateString = [date, airDate].compactMap { $0 }.first { !$0.isEmpty }
+        year = dateString.flatMap { Int($0.prefix(4)) }
+        overview = try c.decodeIfPresent(String.self, forKey: .overview)
+        posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
+        // A malformed `mediaInfo` costs the title its status, not its place.
+        mediaInfo = try? c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
+    }
+}
+
+public struct SeerrSearchPage: Sendable, Equatable, Decodable {
+    public let results: [SeerrTitle]
+    public let totalPages: Int
+
+    public init(results: [SeerrTitle], totalPages: Int) {
+        self.results = results
+        self.totalPages = totalPages
+    }
+
+    private enum CodingKeys: String, CodingKey { case results, totalPages }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        results = try c.decode([LossyTitle].self, forKey: .results).compactMap(\.title)
+        totalPages = try c.decodeIfPresent(Int.self, forKey: .totalPages) ?? 1
+    }
+}
+
+public struct SeerrSeason: Sendable, Equatable, Decodable {
+    public let seasonNumber: Int
+    public let episodeCount: Int
+
+    public init(seasonNumber: Int, episodeCount: Int) {
+        self.seasonNumber = seasonNumber
+        self.episodeCount = episodeCount
+    }
+
+    private enum CodingKeys: String, CodingKey { case seasonNumber, episodeCount }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        seasonNumber = try c.decode(Int.self, forKey: .seasonNumber)
+        episodeCount = try c.decodeIfPresent(Int.self, forKey: .episodeCount) ?? 0
+    }
+}
+
+public struct SeerrTVDetails: Sendable, Equatable, Decodable {
+    public let tmdbId: Int
+    public let name: String
+    public let seasons: [SeerrSeason]
+    public let mediaInfo: SeerrMediaInfo?
+
+    public init(tmdbId: Int, name: String, seasons: [SeerrSeason], mediaInfo: SeerrMediaInfo? = nil) {
+        self.tmdbId = tmdbId
+        self.name = name
+        self.seasons = seasons
+        self.mediaInfo = mediaInfo
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, name, seasons, mediaInfo }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tmdbId = try c.decode(Int.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        seasons = try c.decodeIfPresent([SeerrSeason].self, forKey: .seasons) ?? []
+        mediaInfo = try c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
+    }
+}
+
+public struct SeerrCollection: Sendable, Equatable, Decodable {
+    public let id: Int
+    public let name: String
+    public let parts: [SeerrTitle]
+
+    public init(id: Int, name: String, parts: [SeerrTitle]) {
+        self.id = id
+        self.name = name
+        self.parts = parts
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, name, parts }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        parts = (try c.decodeIfPresent([LossyPart].self, forKey: .parts) ?? []).compactMap(\.title)
+    }
+}
+
+public struct SeerrPerson: Sendable, Equatable, Decodable {
+    public let knownForDepartment: String?
+    public init(knownForDepartment: String? = nil) { self.knownForDepartment = knownForDepartment }
+}
+
+public struct SeerrCombinedCredits: Sendable, Equatable, Decodable {
+    public let cast: [SeerrTitle]
+    public let crew: [SeerrTitle]
+
+    public init(cast: [SeerrTitle], crew: [SeerrTitle]) {
+        self.cast = cast
+        self.crew = crew
+    }
+
+    private enum CodingKeys: String, CodingKey { case cast, crew }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        cast = (try c.decodeIfPresent([LossyTitle].self, forKey: .cast) ?? []).compactMap(\.title)
+        crew = (try c.decodeIfPresent([LossyTitle].self, forKey: .crew) ?? []).compactMap(\.title)
+    }
+}
+
+// MARK: - Requests
+
+public struct SeerrRequestMedia: Sendable, Equatable, Decodable {
+    public let tmdbId: Int
+    public let status: SeerrMediaStatus
+    public let jellyfinMediaId: String?
+
+    public init(tmdbId: Int, status: SeerrMediaStatus, jellyfinMediaId: String? = nil) {
+        self.tmdbId = tmdbId
+        self.status = status
+        self.jellyfinMediaId = jellyfinMediaId
+    }
+
+    private enum CodingKeys: String, CodingKey { case tmdbId, status, jellyfinMediaId }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        tmdbId = try c.decode(Int.self, forKey: .tmdbId)
+        status = try c.decodeIfPresent(SeerrMediaStatus.self, forKey: .status) ?? .unknown
+        jellyfinMediaId = try c.decodeIfPresent(String.self, forKey: .jellyfinMediaId)
+    }
+}
+
+public struct SeerrRequest: Sendable, Equatable, Decodable {
+    public let id: Int
+    public let status: SeerrRequestStatus
+    public let kind: SeerrMediaKind
+    public let seasons: [Int]
+    public let createdAt: Date
+    public let updatedAt: Date
+    public let requestedBy: SeerrUser
+    public let media: SeerrRequestMedia
+
+    public init(
+        id: Int, status: SeerrRequestStatus, kind: SeerrMediaKind, seasons: [Int] = [],
+        createdAt: Date, updatedAt: Date, requestedBy: SeerrUser, media: SeerrRequestMedia
+    ) {
+        self.id = id
+        self.status = status
+        self.kind = kind
+        self.seasons = seasons
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.requestedBy = requestedBy
+        self.media = media
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, status, type, seasons, createdAt, updatedAt, requestedBy, media
+    }
+    private struct SeasonNumber: Decodable { let seasonNumber: Int }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        status = try c.decodeIfPresent(SeerrRequestStatus.self, forKey: .status) ?? .pending
+        kind = try c.decode(SeerrMediaKind.self, forKey: .type)
+        seasons = (try c.decodeIfPresent([SeasonNumber].self, forKey: .seasons) ?? []).map(\.seasonNumber)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        requestedBy = try c.decode(SeerrUser.self, forKey: .requestedBy)
+        media = try c.decode(SeerrRequestMedia.self, forKey: .media)
+    }
+}
+
+public struct SeerrRequestPage: Sendable, Equatable, Decodable {
+    public let results: [SeerrRequest]
+    public let total: Int
+
+    public init(results: [SeerrRequest], total: Int) {
+        self.results = results
+        self.total = total
+    }
+
+    private enum CodingKeys: String, CodingKey { case results, pageInfo }
+    private struct PageInfo: Decodable { let results: Int }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        results = try c.decode([SeerrRequest].self, forKey: .results)
+        total = try c.decode(PageInfo.self, forKey: .pageInfo).results
+    }
+}
+
+// MARK: - Quick Connect
+
+public struct SeerrQuickConnectCode: Sendable, Equatable, Decodable {
+    public let code: String
+    public let secret: String
+    public init(code: String, secret: String) {
+        self.code = code
+        self.secret = secret
+    }
+}

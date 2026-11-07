@@ -86,6 +86,20 @@ final class AppState {
     /// lives outside `AppState` — its code in `AccountLockStore` — goes with it.
     /// Wired by `AppNavigation`.
     var onAccountForgotten: @MainActor (String) -> Void = { _ in }
+    /// Called with a server's id (`ServerEntry.id`) when it is removed, AFTER
+    /// `onAccountForgotten` for each of its accounts — what is keyed by server
+    /// outside `AppState` (the Seerr device key) goes with it. Wired by
+    /// `AppNavigation`.
+    var onServerForgotten: @MainActor (String) -> Void = { _ in }
+    /// Called at the end of EVERY `refreshCurrentUser` — the signed-out early
+    /// return included — i.e. after sign-in, switch, restore, foreground and
+    /// `UserUpdated`: the Seerr session re-reads the account's configuration
+    /// and policy there. Wired by `AppNavigation`.
+    var onCurrentUserRefreshed: @MainActor () -> Void = {}
+    /// Called when the ACTIVE account's age cap changes (`setAgeCap`): lifting
+    /// it must bring back what it hid with no other step — the Seerr session
+    /// re-reads its identity there. Wired by `AppNavigation`.
+    var onAgeCapChanged: @MainActor () -> Void = {}
 
     /// Accounts whose token a switch found revoked (`accountKey`). They stay in
     /// the list, marked « Session expirée », until reconnected or removed.
@@ -213,6 +227,8 @@ final class AppState {
     /// flips to `false` on an explicit successful fetch that says so, or on
     /// logout.
     func refreshCurrentUser() async {
+        // Fires on every exit, the signed-out early return below included.
+        defer { onCurrentUserRefreshed() }
         // Single hook covering all three session-establishing paths (login,
         // user switch, restore): hand the session to the widget / Top Shelf
         // extensions via the App Group.
@@ -802,6 +818,7 @@ final class AppState {
             revokeTokenInBackground(account.accessToken, on: entry.url)
             onAccountForgotten(ServerRegistry.accountKey(serverId: entry.id, userId: account.userId))
         }
+        onServerForgotten(entry.id)
         servers.removeAll { $0.id == entry.id }
         persistRegistry()
         // Its search history goes with it. Nothing could ever read it again —
@@ -998,6 +1015,7 @@ final class AppState {
             apiClient.applyContentRatingLimit(maxAge: age)
             republishExtensionSession()
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            onAgeCapChanged()
         } else {
             var snapshot = AccountSettingsStore.load(for: key, defaults: settingsDefaults)
                 ?? AccountSettingsStore.current(defaults: settingsDefaults)
