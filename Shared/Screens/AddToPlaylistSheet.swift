@@ -37,6 +37,29 @@ final class AddToPlaylistPresenter {
         guard let itemId, !itemId.isEmpty else { return }
         request = AddToPlaylistRequest(itemId: itemId, title: title ?? "")
     }
+
+    /// The request as `host` should present it: while the deep-link modal is
+    /// up it is the one presenter (the root cannot present over it).
+    func request(for host: PresentationHost) -> AddToPlaylistRequest? {
+        host == .modal || modalHosts == 0 ? request : nil
+    }
+
+    /// Deep-link modals on screen (a counter: a new one may appear before
+    /// the old one's disappear).
+    private(set) var modalHosts = 0
+    func modalHostAppeared() { modalHosts += 1 }
+    /// The modal leaves with its request: the root never raises it afterwards.
+    func modalHostDisappeared() {
+        modalHosts = max(0, modalHosts - 1)
+        request = nil
+    }
+}
+
+/// Who presents a root-hosted flow (the playlist sheet, the Seerr request)
+/// raised from a screen: the app's root, or the deep-link modal fiche
+/// (`MainTabView.deepLinkDetail`), over which the root cannot present.
+enum PresentationHost {
+    case root, modal
 }
 
 /// Sheet-scoped model. Nothing outlives the sheet.
@@ -320,17 +343,28 @@ struct AddToPlaylistSheet: View {
 /// `@Environment` reads resolve regardless of automatic propagation — same shape
 /// as `RemotePlayPresentation`.
 struct AddToPlaylistPresentation: ViewModifier {
-    @Binding var request: AddToPlaylistRequest?
+    let presenter: AddToPlaylistPresenter
     let appState: AppState
     let themeManager: ThemeManager
     let loc: LocalizationManager
     let toast: ToastCenter
+    /// `.modal`: hosted inside the deep-link fiche (`MainTabView`), which
+    /// then presents instead of the root — see `PresentationHost`.
+    var host: PresentationHost = .root
 
     func body(content: Content) -> some View {
+        presented(content)
+            .onAppear { if host == .modal { presenter.modalHostAppeared() } }
+            .onDisappear { if host == .modal { presenter.modalHostDisappeared() } }
+    }
+
+    @ViewBuilder
+    private func presented(_ content: Content) -> some View {
+        let request = Binding(get: { presenter.request(for: host) }, set: { presenter.request = $0 })
         #if os(tvOS)
-        content.fullScreenCover(item: $request) { request in sheetView(request) }
+        content.fullScreenCover(item: request) { request in sheetView(request) }
         #else
-        content.sheet(item: $request) { request in sheetView(request) }
+        content.sheet(item: request) { request in sheetView(request) }
         #endif
     }
 

@@ -8,7 +8,12 @@ import JellyfinAPI
 
 // MARK: - Fixtures
 
-private let jellyfinURL = URL(string: "https://maison.local")!
+/// Plain HTTP like the Seerr below: the silent re-sign-in is refused when it
+/// would downgrade from an HTTPS Jellyfin (`SeerrAccess.downgradesFromHTTPS`),
+/// which the tests of that refusal set up explicitly.
+private let jellyfinURL = URL(string: "http://maison.local")!
+private let httpsJellyfinURL = URL(string: "https://maison.local")!
+private let httpsSeerrURL = URL(string: "https://seerr.maison.local")!
 private let seerrURL = URL(string: "http://192.168.1.20:5055")!
 private let otherSeerrURL = URL(string: "http://192.168.1.30:5055")!
 private let enabledConfig = SeerrUserConfig(isEnabled: true, url: seerrURL)
@@ -159,21 +164,22 @@ private func signedIn(
     knownUser: Bool = true,
     config: SeerrUserConfig? = enabledConfig,
     api: MockAPIClient = MockAPIClient(),
-    registryServerID: String? = "srv"
+    registryServerID: String? = "srv",
+    jellyfin: URL = jellyfinURL
 ) -> (AppState, MockAPIClient) {
     if let config {
         api.displayPreferences[prefsKey] = SeerrUserConfig.merged(config, into: nil)
     }
     let keychain = MockKeychain()
     keychain.savedServers = [ServerEntry(
-        id: "S1", name: "Maison", url: jellyfinURL, serverID: registryServerID,
+        id: "S1", name: "Maison", url: jellyfin, serverID: registryServerID,
         accessToken: "tok\(userId)", userId: userId, username: userId,
         lastUsedAt: Date(timeIntervalSince1970: 1_000))]
     keychain.savedActiveServerId = "S1"
     let app = AppState(apiClient: api, keychain: keychain)
     app.settingsDefaults = .isolatedForTesting()
     app.loadServersFromKeychain()
-    app.serverURL = jellyfinURL
+    app.serverURL = jellyfin
     app.hasServer = true
     app.isAuthenticated = true
     app.accessToken = "tok\(userId)"
@@ -752,6 +758,91 @@ struct SeerrSessionTests {
         #expect(session.connection == .notLinked)
         #expect(api.authorizeQuickConnectCalls.isEmpty)
         #expect(!stub.exhausted)
+    }
+
+    // MARK: No silent sign-in downgrading from an HTTPS Jellyfin (owner, 2026-11-07)
+
+    @Test("an HTTPS Jellyfin never signs in silently to a plain-HTTP Seerr: reload and perform both fall to the tap")
+    func noSilentReSignInWhenJellyfinHTTPSAndSeerrHTTP() async throws {
+        // Reload: `/auth/me` refuses the stored cookie.
+        let stub = StubSeerrTransport([settingsReply, forbiddenReply])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("dead")])
+        let (app, api) = signedIn(jellyfin: httpsJellyfinURL)
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .notConnected)
+        #expect(session.showsConnectPrompt(proAllows: true, isOnline: true))
+        #expect(storage.seerrSessions()["S1|A"] == nil)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(stub.requests.count == 2)       // /settings/public, /auth/me — no Quick Connect
+        #expect(!stub.exhausted)
+        // The visible « Se connecter à Seerr » still works.
+        for reply in [initiatedReply, approvedReply, authenticatedReply(cookie: "tapped")] { stub.enqueue(reply) }
+        #expect(await session.signIn(address: seerrURL, appState: app) == .success(alice))
+        #expect(session.connection == .connected(alice))
+        #expect(storage.seerrSessions()["S1|A"] == bound("tapped"))
+        #expect(api.authorizeQuickConnectCalls == ["123456"])
+
+        // Perform: the session dies while connected.
+        let liveStub = StubSeerrTransport([settingsReply, userReply()])
+        let liveStorage = MockKeychain()
+        liveStorage.saveSeerrSessions(["S1|A": bound("old")])
+        let (liveApp, liveApi) = signedIn(jellyfin: httpsJellyfinURL)
+        let liveSession = makeSession(liveStub, storage: liveStorage, following: liveApp)
+        await liveSession.reload(appState: liveApp)
+        #expect(liveSession.connection == .connected(alice))
+        liveStub.enqueue(forbiddenReply)
+        liveStub.enqueue(forbiddenReply)
+
+        await #expect(throws: SeerrError.forbidden) { try await liveSession.perform(search) }
+
+        #expect(liveSession.connection == .notConnected)
+        #expect(liveSession.showsConnectPrompt(proAllows: true, isOnline: true))
+        #expect(liveStorage.seerrSessions()["S1|A"] == nil)
+        #expect(liveApi.authorizeQuickConnectCalls.isEmpty)
+        #expect(liveStub.requests.count == 4)   // + the call and its /auth/me probe
+        #expect(!liveStub.exhausted)
+    }
+
+    @Test("the silent sign-in stays for every other scheme pair")
+    func silentReSignInStillWorksOtherwise() async {
+        let pairs: [(jellyfin: URL, seerr: URL)] = [
+            (jellyfinURL, seerrURL),            // http → http
+            (httpsJellyfinURL, httpsSeerrURL),  // https → https
+            (jellyfinURL, httpsSeerrURL),       // http → https
+        ]
+        for pair in pairs {
+            let stub = StubSeerrTransport([settingsReply, forbiddenReply,
+                                           initiatedReply, approvedReply, authenticatedReply(cookie: "fresh")])
+            let storage = MockKeychain()
+            storage.saveSeerrSessions(["S1|A": bound("dead", to: pair.seerr)])
+            let (app, api) = signedIn(config: SeerrUserConfig(isEnabled: true, url: pair.seerr), jellyfin: pair.jellyfin)
+            let session = makeSession(stub, storage: storage, following: app)
+
+            await session.reload(appState: app)
+
+            let label = "\(pair.jellyfin.absoluteString) → \(pair.seerr.absoluteString)"
+            #expect(session.connection == .connected(alice), "\(label)")
+            #expect(storage.seerrSessions()["S1|A"] == bound("fresh", to: pair.seerr), "\(label)")
+            #expect(api.authorizeQuickConnectCalls == ["123456"], "\(label)")
+            #expect(!stub.exhausted, "\(label)")
+        }
+    }
+
+    @Test("a downgrade is an HTTPS Jellyfin with a plain-HTTP Seerr, nothing else")
+    func downgradeTruthTable() {
+        let http = URL(string: "http://h")
+        let https = URL(string: "HTTPS://h")
+        #expect(SeerrAccess.downgradesFromHTTPS(jellyfin: https, seerr: http))
+        #expect(SeerrAccess.downgradesFromHTTPS(jellyfin: URL(string: "https://h"), seerr: URL(string: "HTTP://s:5055")))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: http, seerr: http))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: https, seerr: https))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: http, seerr: https))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: nil, seerr: http))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: https, seerr: nil))
     }
 
     // MARK: Generations and the account switch
@@ -1473,7 +1564,7 @@ struct SeerrConnectionTestTests {
             loc.localized("seerr.test.ok.quickConnect"),
             loc.localized("seerr.test.ok.account", loc.localized("seerr.test.ok.role.request")),
         ])
-        #expect(report.warning == loc.localized("seerr.test.warning.cannotManage"))
+        #expect(report.warnings == [loc.localized("seerr.test.warning.cannotManage")])
         // The test saves no configuration: the cookie bound to the address is the only trace
         // (the typed address is the saved one here, so the session reads as connected).
         #expect(storage.seerrSessions()["S1|A"] == bound("c"))
@@ -1486,8 +1577,48 @@ struct SeerrConnectionTestTests {
         let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, userReply(admin)])
         let report = await run(session, app, key: "KEY")
         #expect(report.failure == nil)
-        #expect(report.warning == nil)
+        #expect(report.warnings.isEmpty)
         #expect(report.verified.count == 3)      // no Quick Connect line in key mode
+    }
+
+    /// Owner, 2026-11-07: from an HTTPS Jellyfin a plain-HTTP Seerr is never
+    /// signed in to silently — the test says so, in account mode, where a
+    /// session has to be renewed (key mode renews nothing).
+    @Test("an HTTPS Jellyfin with a plain-HTTP Seerr is warned in account mode, never in key mode")
+    func schemeMixIsWarnedInAccountMode() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let (app, api) = signedIn(jellyfin: httpsJellyfinURL)
+        app.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: httpsJellyfinURL)
+        api.stubbedQuickConnectEnabled = true
+        let session = makeSession(stub, following: app)
+        await session.reload(appState: app)
+        for reply in [statusReply, settingsReply] + signInReplies { stub.enqueue(reply) }
+
+        let report = await run(session, app)
+
+        #expect(report.failure == nil)
+        #expect(report.warnings == [
+            loc.localized("seerr.test.warning.httpSeerr"),
+            loc.localized("seerr.test.warning.cannotManage"),
+        ])
+
+        let admin = #"{"id":1,"permissions":2,"jellyfinUserId":"A","displayName":"Alice"}"#
+        let keyStub = StubSeerrTransport([statusReply, settingsReply, seerrServerReply, userReply(admin)])
+        let (keyApp, _) = signedIn(jellyfin: httpsJellyfinURL)
+        keyApp.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: httpsJellyfinURL)
+        let keyReport = await run(makeSession(keyStub, following: keyApp), keyApp, key: "KEY")
+        #expect(keyReport.failure == nil)
+        #expect(keyReport.warnings.isEmpty)
+    }
+
+    @Test("a Quick Connect probe that does not get through is « unreachable »; only a refusal is « off »")
+    func failedQuickConnectProbeIsUnreachable() async {
+        let (stub, session, app, api) = await accountMode([statusReply, settingsReply])
+        api.quickConnectEnabledError = URLError(.timedOut)
+        let report = await run(session, app)
+        #expect(report.failure == .unreachable)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(stub.requests.count == 3)
     }
 
     @Test("serverInfo not fetched yet (after a switch): the registry's server id is compared")
