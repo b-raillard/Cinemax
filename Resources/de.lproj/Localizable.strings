@@ -1651,3 +1651,9 @@
 "seerr.request.action.seasons.one" = "%d Staffel anfragen";
 "seerr.request.action.films" = "Alle %d Filme anfragen";
 "seerr.request.action.films.one" = "Diesen Film anfragen";
+"seerr.badge.request" = "Anfragen";
+"seerr.badge.pending" = "Ausstehend";
+"seerr.badge.processing" = "In Vorbereitung";
+"seerr.badge.declined" = "Abgelehnt";
+"seerr.missing.title" = "Noch nicht in deiner Bibliothek";
+"seerr.missing.a11y" = "%@, noch nicht in deiner Bibliothek, %@";
