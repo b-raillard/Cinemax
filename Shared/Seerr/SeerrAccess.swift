@@ -36,6 +36,15 @@ enum SeerrAccess {
         return .jellyfinRefused
     }
 
+    /// An HTTPS Jellyfin with a plain-HTTP Seerr (owner, 2026-11-07): the
+    /// session is then never renewed silently — a man-in-the-middle on the
+    /// unencrypted Seerr could have Jellyfin approve a Quick Connect code it
+    /// started — only by the visible « Se connecter à Seerr ». Any other pair,
+    /// or a scheme unknown on either side, is not a downgrade.
+    nonisolated static func downgradesFromHTTPS(jellyfin: URL?, seerr: URL?) -> Bool {
+        jellyfin?.scheme?.lowercased() == "https" && seerr?.scheme?.lowercased() == "http"
+    }
+
     /// What a failed one-gesture sign-in tells the user — the connection
     /// test's message for the same reason, wherever the sign-in was started
     /// (the test, « Se connecter à Seerr »). `nil` = nothing to say (cancelled:

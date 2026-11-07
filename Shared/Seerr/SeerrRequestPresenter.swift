@@ -42,6 +42,13 @@ final class SeerrRequestPresenter {
     /// Series whose seasons are being looked up (`SeerrMissingTitle.id`):
     /// repeated taps do not fire repeated `/tv/{id}` calls.
     @ObservationIgnored private var lookingUp: Set<String> = []
+    /// Bounds a series card's `/tv/{id}` lookup like a section load (6 s):
+    /// past it, the same quiet toast as a failure. Injectable for tests.
+    @ObservationIgnored private let lookupDeadline: @Sendable () async throws -> Void
+
+    init(lookupDeadline: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(6)) }) {
+        self.lookupDeadline = lookupDeadline
+    }
 
     func present(_ draft: SeerrRequestDraft) { self.draft = draft }
 
@@ -50,9 +57,10 @@ final class SeerrRequestPresenter {
     /// pending or in preparation — ⇒ an info toast, nothing opens; declined or
     /// never asked ⇒ the request. A film opens it at once; a series first asks
     /// Seerr for its seasons — the library has none of them, so every season
-    /// Seerr lacks is offered, all ticked — one lookup per series at a time. A
-    /// failed lookup says so quietly, never naming Seerr; an account change on
-    /// the way says nothing.
+    /// Seerr lacks is offered, all ticked — one lookup per series at a time,
+    /// bounded by `lookupDeadline` (`loadSection`). A failed or expired lookup
+    /// says so quietly, never naming Seerr; an account change on the way says
+    /// nothing.
     func request(_ missing: SeerrMissingTitle, session: SeerrSession, loc: LocalizationManager, toasts: ToastCenter) async {
         guard !refusesAlreadyRequested(badge(for: missing.id, default: missing.badge), loc: loc, toasts: toasts) else {
             return
@@ -66,13 +74,14 @@ final class SeerrRequestPresenter {
         defer { lookingUp.remove(missing.id) }
         let tmdbId = title.tmdbId
         let details: SeerrTVDetails
-        do {
-            details = try await session.perform { client, credential in
-                try await client.tv(tmdbId: tmdbId, credential)
-            }
-        } catch is CancellationError {
-            return
-        } catch {
+        switch await session.loadSection(deadline: lookupDeadline, { client, credential in
+            [try await client.tv(tmdbId: tmdbId, credential)]
+        }) {
+        case nil:
+            return      // the account changed, or the tap's task was cancelled
+        case .loaded(let found) where found.count == 1:
+            details = found[0]
+        case .hidden, .loading, .loaded:
             toasts.error(loc.localized("seerr.request.seasonsUnavailable"))
             return
         }
@@ -243,7 +252,24 @@ final class SeerrRequestPresenter {
     private struct Result {
         let job: Job
         let outcome: Outcome
+        /// `.sent`: what the created request's status says (`badge(afterCreating:)`).
+        var sentBadge: SeerrBadge?
         var error: Error?
+    }
+
+    /// The badge a card takes once its request is created — from the status
+    /// Seerr ANSWERED, never guessed from the permissions (an admin's
+    /// auto-approval rule, a quota, a per-user override all decide on the
+    /// server): pending ⇒ « En attente », declined ⇒ declined, anything else
+    /// (approved, and `failed` / `completed` — approved, then handed off) ⇒
+    /// in preparation. The permissions only phrase the sheet's « what
+    /// happens next » line (`nextStepKey`).
+    static func badge(afterCreating status: SeerrRequestStatus) -> SeerrBadge {
+        switch status {
+        case .pending: .pending
+        case .declined: .declined
+        case .approved, .failed, .completed: .processing
+        }
     }
 
     /// Sends the draft. `.films` sends one request per selected film, in
@@ -255,8 +281,6 @@ final class SeerrRequestPresenter {
     ) async {
         let jobs = Self.jobs(for: draft, selection: selection, partial: session.publicSettings?.partialRequestsEnabled ?? true)
         guard !jobs.isEmpty else { return }
-        var permissions = SeerrPermissions()
-        if case .connected(let user) = session.connection { permissions = user.permissions }
 
         // Films 2…n must never go out under another account.
         let account = session.activeAccountKeyProvider()
@@ -265,10 +289,10 @@ final class SeerrRequestPresenter {
             guard session.activeAccountKeyProvider() == account else { return }
             let request = job.request
             do {
-                _ = try await session.perform { client, credential in
+                let created = try await session.perform { client, credential in
                     try await client.createRequest(request, credential)
                 }
-                outcomes.append(Result(job: job, outcome: .sent))
+                outcomes.append(Result(job: job, outcome: .sent, sentBadge: Self.badge(afterCreating: created.status)))
             } catch is CancellationError {
                 return   // the account changed: nobody's to show
             } catch SeerrError.duplicate {
@@ -285,7 +309,7 @@ final class SeerrRequestPresenter {
         for result in outcomes {
             switch result.outcome {
             case .sent:
-                mark(result.job, as: permissions.autoApproves(result.job.kind) ? .processing : .pending)
+                mark(result.job, as: result.sentBadge ?? .pending)
             case .duplicate:
                 mark(result.job, as: .pending)
             default:

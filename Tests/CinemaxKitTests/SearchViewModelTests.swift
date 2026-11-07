@@ -610,6 +610,41 @@ struct SeerrRequestEntryPointTests {
         #expect(toasts.current?.title.contains("Seerr") == false)
     }
 
+    @Test("a season lookup past its deadline gives the same quiet toast as a failure, and frees the series")
+    func lookupDeadlineToastsQuietly() async {
+        let gate = TestLatch()
+        let transport = SearchSeerrTransport(tv: .response(status: 200, body: prophecyBody), tvGate: gate)
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let deadline = TestLatch()
+        let firstUsed = FiredFlag()
+        // The first lookup's deadline fires when the test says so; any later
+        // one never does (cancelled with its load).
+        let presenter = SeerrRequestPresenter(lookupDeadline: {
+            if firstUsed.fired {
+                try await Task.sleep(for: .seconds(60))
+            } else {
+                firstUsed.fire()
+                await deadline.wait()
+            }
+        })
+        let toasts = ToastCenter()
+
+        let tap = Task { await presenter.request(missing(prophecy), session: session, loc: loc, toasts: toasts) }
+        await transport.tvArrived.wait()
+        deadline.open()
+        // `/tv/{id}` is still held: only the deadline can have answered.
+        let toasted = await eventually { toasts.current != nil }
+        gate.open()
+        await tap.value
+
+        #expect(toasted)
+        #expect(presenter.draft == nil)
+        #expect(toasts.current?.title == loc.localized("seerr.request.seasonsUnavailable"))
+        // The series is free again: the next tap looks it up.
+        await presenter.request(missing(prophecy), session: session, loc: loc, toasts: toasts)
+        #expect(presenter.draft == .series(prophecy, seasons: [1, 2], preselected: [1, 2]))
+    }
+
     @Test("an account change during the lookup says nothing and opens nothing")
     func cancellationIsSilent() async {
         let gate = TestLatch()

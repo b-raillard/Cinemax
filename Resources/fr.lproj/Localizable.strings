@@ -1580,6 +1580,7 @@
 "seerr.test.ok.role.manage" = "peut valider les demandes";
 "seerr.test.ok.role.request" = "peut demander";
 "seerr.test.warning.cannotManage" = "Ton compte Seerr ne peut pas valider les demandes : donne-lui le droit « Gérer les demandes » dans Seerr.";
+"seerr.test.warning.httpSeerr" = "Seerr est en HTTP alors que ton serveur Jellyfin est en HTTPS : la reconnexion se fera par un appui sur « Se connecter à Seerr ».";
 "seerr.activation.refused.capped" = "%@ n'a pas pu être activé : son compte a une limite d'âge. Retire-la dans Jellyfin pour lui ouvrir les demandes.";
 "seerr.activation.noAddress" = "Renseigne d'abord l'adresse de Seerr.";
 "seerr.activation.failed.enable" = "%@ n'a pas pu être activé : le serveur n'a pas répondu.";
@@ -1637,7 +1638,7 @@
 "seerr.request.already.pending" = "En attente de validation";
 "seerr.request.already.processing" = "En préparation";
 "seerr.request.forbidden.title" = "La demande a été refusée";
-"seerr.request.forbidden.fix" = "Tes droits ou ton quota ne le permettent pas. Demande à l'admin de vérifier dans Seerr.";
+"seerr.request.forbidden.fix" = "Tes droits ou ton quota ne le permettent pas. Demande à l'admin de vérifier tes droits de demande.";
 "seerr.request.noSeasons" = "Aucune saison à demander";
 "seerr.request.failed" = "La demande n'a pas abouti";
 "seerr.request.next.auto" = "Le téléchargement démarre tout de suite.";
