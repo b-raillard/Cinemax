@@ -292,6 +292,18 @@ final class SeerrPendingModel {
     @ObservationIgnored private var snapshot: SeerrSession.Snapshot?
     @ObservationIgnored private var generation = 0
 
+    /// What a row's button says — on screen (tvOS) AND to VoiceOver (both
+    /// platforms): « Approbation en cours… » / « Refus en cours… » while its
+    /// own action is in flight, its name otherwise.
+    static func buttonTitleKey(_ action: Action, inFlight: Action?) -> String {
+        switch (action, inFlight == action) {
+        case (.approve, true): "seerr.pending.approving"
+        case (.approve, false): "seerr.pending.approve"
+        case (.decline, true): "seerr.pending.declining"
+        case (.decline, false): "seerr.pending.decline"
+        }
+    }
+
     /// The section shows for a connected Seerr user who may manage requests.
     static func isShown(for connection: SeerrSession.Connection) -> Bool {
         guard case .connected(let user) = connection else { return false }

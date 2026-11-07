@@ -2352,6 +2352,16 @@ private func isCall(_ suffix: String) -> (URLRequest) -> Bool {
 struct SeerrPendingTests {
     private let loc = LocalizationManager()
 
+    @Test("a button in flight says so, on screen and to VoiceOver; the other keeps its name")
+    func buttonTitleFollowsInFlight() {
+        #expect(SeerrPendingModel.buttonTitleKey(.approve, inFlight: nil) == "seerr.pending.approve")
+        #expect(SeerrPendingModel.buttonTitleKey(.approve, inFlight: .approve) == "seerr.pending.approving")
+        #expect(SeerrPendingModel.buttonTitleKey(.approve, inFlight: .decline) == "seerr.pending.approve")
+        #expect(SeerrPendingModel.buttonTitleKey(.decline, inFlight: nil) == "seerr.pending.decline")
+        #expect(SeerrPendingModel.buttonTitleKey(.decline, inFlight: .decline) == "seerr.pending.declining")
+        #expect(SeerrPendingModel.buttonTitleKey(.decline, inFlight: .approve) == "seerr.pending.decline")
+    }
+
     @Test("the count is the pending listing's own total, everyone's requests — never /request/count")
     func countFromPendingFilter() async throws {
         let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: pendingRoutes(20, total: 23))

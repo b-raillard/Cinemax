@@ -426,6 +426,8 @@ struct RequestsSettingsScreen: View {
         let inFlight = pending.inFlight[row.id]
         let isApprove = action == .approve
         let label = loc.localized(isApprove ? "seerr.pending.approve" : "seerr.pending.decline")
+        // What VoiceOver reads (and tvOS shows): the busy state while it runs.
+        let current = loc.localized(SeerrPendingModel.buttonTitleKey(action, inFlight: inFlight))
         let press: () -> Void = {
             #if os(tvOS)
             let formerIndex = pending.rows.firstIndex { $0.id == row.id }
@@ -451,9 +453,7 @@ struct RequestsSettingsScreen: View {
                 HStack(spacing: CinemaSpacing.spacing2) {
                     rowIcon(isApprove ? "checkmark.circle.fill" : "xmark.circle",
                             tint: isApprove ? themeManager.accent : CinemaColor.error)
-                    Text(isBusy
-                         ? loc.localized(isApprove ? "seerr.pending.approving" : "seerr.pending.declining")
-                         : label)
+                    Text(current)
                         .font(rowLabelFont)
                         .foregroundStyle(CinemaColor.onSurface)
                 }
@@ -462,13 +462,14 @@ struct RequestsSettingsScreen: View {
         }
         .buttonStyle(.plain)
         .modifier(RowFocus(id: id, focus: focusBinding))
-        .accessibilityLabel(label)
+        .accessibilityLabel(current)
         #else
         CinemaButton(title: label, style: isApprove ? .accent : .ghost, isLoading: inFlight == action) {
             press()
         }
         .fixedSize(horizontal: false, vertical: true)
         .disabled(inFlight != nil)
+        .accessibilityLabel(current)
         #endif
     }
 
