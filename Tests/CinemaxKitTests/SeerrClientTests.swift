@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @testable import CinemaxKit
 @testable import Cinemax
+import Get
 
 // MARK: - Stub transport (shared by every Seerr client suite)
 
@@ -569,5 +570,129 @@ struct SeerrClientEndpointTests {
         }
         #expect(String(describing: SeerrCredential.apiKey(key: "TOPSECRETKEY", user: SeerrUserID(rawValue: 3)))
             == "apiKey(user: 3)")
+    }
+}
+
+// MARK: - Quick Connect sign-in
+
+/// Records what the `@Sendable` approve closure was called with.
+private final class ApprovalBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var codes: [String] = []
+    func record(_ code: String) { lock.withLock { codes.append(code) } }
+    var recorded: [String] { lock.withLock { codes } }
+}
+
+@Suite("Seerr Quick Connect sign-in")
+struct SeerrQuickConnectSignInTests {
+
+    private let lanURL = URL(string: "http://192.168.1.20:5055")!
+    private let initiated = StubSeerrTransport.Reply.response(status: 200, body: #"{"code":"123456","secret":"s"}"#)
+    private let approvedCheck = StubSeerrTransport.Reply.response(status: 200, body: #"{"authenticated":true}"#)
+    private let pendingCheck = StubSeerrTransport.Reply.response(status: 200, body: #"{"authenticated":false}"#)
+    private let userJSON = #"{"id":2,"permissions":32,"jellyfinUserId":"abc","displayName":"Léa"}"#
+
+    private func signIn(
+        _ stub: StubSeerrTransport, box: ApprovalBox = ApprovalBox(), maxChecks: Int = 10,
+        approve: @escaping @Sendable (String) async throws -> Bool = { _ in true }
+    ) -> SeerrQuickConnectSignIn {
+        SeerrQuickConnectSignIn(
+            client: SeerrClient(baseURL: lanURL, languageCode: "fr", transport: stub),
+            approve: { code in
+                box.record(code)
+                return try await approve(code)
+            },
+            maxChecks: maxChecks, pause: {})
+    }
+
+    private func failure(_ signIn: SeerrQuickConnectSignIn) async -> SeerrSignInError? {
+        do {
+            _ = try await signIn.run()
+            return nil
+        } catch {
+            return error
+        }
+    }
+
+    @Test("Signs in without typing: initiate, approve, check, authenticate")
+    func signsInWithoutTyping() async throws {
+        let stub = StubSeerrTransport([
+            initiated, approvedCheck,
+            .response(status: 200, headers: ["Set-Cookie": "connect.sid=s%3Aabc; Path=/; HttpOnly"], body: userJSON),
+        ])
+        let box = ApprovalBox()
+        let result = try await signIn(stub, box: box).run()
+        #expect(result.cookie == "s%3Aabc")
+        #expect(result.user.id == SeerrUserID(rawValue: 2))
+        #expect(box.recorded == ["123456"])
+        #expect(!stub.exhausted)
+    }
+
+    @Test("A 404 from Jellyfin means the code belongs to another Jellyfin")
+    func approval404IsOtherJellyfin() async {
+        let stub = StubSeerrTransport([initiated])
+        let result = await failure(signIn(stub) { _ in throw Get.APIError.unacceptableStatusCode(404) })
+        #expect(result == .otherJellyfin)
+        #expect(stub.requests.count == 1)
+    }
+
+    @Test("A 403 from Jellyfin is a refusal")
+    func approval403IsRefused() async {
+        let stub = StubSeerrTransport([initiated])
+        let result = await failure(signIn(stub) { _ in throw Get.APIError.unacceptableStatusCode(403) })
+        #expect(result == .jellyfinRefused)
+    }
+
+    @Test("Approval that answers false is another Jellyfin")
+    func approvalFalse() async {
+        let result = await failure(signIn(StubSeerrTransport([initiated])) { _ in false })
+        #expect(result == .otherJellyfin)
+    }
+
+    @Test("Any other approval failure reads as unreachable")
+    func approvalOtherErrorIsUnreachable() async {
+        let result = await failure(signIn(StubSeerrTransport([initiated])) { _ in throw JellyfinError.notConnected })
+        #expect(result == .seerr(.unreachable))
+        #expect(SeerrQuickConnectSignIn.classifyApproval(Get.APIError.unacceptableStatusCode(500)) == .seerr(.unreachable))
+    }
+
+    @Test("A Seerr user never imported is notImported")
+    func unimportedUser() async {
+        let stub = StubSeerrTransport([
+            initiated, approvedCheck, .response(status: 403, body: #"{"message":"Access denied."}"#),
+        ])
+        #expect(await failure(signIn(stub)) == .notImported)
+    }
+
+    @Test("Seerr errors surface as .seerr")
+    func seerrErrorsSurface() async {
+        let stub = StubSeerrTransport([.response(status: 500)])
+        #expect(await failure(signIn(stub)) == .seerr(.http(500)))
+    }
+
+    @Test("check gives up after maxChecks")
+    func checkGivesUp() async {
+        let stub = StubSeerrTransport([initiated, pendingCheck, pendingCheck, pendingCheck, pendingCheck])
+        #expect(await failure(signIn(stub, maxChecks: 3)) == .timedOut)
+        #expect(stub.requests.count == 4)  // initiate + 3 checks
+    }
+
+    @Test("Cancellation is not a timeout nor a Seerr error")
+    func cancellationIsCancelled() async {
+        let stub = StubSeerrTransport([initiated])
+        let result = await failure(signIn(stub) { _ in throw CancellationError() })
+        #expect(result == .cancelled)
+    }
+}
+
+@Suite("Seerr path segments")
+struct SeerrPathSegmentTests {
+    @Test("A Jellyfin id is one path segment, whatever it holds")
+    func jellyfinIdIsEscaped() async throws {
+        let stub = StubSeerrTransport([.response(status: 404)])
+        let seerr = SeerrClient(baseURL: URL(string: "http://h:5055/seerr")!, languageCode: nil, transport: stub)
+        let found = try await seerr.user(forJellyfinUserId: "a/../b?c", auth: .adminKey("k"))
+        #expect(found == nil)
+        #expect(stub.requests.first?.url?.absoluteString == "http://h:5055/seerr/api/v1/user/jellyfin/a%2F..%2Fb%3Fc")
     }
 }

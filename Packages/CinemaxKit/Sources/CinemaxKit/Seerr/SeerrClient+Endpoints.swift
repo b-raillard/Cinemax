@@ -70,7 +70,9 @@ extension SeerrClient {
     /// `nil` when Seerr has no account for this Jellyfin user (404).
     public func user(forJellyfinUserId id: String, auth: SeerrLookupAuth) async throws -> SeerrUser? {
         do {
-            return try await get("/user/jellyfin/\(id)", query: [], auth: .lookup(auth), localized: false)
+            // A path segment: an id holding `/` or `?` must not change the route.
+            let segment = id.addingPercentEncoding(withAllowedCharacters: .urlPathSegmentAllowed) ?? id
+            return try await get("/user/jellyfin/\(segment)", query: [], auth: .lookup(auth), localized: false)
         } catch SeerrError.notFound {
             return nil
         }
@@ -165,4 +167,10 @@ extension SeerrClient {
 
     /// A body nobody reads (approve, decline, logout): decoding it is skipped.
     struct Empty: Decodable {}
+}
+
+private extension CharacterSet {
+    /// RFC 3986 `pchar` minus the sub-delimiters: `/`, `?`, `#` and the like are encoded.
+    static let urlPathSegmentAllowed = CharacterSet(
+        charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
 }

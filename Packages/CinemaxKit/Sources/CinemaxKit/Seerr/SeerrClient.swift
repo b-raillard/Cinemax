@@ -25,9 +25,10 @@ public enum SeerrLookupAuth: Sendable, Equatable {
     case adminKey(String)
 }
 
-// A key or a cookie must not leak through `print`, `dump`, an `os_log("\(x)")`
-// or a failed `#expect`: the descriptions name the case and the user, nothing
-// else.
+// A key or a cookie must not leak through `print`, string interpolation, an
+// `os_log("\(x)")` or a failed `#expect`: the descriptions name the case and
+// the user, nothing else. This does NOT cover `dump` or `Mirror`, which ignore
+// `CustomStringConvertible` and print the stored values.
 extension SeerrCredential: CustomStringConvertible, CustomDebugStringConvertible {
     public var description: String {
         switch self {
@@ -209,7 +210,8 @@ public final class SeerrClient: Sendable {
         var debugDescription: String { description }
     }
 
-    /// One request, as `perform` sends it. `path` is relative to `/api/v1`.
+    /// One request, as `perform` sends it. `path` is relative to `/api/v1` and
+    /// already percent-encoded (the safe ASCII routes need nothing).
     struct Call: Sendable, CustomStringConvertible, CustomDebugStringConvertible {
         var method: String
         var path: String
@@ -313,7 +315,11 @@ public final class SeerrClient: Sendable {
 
     func makeURL(_ path: String, query: [URLQueryItem], localized: Bool) -> URL? {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return nil }
-        components.setEndpointPath("/api/v1" + path, preservingBasePathOf: baseURL)
+        // The base path goes through the shared helper; the endpoint is then
+        // appended ALREADY percent-encoded, so a caller can escape a path
+        // segment (`/user/jellyfin/{id}`) without it being encoded twice.
+        components.setEndpointPath("", preservingBasePathOf: baseURL)
+        components.percentEncodedPath += "/api/v1" + path
         var items = query
         if localized, let languageCode {
             items.append(URLQueryItem(name: "language", value: languageCode))
@@ -338,8 +344,10 @@ public final class SeerrClient: Sendable {
 
     private func makeRequest(_ call: Call, url: URL) -> URLRequest {
         if case .lookup(.adminKey) = call.auth {
-            // Fail closed: the one credential that must not carry `X-API-User`
-            // is confined to the two routes that refuse it.
+            // The one credential that must not carry `X-API-User` is confined
+            // to the two routes that refuse it. DEBUG-ONLY check: `assert` is
+            // compiled out of Release, so this catches a misuse in tests and
+            // development, not in a shipped build.
             assert(call.path.hasPrefix("/user/jellyfin/") || call.path == "/settings/jellyfin",
                    "An admin lookup key is only for /user/jellyfin/{id} and /settings/jellyfin")
         }
