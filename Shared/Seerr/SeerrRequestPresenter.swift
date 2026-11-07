@@ -42,6 +42,13 @@ final class SeerrRequestPresenter {
     /// Series whose seasons are being looked up (`SeerrMissingTitle.id`):
     /// repeated taps do not fire repeated `/tv/{id}` calls.
     @ObservationIgnored private var lookingUp: Set<String> = []
+    /// Bounds a series card's `/tv/{id}` lookup like a section load (6 s):
+    /// past it, the same quiet toast as a failure. Injectable for tests.
+    @ObservationIgnored private let lookupDeadline: @Sendable () async throws -> Void
+
+    init(lookupDeadline: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(6)) }) {
+        self.lookupDeadline = lookupDeadline
+    }
 
     func present(_ draft: SeerrRequestDraft) { self.draft = draft }
 
@@ -50,9 +57,10 @@ final class SeerrRequestPresenter {
     /// pending or in preparation — ⇒ an info toast, nothing opens; declined or
     /// never asked ⇒ the request. A film opens it at once; a series first asks
     /// Seerr for its seasons — the library has none of them, so every season
-    /// Seerr lacks is offered, all ticked — one lookup per series at a time. A
-    /// failed lookup says so quietly, never naming Seerr; an account change on
-    /// the way says nothing.
+    /// Seerr lacks is offered, all ticked — one lookup per series at a time,
+    /// bounded by `lookupDeadline` (`loadSection`). A failed or expired lookup
+    /// says so quietly, never naming Seerr; an account change on the way says
+    /// nothing.
     func request(_ missing: SeerrMissingTitle, session: SeerrSession, loc: LocalizationManager, toasts: ToastCenter) async {
         switch badge(for: missing.id, default: missing.badge) {
         case .pending:
@@ -73,13 +81,14 @@ final class SeerrRequestPresenter {
         defer { lookingUp.remove(missing.id) }
         let tmdbId = title.tmdbId
         let details: SeerrTVDetails
-        do {
-            details = try await session.perform { client, credential in
-                try await client.tv(tmdbId: tmdbId, credential)
-            }
-        } catch is CancellationError {
-            return
-        } catch {
+        switch await session.loadSection(deadline: lookupDeadline, { client, credential in
+            [try await client.tv(tmdbId: tmdbId, credential)]
+        }) {
+        case nil:
+            return      // the account changed, or the tap's task was cancelled
+        case .loaded(let found) where found.count == 1:
+            details = found[0]
+        case .hidden, .loading, .loaded:
             toasts.error(loc.localized("seerr.request.seasonsUnavailable"))
             return
         }
