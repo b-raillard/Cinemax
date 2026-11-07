@@ -92,7 +92,7 @@ Visible to a Jellyfin admin always, and to any other user once the admin has ena
 
 ### Arrival message
 
-On launch and on return to the foreground (feature visible, connected): if a request of mine became available since last time, a toast « <Titre> est disponible » + « Regarder » (opens the fiche); several ⇒ « 3 demandes sont disponibles » + « Voir » (opens Mes demandes). The first check on a device seeds the "already seen" set without toasting. No push: Seerr cannot notify a native app.
+On launch and on return to the foreground (feature visible, connected): if a request of mine became available since last time, a toast « <Titre> est disponible » + « Regarder » (opens the fiche); several ⇒ « 3 demandes sont disponibles » + « Voir » (opens Mes demandes). The first check on a device seeds the "already seen" set without toasting. No push: Seerr cannot notify a native app. **Apple TV**: the toast window takes no input (`Shared/DesignSystem/CLAUDE.md`), so the tvOS toast carries no « Regarder » / « Voir » — it informs, and the arrived title waits at the top of Mes demandes with its « Regarder ».
 
 ### Age-capped accounts
 
@@ -229,6 +229,11 @@ Type and file names; caching (in-memory per (server, user), short TTL, invalidat
 16. **Free user after the paid launch**: nothing on browse surfaces, no Seerr call; locked Settings category.
 17. **Age cap** = the app's `privacy.maxContentAge` on the device OR the Jellyfin `MaxParentalRating` policy.
 18. **Silent re-sign-in after the 30-day Seerr session expires** (one retry, configured address only). The reviewer suggested making it a visible tap each time, since each approval mints a Jellyfin session for Seerr; I kept it silent because the first approval already trusts that address and a monthly prompt is friction. Your call if you prefer the visible tap.
+
+19. **Apple TV arrival toast without a button** (the toast window takes no input on tvOS); « Regarder » lives in Mes demandes there.
+20. **An address typed without a scheme gets `http://`** (Seerr listens on plain HTTP 5055; a public HTTPS address is pasted whole). Jellyfin's own setup defaults to `https://`.
+21. **« Demandes » sits right after « Compte »** in the Settings landing.
+22. **The dashed card is the one exception to the design system's « no borders » rule**, documented in `Shared/DesignSystem/CLAUDE.md` (the product owner's option C).
 
 ## References
 
