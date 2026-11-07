@@ -30,7 +30,7 @@
 
 ## Review Focus
 
-1. **Bascule de profil pendant un chargement Seerr** (admin → enfant) : la réponse tardive n'apparaît jamais sur le profil suivant. → test Task 7 `staleAnswerIsDropped` + Task 15 `profileSwitchDropsSeerrSection`.
+1. **Bascule de profil pendant un chargement Seerr** (admin → enfant) : la réponse tardive n'apparaît jamais sur le profil suivant, et rien de Seerr ne s'affiche tant que la politique du nouveau profil n'est pas connue — alors qu'un simple retour dans l'app, même compte, ne fait rien clignoter. → tests Task 7 `staleAnswerIsDropped`, `policyUnknownIsCapped`, `sameAccountReloadKeepsGenerationAndSections` + Task 15 `profileSwitchDropsSeerrSection`.
 2. **Seerr éteint ou très lent** : la recherche montre ses résultats Jellyfin, le squelette disparaît sans message à l'échéance. → test Task 12 `slowSeerrSkeletonExpires` + Task 15 `unreachableSeerrShowsNothing`.
 3. **Seerr derrière un sous-chemin avec `/api/v1` collé** (`https://hote/seerr/api/v1/`) : toutes les URL gardent `/seerr`. → test Task 2 `subPathAndPastedAPIPrefix`.
 4. **CSRF activé, HTTP simple** : la première mutation reçoit `invalid csrf token`, le client rafraîchit la paire et réussit ; un second 403 CSRF ne boucle pas. → test Task 2 `csrfRefreshedOnceThenFails`.
@@ -233,7 +233,7 @@
   - `struct Snapshot: Equatable, Sendable { let accountKey: String; let generation: Int }`
   - `private(set) var config: SeerrUserConfig?`, `connection: Connection`, `publicSettings: SeerrPublicSettings?`, `usesDeviceKey: Bool`, `isAgeCapped: Bool`
   - `func reset()` — synchrone : `generation += 1`, `config = nil`, `connection = .unavailable`, `isAgeCapped = true`, client et approbateur oubliés ; appelé au changement de compte AVANT toute autre chose, et en tête de `reload`
-  - `func reload(appState: AppState) async` — `reset()` d'abord (avant le premier `await`) ; `appState.currentUser == nil` ⇒ reste bridé (on ne sait pas encore : fermé par défaut) ; garde un approbateur `@Sendable (String) async throws -> Bool` bâti sur `appState.apiClient.authorizeQuickConnect` pour la reprise silencieuse ; puis lit la config (`getDisplayPreferences(id: SeerrUserConfig.preferencesId, client: SeerrUserConfig.client, userId: nil)`), calcule `isAgeCapped`, et si non bridé + activé + URL : `publicSettings`, puis identité (clé de l'appareil ⇒ `user(forJellyfinUserId:auth: .adminKey)` ⇒ `.connected`/`.notLinked` ; sinon cookie ⇒ `me` ⇒ `.connected`, cookie absent ⇒ `.notConnected`). Toute écriture après un `await` est jetée si la génération a changé.
+  - `func reload(appState: AppState) async` — si `appState.activeAccountKey` diffère de la clé du dernier `snapshot()` (ou est nil) : `reset()` d'abord, avant le premier `await` ; MÊME compte (retour au premier plan, trame `UserUpdated`) : ni reset ni nouvelle génération — `config` / `connection` / `isAgeCapped` sont seulement remplacés par les nouvelles réponses (une limite d'âge apparue masque tout au rendu par `isVisible`), sinon chaque retour dans l'app ferait clignoter les sections et périmer les chargements en cours ; `appState.currentUser == nil` ⇒ reste bridé (on ne sait pas encore : fermé par défaut) ; garde un approbateur `@Sendable (String) async throws -> Bool` bâti sur `appState.apiClient.authorizeQuickConnect` pour la reprise silencieuse ; puis lit la config (`getDisplayPreferences(id: SeerrUserConfig.preferencesId, client: SeerrUserConfig.client, userId: nil)`), calcule `isAgeCapped`, et si non bridé + activé + URL : `publicSettings`, puis identité (clé de l'appareil ⇒ `user(forJellyfinUserId:auth: .adminKey)` ⇒ `.connected`/`.notLinked` ; sinon cookie ⇒ `me` ⇒ `.connected`, cookie absent ⇒ `.notConnected`). Toute écriture après un `await` est jetée si la génération a changé.
   - `func snapshot() -> Snapshot?`, `func isCurrent(_ s: Snapshot) -> Bool`
   - `func credential() -> SeerrCredential?` ; `var client: SeerrClient?`
   - `func perform<T: Sendable>(_ op: @Sendable (SeerrClient, SeerrCredential) async throws -> T) async throws -> T` — sur `.forbidden` : sonde (`me` en mode compte / `user(forJellyfinUserId:auth: .adminKey)` en mode clé) ; sonde 403 en mode compte ⇒ UNE reconnexion silencieuse (`SeerrQuickConnectSignIn` sur `config.url` seulement, avec l'approbateur gardé par `reload`) puis une nouvelle tentative ; échec ⇒ `connection = .notConnected`, cookie effacé, l'erreur remonte ; mode clé : sonde 403 ⇒ `SeerrError.forbidden` remonte et l'état passe « clé refusée », 404 ⇒ `.notLinked`, jamais de nouvelle tentative ; sonde 200 ⇒ l'erreur `.forbidden` remonte telle quelle.
@@ -251,7 +251,8 @@
   - `deadSessionReSignsInOnce` : appel 403, `/auth/me` 403, Quick Connect stubé OK, nouvel appel 200 ⇒ succès, `authorizeQuickConnectCalls.count == 1` ; si la reprise échoue ⇒ `.notConnected` et l'erreur remonte, pas de deuxième reprise
   - `genuineForbiddenDoesNotReSignIn` : appel 403, `/auth/me` 200 ⇒ `.forbidden`, aucun appel `authorizeQuickConnect`
   - `policyUnknownIsCapped` : `currentUser == nil` ⇒ `isAgeCapped`, zéro requête
-  - `reloadResetsBeforeFirstAwait` : `.connected` puis `reload` retenu par un `TestLatch` sur la lecture des préférences ⇒ pendant l'attente, `connection == .unavailable` et `isVisible(…) == false`
+  - `sameAccountReloadKeepsGenerationAndSections` : `.connected`, `snapshot()` pris, `reload` du même compte ⇒ `isCurrent(snapshot)` toujours vrai, `connection` jamais passé par `.unavailable`
+  - `reloadResetsBeforeFirstAwait` : `.connected` puis `reload` d'un AUTRE compte retenu par un `TestLatch` sur la lecture des préférences ⇒ pendant l'attente, `connection == .unavailable` et `isVisible(…) == false`
   - `staleAnswerIsDropped` : `reload` A bloqué sur un `TestLatch`, `reload` B (autre compte) termine, puis A se débloque ⇒ `config`/`connection` restent ceux de B
   - `promptOnlyWhenNotConnected` : `.notConnected` ⇒ `showsConnectPrompt` vrai ; `.connected`, mode clé, bridé ⇒ faux
 - [ ] **Step 2: `xcodegen generate`, lancer** → échec.
@@ -320,7 +321,7 @@
 - [ ] **Step 2: Lancer** → échec.
 - [ ] **Step 3: Implémenter** le cas Pro, la catégorie, l'écran et les chaînes ; `xcodegen generate`.
 - [ ] **Step 4: Relancer iOS puis tvOS** → vertes, `localize-check` sans écart, `scripts/check-localization-parity.py` OK.
-- [ ] **Step 5: Vérifier au simulateur de test** (5AB90411 / 699CCA2B, jamais un simulateur personnel ou de démo) contre le banc de l'essai (`docker start jf-bench seerr-spike`, Seerr `http://127.0.0.1:5055`, comptes de `~/seerr-spike/users.txt`) : test OK, test en erreur (port 8096 ⇒ « ne mène pas à Seerr »), activation de Tom refusée avec son message, connexion de Léa en un geste, redirection http→https d'un proxy suivie. Captures dans `_artifacts/seerr-lot1a/`.
+- [ ] **Step 5: Vérifier au simulateur de test** (5AB90411 / 699CCA2B, jamais un simulateur personnel ou de démo) contre le banc de l'essai (`docker start jf-bench seerr-spike`, Seerr `http://127.0.0.1:5055`, comptes de `~/seerr-spike/users.txt`) : test OK, test en erreur (port 8096 ⇒ « ne mène pas à Seerr »), activation de Tom refusée avec son message, connexion de Léa en un geste. Captures dans `_artifacts/seerr-lot1a/`.
 - [ ] **Step 6: Commit** — `feat(seerr): Réglages → Demandes, configuration et connexion (iOS + tvOS)`.
 
 ### Task 11: Règles, documentation, PR 1
