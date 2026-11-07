@@ -199,6 +199,34 @@ struct ToastAnnouncementTests {
         #expect(ToastCenter.effectiveDuration(2.5, voiceOverRunning: true) == 6)
         #expect(ToastCenter.effectiveDuration(4, voiceOverRunning: true) == 8)
     }
+
+    @Test("a toast with a button stays at least 5 s, and longer still under VoiceOver")
+    func actionDuration() {
+        #expect(ToastCenter.effectiveDuration(2.5, voiceOverRunning: false, hasAction: true) == 5)
+        #expect(ToastCenter.effectiveDuration(7, voiceOverRunning: false, hasAction: true) == 7)
+        #expect(ToastCenter.effectiveDuration(2.5, voiceOverRunning: true, hasAction: true) == 10)
+    }
+
+    @Test("the button is kept on the queued toast, and a toast is equal only to itself")
+    @MainActor
+    func actionKeptAndIdentity() throws {
+        var pressed = 0
+        let center = ToastCenter()
+        center.info("Dune est disponible", duration: 5, action: ToastAction(title: "Regarder") { pressed += 1 })
+        let shown = try #require(center.current)
+        #expect(shown.action?.title == "Regarder")
+        shown.action?.perform()
+        #expect(pressed == 1)
+        // Every existing call site still builds a toast without one.
+        center.success("Ajouté aux favoris")
+        #expect(center.current?.action == nil)
+
+        let copy = shown
+        #expect(copy == shown)
+        let twin = Toast(level: shown.level, title: shown.title, message: shown.message, duration: shown.duration)
+        #expect(twin != shown)
+        #expect(ToastCenter.announcement(for: shown) == "Dune est disponible")
+    }
 }
 
 // MARK: - Plurals (audit 2026-09-22)
@@ -255,7 +283,9 @@ struct PluralRuleTests {
                     // Seerr missing seasons (series fiche), missing films (saga).
                     "seerr.missing.requestAll", "seerr.saga.requestAll",
                     // Seerr — Mes demandes, À valider (Settings → Demandes).
-                    "seerr.myRequests.seasons", "seerr.settings.section.pendingCount"]
+                    "seerr.myRequests.seasons", "seerr.settings.section.pendingCount",
+                    // Seerr — the arrival message.
+                    "seerr.arrival.several"]
         for language in AppLanguage.supported {
             let bundle = Bundle.localizedBundle(for: language)
             for key in keys {

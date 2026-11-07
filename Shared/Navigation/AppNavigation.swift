@@ -462,10 +462,26 @@ struct AppNavigation: View {
             // Every `refreshCurrentUser` (sign-in, switch, restore, foreground,
             // `UserUpdated`) re-reads the account's Seerr configuration and
             // identity. Wired BEFORE `restoreSession`, whose background task
-            // runs the cold launch's first refresh. Both are process
-            // singletons: captured strongly, nothing to protect.
-            appState.onCurrentUserRefreshed = { [seerr, appState] in
-                Task { await seerr.reload(appState: appState) }
+            // runs the cold launch's first refresh. The session and the app
+            // state are process singletons, the three others this root's own
+            // `@State`: captured strongly, nothing to protect.
+            // Once that reload has settled, the arrival message: launch and
+            // every return to the foreground both come through here
+            // (`refreshCurrentUser`, directly or after a re-validation).
+            appState.onCurrentUserRefreshed = { [seerr, appState, toasts, loc, settingsNav] in
+                Task {
+                    await seerr.reload(appState: appState)
+                    let arrival = await SeerrArrivalWatcher.check(
+                        session: seerr, appState: appState, defaults: .standard, loc: loc,
+                        openRequests: {
+                            // Whatever is open over the tabs goes first, as for
+                            // a deep link: the Settings tab is underneath.
+                            PlayerPresentation.dismissPresentations {
+                                SeerrArrivalWatcher.openRequests(appState: appState, settingsNav: settingsNav)
+                            }
+                        })
+                    if let arrival { toasts.show(arrival) }
+                }
             }
             // Lifting the active account's age cap brings Seerr back at once.
             appState.onAgeCapChanged = { [seerr, appState] in

@@ -1698,3 +1698,7 @@
 "seerr.pending.alreadyHandled" = "Bereits bearbeitet";
 "seerr.pending.approveFailed" = "Anfrage konnte nicht genehmigt werden";
 "seerr.pending.declineFailed" = "Anfrage konnte nicht abgelehnt werden";
+"seerr.arrival.title" = "%@ ist verfügbar";
+"seerr.arrival.several" = "%d Anfragen sind verfügbar";
+"seerr.arrival.several.one" = "%d Anfrage ist verfügbar";
+"seerr.arrival.view" = "Anzeigen";

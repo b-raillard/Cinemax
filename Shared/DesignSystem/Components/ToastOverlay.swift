@@ -50,6 +50,10 @@ private struct ToastView: View {
     let onDismiss: () -> Void
 
     @Environment(LocalizationManager.self) private var loc
+    #if os(iOS)
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    #endif
 
     var body: some View {
         HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
@@ -77,8 +81,21 @@ private struct ToastView: View {
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .lineLimit(3)
                 }
+                #if os(iOS)
+                // At accessibility sizes the button goes under the text: beside
+                // it, it squeezed the title it explains.
+                if let action = toast.action, dynamicTypeSize.isAccessibilitySize {
+                    actionButton(action, inline: false)
+                }
+                #endif
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            #if os(iOS)
+            if let action = toast.action, !dynamicTypeSize.isAccessibilitySize {
+                actionButton(action, inline: true)
+            }
+            #endif
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
@@ -109,5 +126,53 @@ private struct ToastView: View {
         // action (and the escape gesture) rather than a separate element.
         .accessibilityAction(named: loc.localized("toast.dismiss"), onDismiss)
         .accessibilityAction(.escape, onDismiss)
+        #if os(iOS)
+        // The combined element swallows the button: its action is offered
+        // explicitly, like the dismissal.
+        .modifier(ToastActionAccessibility(action: toast.action, onDismiss: onDismiss))
+        #endif
+    }
+
+    #if os(iOS)
+    /// The toast's one button (iOS only — the toast window takes no input on
+    /// tvOS). A 44 pt target — beside the text, pulled back into the pill's
+    /// padding like the ✕ — always inside the pill's REPORTED frame, so the
+    /// passthrough window lets the tap land. Performs, then dismisses.
+    private func actionButton(_ action: ToastAction, inline: Bool) -> some View {
+        Button {
+            action.perform()
+            onDismiss()
+        } label: {
+            Text(action.title)
+                .font(CinemaFont.dynamicLabel(.large))
+                .fontWeight(.semibold)
+                .foregroundStyle(themeManager.accent)
+                .lineLimit(1)
+                .fixedSize()
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .padding(.vertical, inline ? -CinemaSpacing.spacing2 : 0)
+        .buttonStyle(.plain)
+    }
+    #endif
+}
+
+#if os(iOS)
+/// The toast's button as a named VoiceOver action of the combined element.
+private struct ToastActionAccessibility: ViewModifier {
+    let action: ToastAction?
+    let onDismiss: () -> Void
+
+    func body(content: Content) -> some View {
+        if let action {
+            content.accessibilityAction(named: action.title) {
+                action.perform()
+                onDismiss()
+            }
+        } else {
+            content
+        }
     }
 }
+#endif

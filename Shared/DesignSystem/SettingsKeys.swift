@@ -119,6 +119,15 @@ enum SettingsKey {
     static func seerrSearchPromptDismissed(accountKey: String) -> String {
         seerrSearchPromptDismissedPrefix + accountKey
     }
+    /// Prefix of `seerr.arrivals.seen.<accountKey>` — a plain `[Int]`, the
+    /// ids of that account's requests already found AVAILABLE on this device
+    /// (the arrival message announces only the others). Absent = never
+    /// checked here: the first check seeds it without a toast. Read and
+    /// written by `SeerrArrivalWatcher` only.
+    static let seerrArrivalsSeenPrefix = "seerr.arrivals.seen."
+    static func seerrArrivalsSeen(accountKey: String) -> String {
+        seerrArrivalsSeenPrefix + accountKey
+    }
 
     // Library landing (iOS + tvOS)
     /// `"browse"` (default) shows the cinematic hero + genre rows ("By genre");

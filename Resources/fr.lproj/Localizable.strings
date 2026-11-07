@@ -1700,3 +1700,7 @@
 "seerr.pending.alreadyHandled" = "Déjà traitée";
 "seerr.pending.approveFailed" = "Impossible d'approuver la demande";
 "seerr.pending.declineFailed" = "Impossible de refuser la demande";
+"seerr.arrival.title" = "%@ est disponible";
+"seerr.arrival.several" = "%d demandes sont disponibles";
+"seerr.arrival.several.one" = "%d demande est disponible";
+"seerr.arrival.view" = "Voir";
