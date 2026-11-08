@@ -335,18 +335,22 @@ public struct SeerrSearchPage: Sendable, Equatable, Decodable {
 public struct SeerrSeason: Sendable, Equatable, Decodable {
     public let seasonNumber: Int
     public let episodeCount: Int
+    /// The season's own TMDb poster (the missing-season cards); nil when TMDb has none.
+    public let posterPath: String?
 
-    public init(seasonNumber: Int, episodeCount: Int) {
+    public init(seasonNumber: Int, episodeCount: Int, posterPath: String? = nil) {
         self.seasonNumber = seasonNumber
         self.episodeCount = episodeCount
+        self.posterPath = posterPath
     }
 
-    private enum CodingKeys: String, CodingKey { case seasonNumber, episodeCount }
+    private enum CodingKeys: String, CodingKey { case seasonNumber, episodeCount, posterPath }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         seasonNumber = try c.decode(Int.self, forKey: .seasonNumber)
         episodeCount = try c.decodeIfPresent(Int.self, forKey: .episodeCount) ?? 0
+        posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
     }
 }
 

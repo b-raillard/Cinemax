@@ -109,11 +109,12 @@ struct SeerrModelTests {
     @Test("TV keeps season zero")
     func tvKeepsSeasonZero() throws {
         let json = """
-        {"id":1,"name":"Show","seasons":[{"seasonNumber":0,"episodeCount":17},{"seasonNumber":1,"episodeCount":6}]}
+        {"id":1,"name":"Show","seasons":[{"seasonNumber":0,"episodeCount":17},{"seasonNumber":1,"episodeCount":6,"posterPath":"/s1.jpg"}]}
         """
         let tv = try decode(SeerrTVDetails.self, json)
         #expect(tv.seasons.map(\.seasonNumber) == [0, 1])
         #expect(tv.seasons[0].episodeCount == 17)
+        #expect(tv.seasons.map(\.posterPath) == [nil, "/s1.jpg"])
     }
 
     @Test("Collection parts without mediaType are movies")

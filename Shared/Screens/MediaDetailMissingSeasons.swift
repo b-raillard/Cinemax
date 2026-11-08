@@ -4,7 +4,8 @@ import CinemaxKit
 // MARK: - Missing seasons (Seerr) — series fiche
 
 /// « Pas encore dans ta bibliothèque » of a series fiche: the seasons Seerr
-/// knows that the library lacks, as dashed season cards AFTER the episodes —
+/// knows that the library lacks, as dashed season cards over each season's
+/// own poster (dimmed, like every missing card) AFTER the episodes —
 /// iPhone / iPad, and Apple TV when there is no pill row (one owned season).
 ///
 /// Equatable on its data (the closures are the screen's, reading the view
@@ -17,6 +18,7 @@ struct MediaDetailMissingSeasonsRow: View, Equatable {
     let onRequestAll: () -> Void
 
     @Environment(SeerrRequestPresenter.self) private var presenter
+    @Environment(SeerrSession.self) private var seerr: SeerrSession?
     @Environment(LocalizationManager.self) private var loc
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
@@ -39,7 +41,8 @@ struct MediaDetailMissingSeasonsRow: View, Equatable {
                 MissingTitleCard(
                     title: SeerrRequestPresenter.seasonName(season.seasonNumber, loc: loc),
                     subtitle: nil,
-                    badge: presenter.badge(for: season.id, default: season.badge)
+                    badge: presenter.badge(for: season.id, default: season.badge),
+                    posterURL: seerr?.posterURL(season.posterPath)
                 )
             }
             #if os(tvOS)
