@@ -63,6 +63,9 @@ func serverStatusBadge(label: String, fontSize: Double, dotSize: CGFloat = 6) ->
 /// the count as its value (`seerr.settings.pendingBubble`).
 struct SettingsCountBadge: View {
     @Environment(ThemeManager.self) private var themeManager
+    /// Read so a text-size change re-renders the bubble: its font is a point
+    /// size computed in `body` (measured: it kept the old size until relaunch).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let label: String
     var onAccent = false
 

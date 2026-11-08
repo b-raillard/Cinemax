@@ -422,7 +422,16 @@ final class SeerrPendingModel {
         guard pass == generation, session.isCurrent(snap) else { return }
         isLoadingMore = false
         let fresh = pages.append(page)
+        session.notePendingCount(count, for: snap)
         await loadTitles(of: fresh, session: session, snapshot: snap, pass: pass)
+    }
+
+    /// A request withdrawn from Mes demandes (a manager's own): it leaves
+    /// « À valider » too, with the count. Nothing when it is not listed here.
+    func forget(_ id: Int, session: SeerrSession) {
+        guard rows.contains(where: { $0.id == id }), let snap = snapshot, session.isCurrent(snap) else { return }
+        pages.remove(id)
+        session.notePendingCount(count, for: snap)
     }
 
     private static func fetchPage(session: SeerrSession, skip: Int) async throws -> SeerrRequestPage {
@@ -476,6 +485,9 @@ final class SeerrPendingModel {
             outcome = .done
         } catch SeerrError.duplicate {
             // 409: the request is no longer pending.
+            outcome = .alreadyHandled
+        } catch SeerrError.notFound {
+            // 404: withdrawn (or deleted) meanwhile — no longer pending either.
             outcome = .alreadyHandled
         } catch is CancellationError {
             outcome = .cancelled

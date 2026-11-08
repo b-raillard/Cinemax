@@ -132,6 +132,12 @@ struct MainTabView: View {
             iOSTabLayout(tabs: menuConfig.resolvedTabs)
             #endif
         }
+        // The bubble's identity came back (online again, signed in, Pro or
+        // the age cap lifted): its count was forgotten with it — read it now,
+        // not at the next return to the foreground.
+        .task(id: seerr.showsPendingBadge) {
+            if seerr.showsPendingBadge { await seerr.refreshPendingCount() }
+        }
         // **RULE — an item deep link has ONE route, and it is this modal.**
         // Widget poster, Top Shelf selection, App Intent, inbound « Lire sur… »,
         // Watch Together join: every one of them presents `MediaDetailScreen`

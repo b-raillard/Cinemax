@@ -50,7 +50,9 @@ struct RequestsSettingsScreen: View {
     @State private var pending = SeerrPendingModel()
     @State private var pendingLoadedFor: RequestListTrigger?
     /// « À valider » comes first: requests were waiting when the page opened.
-    @State private var pendingFirst = false
+    /// Decided ONCE per page (`nil` until then): a later `onAppear` — a tab
+    /// round-trip, a cover closing — never swaps the sections.
+    @State private var pendingFirst: Bool?
     /// A « Réessayer » press is on its way: the failed panel stays, its row
     /// turning, rather than giving way to the spinner (on tvOS the pressed row
     /// would vanish under focus).
@@ -147,13 +149,13 @@ struct RequestsSettingsScreen: View {
                 // Requests waiting ⇒ the page opens on « À valider » (the
                 // Réglages bubble brought the manager here). Decided on
                 // appear, so the sections never swap under the user.
-                if pendingFirst, pendingTrigger != nil {
+                if pendingFirst == true, pendingTrigger != nil {
                     pendingSection
                 }
                 if myRequestsTrigger != nil {
                     myRequestsSection
                 }
-                if !pendingFirst, pendingTrigger != nil {
+                if pendingFirst != true, pendingTrigger != nil {
                     pendingSection
                 }
                 connectionSection
@@ -169,7 +171,7 @@ struct RequestsSettingsScreen: View {
         .task(id: myRequestsTrigger) { await loadMyRequestsIfNeeded() }
         .task(id: pendingTrigger) { await loadPendingIfNeeded() }
         .onAppear {
-            pendingFirst = (seerr.pendingBadgeCount ?? 0) > 0
+            if pendingFirst == nil { pendingFirst = (seerr.pendingBadgeCount ?? 0) > 0 }
             seedAddress()
             refreshStoredKey()
         }
@@ -275,6 +277,8 @@ struct RequestsSettingsScreen: View {
         #endif
         Task {
             await myRequests.cancel(row.id, session: seerr, toasts: toasts, loc: loc)
+            // Withdrawn: a manager's own request leaves « À valider » too.
+            if !myRequests.rows.contains(where: { $0.id == row.id }) { pending.forget(row.id, session: seerr) }
             #if os(tvOS)
             // Confirmed in an alert opened from this row: focus is the
             // alert's until it closes, so it never reads as « still here ».
@@ -877,6 +881,7 @@ struct RequestsSettingsScreen: View {
         myRequestsLoadedFor = nil
         pending = SeerrPendingModel()
         pendingLoadedFor = nil
+        pendingFirst = false
         isRetryingMyRequests = false
         isRetryingPending = false
         report = nil

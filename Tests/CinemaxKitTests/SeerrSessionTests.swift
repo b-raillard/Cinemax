@@ -2693,6 +2693,64 @@ struct SeerrPendingTests {
         await model.approve(2, session: session, toasts: ToastCenter(), loc: loc)
         #expect(session.pendingBadgeCount == 21)
     }
+
+    @Test("a read that started before an approval never writes its older number over it")
+    func olderReadLosesToAFresherNumber() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 5)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            guard path == "/request" else { return }
+            started.open()
+            await release.wait()
+        }
+        let read = Task { await session.refreshPendingCount() }
+        await started.wait()
+        // « À valider » settles one meanwhile: 3 is the fresher number.
+        session.notePendingCount(3, for: try #require(session.snapshot()))
+        release.open()
+        await read.value
+        #expect(session.pendingBadgeCount == 3)
+    }
+
+    @Test("an identity forgotten (Pro gone, cap on) forgets its count: it never comes back unread")
+    func forgottenIdentityForgetsTheCount() async {
+        let (session, app, _) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 4)],
+        ])
+        await session.refreshPendingCount()
+        #expect(session.pendingBadgeCount == 4)
+        #expect(session.showsPendingBadge)
+
+        session.proAllowsProvider = { false }
+        await session.reload(appState: app)
+        session.proAllowsProvider = { true }
+        #expect(session.pendingCount == nil)
+        #expect(!session.showsPendingBadge)
+    }
+
+    @Test("a request withdrawn in Mes demandes leaves « À valider » with the count; a 404 reads as already handled")
+    func withdrawalAndNotFoundLeaveTheQueue() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(20, total: 22, extra: [
+            "/request/3/approve": [notFoundReply],
+        ]))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        model.forget(2, session: session)
+        #expect(!model.rows.contains { $0.id == 2 })
+        #expect(session.pendingBadgeCount == 21)
+        // Not listed here: nothing moves.
+        model.forget(999, session: session)
+        #expect(session.pendingBadgeCount == 21)
+
+        // Withdrawn elsewhere before the approval reached Seerr.
+        await model.approve(3, session: session, toasts: ToastCenter(), loc: loc)
+        #expect(!model.rows.contains { $0.id == 3 })
+        #expect(session.pendingBadgeCount == 20)
+    }
 }
 
 @Suite("Seerr settings — connection report")
