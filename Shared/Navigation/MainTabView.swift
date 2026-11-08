@@ -506,6 +506,9 @@ private struct TabBarBadgeTint: UIViewRepresentable {
         // After SwiftUI has pushed this pass's badge values to the items.
         DispatchQueue.main.async {
             guard let root = view.window?.rootViewController else { return }
+            #if os(iOS)
+            if let window = view.window { Self.paintFloatingBadges(in: window, color: color, ink: ink) }
+            #endif
             for controller in Self.tabBarControllers(from: root) {
                 if let itemIndex, let items = controller.tabBar.items, items.indices.contains(itemIndex) {
                     for (index, item) in items.enumerated() {
@@ -537,4 +540,25 @@ private struct TabBarBadgeTint: UIViewRepresentable {
             item.setBadgeTextAttributes([.foregroundColor: ink], for: .normal)
         }
     }
+
+    #if os(iOS)
+    /// The iPad's floating tab bar (iPadOS 18+) draws its badge as a view of
+    /// its own, painted system red, that reads neither the item's colour nor
+    /// the bar's appearance (measured on the iPadOS 27.2 simulator: a
+    /// `_UIBarBadgeView` inside `_UIFloatingTabBarItemView`). Found by class
+    /// name and given the colour through public `UIView` properties only; if
+    /// UIKit renames it, the badge simply stays red.
+    private static func paintFloatingBadges(in root: UIView, color: UIColor, ink: UIColor) {
+        var stack = [root]
+        while let next = stack.popLast() {
+            if String(describing: type(of: next)).contains("BarBadgeView"),
+               let parent = next.superview, String(describing: type(of: parent)).contains("FloatingTabBar") {
+                next.backgroundColor = color
+                for case let label as UILabel in next.subviews { label.textColor = ink }
+            }
+            stack.append(contentsOf: next.subviews)
+        }
+    }
+
+    #endif
 }
