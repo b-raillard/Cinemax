@@ -289,8 +289,9 @@ final class SeerrMyRequestsModel {
         case .done:
             if ownsRows { pages.remove(id) }
             toasts.success(loc.localized("seerr.myRequests.cancelled"))
-            // A manager's own pending request was in « À valider » too.
-            await session.refreshPendingCount()
+            // A manager's own pending request was in « À valider » too. Not
+            // awaited: tvOS hands focus on as soon as this returns.
+            Task { await session.refreshPendingCount() }
         case .notPending:
             toasts.info(loc.localized("seerr.pending.alreadyHandled"))
             if ownsRows { await loadFirstPage(session: session) }
