@@ -33,6 +33,15 @@ enum MissingSection<Element: Equatable & Sendable>: Equatable {
     case hidden, loading, loaded([Element])
 }
 
+extension SeerrSession {
+    /// A TMDb poster path as an image URL on this session's Seerr — its image
+    /// proxy when Seerr caches images; nil without a client or a path.
+    func posterURL(_ path: String?) -> URL? {
+        guard let base = client?.baseURL else { return nil }
+        return SeerrImages.posterURL(path: path, seerrBase: base, cacheImages: publicSettings?.cacheImages ?? false)
+    }
+}
+
 enum SeerrImages {
     /// Seerr's image proxy (sub-path kept) when `cacheImages`, TMDb otherwise.
     static func posterURL(path: String?, seerrBase: URL, cacheImages: Bool) -> URL? {

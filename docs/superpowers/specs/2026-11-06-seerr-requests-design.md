@@ -13,7 +13,7 @@ The household's server runs Seerr next to Jellyfin. Today, wanting a title that 
 | Question | Answer |
 |---|---|
 | Where requesting happens | Search results, series fiche (missing seasons), saga, actor page. Plus follow-up and admin approval. |
-| Look of a missing title | **Dashed outline**, no artwork, title inside (mockup option C). |
+| Look of a missing title | **Dashed outline**, title inside (mockup option C) — over Seerr's poster, dimmed under a 62 % `surfaceContainerLowest` veil (owner, 2026-11-08, variant A); no poster ⇒ the outline alone. Season cards keep the bare outline. |
 | Order | **Missing titles always AFTER the owned ones**, everywhere — so nothing already on screen moves when Seerr answers. |
 | While Seerr loads | **Skeletons** in the place the Seerr items will take — only when Seerr is configured for this user. Not configured ⇒ nothing at all, the screen is today's. |
 | Naming Seerr | **Only where the tool matters**: Settings, and the prompts that invite a user to connect. **Never** on search, fiches, lists. |
@@ -139,7 +139,7 @@ There is no server-wide "mode": the key is typed by a Jellyfin admin on a given 
 - `GET /auth/me` → `permissions` bitmask (`ADMIN` 2 passes everything; `MANAGE_REQUESTS` 16, `REQUEST` 32, `AUTO_APPROVE` 128, `REQUEST_MOVIE` 262144, `REQUEST_TV` 524288 …).
 - Enums — **code, not the YAML spec** (they disagree): `MediaStatus` 1 unknown, 2 pending, 3 processing, 4 partially available, 5 available, 6 blocklisted (« blacklisted » ≤ 2.7), 7 deleted; `MediaRequestStatus` 1 pending, 2 approved, 3 declined, 4 failed, 5 completed.
 - Unauthenticated probes: `GET /status` (`version`), `GET /settings/public` (`mediaServerType`, `mediaServerLogin`, `newPlexLogin`, `jellyfinServerName`, `partialRequestsEnabled`, `enableSpecialEpisodes`, …).
-- Images: TMDb paths, `https://image.tmdb.org/t/p/w300{path}` — irrelevant to the dashed look, used only in the request sheet and Mes demandes. When `cacheImages` is on, use Seerr's unauthenticated `/imageproxy/tmdb/t/p/{size}{path}` instead (no device → TMDb traffic).
+- Images: TMDb paths, `https://image.tmdb.org/t/p/w300{path}` — used by the request sheet, Mes demandes and, dimmed, the missing-title cards (`SeerrSession.posterURL`). When `cacheImages` is on, use Seerr's unauthenticated `/imageproxy/tmdb/t/p/{size}{path}` instead (no device → TMDb traffic).
 - Traps: when Seerr's CSRF protection is on, every non-GET needs the `_csrf` cookie and the `XSRF-TOKEN` value echoed in `X-XSRF-TOKEN`, API key included (see the spike: handled by the client, not an error); `express-openapi-validator` 400s on query parameters not in the spec — send only listed ones; error bodies are `{message}` or `{error}`.
 
 ## Spike findings (2026-11-07, Seerr 3.5.1 against Jellyfin 10.11.0 AND 12.0.0, throwaway Docker bench)

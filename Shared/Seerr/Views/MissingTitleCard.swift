@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// A title the library lacks, drawn as a dashed outline instead of artwork.
+/// A title the library lacks: a dashed outline over Seerr's poster, dimmed so
+/// the text stays readable (product decision 2026-11-08) — the dash says « not
+/// here yet », the poster says what it is. No poster ⇒ the bare outline.
 /// The caller owns the action (iOS `Button` + `.plain`, tvOS `Button` +
 /// `CinemaTVCardButtonStyle`) — the card is only the look, focus ring included.
 ///
@@ -15,11 +17,20 @@ struct MissingTitleCard: View {
     let subtitle: String?
     let badge: SeerrBadge
     var aspectRatio: CGFloat = 2 / 3
+    /// Seerr's poster (`SeerrSession.posterURL`); nil draws the outline alone.
+    var posterURL: URL? = nil
 
     var body: some View {
         Color.clear
             .aspectRatio(aspectRatio, contentMode: .fit)
             .frame(maxWidth: .infinity)
+            .overlay {
+                if let posterURL {
+                    CinemaLazyImage(url: posterURL, fallbackIcon: nil, fallbackBackground: .clear)
+                        .overlay(CinemaColor.surfaceContainerLowest.opacity(0.62))
+                        .accessibilityHidden(true)
+                }
+            }
             .overlay {
                 VStack(spacing: CinemaSpacing.spacing2) {
                     Spacer(minLength: 0)
@@ -33,13 +44,13 @@ struct MissingTitleCard: View {
                     if let subtitle, !dynamicTypeSize.isAccessibilitySize {
                         Text(subtitle)
                             .font(CinemaFont.label(.medium))
-                            .foregroundStyle(CinemaColor.onSurfaceMuted)
+                            .foregroundStyle(secondaryText)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
                     Text(badgeLabel)
                         .font(CinemaFont.label(.medium))
-                        .foregroundStyle(badge == .request ? themeManager.accent : CinemaColor.onSurfaceMuted)
+                        .foregroundStyle(badge == .request ? themeManager.accent : secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .layoutPriority(1)
@@ -55,6 +66,11 @@ struct MissingTitleCard: View {
             .cinemaFocus()
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(loc.localized("seerr.missing.a11y", title, badgeLabel))
+    }
+
+    /// Muted reads too faint over a poster: the lighter variant there.
+    private var secondaryText: Color {
+        posterURL == nil ? CinemaColor.onSurfaceMuted : CinemaColor.onSurfaceVariant
     }
 
     private var badgeLabel: String {

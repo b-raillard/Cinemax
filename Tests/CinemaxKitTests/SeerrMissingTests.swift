@@ -353,6 +353,15 @@ struct SeerrMissingTests {
                 == "https://image.tmdb.org/t/p/w300/x.jpg")
         #expect(SeerrImages.posterURL(path: nil, seerrBase: base, cacheImages: true) == nil)
     }
+
+    /// A missing-title card without a poster URL draws the bare outline.
+    @Test("a session with no Seerr client gives a card no poster")
+    func noClientNoPoster() {
+        let session = SeerrSession(
+            storage: MockKeychain(), defaults: .isolatedForTesting(),
+            transport: StubSeerrTransport([]), signInPause: {})
+        #expect(session.posterURL("/x.jpg") == nil)
+    }
 }
 
 // MARK: - Request flow

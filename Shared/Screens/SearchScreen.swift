@@ -946,6 +946,7 @@ private struct SearchMissingCard: View {
     let onRequest: (SeerrMissingTitle) -> Void
 
     @Environment(SeerrRequestPresenter.self) private var presenter
+    @Environment(SeerrSession.self) private var seerr
     @Environment(LocalizationManager.self) private var loc
 
     var body: some View {
@@ -955,7 +956,8 @@ private struct SearchMissingCard: View {
             MissingTitleCard(
                 title: missing.title.title,
                 subtitle: subtitle,
-                badge: presenter.badge(for: missing.id, default: missing.badge)
+                badge: presenter.badge(for: missing.id, default: missing.badge),
+                posterURL: seerr.posterURL(missing.title.posterPath)
             )
         }
         #if os(tvOS)
