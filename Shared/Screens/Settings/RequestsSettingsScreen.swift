@@ -22,6 +22,11 @@ struct RequestsSettingsScreen: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(SeerrSession.self) private var seerr
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    /// Never read: declaring it makes the screen redraw when the text size
+    /// changes. Its fonts (`CinemaFont.dynamic*`) are point sizes computed
+    /// while the body runs, so without this the rows kept the old size until
+    /// the page was left and opened again (recette R2, 2026-11-08).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Replaced on an account change: another account's users are never shown.
     @State private var activation = SeerrActivationModel()
@@ -309,8 +314,10 @@ struct RequestsSettingsScreen: View {
     private var deviceSection: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
             sectionHeader(loc.localized("seerr.settings.section.device"))
+            #if os(tvOS)
             // Above the field, so the remote's scroll to the last row still shows it.
             noteText(loc.localized("seerr.settings.key.explanation"))
+            #endif
 
             if hasStoredKey {
                 panel {
@@ -328,7 +335,14 @@ struct RequestsSettingsScreen: View {
                     }
                 }
             } else {
+                #if os(tvOS)
                 GlassTextField(label: loc.localized("seerr.settings.key"), text: $keyText, icon: "key", isSecure: true)
+                #else
+                // No label of its own: its bold, inset caption read as a second,
+                // misaligned section header under « Sur cet appareil » (recette R3).
+                GlassTextField(label: "", text: $keyText, icon: "key", isSecure: true)
+                    .accessibilityLabel(loc.localized("seerr.settings.key"))
+                #endif
                 panel {
                     actionRow(id: "seerr.key.save", icon: "square.and.arrow.down", label: loc.localized("seerr.settings.key.save")) {
                         Task { await saveKey() }
@@ -336,6 +350,9 @@ struct RequestsSettingsScreen: View {
                     .disabled(typedKey.isEmpty)
                 }
             }
+            #if os(iOS)
+            noteText(loc.localized("seerr.settings.key.explanation"))
+            #endif
         }
     }
 
