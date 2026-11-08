@@ -1692,6 +1692,7 @@
 "seerr.pending.requestedAt" = "Requested %@";
 "seerr.pending.approve" = "Approve";
 "seerr.pending.decline" = "Decline";
+"seerr.pending.decline.confirm" = "Decline “%@”?";
 "seerr.pending.approving" = "Approving…";
 "seerr.pending.declining" = "Declining…";
 "seerr.pending.approved" = "Request approved";

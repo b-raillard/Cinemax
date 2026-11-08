@@ -1694,6 +1694,7 @@
 "seerr.pending.requestedAt" = "Demandé %@";
 "seerr.pending.approve" = "Approuver";
 "seerr.pending.decline" = "Refuser";
+"seerr.pending.decline.confirm" = "Refuser « %@ » ?";
 "seerr.pending.approving" = "Approbation en cours…";
 "seerr.pending.declining" = "Refus en cours…";
 "seerr.pending.approved" = "Demande approuvée";

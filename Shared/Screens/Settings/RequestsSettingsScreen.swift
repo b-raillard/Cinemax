@@ -63,6 +63,9 @@ struct RequestsSettingsScreen: View {
     /// from the Keychain on appear and after each change, never per render.
     @State private var storedKeyOrigin: URL?
     @State private var showsDisableAllConfirm = false
+    /// The pending request « Refuser » was pressed on, waiting for the
+    /// confirmation (recette Q1): a refusal cannot be taken back here.
+    @State private var declineCandidate: SeerrRequestRow?
     /// What the user lines were last loaded for. The tvOS `.task` re-fires on
     /// every re-presentation of Settings (Settings RULE): an unchanged trigger
     /// loads nothing.
@@ -175,6 +178,12 @@ struct RequestsSettingsScreen: View {
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
             Text(loc.localized("seerr.settings.disableAll.confirm"))
+        }
+        .alert(declineCandidate.map { loc.localized("seerr.pending.decline.confirm", requestTitle($0)) } ?? "",
+               isPresented: Binding(get: { declineCandidate != nil }, set: { if !$0 { declineCandidate = nil } }),
+               presenting: declineCandidate) { row in
+            Button(loc.localized("seerr.pending.decline"), role: .destructive) { settle(row, .decline) }
+            Button(loc.localized("action.cancel"), role: .cancel) {}
         }
     }
 
@@ -421,7 +430,8 @@ struct RequestsSettingsScreen: View {
         #endif
     }
 
-    /// One tap, no confirmation (Seerr's own page asks none). While the row's
+    /// « Approuver » acts on one tap; « Refuser » asks first (recette Q1 —
+    /// Seerr's own page asks neither). While the row's
     /// request is being settled, both its buttons wait: disabled on iOS; on
     /// tvOS still focusable — disabling the focused button would throw focus
     /// off it — the pressed one reading « Approbation en cours… » and the
@@ -434,19 +444,7 @@ struct RequestsSettingsScreen: View {
         // What VoiceOver reads (and tvOS shows): the busy state while it runs.
         let current = loc.localized(SeerrPendingModel.buttonTitleKey(action, inFlight: inFlight))
         let press: () -> Void = {
-            #if os(tvOS)
-            let formerIndex = pending.rows.firstIndex { $0.id == row.id }
-            #endif
-            Task {
-                if isApprove {
-                    await pending.approve(row.id, session: seerr, toasts: toasts, loc: loc)
-                } else {
-                    await pending.decline(row.id, session: seerr, toasts: toasts, loc: loc)
-                }
-                #if os(tvOS)
-                focusAfterSettling(row.id, action, formerIndex: formerIndex)
-                #endif
-            }
+            if isApprove { settle(row, action) } else { declineCandidate = row }
         }
         #if os(tvOS)
         let id = pendingButtonId(row.id, action)
@@ -476,6 +474,23 @@ struct RequestsSettingsScreen: View {
         .disabled(inFlight != nil)
         .accessibilityLabel(current)
         #endif
+    }
+
+    /// Sends the decision to Seerr. tvOS: then puts focus back where it was.
+    private func settle(_ row: SeerrRequestRow, _ action: SeerrPendingModel.Action) {
+        #if os(tvOS)
+        let formerIndex = pending.rows.firstIndex { $0.id == row.id }
+        #endif
+        Task {
+            if action == .approve {
+                await pending.approve(row.id, session: seerr, toasts: toasts, loc: loc)
+            } else {
+                await pending.decline(row.id, session: seerr, toasts: toasts, loc: loc)
+            }
+            #if os(tvOS)
+            focusAfterSettling(row.id, action, formerIndex: formerIndex)
+            #endif
+        }
     }
 
     #if os(tvOS)
