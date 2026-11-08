@@ -133,6 +133,9 @@ final class SeerrMyRequestsModel {
 
     private(set) var phase: Phase = .idle
     private(set) var isLoadingMore = false
+    /// The request whose withdrawal is on its way: its row waits, a second
+    /// press does nothing.
+    private(set) var cancelling: Int?
     private var pages = SeerrRequestPages()
 
     var rows: [SeerrRequestRow] { pages.rows }
@@ -240,6 +243,60 @@ final class SeerrMyRequestsModel {
         guard let list = seasonList(request) else { return nil }
         let count = Set(request.seasons).count
         return loc.localized(loc.pluralKey("seerr.myRequests.seasons", count), list)
+    }
+
+    // MARK: « Annuler la demande »
+
+    /// Only a request still waiting for an admin: Seerr refuses its asker
+    /// anything else (401).
+    static func canCancel(_ request: SeerrRequest) -> Bool {
+        statusKey(request) == "seerr.myRequests.status.pending"
+    }
+
+    private enum CancelOutcome { case done, notPending, failed, cancelled }
+
+    /// Withdraws one of MY pending requests (`DELETE /request/{id}`). Done —
+    /// or already gone (404) ⇒ the row leaves, a toast says so. 401 ⇒ an
+    /// admin settled it meanwhile: « Déjà traitée », and the list is read
+    /// again so the row shows its new status. Any other failure keeps the row.
+    /// An account change meanwhile writes and shows nothing.
+    func cancel(_ id: Int, session: SeerrSession, toasts: ToastCenter, loc: LocalizationManager) async {
+        guard cancelling == nil, phase == .loaded,
+              let row = rows.first(where: { $0.id == id }), Self.canCancel(row.request),
+              let snap = snapshot, session.isCurrent(snap) else { return }
+        let pass = generation
+        cancelling = id
+        let outcome: CancelOutcome
+        do {
+            try await session.perform { client, credential in
+                try await client.deleteRequest(requestId: id, credential)
+            }
+            outcome = .done
+        } catch SeerrError.notFound {
+            outcome = .done
+        } catch SeerrError.http(401) {
+            outcome = .notPending
+        } catch is CancellationError {
+            outcome = .cancelled
+        } catch {
+            outcome = .failed
+        }
+        if cancelling == id { cancelling = nil }
+        guard session.isCurrent(snap) else { return }
+        // A newer listing owns the rows; the toast still answers the press.
+        let ownsRows = pass == generation
+        switch outcome {
+        case .done:
+            if ownsRows { pages.remove(id) }
+            toasts.success(loc.localized("seerr.myRequests.cancelled"))
+        case .notPending:
+            toasts.info(loc.localized("seerr.pending.alreadyHandled"))
+            if ownsRows { await loadFirstPage(session: session) }
+        case .failed:
+            toasts.error(loc.localized("seerr.myRequests.cancelFailed"))
+        case .cancelled:
+            break
+        }
     }
 
     // MARK: « Regarder » (pure + its one effect)

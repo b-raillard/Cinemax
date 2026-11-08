@@ -66,6 +66,9 @@ struct RequestsSettingsScreen: View {
     /// The pending request « Refuser » was pressed on, waiting for the
     /// confirmation (recette Q1): a refusal cannot be taken back here.
     @State private var declineCandidate: SeerrRequestRow?
+    /// My pending request « Annuler la demande » was pressed on, waiting for
+    /// the confirmation.
+    @State private var cancelCandidate: SeerrRequestRow?
     /// What the user lines were last loaded for. The tvOS `.task` re-fires on
     /// every re-presentation of Settings (Settings RULE): an unchanged trigger
     /// loads nothing.
@@ -185,6 +188,12 @@ struct RequestsSettingsScreen: View {
             Button(loc.localized("seerr.pending.decline"), role: .destructive) { settle(row, .decline) }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         }
+        .alert(cancelCandidate.map { loc.localized("seerr.myRequests.cancel.confirm", requestTitle($0)) } ?? "",
+               isPresented: Binding(get: { cancelCandidate != nil }, set: { if !$0 { cancelCandidate = nil } }),
+               presenting: cancelCandidate) { row in
+            Button(loc.localized("seerr.myRequests.cancel"), role: .destructive) { withdraw(row) }
+            Button(loc.localized("seerr.myRequests.cancel.keep"), role: .cancel) {}
+        }
     }
 
     // MARK: - Mes demandes
@@ -232,41 +241,73 @@ struct RequestsSettingsScreen: View {
         }
     }
 
+    /// What pressing a row of Mes demandes does: open an arrived title,
+    /// withdraw a pending one (after a confirmation), or nothing.
+    private enum RequestRowAction { case watch, cancel, none }
+
+    private func requestRowAction(_ row: SeerrRequestRow) -> RequestRowAction {
+        if SeerrMyRequestsModel.watchTarget(row.request) != nil { return .watch }
+        if SeerrMyRequestsModel.canCancel(row.request) { return .cancel }
+        return .none
+    }
+
+    private func press(_ row: SeerrRequestRow, _ action: RequestRowAction) {
+        switch action {
+        case .watch: SeerrMyRequestsModel.watch(row.request, appState: appState)
+        case .cancel: if myRequests.cancelling == nil { cancelCandidate = row }
+        case .none: break
+        }
+    }
+
+    /// Sends the withdrawal. tvOS: focus then goes to the row taking its place.
+    private func withdraw(_ row: SeerrRequestRow) {
+        #if os(tvOS)
+        let formerIndex = myRequests.rows.firstIndex { $0.id == row.id }
+        #endif
+        Task {
+            await myRequests.cancel(row.id, session: seerr, toasts: toasts, loc: loc)
+            #if os(tvOS)
+            focusAfterWithdrawing(row.id, formerIndex: formerIndex)
+            #endif
+        }
+    }
+
     /// One request. tvOS: ONE focusable unit per row, an inert one included —
     /// the remote scrolls by focus, so a row nobody can focus could not be
-    /// reached; Select opens an arrived title. iOS: only an arrived title is a
-    /// button.
+    /// reached; Select opens an arrived title or withdraws a pending one.
+    /// iOS: only those two kinds of row are buttons.
     @ViewBuilder
     private func requestRow(_ row: SeerrRequestRow) -> some View {
         let id = "seerr.request.\(row.id)"
-        let canWatch = SeerrMyRequestsModel.watchTarget(row.request) != nil
+        let action = requestRowAction(row)
         #if os(tvOS)
         Button {
-            SeerrMyRequestsModel.watch(row.request, appState: appState)
+            press(row, action)
         } label: {
-            rowChrome(id: id) { requestRowContent(row, canWatch: canWatch) }
+            rowChrome(id: id) { requestRowContent(row, action: action) }
         }
         .buttonStyle(.plain)
         .modifier(RowFocus(id: id, focus: focusBinding))
         .accessibilityElement(children: .combine)
         #else
-        if canWatch {
+        if action == .none {
+            rowChrome(id: id) { requestRowContent(row, action: .none) }
+                .accessibilityElement(children: .combine)
+        } else {
             Button {
-                SeerrMyRequestsModel.watch(row.request, appState: appState)
+                press(row, action)
             } label: {
-                rowChrome(id: id) { requestRowContent(row, canWatch: true) }
+                rowChrome(id: id) { requestRowContent(row, action: action) }
             }
             .buttonStyle(.plain)
+            .disabled(action == .cancel && myRequests.cancelling != nil)
             .accessibilityElement(children: .combine)
-        } else {
-            rowChrome(id: id) { requestRowContent(row, canWatch: false) }
-                .accessibilityElement(children: .combine)
         }
         #endif
     }
 
     @ViewBuilder
-    private func requestRowContent(_ row: SeerrRequestRow, canWatch: Bool) -> some View {
+    private func requestRowContent(_ row: SeerrRequestRow, action: RequestRowAction) -> some View {
         let text = HStack(spacing: CinemaSpacing.spacing3) {
             requestPoster(row)
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
@@ -278,10 +319,22 @@ struct RequestsSettingsScreen: View {
             }
         }
         let watch = Group {
-            if canWatch {
+            switch action {
+            case .watch:
                 Label(loc.localized("seerr.myRequests.watch"), systemImage: "play.fill")
                     .font(rowDetailFont.weight(.semibold))
                     .foregroundStyle(themeManager.accent)
+            case .cancel:
+                if myRequests.cancelling == row.id {
+                    ProgressView()
+                        .accessibilityLabel(loc.localized("seerr.myRequests.cancelling"))
+                } else {
+                    Label(loc.localized("seerr.myRequests.cancel"), systemImage: "xmark.circle")
+                        .font(rowDetailFont.weight(.semibold))
+                        .foregroundStyle(CinemaColor.error)
+                }
+            case .none:
+                EmptyView()
             }
         }
         #if os(tvOS)
@@ -494,6 +547,16 @@ struct RequestsSettingsScreen: View {
     }
 
     #if os(tvOS)
+    /// The withdrawn row left the list: focus goes to the row now in its place
+    /// (or the last one), only while it was still on the pressed row — left to
+    /// itself the engine sends it back to the top of the page.
+    private func focusAfterWithdrawing(_ requestId: Int, formerIndex: Int?) {
+        let rows = myRequests.rows
+        guard focusedItem == .toggle("seerr.request.\(requestId)"), let formerIndex,
+              !rows.contains(where: { $0.id == requestId }), !rows.isEmpty else { return }
+        focusedItem = .toggle("seerr.request.\(rows[min(formerIndex, rows.count - 1)].id)")
+    }
+
     private func pendingButtonId(_ requestId: Int, _ action: SeerrPendingModel.Action) -> String {
         "seerr.pending.\(requestId).\(action == .approve ? "approve" : "decline")"
     }

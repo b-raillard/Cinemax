@@ -167,7 +167,14 @@ extension SeerrClient {
             "POST", "/request/\(requestId)/decline", body: nil, auth: .credential(credential))
     }
 
-    /// A body nobody reads (approve, decline, logout): decoding it is skipped.
+    /// Withdraws a request. Seerr lets its asker do it only while it is
+    /// PENDING (401 otherwise, measured on 3.5.1); a manager, always.
+    public func deleteRequest(requestId: Int, _ credential: SeerrCredential) async throws {
+        let _: (Empty?, Int) = try await mutate(
+            "DELETE", "/request/\(requestId)", body: nil, auth: .credential(credential))
+    }
+
+    /// A body nobody reads (approve, decline, delete, logout): decoding it is skipped.
     struct Empty: Decodable {}
 }
 

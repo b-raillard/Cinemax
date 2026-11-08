@@ -2190,6 +2190,71 @@ struct SeerrMyRequestsTests {
         }
     }
 
+    @Test("only a request still waiting for an admin can be withdrawn")
+    func onlyPendingCanBeCancelled() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.canCancel(myRequest(status: .pending)))
+        #expect(!Model.canCancel(myRequest(status: .approved, media: .processing)))
+        #expect(!Model.canCancel(myRequest(status: .declined)))
+        // Mine waits, but the title already arrived through someone else's.
+        #expect(!Model.canCancel(myRequest(status: .pending, media: .available)))
+    }
+
+    @Test("withdrawing a pending request sends DELETE, removes the row, says so")
+    func cancelRemovesRow() async {
+        let loc = LocalizationManager()
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [requestPage([requestJSON(1, tmdbId: 11), requestJSON(2, status: 2, tmdbId: 11)], total: 2)],
+            "/movie/11": [movieReply(11, "Dune"), movieReply(11, "Dune")],
+            "/request/1": [.response(status: 204, body: "")],
+        ])
+        let toasts = ToastCenter()
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        // An approved request is not withdrawable: nothing is sent.
+        await model.cancel(2, session: session, toasts: toasts, loc: loc)
+        #expect(!transport.requests.contains(where: isCall("/request/2")))
+
+        await model.cancel(1, session: session, toasts: toasts, loc: loc)
+        #expect(transport.requests.first(where: isCall("/request/1"))?.httpMethod == "DELETE")
+        #expect(model.rows.map(\.id) == [2])
+        #expect(model.cancelling == nil)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.myRequests.cancelled"))
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a request an admin settled meanwhile (401) says so and is read again; another failure keeps the row")
+    func cancelRefused() async {
+        let loc = LocalizationManager()
+        let (session, _, _) = await myRequestsWorld(routes: [
+            "/request": [
+                requestPage([requestJSON(1, tmdbId: 11), requestJSON(3, tmdbId: 11)], total: 2),
+                requestPage([requestJSON(1, status: 2, tmdbId: 11), requestJSON(3, tmdbId: 11)], total: 2),
+            ],
+            "/movie/11": Array(repeating: movieReply(11, "Dune"), count: 4),
+            "/request/1": [.response(status: 401, body: #"{"message":"You do not have permission to delete this request."}"#)],
+            "/request/3": [.response(status: 500, body: #"{"message":"boom"}"#)],
+        ])
+        let toasts = ToastCenter()
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        await model.cancel(1, session: session, toasts: toasts, loc: loc)
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.alreadyHandled"))
+        // Read again: request 1 now shows as approved, no longer withdrawable.
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(model.rows.first.map { SeerrMyRequestsModel.canCancel($0.request) } == false)
+
+        await model.cancel(3, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(model.cancelling == nil)
+        #expect(toasts.current?.level == .error)
+        #expect(toasts.current?.title == loc.localized("seerr.myRequests.cancelFailed"))
+    }
+
     @Test("a series names its seasons, ascending, once each; a film names none")
     func seasonsSuffix() {
         typealias Model = SeerrMyRequestsModel

@@ -1683,6 +1683,12 @@
 "seerr.myRequests.seasons" = "seasons %@";
 "seerr.myRequests.seasons.one" = "season %@";
 "seerr.myRequests.watch" = "Watch";
+"seerr.myRequests.cancel" = "Cancel request";
+"seerr.myRequests.cancel.confirm" = "Cancel the request for “%@”?";
+"seerr.myRequests.cancel.keep" = "Keep";
+"seerr.myRequests.cancelling" = "Cancelling…";
+"seerr.myRequests.cancelled" = "Request cancelled";
+"seerr.myRequests.cancelFailed" = "Couldn't cancel the request";
 "seerr.myRequests.more" = "Show more";
 "seerr.settings.section.pending" = "To review";
 "seerr.settings.section.pendingCount" = "To review (%d)";

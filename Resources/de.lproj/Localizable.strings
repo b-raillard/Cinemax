@@ -1683,6 +1683,12 @@
 "seerr.myRequests.seasons" = "Staffeln %@";
 "seerr.myRequests.seasons.one" = "Staffel %@";
 "seerr.myRequests.watch" = "Ansehen";
+"seerr.myRequests.cancel" = "Anfrage zurückziehen";
+"seerr.myRequests.cancel.confirm" = "Anfrage für „%@“ zurückziehen?";
+"seerr.myRequests.cancel.keep" = "Behalten";
+"seerr.myRequests.cancelling" = "Wird zurückgezogen …";
+"seerr.myRequests.cancelled" = "Anfrage zurückgezogen";
+"seerr.myRequests.cancelFailed" = "Anfrage konnte nicht zurückgezogen werden";
 "seerr.myRequests.more" = "Mehr anzeigen";
 "seerr.settings.section.pending" = "Zu prüfen";
 "seerr.settings.section.pendingCount" = "Zu prüfen (%d)";

@@ -481,6 +481,14 @@ struct SeerrClientEndpointTests {
         #expect(stub.requests[0].value(forHTTPHeaderField: "X-API-User") == "3")
     }
 
+    @Test("withdrawing a request is a DELETE on the request itself")
+    func deleteRequestIsDELETE() async throws {
+        let stub = StubSeerrTransport([.response(status: 204, body: "")])
+        try await client(stub).deleteRequest(requestId: 19, key)
+        #expect(stub.requests[0].httpMethod == "DELETE")
+        #expect(stub.requests[0].url?.path == "/api/v1/request/19")
+    }
+
     @Test("Read endpoints: paths, language and credentials")
     func readEndpointPaths() async throws {
         let movie = #"{"mediaType":"movie","id":5,"title":"Dune"}"#

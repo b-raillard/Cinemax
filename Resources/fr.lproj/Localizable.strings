@@ -1685,6 +1685,12 @@
 "seerr.myRequests.seasons" = "saisons %@";
 "seerr.myRequests.seasons.one" = "saison %@";
 "seerr.myRequests.watch" = "Regarder";
+"seerr.myRequests.cancel" = "Annuler la demande";
+"seerr.myRequests.cancel.confirm" = "Annuler la demande « %@ » ?";
+"seerr.myRequests.cancel.keep" = "Garder";
+"seerr.myRequests.cancelling" = "Annulation en cours…";
+"seerr.myRequests.cancelled" = "Demande annulée";
+"seerr.myRequests.cancelFailed" = "Impossible d'annuler la demande";
 "seerr.myRequests.more" = "Afficher plus";
 "seerr.settings.section.pending" = "À valider";
 "seerr.settings.section.pendingCount" = "À valider (%d)";
