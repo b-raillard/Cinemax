@@ -179,6 +179,7 @@ struct MediaDetailMissingFilmCard: View {
     let onRequest: (SeerrMissingTitle) -> Void
 
     @Environment(SeerrRequestPresenter.self) private var presenter: SeerrRequestPresenter?
+    @Environment(SeerrSession.self) private var seerr: SeerrSession?
 
     var body: some View {
         Button {
@@ -187,7 +188,8 @@ struct MediaDetailMissingFilmCard: View {
             MissingTitleCard(
                 title: missing.title.title,
                 subtitle: missing.title.year.map(String.init),
-                badge: presenter?.badge(for: missing.id, default: missing.badge) ?? missing.badge
+                badge: presenter?.badge(for: missing.id, default: missing.badge) ?? missing.badge,
+                posterURL: seerr?.posterURL(missing.title.posterPath)
             )
         }
         #if os(tvOS)
