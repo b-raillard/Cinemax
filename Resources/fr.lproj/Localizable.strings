@@ -1642,7 +1642,7 @@
 "seerr.request.noSeasons" = "Aucune saison à demander";
 "seerr.request.failed" = "La demande n'a pas abouti";
 "seerr.request.next.auto" = "Le téléchargement démarre tout de suite.";
-"seerr.request.next.approval" = "L'admin doit valider ta demande, tu seras prévenu à son arrivée.";
+"seerr.request.next.approval" = "L'admin doit d'abord valider ta demande. On te prévient dès qu'elle arrive.";
 "seerr.request.kind.movie" = "Film";
 "seerr.request.kind.series" = "Série";
 "seerr.request.seasonRow" = "Saison %d";
