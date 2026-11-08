@@ -18,7 +18,7 @@ struct MissingTitleCard: View {
     let badge: SeerrBadge
     var aspectRatio: CGFloat = 2 / 3
     /// Seerr's poster (`SeerrSession.posterURL`); nil draws the outline alone.
-    var posterURL: URL? = nil
+    var posterURL: URL?
 
     var body: some View {
         Color.clear
