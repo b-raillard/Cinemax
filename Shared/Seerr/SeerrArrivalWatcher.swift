@@ -128,6 +128,7 @@ enum SeerrArrivalWatcher {
     static func openRequests(appState: AppState, settingsNav: SettingsNavCoordinator) {
         settingsNav.selectedInterfaceSub = nil
         settingsNav.showsAppIconPage = false
+        settingsNav.requestsUserId = nil
         settingsNav.selectedCategory = .requests
         appState.pendingDeepLinkTabId = MenuEntry.settingsID
     }

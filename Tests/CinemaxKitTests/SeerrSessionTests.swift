@@ -1781,7 +1781,8 @@ private struct ActivationWorld {
 @MainActor
 private func activationWorld(
     users: [UserDto], enabled: Set<String> = [], lookups: [String: StubSeerrTransport.Reply] = [:],
-    credentialed: Bool = true, publicSettings: StubSeerrTransport.Reply = settingsReply
+    credentialed: Bool = true, publicSettings: StubSeerrTransport.Reply = settingsReply,
+    extraRoutes: [String: [StubSeerrTransport.Reply]] = [:]
 ) async -> ActivationWorld {
     let api = MockAPIClient()
     api.stubbedUsers = users
@@ -1797,6 +1798,7 @@ private func activationWorld(
     var routes: [String: [StubSeerrTransport.Reply]] = [
         "/settings/public": [publicSettings], "/auth/me": [userReply(adminJSON)]]
     for (id, reply) in lookups { routes["/user/jellyfin/\(id)"] = [reply] }
+    routes.merge(extraRoutes) { $1 }
     let transport = RoutedSeerrTransport(routes)
     let storage = MockKeychain()
     if credentialed { storage.saveSeerrSessions(["S1|ADMIN": bound("abc")]) }
@@ -1911,7 +1913,8 @@ struct SeerrActivationTests {
     func lookupFailureIsUnknown() async {
         let failing = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": .failure(URLError(.timedOut))])
         await failing.model.load(appState: failing.app, session: failing.session)
-        #expect(failing.model.lines.map(\.kind) == [.linked(autoApproves: true), .unknown])
+        #expect(failing.model.lines.map(\.kind) == [.linked(SeerrUser(
+            id: SeerrUserID(rawValue: 1), permissions: .admin, jellyfinUserId: "ADMIN", displayName: "Admin")), .unknown])
 
         let keyless = await activationWorld(users: [adminUser, ann], credentialed: false)
         let before = keyless.transport.requests.count
@@ -2039,6 +2042,66 @@ struct SeerrActivationTests {
         #expect(!world.stored("ANN").isEnabled)
     }
 
+    @Test("« Validation automatique » reads Seerr's current set, moves only its bit, and keeps what Seerr stored")
+    func autoApproveIsAReadModifyWrite() async throws {
+        // Ann, on the server now: request + 4K films auto-approved (65536).
+        let current = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":65568}"#)
+        let stored = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":65824}"#)
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()],
+            extraRoutes: ["/user/7/settings/permissions": [current, stored]])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let saved = await world.model.setAutoApprove(
+            .movie, true, userId: "ANN", session: world.session, appState: world.app)
+
+        #expect(saved)
+        let calls = world.transport.requests.filter { $0.url?.path.hasSuffix("/user/7/settings/permissions") == true }
+        #expect(calls.map(\.httpMethod) == ["GET", "POST"])
+        let body = try #require(calls.last?.httpBody)
+        let sent = try JSONSerialization.jsonObject(with: body) as? [String: Int]
+        #expect(sent == ["permissions": 65568 | 256])
+        let line = try #require(world.model.lines.first { $0.id == "ANN" })
+        #expect(line.kind.seerrUser?.permissions.rawValue == 65824)
+        #expect(world.model.savingAutoApprove.isEmpty)
+    }
+
+    @Test("a refused permission write says so and leaves the line as it was")
+    func autoApproveRefused() async throws {
+        let current = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":32}"#)
+        let refused = StubSeerrTransport.Reply.response(
+            status: 403, body: #"{"message":"You do not have permission to modify this user"}"#)
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()],
+            extraRoutes: ["/user/7/settings/permissions": [current, refused]])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let saved = await world.model.setAutoApprove(
+            .tv, true, userId: "ANN", session: world.session, appState: world.app)
+
+        #expect(saved == false)
+        #expect(world.model.lines.first { $0.id == "ANN" }?.kind.seerrUser?.permissions == .request)
+    }
+
+    @Test("who may change « Validation automatique »")
+    func autoApprovalAccess() {
+        let owner = SeerrUser(id: SeerrUserID(rawValue: 1), permissions: .admin)
+        let usersManager = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: [.request, .manageUsers])
+        let requester = SeerrUser(id: SeerrUserID(rawValue: 2), permissions: .request)
+        let manager = SeerrUser(id: SeerrUserID(rawValue: 3), permissions: [.request, .manageRequests])
+        let plain = SeerrUser(id: SeerrUserID(rawValue: 4), permissions: .request)
+        typealias Access = SeerrAutoApprovalAccess
+        #expect(Access.of(plain, me: owner) == .editable)
+        #expect(Access.of(plain, me: usersManager) == .editable)
+        #expect(Access.of(plain, me: requester) == .notAllowed)
+        #expect(Access.of(plain, me: nil) == .notAllowed)
+        #expect(Access.of(owner, me: owner) == .alwaysAdmin)
+        #expect(Access.of(manager, me: owner) == .alwaysManager)
+        #expect(Access.of(usersManager, me: usersManager) == .ownAccount)
+    }
+
     @Test("the line kind truth table")
     func lineKinds() {
         let request = SeerrUser(id: SeerrUserID(rawValue: 2), permissions: .request)
@@ -2051,10 +2114,18 @@ struct SeerrActivationTests {
         #expect(kind(policy(maxRating: 10), request) == .ageCapped)
         #expect(kind(policy(maxRating: 10), nil, failed: true) == .ageCapped)
         #expect(kind(policy(), request, failed: true) == .unknown)
-        #expect(kind(policy(), request) == .linked(autoApproves: false))
-        #expect(kind(policy(), approved) == .linked(autoApproves: true))
-        #expect(kind(policy(), adminSeerr) == .linked(autoApproves: true))
-        #expect(kind(policy(), movieOnly) == .linked(autoApproves: false))
+        #expect(kind(policy(), request) == .linked(request))
+        #expect(kind(policy(), approved) == .linked(approved))
+        #expect(kind(policy(), adminSeerr) == .linked(adminSeerr))
+        #expect(kind(policy(), movieOnly) == .linked(movieOnly))
+        let loc = LocalizationManager()
+        #expect(SeerrActivationModel.lineText(.linked(request), loc: loc) == loc.localized("seerr.settings.line.linked"))
+        #expect(SeerrActivationModel.lineText(.linked(approved), loc: loc)
+            == loc.localized("seerr.settings.line.linkedAutoApprove"))
+        #expect(SeerrActivationModel.lineText(.linked(adminSeerr), loc: loc)
+            == loc.localized("seerr.settings.line.linkedAutoApprove"))
+        #expect(SeerrActivationModel.lineText(.linked(movieOnly), loc: loc)
+            == loc.localized("seerr.settings.line.linkedAutoApproveMovies"))
         #expect(kind(policy(), nil, plex: true) == .willBeCreated)
         #expect(kind(policy(), nil, plex: false) == .mustBeAdded)
         #expect(kind(nil, nil) == .mustBeAdded)

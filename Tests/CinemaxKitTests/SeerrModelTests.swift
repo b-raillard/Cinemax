@@ -57,6 +57,26 @@ struct SeerrModelTests {
         #expect(SeerrPermissions(rawValue: 256).autoApproves(.tv) == false)
         #expect(SeerrPermissions(rawValue: 512).autoApproves(.tv))
         #expect(SeerrPermissions(rawValue: 128).autoApproves(.tv))
+        // Seerr approves a manager's requests too (MediaRequest ORs it in).
+        #expect(SeerrPermissions([.request, .manageRequests]).autoApproves(.movie))
+        #expect(SeerrPermissions.admin.grantsAutoApprove(.movie) == false)
+        #expect(SeerrPermissions.admin.canManageUsers)
+        #expect(SeerrPermissions.request.canManageUsers == false)
+    }
+
+    @Test("Switching one kind's auto-approval moves only the non-4K bits")
+    func settingAutoApprove() {
+        let request = SeerrPermissions.request
+        #expect(request.settingAutoApprove(.movie, true) == [.request, .autoApproveMovie])
+        // Both kinds ⇒ the single « everything » bit.
+        #expect(SeerrPermissions([.request, .autoApproveMovie]).settingAutoApprove(.tv, true) == [.request, .autoApprove])
+        // « Everything » minus films ⇒ series alone.
+        #expect(SeerrPermissions([.request, .autoApprove]).settingAutoApprove(.movie, false) == [.request, .autoApproveTV])
+        #expect(SeerrPermissions([.request, .autoApproveTV]).settingAutoApprove(.tv, false) == .request)
+        // 4K bits and every other bit survive.
+        let with4K = SeerrPermissions(rawValue: 32 | 32768 | 65536 | 131072)
+        #expect(with4K.settingAutoApprove(.movie, true).rawValue == 32 | 32768 | 65536 | 131072 | 256)
+        #expect(SeerrPermissions(rawValue: 2 | 32).settingAutoApprove(.tv, true).rawValue == 2 | 32 | 512)
     }
 
     @Test("Request page total comes from pageInfo")

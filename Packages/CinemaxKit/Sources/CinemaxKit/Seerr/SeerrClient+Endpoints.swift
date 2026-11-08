@@ -78,6 +78,30 @@ extension SeerrClient {
         }
     }
 
+    /// Another user's permissions, as stored now (MANAGE_USERS).
+    public func permissions(ofUser id: SeerrUserID, _ credential: SeerrCredential) async throws -> SeerrPermissions {
+        struct Answer: Decodable { let permissions: Int }
+        let answer: Answer = try await get(
+            "/user/\(id.rawValue)/settings/permissions", query: [], auth: .credential(credential), localized: false)
+        return SeerrPermissions(rawValue: answer.permissions)
+    }
+
+    /// Replaces another user's WHOLE permission set (MANAGE_USERS): read it
+    /// first and change only what is meant. Seerr refuses (403) the owner
+    /// (id 1), the caller's own account, and granting `admin` unless the
+    /// caller is the owner. Returns what Seerr stored.
+    @discardableResult
+    public func setPermissions(
+        _ permissions: SeerrPermissions, ofUser id: SeerrUserID, _ credential: SeerrCredential
+    ) async throws -> SeerrPermissions {
+        struct Body: Codable { let permissions: Int }
+        let (stored, status): (Body?, Int) = try await mutate(
+            "POST", "/user/\(id.rawValue)/settings/permissions",
+            body: Body(permissions: permissions.rawValue), auth: .credential(credential))
+        guard let stored else { throw SeerrError.http(status) }
+        return SeerrPermissions(rawValue: stored.permissions)
+    }
+
     /// Reads `serverId` only: the rest of the body holds Seerr's own Jellyfin
     /// API key and is never logged.
     public func jellyfinServerId(adminKey: String) async throws -> String {

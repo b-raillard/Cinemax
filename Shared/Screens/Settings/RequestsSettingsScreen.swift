@@ -65,7 +65,13 @@ struct RequestsSettingsScreen: View {
     @State private var isSigningIn = false
     @State private var isBulkUpdating = false
     @State private var isLoadingLines = false
-    @State private var pendingUserIds: Set<String> = []
+    /// The account page open on top of the list (proposal B, 2026-11-08).
+    /// iOS pushes it; tvOS draws it in place of the page, its user id held by
+    /// `SettingsNavCoordinator.requestsUserId` (the back row reads it).
+    @State private var openedUser: OpenedSeerrUser?
+    #if os(tvOS)
+    @Environment(SettingsNavCoordinator.self) private var settingsNav
+    #endif
     /// The address this device's key was entered for (`nil` = no key). Read
     /// from the Keychain on appear and after each change, never per render.
     @State private var storedKeyOrigin: URL?
@@ -163,13 +169,29 @@ struct RequestsSettingsScreen: View {
         // redraw (measured: the button kept its arrow over the skeleton). The
         // pull lets go at once; the bar button and the skeleton show the rest.
         .refreshable { Task { await refresh() } }
+        .navigationDestination(item: $openedUser) { opened in
+            SeerrAccountPage(activation: activation, userId: opened.id)
+        }
         .toolbar {
             if showsRefresh {
                 ToolbarItem(placement: .topBarTrailing) { refreshBarButton }
             }
         }
         #else
-        page
+        Group {
+            if let id = settingsNav.requestsUserId {
+                SeerrAccountPage(activation: activation, userId: id)
+                    .tvBackAction { settingsNav.requestsUserId = nil }
+            } else {
+                page
+            }
+        }
+        // Back from the account page (Menu or the « ‹ Demandes » row): focus
+        // returns to that user's row once the list is drawn again.
+        .onChange(of: settingsNav.requestsUserId) { closed, now in
+            guard now == nil, let closed else { return }
+            Task { @MainActor in focusedItem = .toggle("seerr.user.\(closed)") }
+        }
         #endif
     }
 
@@ -853,17 +875,6 @@ struct RequestsSettingsScreen: View {
         noteText(loc.localized("seerr.settings.footnote"))
     }
 
-    private func lineText(_ kind: SeerrUserLineKind) -> String {
-        switch kind {
-        case .ageCapped: loc.localized("seerr.settings.line.ageCapped")
-        case .linked(let autoApproves):
-            loc.localized(autoApproves ? "seerr.settings.line.linkedAutoApprove" : "seerr.settings.line.linked")
-        case .willBeCreated: loc.localized("seerr.settings.line.willBeCreated")
-        case .mustBeAdded: loc.localized("seerr.settings.line.mustBeAdded")
-        case .unknown: loc.localized("seerr.settings.line.unknown")
-        }
-    }
-
     // MARK: - Report
 
     private func reportView(_ report: SeerrTestReport) -> some View {
@@ -981,6 +992,11 @@ struct RequestsSettingsScreen: View {
     }
 
     private func resetForAccountChange() {
+        // Another account's user page is never left on screen.
+        openedUser = nil
+        #if os(tvOS)
+        settingsNav.requestsUserId = nil
+        #endif
         activation = SeerrActivationModel()
         loadedTrigger = nil
         myRequests = SeerrMyRequestsModel()
@@ -1120,24 +1136,6 @@ struct RequestsSettingsScreen: View {
 
     private func showFailure(_ failure: SeerrTestFailure) {
         toasts.error(failureTitle(failure), message: loc.localized(failure.fixKey))
-    }
-
-    private func toggle(_ line: SeerrUserLine) async {
-        guard !pendingUserIds.contains(line.id) else { return }
-        pendingUserIds.insert(line.id)
-        defer { pendingUserIds.remove(line.id) }
-        let turningOn = !line.isEnabled
-        if let message = await activation.setEnabled(turningOn, userId: line.id, appState: appState, loc: loc) {
-            // A refusal (age cap, no address yet) informs; a failed write is an error.
-            if turningOn, line.kind == .ageCapped || seerr.config?.url == nil {
-                toasts.info(message)
-            } else {
-                toasts.error(message)
-            }
-            return
-        }
-        // The admin's own switch changes the admin's own configuration (R22).
-        if line.id == appState.currentUserId { await seerr.reload(appState: appState) }
     }
 
     private func enableAll() async {
@@ -1318,60 +1316,56 @@ struct RequestsSettingsScreen: View {
         .modifier(RowFocus(id: id, focus: focusBinding))
     }
 
-    /// One Jellyfin user: the whole row is the switch, its Seerr state under
-    /// the name (ONE focusable unit on tvOS).
+    /// One Jellyfin user: the row opens their account page (« Peut demander »,
+    /// « Validation automatique »), its Seerr state under the name and
+    /// « Activé » / « Désactivé » beside it (ONE focusable unit on tvOS).
     private func userRow(_ line: SeerrUserLine) -> some View {
         let id = "seerr.user.\(line.id)"
-        let subtitle = lineText(line.kind)
-        let action: () -> Void = { Task { await toggle(line) } }
-        return Button(action: action) {
+        let subtitle = SeerrActivationModel.lineText(line.kind, loc: loc)
+        let state = loc.localized(line.isEnabled ? "seerr.user.on" : "seerr.user.off")
+        return Button {
+            #if os(tvOS)
+            settingsNav.requestsUserId = line.id
+            #else
+            openedUser = OpenedSeerrUser(id: line.id)
+            #endif
+        } label: {
             rowChrome(id: id) {
-                toggleRowContent(label: line.name, subtitle: subtitle, isOn: line.isEnabled,
-                                 isBusy: pendingUserIds.contains(line.id))
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                        Text(line.name)
+                            .font(rowLabelFont)
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Text(subtitle)
+                            .font(rowDetailFont)
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    #if os(tvOS)
+                    .padding(.vertical, CinemaSpacing.spacing2)
+                    #endif
+                    Spacer(minLength: CinemaSpacing.spacing3)
+                    if activation.togglingUserIds.contains(line.id) {
+                        ProgressView()
+                    } else {
+                        Text(state)
+                            .font(rowDetailFont.weight(.semibold))
+                            .foregroundStyle(line.isEnabled ? themeManager.accent : CinemaColor.onSurfaceVariant)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(rowDetailFont.weight(.semibold))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .accessibilityHidden(true)
+                }
             }
         }
         .buttonStyle(.plain)
         .modifier(RowFocus(id: id, focus: focusBinding))
-        // One VoiceOver element: name, state line, on / off, toggle semantics.
+        // One VoiceOver element: name, then its state and line.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(line.name)
-        .accessibilityValue(loc.localized(line.isEnabled ? "a11y.toggle.on" : "a11y.toggle.off"))
-        .accessibilityHint(subtitle)
-        .accessibilityAddTraits(.isToggle)
-        .accessibilityAction { action() }
-    }
-
-    @ViewBuilder
-    private func toggleRowContent(label: String, subtitle: String, isOn: Bool, isBusy: Bool) -> some View {
-        let text = VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
-            Text(label)
-                .font(rowLabelFont)
-                .foregroundStyle(CinemaColor.onSurface)
-            Text(subtitle)
-                .font(rowDetailFont)
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        let control = Group {
-            if isBusy {
-                ProgressView()
-            } else {
-                CinemaToggleIndicator(isOn: isOn, accent: themeManager.accent, animated: motionEffects)
-            }
-        }
-        #if os(tvOS)
-        HStack(spacing: CinemaSpacing.spacing3) {
-            text.padding(.vertical, CinemaSpacing.spacing2)
-            Spacer(minLength: CinemaSpacing.spacing3)
-            control
-        }
-        #else
-        SettingsRowAdaptiveLayout {
-            text
-        } control: {
-            control
-        }
-        #endif
+        .accessibilityValue("\(state), \(subtitle)")
+        .accessibilityAddTraits(.isButton)
     }
 
     /// The row's padding, background and focus look.
@@ -1396,9 +1390,14 @@ struct RequestsSettingsScreen: View {
     #endif
 }
 
+/// The account page open over Réglages → Demandes (a Jellyfin user id).
+struct OpenedSeerrUser: Hashable, Identifiable {
+    let id: String
+}
+
 /// tvOS: a row is ONE focusable unit in the screen's lane, without the
 /// system focus effect (Settings and design-system focus RULEs). iOS: nothing.
-private struct RowFocus: ViewModifier {
+struct RowFocus: ViewModifier {
     let id: String
     #if os(tvOS)
     let focus: FocusState<SettingsFocus?>.Binding

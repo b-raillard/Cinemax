@@ -102,6 +102,7 @@ public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decoda
     public init(rawValue: Int) { self.rawValue = rawValue }
 
     public static let admin = Self(rawValue: 2)
+    public static let manageUsers = Self(rawValue: 8)
     public static let manageRequests = Self(rawValue: 16)
     public static let request = Self(rawValue: 32)
     public static let autoApprove = Self(rawValue: 128)
@@ -117,13 +118,41 @@ public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decoda
     }
 
     public var canManageRequests: Bool { allows(.manageRequests) }
+    /// May change another user's permissions (`POST /user/{id}/settings/permissions`).
+    public var canManageUsers: Bool { allows(.manageUsers) }
 
+    /// As Seerr decides when the request is created: an admin, a manager of
+    /// requests and the auto-approve bits all skip « À valider » (read in
+    /// Seerr 3.5.1's `MediaRequest`, which ORs `MANAGE_REQUESTS` in).
     public func autoApproves(_ kind: SeerrMediaKind) -> Bool {
-        if contains(.admin) || contains(.autoApprove) { return true }
+        allows(.manageRequests) || grantsAutoApprove(kind)
+    }
+
+    /// Approved without review because of the bits alone — never because the
+    /// user is an admin or a manager. What « Validation automatique » shows.
+    public func grantsAutoApprove(_ kind: SeerrMediaKind) -> Bool {
+        if contains(.autoApprove) { return true }
         switch kind {
         case .movie: return contains(.autoApproveMovie)
         case .tv: return contains(.autoApproveTV)
         }
+    }
+
+    /// The same permissions with one kind's auto-approval switched. Only the
+    /// three non-4K bits move: both kinds on ⇒ `autoApprove` alone, one ⇒ its
+    /// own bit; every other bit (4K, admin, request…) is kept as it was.
+    public func settingAutoApprove(_ kind: SeerrMediaKind, _ on: Bool) -> Self {
+        let movie = kind == .movie ? on : grantsAutoApprove(.movie)
+        let tv = kind == .tv ? on : grantsAutoApprove(.tv)
+        var next = subtracting([.autoApprove, .autoApproveMovie, .autoApproveTV])
+        if movie && tv {
+            next.insert(.autoApprove)
+        } else if movie {
+            next.insert(.autoApproveMovie)
+        } else if tv {
+            next.insert(.autoApproveTV)
+        }
+        return next
     }
 
     public init(from decoder: Decoder) throws {

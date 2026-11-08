@@ -69,6 +69,7 @@ extension SettingsScreen {
                 if newValue == nil {
                     selectedInterfaceSub = nil
                     showsAppIconPage = false
+                    settingsNav.requestsUserId = nil
                     tierChipFocusable = false
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
@@ -443,7 +444,12 @@ extension SettingsScreen {
                 // Back button
                 let backFocused = focusedItem == .back
                 Button {
-                    selectedCategory = nil
+                    // Demandes → a user's page: back to the list first.
+                    if category == .requests, settingsNav.requestsUserId != nil {
+                        settingsNav.requestsUserId = nil
+                    } else {
+                        selectedCategory = nil
+                    }
                 } label: {
                     HStack(spacing: CinemaSpacing.spacing2) {
                         Image(systemName: "chevron.left")
