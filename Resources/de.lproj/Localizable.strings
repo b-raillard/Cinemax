@@ -1557,7 +1557,7 @@
 "seerr.test.notJellyfin.fix" = "JellyGlass funktioniert nur mit einem für Jellyfin eingerichteten Seerr. Wähle in Seerr Jellyfin als Medienserver oder gib die Adresse eines mit Jellyfin verbundenen Seerr ein.";
 "seerr.test.otherJellyfin.title" = "Dieses Seerr ist mit einem anderen Jellyfin-Server verbunden.";
 "seerr.test.otherJellyfin.fix" = "Die Anfragen würden auf diesem anderen Server landen. Prüfe die Adresse von Seerr oder seinen Server unter Seerr → Einstellungen → Jellyfin.";
-"seerr.test.quickConnectOff.title" = "Die Anmeldung in einem Schritt ist auf deinem Jellyfin-Server deaktiviert.";
+"seerr.test.quickConnectOff.title" = "Die Anmeldung mit Quick Connect ist auf deinem Jellyfin-Server deaktiviert.";
 "seerr.test.quickConnectOff.fix" = "Aktiviere Quick Connect unter Jellyfin → Dashboard → Allgemein.";
 "seerr.test.jellyfinDevice.title" = "Dein Jellyfin-Konto ist auf einem neuen Gerät nicht erlaubt.";
 "seerr.test.jellyfinDevice.fix" = "Erlaube unter Jellyfin → Benutzer → dein Konto → Zugriff alle Geräte oder füge „Seerr“ hinzu.";
@@ -1571,7 +1571,7 @@
 "seerr.test.notInSeerr.fix" = "Füge es unter Seerr → Benutzer hinzu oder aktiviere das automatische Anlegen von Konten.";
 "seerr.test.ok.version" = "Seerr %@";
 "seerr.test.ok.server" = "Verbunden mit deinem Jellyfin-Server „%@“";
-"seerr.test.ok.quickConnect" = "Anmeldung in einem Schritt verfügbar";
+"seerr.test.ok.quickConnect" = "Anmeldung mit Quick Connect verfügbar";
 "seerr.test.ok.account" = "Dein Seerr-Konto: %@";
 "seerr.test.ok.role.admin" = "Admin";
 "seerr.test.ok.role.autoApprove" = "Anfragen werden automatisch genehmigt";
