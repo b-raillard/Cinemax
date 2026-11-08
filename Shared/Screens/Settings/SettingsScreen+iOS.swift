@@ -131,6 +131,11 @@ extension SettingsScreen {
                 Text(category.localizedName(loc))
                     .font(CinemaFont.dynamicSystem(18, weight: .semibold, relativeTo: .headline))
                     .tracking(-0.3)
+                    // One line that shrinks: at the largest text sizes a long
+                    // word (« Administration ») wrapped mid-word. Half size at
+                    // the largest still reads bigger than the default size.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .foregroundStyle(isFirst ? themeManager.onAccentContainer : CinemaColor.onSurface)
 
                 Spacer()
@@ -193,6 +198,9 @@ extension SettingsScreen {
                         Text(loc.localized("settings.rateApp"))
                             .font(CinemaFont.dynamicSystem(18, weight: .semibold, relativeTo: .headline))
                             .tracking(-0.3)
+                            // « Noter JellyGlass » broke mid-word too (« JellyGlas / s »).
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
                             .foregroundStyle(CinemaColor.onSurface)
                         Text(loc.localized("settings.rateApp.subtitle"))
                             .font(CinemaFont.dynamicLabel(.medium))
@@ -482,6 +490,9 @@ extension SettingsScreen {
                 Text(sub.localizedName(loc))
                     .font(CinemaFont.dynamicSystem(18, weight: .semibold, relativeTo: .headline))
                     .tracking(-0.3)
+                    // Same one-line rule as the landing pills above.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .foregroundStyle(isFirst ? themeManager.onAccentContainer : CinemaColor.onSurface)
 
                 Spacer()
