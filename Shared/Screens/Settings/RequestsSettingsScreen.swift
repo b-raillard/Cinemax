@@ -267,6 +267,8 @@ struct RequestsSettingsScreen: View {
         Task {
             await myRequests.cancel(row.id, session: seerr, toasts: toasts, loc: loc)
             #if os(tvOS)
+            // Confirmed in an alert opened from this row: focus is the
+            // alert's until it closes, so it never reads as « still here ».
             focusAfterWithdrawing(row.id, formerIndex: formerIndex)
             #endif
         }
@@ -533,6 +535,9 @@ struct RequestsSettingsScreen: View {
     private func settle(_ row: SeerrRequestRow, _ action: SeerrPendingModel.Action) {
         #if os(tvOS)
         let formerIndex = pending.rows.firstIndex { $0.id == row.id }
+        // « Refuser » was confirmed in an alert, which held focus: the press
+        // itself says where focus was. « Approuver » asks the live focus.
+        let wasOnButton = action == .decline || focusedItem == .toggle(pendingButtonId(row.id, action))
         #endif
         Task {
             if action == .approve {
@@ -541,18 +546,21 @@ struct RequestsSettingsScreen: View {
                 await pending.decline(row.id, session: seerr, toasts: toasts, loc: loc)
             }
             #if os(tvOS)
-            focusAfterSettling(row.id, action, formerIndex: formerIndex)
+            focusAfterSettling(row.id, action, formerIndex: formerIndex, wasOnButton: wasOnButton)
             #endif
         }
     }
 
     #if os(tvOS)
     /// The withdrawn row left the list: focus goes to the row now in its place
-    /// (or the last one), only while it was still on the pressed row — left to
-    /// itself the engine sends it back to the top of the page.
+    /// (or the last one) — left to itself the engine sent it to the tab bar
+    /// (measured on the tvOS simulator, 2026-11-08): the confirmation alert
+    /// held focus, so a strict « still on the row » test always failed. Focus
+    /// still on the row, or nowhere yet, moves; a user who moved on stays.
     private func focusAfterWithdrawing(_ requestId: Int, formerIndex: Int?) {
         let rows = myRequests.rows
-        guard focusedItem == .toggle("seerr.request.\(requestId)"), let formerIndex,
+        let pressed = SettingsFocus.toggle("seerr.request.\(requestId)")
+        guard focusedItem == nil || focusedItem == pressed, let formerIndex,
               !rows.contains(where: { $0.id == requestId }), !rows.isEmpty else { return }
         focusedItem = .toggle("seerr.request.\(rows[min(formerIndex, rows.count - 1)].id)")
     }
@@ -565,11 +573,15 @@ struct RequestsSettingsScreen: View {
     /// button of the row that took its place — left to itself, the engine
     /// sends it back to the top of the page, and a manager working down the
     /// queue would walk down again after every press (recette 2026-11-07).
-    /// Only while focus is still on the pressed button: a user who moved on
-    /// during the call keeps their place.
-    private func focusAfterSettling(_ requestId: Int, _ action: SeerrPendingModel.Action, formerIndex: Int?) {
+    /// Only when focus was on the pressed button (`wasOnButton`, read by the
+    /// caller — through an alert, focus is the alert's) and still is, or is
+    /// nowhere yet (the alert just closed): a user who moved on keeps their place.
+    private func focusAfterSettling(
+        _ requestId: Int, _ action: SeerrPendingModel.Action, formerIndex: Int?, wasOnButton: Bool
+    ) {
         let rows = pending.rows
-        guard focusedItem == .toggle(pendingButtonId(requestId, action)), let formerIndex,
+        let pressed = SettingsFocus.toggle(pendingButtonId(requestId, action))
+        guard wasOnButton, focusedItem == nil || focusedItem == pressed, let formerIndex,
               !rows.contains(where: { $0.id == requestId }) else { return }
         if rows.isEmpty {
             if pending.canLoadMore { focusedItem = .toggle("seerr.pending.more") }
