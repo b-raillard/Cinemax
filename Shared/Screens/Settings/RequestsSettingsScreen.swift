@@ -881,7 +881,7 @@ struct RequestsSettingsScreen: View {
         myRequestsLoadedFor = nil
         pending = SeerrPendingModel()
         pendingLoadedFor = nil
-        pendingFirst = false
+        pendingFirst = nil
         isRetryingMyRequests = false
         isRetryingPending = false
         report = nil
