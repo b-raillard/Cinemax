@@ -351,6 +351,12 @@ struct SettingsScreen: View {
     #if os(iOS)
     /// A landscape iPhone shrinks the landing header (`iOSHeader`).
     @Environment(\.verticalSizeClass) var verticalSizeClass
+    /// Never read: declaring it makes the landing redraw when the text size
+    /// changes. Its row titles (`CinemaFont.dynamic*`) are point sizes computed
+    /// while the body runs, so without it they kept the old size while the
+    /// « Demandes » bubble — which reads it — took the new one (recette
+    /// 2026-11-08: big titles + small bubble, or the reverse).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #endif
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode
