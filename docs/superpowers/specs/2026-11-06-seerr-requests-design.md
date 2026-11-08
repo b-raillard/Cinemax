@@ -162,7 +162,7 @@ There is no server-wide "mode": the key is typed by a Jellyfin admin on a given 
 
 ## Test connection — order and messages (FR, explicit: what + how to fix)
 
-Run in this order, stop at the first error; success lists what was verified (« Seerr 3.5.1 », « Relié à ton serveur Jellyfin « Maison » », « Connexion en un geste disponible », « Ton compte Seerr : admin, demandes approuvées automatiquement »).
+Run in this order, stop at the first error; success lists what was verified (« Seerr 3.5.1 », « Relié à ton serveur Jellyfin « Maison » », « Connexion Quick Connect disponible », « Ton compte Seerr : admin, demandes approuvées automatiquement »).
 
 | Check | Message |
 |---|---|
@@ -171,7 +171,7 @@ Run in this order, stop at the first error; success lists what was verified (« 
 | Version < 3.4 | « Seerr <v> est trop ancien. » JellyGlass a besoin de Seerr 3.4 ou plus récent. Mets Seerr à jour. |
 | Not Jellyfin-backed | « Ce Seerr n'est pas relié à Jellyfin. » |
 | Other Jellyfin (account mode: `Authorize` → 404; key mode: `/settings/jellyfin` `serverId` ≠ this server's id) | « Ce Seerr est relié à un autre serveur Jellyfin. » Les demandes arriveraient sur cet autre serveur. Vérifie l'adresse de Seerr, ou son serveur dans Seerr → Réglages → Jellyfin. |
-| Jellyfin Quick Connect off (account mode) | « La connexion en un geste est désactivée sur ton serveur Jellyfin. » Active Quick Connect dans Jellyfin → Tableau de bord → Général. |
+| Jellyfin Quick Connect off (account mode) | « La connexion Quick Connect est désactivée sur ton serveur Jellyfin. » Active Quick Connect dans Jellyfin → Tableau de bord → Général. |
 | Jellyfin refuses the approval, policy `EnableAllDevices` off | « Ton compte Jellyfin n'est pas autorisé sur un nouvel appareil. » Dans Jellyfin → Utilisateurs → <toi> → Accès, autorise tous les appareils, ou ajoute « Seerr ». |
 | Jellyfin refuses the approval, policy `MaxActiveSessions` > 0 | « Ton compte Jellyfin a atteint son nombre maximal de sessions. » Déconnecte un appareil dans Réglages → Confidentialité → Appareils connectés, ou augmente la limite dans Jellyfin. |
 | Jellyfin refuses the approval, neither | « Jellyfin a refusé la connexion de Seerr à ton compte. » Réessaie ; si ça recommence, regarde le journal de Jellyfin. |
