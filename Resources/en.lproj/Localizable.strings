@@ -1693,6 +1693,9 @@
 "seerr.settings.section.pending" = "To review";
 "seerr.settings.section.pendingCount" = "To review (%d)";
 "seerr.settings.section.pendingCount.one" = "To review (%d)";
+"seerr.settings.refresh" = "Refresh";
+"seerr.settings.refreshing" = "Refreshing…";
+"seerr.settings.loading" = "Loading requests…";
 "seerr.settings.pendingBubble" = "%d requests to review";
 "seerr.settings.pendingBubble.one" = "%d request to review";
 "seerr.pending.empty" = "Nothing to review right now";

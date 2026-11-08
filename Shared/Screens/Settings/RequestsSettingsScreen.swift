@@ -49,6 +49,9 @@ struct RequestsSettingsScreen: View {
     /// Replaced on an account change, like `activation`.
     @State private var pending = SeerrPendingModel()
     @State private var pendingLoadedFor: RequestListTrigger?
+    /// « Actualiser » is under way (the iOS pull or bar button, the tvOS row):
+    /// the bar button turns into a spinner, the tvOS row says so.
+    @State private var isRefreshing = false
     /// « À valider » comes first: requests were waiting when the page opened.
     /// Decided ONCE per page (`nil` until then): a later `onAppear` — a tab
     /// round-trip, a cover closing — never swaps the sections.
@@ -144,8 +147,74 @@ struct RequestsSettingsScreen: View {
     }
 
     var body: some View {
+        #if os(iOS)
+        // The page owns its scroll view (like Administration): `.refreshable`
+        // only reaches the scroll view it is set on, and the bar button lives
+        // here with the state it shows.
+        ScrollView(showsIndicators: false) {
+            page
+                .padding(.horizontal, CinemaSpacing.spacing3)
+                .padding(.bottom, CinemaSpacing.spacing8)
+        }
+        .background(CinemaColor.surface.ignoresSafeArea())
+        .navigationTitle(SettingsCategory.requests.localizedName(loc))
+        .navigationBarTitleDisplayMode(.large)
+        // Not awaited: while the pull's own spinner runs, the bar does not
+        // redraw (measured: the button kept its arrow over the skeleton). The
+        // pull lets go at once; the bar button and the skeleton show the rest.
+        .refreshable { Task { await refresh() } }
+        .toolbar {
+            if showsRefresh {
+                ToolbarItem(placement: .topBarTrailing) { refreshBarButton }
+            }
+        }
+        #else
+        page
+        #endif
+    }
+
+    /// Something to re-read: one of the two lists is on the page.
+    private var showsRefresh: Bool {
+        isVisible && (myRequestsTrigger != nil || pendingTrigger != nil)
+    }
+
+    #if os(iOS)
+    /// Liquid Glass draws the bar item itself (no `.glass` style — root RULE).
+    /// While a refresh runs — pulled or pressed — the arrow gives way to a
+    /// spinner, as the tvOS row's « Actualisation… ».
+    private var refreshBarButton: some View {
+        Button {
+            Task { await refresh() }
+        } label: {
+            if isRefreshing {
+                ProgressView()
+            } else {
+                Image(systemName: "arrow.clockwise")
+            }
+        }
+        .disabled(isRefreshing)
+        .tint(themeManager.accent)
+        .accessibilityLabel(loc.localized(isRefreshing ? "seerr.settings.refreshing" : "seerr.settings.refresh"))
+    }
+    #endif
+
+    private var page: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             if isVisible {
+                #if os(tvOS)
+                // No pull on a remote: the row, first under the back button.
+                // Never disabled while it runs (tvOS busy RULE): it keeps the
+                // focus while both lists turn to their skeleton.
+                if showsRefresh {
+                    panel {
+                        actionRow(id: "seerr.refresh", icon: "arrow.clockwise",
+                                  label: loc.localized(isRefreshing ? "seerr.settings.refreshing" : "seerr.settings.refresh"),
+                                  isBusy: isRefreshing) {
+                            Task { await refresh() }
+                        }
+                    }
+                }
+                #endif
                 // Requests waiting ⇒ the page opens on « À valider » (the
                 // Réglages bubble brought the manager here). Decided on
                 // appear, so the sections never swap under the user.
@@ -223,7 +292,7 @@ struct RequestsSettingsScreen: View {
             if isRetryingMyRequests {
                 failedPanel(retryId: "seerr.requests.retry", isRetrying: true) {}
             } else {
-                loadingRow
+                skeletonPanel(rows: 3)
             }
         case .failed:
             failedPanel(retryId: "seerr.requests.retry", isRetrying: false) {
@@ -436,7 +505,7 @@ struct RequestsSettingsScreen: View {
             if isRetryingPending {
                 failedPanel(retryId: "seerr.pending.retry", isRetrying: true) {}
             } else {
-                loadingRow
+                skeletonPanel(rows: 1)
             }
         case .failed:
             failedPanel(retryId: "seerr.pending.retry", isRetrying: false) {
@@ -606,10 +675,47 @@ struct RequestsSettingsScreen: View {
 
     // MARK: - Shared states
 
-    private var loadingRow: some View {
-        ProgressView()
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, CinemaSpacing.spacing3)
+    /// A list on its way: rows sketched as they will come (poster, title,
+    /// status), the shimmer Home's skeleton uses. Never focusable on tvOS —
+    /// the focus stays where it is (the « Actualiser » row, typically).
+    private func skeletonPanel(rows: Int) -> some View {
+        panel {
+            ForEach(0..<rows, id: \.self) { index in
+                skeletonRow(index)
+                if index < rows - 1 { divider }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(loc.localized("seerr.settings.loading"))
+    }
+
+    @ViewBuilder
+    private func skeletonRow(_ index: Int) -> some View {
+        let widths: [CGFloat] = [0.7, 0.5, 0.62]
+        let line = widths[index % widths.count]
+        #if os(tvOS)
+        let base = CinemaScale.pt(520), lineHeight = CinemaScale.pt(20)
+        #else
+        let base = CinemaScale.pt(220), lineHeight = CinemaScale.pt(14)
+        #endif
+        let content = HStack(spacing: CinemaSpacing.spacing3) {
+            SkeletonBlock(cornerRadius: CinemaRadius.small)
+                .frame(width: requestPosterWidth, height: requestPosterWidth * 1.5)
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                SkeletonBlock(cornerRadius: lineHeight / 2)
+                    .frame(width: base * line, height: lineHeight)
+                SkeletonBlock(cornerRadius: lineHeight / 2)
+                    .frame(width: base * 0.45, height: lineHeight * 0.8)
+            }
+            Spacer(minLength: 0)
+        }
+        #if os(tvOS)
+        content
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing2)
+        #else
+        iOSSettingsRow { content }
+        #endif
     }
 
     /// A list Seerr did not serve: say so, and offer « Réessayer » (R30).
@@ -950,6 +1056,25 @@ struct RequestsSettingsScreen: View {
         defer { isRetryingPending = false }
         await pending.load(session: seerr)
         if pending.phase == .loaded, current == pendingTrigger { pendingLoadedFor = current }
+    }
+
+    /// « Actualiser »: both lists re-read side by side (each shows its
+    /// skeleton meanwhile), « À valider » writing the bubble's fresh count.
+    /// A second press while one runs does nothing.
+    private func refresh() async {
+        guard !isRefreshing, showsRefresh else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        let mine = myRequestsTrigger, waiting = pendingTrigger
+        let myModel = myRequests, pendingModel = pending, session = seerr
+        await withTaskGroup(of: Void.self) { group in
+            if mine != nil { group.addTask { await myModel.loadFirstPage(session: session) } }
+            if waiting != nil { group.addTask { await pendingModel.load(session: session) } }
+        }
+        // A list that had failed to open is now loaded: its `.task` re-fire
+        // must not read it a third time.
+        if let mine, mine == myRequestsTrigger, myRequests.phase == .loaded { myRequestsLoadedFor = mine }
+        if let waiting, waiting == pendingTrigger, pending.phase == .loaded { pendingLoadedFor = waiting }
     }
 
     /// « Tester la connexion »: on the TYPED address (R18), in key mode when

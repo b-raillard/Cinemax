@@ -1693,6 +1693,9 @@
 "seerr.settings.section.pending" = "Zu prüfen";
 "seerr.settings.section.pendingCount" = "Zu prüfen (%d)";
 "seerr.settings.section.pendingCount.one" = "Zu prüfen (%d)";
+"seerr.settings.refresh" = "Aktualisieren";
+"seerr.settings.refreshing" = "Wird aktualisiert…";
+"seerr.settings.loading" = "Anfragen werden geladen…";
 "seerr.settings.pendingBubble" = "%d Anfragen zu prüfen";
 "seerr.settings.pendingBubble.one" = "%d Anfrage zu prüfen";
 "seerr.pending.empty" = "Gerade nichts zu prüfen";

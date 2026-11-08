@@ -273,6 +273,12 @@ extension SettingsScreen {
             ProScreen()
         case .administration:
             AdminLandingScreen()
+        case .requests:
+            // Owns its scroll view, title and bar button: the pull-to-refresh
+            // and « Actualiser » live with the lists they re-read.
+            // A standalone view: a pushed destination only redraws on
+            // `@Observable` changes it reads itself (root RULE).
+            RequestsSettingsScreen()
         default:
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
@@ -289,11 +295,7 @@ extension SettingsScreen {
                         iOSPlaybackDetail
                     case .debug:
                         iOSDebugDetail
-                    case .requests:
-                        // A standalone view: a pushed destination only redraws on
-                        // `@Observable` changes it reads itself (root RULE).
-                        RequestsSettingsScreen()
-                    case .pro, .administration:
+                    case .pro, .administration, .requests:
                         EmptyView() // handled above
                     }
                 }

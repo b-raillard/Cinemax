@@ -1695,6 +1695,9 @@
 "seerr.settings.section.pending" = "À valider";
 "seerr.settings.section.pendingCount" = "À valider (%d)";
 "seerr.settings.section.pendingCount.one" = "À valider (%d)";
+"seerr.settings.refresh" = "Actualiser";
+"seerr.settings.refreshing" = "Actualisation…";
+"seerr.settings.loading" = "Chargement des demandes…";
 "seerr.settings.pendingBubble" = "%d demandes à valider";
 "seerr.settings.pendingBubble.one" = "%d demande à valider";
 "seerr.pending.empty" = "Rien à valider pour l'instant";
