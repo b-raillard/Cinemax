@@ -25,7 +25,7 @@ struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
     let seasonNumber: Int
     let badge: SeerrBadge
     /// The season's own poster (Seerr's `/tv/{id}`); nil ⇒ the bare outline.
-    var posterPath: String? = nil
+    var posterPath: String?
     var id: String { "tv-\(seriesTmdbId)-s\(seasonNumber)" }
 }
 
