@@ -299,7 +299,7 @@ final class SeerrActivationModel {
 
     // MARK: Wording
 
-    /// « Activé pour 3 utilisateurs. Tom n'a pas pu être activé : limite d'âge
+    /// « Activé pour 3 utilisateurs. Impossible d'activer Tom : limite d'âge
     /// sur son compte. »
     static func activationSummary(
         enabled: Int, refusedNames: [String], failedNames: [String] = [], loc: LocalizationManager
