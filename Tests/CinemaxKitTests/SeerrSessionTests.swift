@@ -2644,6 +2644,55 @@ struct SeerrPendingTests {
         }
         #expect(loc.counted("seerr.settings.section.pendingCount", 3).contains("3"))
     }
+
+    // MARK: The Réglages bubble (owner 2026-11-08, proposal A)
+
+    @Test("the bubble says nothing at 0 or unknown, the number up to 99, then « 99+ »")
+    func badgeLabel() {
+        #expect(SeerrPendingModel.badgeLabel(nil) == nil)
+        #expect(SeerrPendingModel.badgeLabel(0) == nil)
+        #expect(SeerrPendingModel.badgeLabel(1) == "1")
+        #expect(SeerrPendingModel.badgeLabel(99) == "99")
+        #expect(SeerrPendingModel.badgeLabel(100) == "99+")
+    }
+
+    @Test("a manager's count is read with ONE row asked, the pending listing's total kept")
+    func refreshReadsTheTotal() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 7)],
+        ])
+        await session.refreshPendingCount()
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("filter", in: sent) == "pending")
+        #expect(queryValue("take", in: sent) == "1")
+        #expect(queryValue("requestedBy", in: sent) == nil)
+        #expect(session.pendingBadgeCount == 7)
+        // A new account forgets it.
+        session.reset()
+        #expect(session.pendingBadgeCount == nil)
+    }
+
+    @Test("someone who may not manage requests asks nothing and gets no bubble")
+    func noBubbleForARequester() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: 32, routes: [:])
+        await session.refreshPendingCount()
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(session.pendingBadgeCount == nil)
+    }
+
+    @Test("« À valider » keeps the bubble in step: its listing, then every approval")
+    func listingAndApprovalUpdateTheBubble() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(20, total: 22, extra: [
+            "/request/2/approve": [settled(2, status: 2)],
+        ]))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+        #expect(session.pendingBadgeCount == 22)
+
+        await model.approve(2, session: session, toasts: ToastCenter(), loc: loc)
+        #expect(session.pendingBadgeCount == 21)
+    }
 }
 
 @Suite("Seerr settings — connection report")

@@ -49,6 +49,8 @@ struct RequestsSettingsScreen: View {
     /// Replaced on an account change, like `activation`.
     @State private var pending = SeerrPendingModel()
     @State private var pendingLoadedFor: RequestListTrigger?
+    /// « À valider » comes first: requests were waiting when the page opened.
+    @State private var pendingFirst = false
     /// A « Réessayer » press is on its way: the failed panel stays, its row
     /// turning, rather than giving way to the spinner (on tvOS the pressed row
     /// would vanish under focus).
@@ -142,10 +144,16 @@ struct RequestsSettingsScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
             if isVisible {
+                // Requests waiting ⇒ the page opens on « À valider » (the
+                // Réglages bubble brought the manager here). Decided on
+                // appear, so the sections never swap under the user.
+                if pendingFirst, pendingTrigger != nil {
+                    pendingSection
+                }
                 if myRequestsTrigger != nil {
                     myRequestsSection
                 }
-                if pendingTrigger != nil {
+                if !pendingFirst, pendingTrigger != nil {
                     pendingSection
                 }
                 connectionSection
@@ -161,6 +169,7 @@ struct RequestsSettingsScreen: View {
         .task(id: myRequestsTrigger) { await loadMyRequestsIfNeeded() }
         .task(id: pendingTrigger) { await loadPendingIfNeeded() }
         .onAppear {
+            pendingFirst = (seerr.pendingBadgeCount ?? 0) > 0
             seedAddress()
             refreshStoredKey()
         }

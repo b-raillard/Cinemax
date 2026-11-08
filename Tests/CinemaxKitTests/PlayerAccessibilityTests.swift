@@ -283,7 +283,7 @@ struct PluralRuleTests {
                     // Seerr missing seasons (series fiche), missing films (saga).
                     "seerr.missing.requestAll", "seerr.saga.requestAll",
                     // Seerr — Mes demandes, À valider (Settings → Demandes).
-                    "seerr.myRequests.seasons", "seerr.settings.section.pendingCount",
+                    "seerr.myRequests.seasons", "seerr.settings.section.pendingCount", "seerr.settings.pendingBubble",
                     // Seerr — the arrival message.
                     "seerr.arrival.several"]
         for language in AppLanguage.supported {

@@ -338,6 +338,10 @@ extension SettingsScreen {
                     .layoutPriority(0.5)
                 }
 
+                if !isLocked, category == .requests, let pending = pendingBadgeLabel {
+                    SettingsCountBadge(label: pending, onAccent: isFocused)
+                }
+
                 if isLocked {
                     ProBadge(ink: isFocused ? themeManager.onAccentContainer : nil)
                 } else if isFocused {
@@ -352,6 +356,7 @@ extension SettingsScreen {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .category(category.rawValue))
+        .accessibilityValue(category == .requests ? pendingBadgeValue : "")
         .accessibilityHint(isLocked ? loc.localized("pro.locked.hint") : "")
     }
 

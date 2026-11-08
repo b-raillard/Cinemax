@@ -63,6 +63,10 @@ final class SeerrSession {
     /// The server half of the cap, as of the last `reload` (`true` until the
     /// policy is known).
     private var policyCapped = true
+    /// How many requests wait, as last read — the raw number behind the
+    /// Réglages bubble. Read it through `pendingBadgeCount`, which hides it
+    /// from anyone who may not manage requests.
+    private(set) var pendingCount: Int?
 
     /// Capped by age — the server policy, or this device's setting read LIVE.
     var isAgeCapped: Bool {
@@ -159,6 +163,7 @@ final class SeerrSession {
         publicSettings = nil
         usesDeviceKey = false
         policyCapped = true
+        pendingCount = nil
     }
 
     /// The account changed (`onChange(of: activeAccountKey)`, and the head of
@@ -297,6 +302,38 @@ final class SeerrSession {
         } catch {
             // A blip: the last known state stands.
         }
+    }
+
+    // MARK: Requests waiting (the Réglages bubble)
+
+    /// The number the bubble on Réglages and on « Demandes » shows: only for a
+    /// connected Seerr user who may manage requests (Pro, not age-capped —
+    /// `credential()`'s gate), `nil` otherwise and while unknown.
+    var pendingBadgeCount: Int? {
+        guard SeerrPendingModel.isShown(for: connection), proAllowsProvider(), !isAgeCapped else { return nil }
+        return pendingCount
+    }
+
+    /// Re-reads the count: one row asked, the listing's total kept. Called
+    /// after every `reload` (launch, foreground). A failure keeps the last
+    /// number; a user who may not manage requests asks nothing.
+    func refreshPendingCount() async {
+        guard SeerrPendingModel.isShown(for: connection), let snap = snapshot() else { return }
+        let page: SeerrRequestPage
+        do {
+            page = try await perform { client, credential in
+                try await client.requests(filter: .pending, take: 1, skip: 0, requestedBy: nil, credential)
+            }
+        } catch {
+            return
+        }
+        notePendingCount(page.total, for: snap)
+    }
+
+    /// « À valider » read or settled a request: its total is the fresh count.
+    func notePendingCount(_ count: Int, for snapshot: Snapshot) {
+        guard isCurrent(snapshot), pendingCount != count else { return }
+        pendingCount = count
     }
 
     // MARK: Stale-answer token

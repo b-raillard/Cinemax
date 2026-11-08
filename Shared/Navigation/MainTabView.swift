@@ -320,7 +320,7 @@ struct MainTabView: View {
                     // right tab.
                     .environment(\.tvTabID, tab.id)
                 } label: {
-                    Label(tab.displayTitle(loc), systemImage: tab.icon)
+                    Label(tvTabTitle(tab), systemImage: tab.icon)
                         // The tab bar sets no font of its own, so it is
                         // the one surface that really collapses at the
                         // largest sizes — see `CinemaDynamicType`.
@@ -328,6 +328,11 @@ struct MainTabView: View {
                 }
             }
         }
+        // tvOS has no SwiftUI `.badge`: the value goes on the bar's item.
+        .background(TabBarBadgeTint(color: UIColor(themeManager.accentContainer),
+                                    ink: UIColor(themeManager.onAccentContainer),
+                                    label: settingsBadge,
+                                    itemIndex: tabs.firstIndex { $0.destination == .settings }))
         // Multi-account: the account avatar left of the bar (TV-10). Always
         // shown (recette 2026-10-21), but focusable only while focus is in the
         // bar: a left press from the first tab reaches it, and a page never
@@ -369,6 +374,14 @@ struct MainTabView: View {
     /// like iOS: a pushed page (a fiche) hides the tab bar, so the avatar was
     /// drawn there with nothing that could reach it (user, 2026-10-25) — Menu
     /// goes back to the root, where it is.
+    /// The tvOS bar draws its badge OVER the end of the title (measured on
+    /// the tvOS 27.2 simulator: « Réglage① »); trailing spaces make room for it.
+    private func tvTabTitle(_ tab: ResolvedTab) -> String {
+        let title = tab.displayTitle(loc)
+        guard tab.destination == .settings, let settingsBadge else { return title }
+        return title + String(repeating: "\u{2002}", count: settingsBadge.count + 1)
+    }
+
     private var showsTVAccountAvatar: Bool {
         appState.isAuthenticated && !tvBack.canGoBack(in: selectedTabID)
     }
@@ -410,13 +423,29 @@ struct MainTabView: View {
                         // largest sizes — see `CinemaDynamicType`.
                         .layoutBoundDynamicType()
                 }
+                .badge(badge(for: tab))
             }
         }
+        .background(TabBarBadgeTint(color: UIColor(themeManager.accentContainer),
+                                    ink: UIColor(themeManager.onAccentContainer),
+                                    label: settingsBadge))
         .tabViewStyle(.sidebarAdaptable)
         .tint(themeManager.accentContainer)
         .sensoryFeedback(.selection, trigger: selectedTabID)
     }
     #endif
+
+    // MARK: - Requests waiting (Seerr managers)
+
+    /// « 3 », « 99+ », or nothing — the Réglages tab's bubble.
+    private var settingsBadge: String? {
+        SeerrPendingModel.badgeLabel(seerr.pendingBadgeCount)
+    }
+
+    private func badge(for tab: ResolvedTab) -> Text? {
+        guard tab.destination == .settings, let settingsBadge else { return nil }
+        return Text(settingsBadge)
+    }
 
     // MARK: - Destination dispatch
 
@@ -446,6 +475,66 @@ struct MainTabView: View {
             // managed while Home's « Voir tout » could. Collections keep the
             // folder read.
             LibraryFolderBrowseScreen(source: isPlaylist ? .playlists : .parent(id), title: name, isPlaylist: isPlaylist)
+        }
+    }
+}
+
+// MARK: - Tab badge colour
+
+/// Paints the tab bar's badges in the accent instead of the system red. SwiftUI
+/// offers no colour for `.badge`, and `UITabBarItem.appearance()` is ignored by
+/// the iOS 27 bar (measured on the simulator, 2026-11-08): the colour has to be
+/// set on the bar's own items, found from the window. Re-applied whenever the
+/// colour or the label changes.
+private struct TabBarBadgeTint: UIViewRepresentable {
+    let color: UIColor
+    let ink: UIColor
+    let label: String?
+    /// tvOS only: the item that carries `label` itself (no SwiftUI `.badge`
+    /// there). `nil` on iOS, where `.badge` sets the value.
+    var itemIndex: Int?
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        view.isHidden = true
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        let color = color, ink = ink, label = label, itemIndex = itemIndex
+        // After SwiftUI has pushed this pass's badge values to the items.
+        DispatchQueue.main.async {
+            guard let root = view.window?.rootViewController else { return }
+            for controller in Self.tabBarControllers(from: root) {
+                if let itemIndex, let items = controller.tabBar.items, items.indices.contains(itemIndex) {
+                    for (index, item) in items.enumerated() {
+                        item.badgeValue = index == itemIndex ? label : nil
+                    }
+                    controller.tabBar.setNeedsLayout()
+                    controller.tabBar.layoutIfNeeded()
+                }
+                Self.paint(controller, color: color, ink: ink)
+            }
+        }
+    }
+
+    private static func tabBarControllers(from root: UIViewController) -> [UITabBarController] {
+        var found: [UITabBarController] = []
+        var stack = [root]
+        while let next = stack.popLast() {
+            if let tabs = next as? UITabBarController { found.append(tabs) }
+            stack.append(contentsOf: next.children)
+            if let presented = next.presentedViewController { stack.append(presented) }
+        }
+        return found
+    }
+
+    private static func paint(_ controller: UITabBarController, color: UIColor, ink: UIColor) {
+        let items = (controller.tabBar.items ?? []) + (controller.viewControllers ?? []).map(\.tabBarItem)
+        for item in items {
+            item.badgeColor = color
+            item.setBadgeTextAttributes([.foregroundColor: ink], for: .normal)
         }
     }
 }

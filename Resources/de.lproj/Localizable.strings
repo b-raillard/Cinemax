@@ -1693,6 +1693,8 @@
 "seerr.settings.section.pending" = "Zu prüfen";
 "seerr.settings.section.pendingCount" = "Zu prüfen (%d)";
 "seerr.settings.section.pendingCount.one" = "Zu prüfen (%d)";
+"seerr.settings.pendingBubble" = "%d Anfragen zu prüfen";
+"seerr.settings.pendingBubble.one" = "%d Anfrage zu prüfen";
 "seerr.pending.empty" = "Gerade nichts zu prüfen";
 "seerr.pending.requestedBy" = "Angefragt von %1$@ · %2$@";
 "seerr.pending.requestedAt" = "Angefragt %@";

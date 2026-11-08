@@ -289,6 +289,8 @@ final class SeerrMyRequestsModel {
         case .done:
             if ownsRows { pages.remove(id) }
             toasts.success(loc.localized("seerr.myRequests.cancelled"))
+            // A manager's own pending request was in « À valider » too.
+            await session.refreshPendingCount()
         case .notPending:
             toasts.info(loc.localized("seerr.pending.alreadyHandled"))
             if ownsRows { await loadFirstPage(session: session) }
@@ -363,6 +365,12 @@ final class SeerrPendingModel {
         }
     }
 
+    /// What the Réglages bubble says: nothing at 0 or unknown, « 99+ » past 99.
+    static func badgeLabel(_ count: Int?) -> String? {
+        guard let count, count > 0 else { return nil }
+        return count > 99 ? "99+" : String(count)
+    }
+
     /// The section shows for a connected Seerr user who may manage requests.
     static func isShown(for connection: SeerrSession.Connection) -> Bool {
         guard case .connected(let user) = connection else { return false }
@@ -394,6 +402,7 @@ final class SeerrPendingModel {
         guard pass == generation, session.isCurrent(snap) else { return }
         let fresh = pages.append(page)
         phase = .loaded
+        session.notePendingCount(count, for: snap)
         await loadTitles(of: fresh, session: session, snapshot: snap, pass: pass)
     }
 
@@ -478,10 +487,10 @@ final class SeerrPendingModel {
         if ownsRows { inFlight[id] = nil }
         switch outcome {
         case .done:
-            if ownsRows { pages.remove(id) }
+            if ownsRows { pages.remove(id); session.notePendingCount(count, for: snap) }
             toasts.success(loc.localized(action == .approve ? "seerr.pending.approved" : "seerr.pending.declined"))
         case .alreadyHandled:
-            if ownsRows { pages.remove(id) }
+            if ownsRows { pages.remove(id); session.notePendingCount(count, for: snap) }
             toasts.info(loc.localized("seerr.pending.alreadyHandled"))
         case .failed:
             toasts.error(loc.localized(action == .approve ? "seerr.pending.approveFailed" : "seerr.pending.declineFailed"))

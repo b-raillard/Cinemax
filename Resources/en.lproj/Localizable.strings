@@ -1693,6 +1693,8 @@
 "seerr.settings.section.pending" = "To review";
 "seerr.settings.section.pendingCount" = "To review (%d)";
 "seerr.settings.section.pendingCount.one" = "To review (%d)";
+"seerr.settings.pendingBubble" = "%d requests to review";
+"seerr.settings.pendingBubble.one" = "%d request to review";
 "seerr.pending.empty" = "Nothing to review right now";
 "seerr.pending.requestedBy" = "Requested by %1$@ · %2$@";
 "seerr.pending.requestedAt" = "Requested %@";

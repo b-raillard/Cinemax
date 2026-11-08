@@ -277,6 +277,18 @@ struct SettingsScreen: View {
                                           config: seerr.config)
     }
 
+    /// The « Demandes » entry's bubble: « 3 », « 99+ », or nothing
+    /// (`SeerrSession.pendingBadgeCount` — Seerr managers only).
+    var pendingBadgeLabel: String? {
+        SeerrPendingModel.badgeLabel(seerr.pendingBadgeCount)
+    }
+
+    /// What VoiceOver reads after « Demandes »: « 3 demandes à valider ».
+    var pendingBadgeValue: String {
+        guard pendingBadgeLabel != nil, let count = seerr.pendingBadgeCount else { return "" }
+        return loc.counted("seerr.settings.pendingBubble", count)
+    }
+
     var headerTierLook: ProTierLook? {
         guard entitlements.showsProEntry else { return nil }
         return ProTierLook(tier: entitlements.proTier(earlyAdopter: earlyAdopter), themeManager: themeManager)

@@ -139,6 +139,9 @@ extension SettingsScreen {
                 if isLocked {
                     ProBadge()
                 } else {
+                    if category == .requests, let pending = pendingBadgeLabel {
+                        SettingsCountBadge(label: pending)
+                    }
                     // Chevron
                     Image(systemName: "chevron.right")
                         .font(.system(size: CinemaScale.pt(14), weight: .semibold))
@@ -163,6 +166,7 @@ extension SettingsScreen {
             .shadow(color: isFirst ? themeManager.accentContainer.opacity(0.3) : .clear, radius: 20, y: 4)
         }
         .buttonStyle(.plain)
+        .accessibilityValue(category == .requests ? pendingBadgeValue : "")
         .accessibilityHint(isLocked ? loc.localized("pro.locked.hint") : "")
     }
 
