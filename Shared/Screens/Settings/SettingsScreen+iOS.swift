@@ -97,7 +97,8 @@ extension SettingsScreen {
     var iOSNavigationList: some View {
         VStack(spacing: CinemaSpacing.spacing2) {
             ForEach(SettingsCategory.visibleCases(isAdmin: appState.isAdministrator, isTVOS: false,
-                                                  showsDebug: showsDebugCategory)) { category in
+                                                  showsDebug: showsDebugCategory,
+                                                  showsRequests: showsRequestsCategory)) { category in
                 iOSCategoryButton(category)
             }
         }
@@ -284,6 +285,10 @@ extension SettingsScreen {
                         iOSPlaybackDetail
                     case .debug:
                         iOSDebugDetail
+                    case .requests:
+                        // A standalone view: a pushed destination only redraws on
+                        // `@Observable` changes it reads itself (root RULE).
+                        RequestsSettingsScreen()
                     case .pro, .administration:
                         EmptyView() // handled above
                     }

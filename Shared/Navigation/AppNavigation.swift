@@ -66,6 +66,11 @@ struct AppNavigation: View {
     /// The per-account codes (multi-account) — a process singleton: it caches
     /// what it has read from the Keychain, per account.
     static let sharedAccountLocks = AccountLockStore()
+    /// The active account's Seerr identity — a process singleton: every Seerr
+    /// surface reads it at render, and its generation token is what keeps an
+    /// answer for one profile off the next profile's screen. Not `private`, for
+    /// the same reason as `sharedProAccess`. See `Shared/Seerr/SeerrSession.swift`.
+    static let sharedSeerrSession = SeerrSession()
 
     @State private var appState = AppNavigation.sharedAppState
     @State private var themeManager = ThemeManager()
@@ -80,6 +85,7 @@ struct AppNavigation: View {
     @State private var proStore = Self.sharedProStore
     @State private var proAccess = Self.sharedProAccess
     @State private var accountLocks = Self.sharedAccountLocks
+    @State private var seerr = Self.sharedSeerrSession
     /// Read straight off the static rather than through `@State`: nothing here
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
@@ -190,6 +196,209 @@ struct AppNavigation: View {
         whatsNewPages = []
     }
 
+    /// The root `.task`: wiring, session restore, the launch decisions. A
+    /// method rather than the closure itself — a closure body is type-checked
+    /// WITH the root `body` expression, which is already at the type
+    /// checker's limit (C1, PR #330; see `SeerrRootWiring`).
+    private func bootstrap() async {
+        // The Pro purchase: listen to `Transaction.updates` (an « Ask to
+        // Buy » approval or a refund that arrived while the app was closed
+        // is delivered there) and reconcile with StoreKit's current
+        // entitlements — a local cache, no network, no account prompt.
+        proStore.start()
+        // Let the confirm-before-logout coordinator see real connectivity.
+        // Captured strongly: `NetworkMonitor` and `AppState` are both process
+        // singletons, so there is no lifetime to protect — and a `weak`
+        // capture here was ineffective anyway, the enclosing `.task` already
+        // holding `network` strongly (Swift 6.4 warns about exactly that).
+        appState.isOnlineProvider = { [network] in network.isOnline }
+        // Multi-account: remembering several accounts is a Pro feature
+        // (open to everyone until the Pro launches — `ProFeatureGate`); a
+        // protected profile, or one less restricted than the current one
+        // while a parental code is set, needs a code (`AppState.switchAccount`).
+        appState.multiAccountProvider = { [proAccess] in
+            proAccess.allows(.memorizedAccounts)
+        }
+        appState.accountLockProvider = { [accountLocks] key in accountLocks.hasLock(key) }
+        appState.parentalLockProvider = { [parentalLock] in parentalLock.isEnabled }
+        appState.onAccountForgotten = { [accountLocks, seerr] key in
+            accountLocks.remove(key: key)
+            // Its Seerr session cookie goes with it.
+            seerr.forgetAccount(key)
+        }
+        // A removed server's Seerr API key (per device, per server) too.
+        appState.onServerForgotten = { [seerr] serverId in seerr.forgetServer(serverId) }
+        // Every `refreshCurrentUser` (sign-in, switch, restore, foreground,
+        // `UserUpdated`) re-reads the account's Seerr configuration and
+        // identity. Wired BEFORE `restoreSession`, whose background task
+        // runs the cold launch's first refresh. Both are process
+        // singletons: captured strongly, nothing to protect.
+        appState.onCurrentUserRefreshed = { [seerr, appState] in
+            Task { await seerr.reload(appState: appState) }
+        }
+        // Lifting the active account's age cap brings Seerr back at once.
+        appState.onAgeCapChanged = { [seerr, appState] in
+            Task { await seerr.reload(appState: appState) }
+        }
+        // The account the app is on RIGHT NOW: between `applyActiveServer`
+        // and the reset, the session serves nothing of the previous one.
+        seerr.activeAccountKeyProvider = { [appState] in appState.activeAccountKey }
+        // Seerr requests are a Pro feature: no Seerr call without it. Wired
+        // before `restoreSession`, whose refresh runs the first reload.
+        seerr.proAllowsProvider = { [proAccess] in proAccess.allows(.requests) }
+        // The language rides every request as `Accept-Language` (Jellyfin
+        // 12.0 localizes the media-stream titles the track pickers print
+        // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds
+        // the client, so the first authenticated request already carries
+        // it; `onChange(of: loc.languageCode)` below keeps it current.
+        appState.apiClient.setPreferredLanguage(loc.languageCode)
+        seerr.setLanguage(loc.languageCode)
+        await appState.restoreSession()
+        // An install that already knows a server is not a first run whatever
+        // the flag says — it upgraded from a version without onboarding.
+        // Latching here is what keeps that user out for good: without it,
+        // deleting their last server from the list would empty the registry
+        // and the gate above would greet them as a newcomer.
+        if OnboardingPolicy.shouldStampSeen(
+            hasRegisteredServer: !appState.servers.isEmpty,
+            hasServer: appState.hasServer
+        ) {
+            onboardingSeen = true
+        }
+        hasCheckedSession = true
+        #if os(tvOS)
+        // The living-room picker: only with several remembered accounts to
+        // choose from, and only when the household asked for it.
+        if appState.isAuthenticated, accountsAskOnLaunch,
+           proAccess.allows(.memorizedAccounts),
+           appState.activeAccounts.count >= 2 {
+            showWhoIsWatching = true
+        }
+        #endif
+        // Baseline attach so the menu editor has an API client even with
+        // no session. The library-mode view refresh is NOT triggered here:
+        // `onChange(of: appState.currentUserId)` below owns it for every
+        // session-establishing transition (restore, fresh login, user
+        // switch) — `restoreSession` has already set `currentUserId` by
+        // now, so the cold-restore case fires through that observer.
+        menuConfig.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
+        // Load the restored server's menu profile in the SAME main-actor
+        // slice as `hasCheckedSession = true` above — there is no `await`
+        // between the two, so SwiftUI coalesces them into one render and
+        // `MainTabView` never paints a menu the user hasn't configured.
+        // RULE: keep it that way. Inserting an `await` between them makes
+        // the tab bar visible before its profile is loaded.
+        // `restoreSession` has already hydrated the registry, so both the
+        // active id and the known ids are available here.
+        menuConfig.activate(accountKey: appState.activeAccountKey,
+                            serverId: appState.activeServerId,
+                            knownProfileIds: appState.knownMenuProfileIds)
+        // Search history is per-server too: the first server that activates
+        // after the upgrade inherits the old global list, once.
+        SearchHistoryStore.migrateLegacyIfNeeded(into: appState.activeServerId)
+        // Ask the App Store whether a newer build exists. In its own Task so
+        // it can never delay the launch it rides on: the lookup is a network
+        // round-trip to Apple, and NOTHING downstream waits for its answer.
+        // Deliberately placed AFTER `hasCheckedSession = true` — an alert
+        // over the launch screen would interrupt a session still being
+        // restored. `AppUpdatePolicy` owns every rule about whether it
+        // speaks at all, and its answer to any uncertainty is silence.
+        Task { await updateChecker.refresh() }
+        // « Quoi de neuf » — decided here, in the same main-actor slice as
+        // the onboarding stamp above, because the two answer ONE question
+        // between them and must never both speak. `isFirstRun` is computed
+        // from the very inputs the branch in `body` reads, so the screen
+        // the user is about to see and the decision taken here cannot
+        // disagree. Note `onboardingSeen` has already been latched above
+        // for an upgraded install, which is what makes that user « not a
+        // first run » and therefore the audience for the reel.
+        let installedVersion = AppUpdateChecker.installedVersion
+        let isFirstRun = OnboardingPolicy.shouldShow(
+            seen: onboardingSeen,
+            hasRegisteredServer: !appState.servers.isEmpty,
+            hasServer: appState.hasServer,
+            isAddingServer: appState.isAddingServer
+        )
+        switch WhatsNewPolicy.decide(
+            lastSeenVersion: whatsNewLastSeen.isEmpty ? nil : whatsNewLastSeen,
+            installed: installedVersion,
+            isFirstRun: isFirstRun,
+            resolve: { [loc] in
+                WhatsNewCatalogue.resolvingOffers(
+                    $0, appLanguage: loc.languageCode, preferredLanguages: AppLanguage.deviceLanguages()
+                )
+            }
+        ) {
+        case .nothing:
+            break
+        case .stampOnly:
+            // A genuine first run, or a version shipping no pages at all.
+            // Moving the stamp is what stops the NEXT version's launch
+            // handing the user everything accumulated since — including
+            // announcements for a version they started on.
+            if let stamp = WhatsNewPolicy.stamp(installed: installedVersion) {
+                whatsNewLastSeen = stamp
+            }
+        case .show(let pages):
+            whatsNewPages = pages
+        }
+        #if os(iOS)
+        // The rating request's launch moment, for whoever never closes a
+        // player (they swipe the app away with it open) — see
+        // `ReviewPromptTracker.appDidLaunch`. Signed-in only: over the
+        // login form it would interrupt the one thing the user came to do.
+        if appState.isAuthenticated {
+            reviewPrompt.appDidLaunch()
+        }
+        #endif
+        // A joined group learns WHAT to watch only from the socket's
+        // `PlayQueue` update — `GET /SyncPlay/List` carries no item. Route
+        // it through the same in-process pair an App Intent and a remote
+        // « Lire sur… » use, so a session join inherits the full fidelity of
+        // a tap: series → next-up, resume position, version pick, prev/next.
+        //
+        // RULE — this MUST stay outside `#if os(iOS)`. It sat inside that
+        // block, between two genuinely iOS-only chores, and the Apple TV is
+        // the device Watch Together exists for: measured on 2026-09-05, a
+        // tvOS join received the `PlayQueue` frame (`CINEMAX-SYNCPLAY ▸
+        // PlayQueue : item=… entrée=…`), had nowhere to hand it, and left
+        // the viewer on Accueil with the card merely flipping to « Vous y
+        // êtes » — a feature that looks wired and does nothing. Exactly the
+        // failure `MediaDetailScreen.consumeIntentPlaybackRequest()` carries
+        // its own cross-platform RULE about.
+        //
+        // The position is carried, NOT discarded. `{ itemId, _ in … }` was
+        // the whole of defect D2: the group's `startPositionTicks` reached
+        // this closure and died here, so the request fell through to the
+        // fiche's own resume resolution — the JOINING account's. Measured
+        // 2026-09-06: group at 3:39, joiner opened at 12:33 on the end
+        // credits, gap never corrected. See `SyncPlayJoinStart`.
+        SyncPlayController.shared.onQueueChanged = { itemId, startTicks in
+            guard AppState.isValidItemId(itemId) else { return }
+            appState.pendingIntentPlaybackItemId = itemId
+            appState.pendingIntentPlaybackStartTicks = startTicks
+            appState.pendingDeepLinkItemId = itemId
+        }
+        // Decide once, in the background, whether this server needs the
+        // loopback stream proxy (dual-stack host with a black-holed IPv6
+        // that libVLC would stall on). Non-blocking; cached for the session.
+        StreamTransportPolicy.shared.configure(serverURL: appState.serverURL)
+        // The diagnostics channel's ONLY injection point. The player holds a
+        // narrowed API slice and cannot reach a server-wide route — see the
+        // RULE on `DiagnosticsUploader.client`. One assignment is enough:
+        // `AppState.apiClient` is the same instance for the process's life,
+        // `reconnect` repointing it in place rather than replacing it.
+        DiagnosticsUploader.client = appState.apiClient
+        // Debug-only diagnostics follow the Debug page's own decision.
+        // A Debug build knows at once; a TestFlight build once the App
+        // Store has answered (`network.isOnline`'s `onChange` below).
+        updateVerboseDiagnostics()
+        // Advertise this device as a remote-control target and start
+        // listening. Idempotent — `apply` no-ops when nothing changed, so
+        // the observers below can call it freely.
+        remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
+    }
+
     /// Debug-only diagnostics (`VerboseDiagnostics`) on exactly where the
     /// Debug page shows — a Debug build, or a test environment the App Store
     /// has CONFIRMED (TestFlight answers `.sandbox`) — and nowhere else.
@@ -272,6 +481,9 @@ struct AppNavigation: View {
         .environment(earlyAdopter)
         .environment(proStore)
         .environment(accountLocks)
+        // Every Seerr link of this chain lives in ONE modifier — see
+        // `SeerrRootWiring`, and keep new ones there.
+        .modifier(SeerrRootWiring(seerr: seerr, appState: appState, proAccess: proAccess))
         .environment(\.seasonalAmbianceEnabled, seasonal.ambianceEnabled)
         #if os(iOS)
         .environment(reviewPrompt)
@@ -416,180 +628,10 @@ struct AppNavigation: View {
         // previous locale's track titles for its TTL.
         .onChange(of: loc.languageCode) { _, code in
             appState.apiClient.setPreferredLanguage(code)
+            // Seerr takes the language as `language=`, not `Accept-Language`.
+            seerr.setLanguage(code)
         }
-        .task {
-            // The Pro purchase: listen to `Transaction.updates` (an « Ask to
-            // Buy » approval or a refund that arrived while the app was closed
-            // is delivered there) and reconcile with StoreKit's current
-            // entitlements — a local cache, no network, no account prompt.
-            proStore.start()
-            // Let the confirm-before-logout coordinator see real connectivity.
-            // Captured strongly: `NetworkMonitor` and `AppState` are both process
-            // singletons, so there is no lifetime to protect — and a `weak`
-            // capture here was ineffective anyway, the enclosing `.task` already
-            // holding `network` strongly (Swift 6.4 warns about exactly that).
-            appState.isOnlineProvider = { [network] in network.isOnline }
-            // Multi-account: remembering several accounts is a Pro feature
-            // (open to everyone until the Pro launches — `ProFeatureGate`); a
-            // protected profile, or one less restricted than the current one
-            // while a parental code is set, needs a code (`AppState.switchAccount`).
-            appState.multiAccountProvider = { [proAccess] in
-                proAccess.allows(.memorizedAccounts)
-            }
-            appState.accountLockProvider = { [accountLocks] key in accountLocks.hasLock(key) }
-            appState.parentalLockProvider = { [parentalLock] in parentalLock.isEnabled }
-            appState.onAccountForgotten = { [accountLocks] key in accountLocks.remove(key: key) }
-            // The language rides every request as `Accept-Language` (Jellyfin
-            // 12.0 localizes the media-stream titles the track pickers print
-            // from it; 10.x ignores it). Recorded BEFORE `restoreSession` builds
-            // the client, so the first authenticated request already carries
-            // it; `onChange(of: loc.languageCode)` below keeps it current.
-            appState.apiClient.setPreferredLanguage(loc.languageCode)
-            await appState.restoreSession()
-            // An install that already knows a server is not a first run whatever
-            // the flag says — it upgraded from a version without onboarding.
-            // Latching here is what keeps that user out for good: without it,
-            // deleting their last server from the list would empty the registry
-            // and the gate above would greet them as a newcomer.
-            if OnboardingPolicy.shouldStampSeen(
-                hasRegisteredServer: !appState.servers.isEmpty,
-                hasServer: appState.hasServer
-            ) {
-                onboardingSeen = true
-            }
-            hasCheckedSession = true
-            #if os(tvOS)
-            // The living-room picker: only with several remembered accounts to
-            // choose from, and only when the household asked for it.
-            if appState.isAuthenticated, accountsAskOnLaunch,
-               proAccess.allows(.memorizedAccounts),
-               appState.activeAccounts.count >= 2 {
-                showWhoIsWatching = true
-            }
-            #endif
-            // Baseline attach so the menu editor has an API client even with
-            // no session. The library-mode view refresh is NOT triggered here:
-            // `onChange(of: appState.currentUserId)` below owns it for every
-            // session-establishing transition (restore, fresh login, user
-            // switch) — `restoreSession` has already set `currentUserId` by
-            // now, so the cold-restore case fires through that observer.
-            menuConfig.attach(apiClient: appState.apiClient, userId: appState.currentUserId)
-            // Load the restored server's menu profile in the SAME main-actor
-            // slice as `hasCheckedSession = true` above — there is no `await`
-            // between the two, so SwiftUI coalesces them into one render and
-            // `MainTabView` never paints a menu the user hasn't configured.
-            // RULE: keep it that way. Inserting an `await` between them makes
-            // the tab bar visible before its profile is loaded.
-            // `restoreSession` has already hydrated the registry, so both the
-            // active id and the known ids are available here.
-            menuConfig.activate(accountKey: appState.activeAccountKey,
-                                serverId: appState.activeServerId,
-                                knownProfileIds: appState.knownMenuProfileIds)
-            // Search history is per-server too: the first server that activates
-            // after the upgrade inherits the old global list, once.
-            SearchHistoryStore.migrateLegacyIfNeeded(into: appState.activeServerId)
-            // Ask the App Store whether a newer build exists. In its own Task so
-            // it can never delay the launch it rides on: the lookup is a network
-            // round-trip to Apple, and NOTHING downstream waits for its answer.
-            // Deliberately placed AFTER `hasCheckedSession = true` — an alert
-            // over the launch screen would interrupt a session still being
-            // restored. `AppUpdatePolicy` owns every rule about whether it
-            // speaks at all, and its answer to any uncertainty is silence.
-            Task { await updateChecker.refresh() }
-            // « Quoi de neuf » — decided here, in the same main-actor slice as
-            // the onboarding stamp above, because the two answer ONE question
-            // between them and must never both speak. `isFirstRun` is computed
-            // from the very inputs the branch in `body` reads, so the screen
-            // the user is about to see and the decision taken here cannot
-            // disagree. Note `onboardingSeen` has already been latched above
-            // for an upgraded install, which is what makes that user « not a
-            // first run » and therefore the audience for the reel.
-            let installedVersion = AppUpdateChecker.installedVersion
-            let isFirstRun = OnboardingPolicy.shouldShow(
-                seen: onboardingSeen,
-                hasRegisteredServer: !appState.servers.isEmpty,
-                hasServer: appState.hasServer,
-                isAddingServer: appState.isAddingServer
-            )
-            switch WhatsNewPolicy.decide(
-                lastSeenVersion: whatsNewLastSeen.isEmpty ? nil : whatsNewLastSeen,
-                installed: installedVersion,
-                isFirstRun: isFirstRun,
-                resolve: { [loc] in
-                    WhatsNewCatalogue.resolvingOffers(
-                        $0, appLanguage: loc.languageCode, preferredLanguages: AppLanguage.deviceLanguages()
-                    )
-                }
-            ) {
-            case .nothing:
-                break
-            case .stampOnly:
-                // A genuine first run, or a version shipping no pages at all.
-                // Moving the stamp is what stops the NEXT version's launch
-                // handing the user everything accumulated since — including
-                // announcements for a version they started on.
-                if let stamp = WhatsNewPolicy.stamp(installed: installedVersion) {
-                    whatsNewLastSeen = stamp
-                }
-            case .show(let pages):
-                whatsNewPages = pages
-            }
-            #if os(iOS)
-            // The rating request's launch moment, for whoever never closes a
-            // player (they swipe the app away with it open) — see
-            // `ReviewPromptTracker.appDidLaunch`. Signed-in only: over the
-            // login form it would interrupt the one thing the user came to do.
-            if appState.isAuthenticated {
-                reviewPrompt.appDidLaunch()
-            }
-            #endif
-            // A joined group learns WHAT to watch only from the socket's
-            // `PlayQueue` update — `GET /SyncPlay/List` carries no item. Route
-            // it through the same in-process pair an App Intent and a remote
-            // « Lire sur… » use, so a session join inherits the full fidelity of
-            // a tap: series → next-up, resume position, version pick, prev/next.
-            //
-            // RULE — this MUST stay outside `#if os(iOS)`. It sat inside that
-            // block, between two genuinely iOS-only chores, and the Apple TV is
-            // the device Watch Together exists for: measured on 2026-09-05, a
-            // tvOS join received the `PlayQueue` frame (`CINEMAX-SYNCPLAY ▸
-            // PlayQueue : item=… entrée=…`), had nowhere to hand it, and left
-            // the viewer on Accueil with the card merely flipping to « Vous y
-            // êtes » — a feature that looks wired and does nothing. Exactly the
-            // failure `MediaDetailScreen.consumeIntentPlaybackRequest()` carries
-            // its own cross-platform RULE about.
-            //
-            // The position is carried, NOT discarded. `{ itemId, _ in … }` was
-            // the whole of defect D2: the group's `startPositionTicks` reached
-            // this closure and died here, so the request fell through to the
-            // fiche's own resume resolution — the JOINING account's. Measured
-            // 2026-09-06: group at 3:39, joiner opened at 12:33 on the end
-            // credits, gap never corrected. See `SyncPlayJoinStart`.
-            SyncPlayController.shared.onQueueChanged = { itemId, startTicks in
-                guard AppState.isValidItemId(itemId) else { return }
-                appState.pendingIntentPlaybackItemId = itemId
-                appState.pendingIntentPlaybackStartTicks = startTicks
-                appState.pendingDeepLinkItemId = itemId
-            }
-            // Decide once, in the background, whether this server needs the
-            // loopback stream proxy (dual-stack host with a black-holed IPv6
-            // that libVLC would stall on). Non-blocking; cached for the session.
-            StreamTransportPolicy.shared.configure(serverURL: appState.serverURL)
-            // The diagnostics channel's ONLY injection point. The player holds a
-            // narrowed API slice and cannot reach a server-wide route — see the
-            // RULE on `DiagnosticsUploader.client`. One assignment is enough:
-            // `AppState.apiClient` is the same instance for the process's life,
-            // `reconnect` repointing it in place rather than replacing it.
-            DiagnosticsUploader.client = appState.apiClient
-            // Debug-only diagnostics follow the Debug page's own decision.
-            // A Debug build knows at once; a TestFlight build once the App
-            // Store has answered (`network.isOnline`'s `onChange` below).
-            updateVerboseDiagnostics()
-            // Advertise this device as a remote-control target and start
-            // listening. Idempotent — `apply` no-ops when nothing changed, so
-            // the observers below can call it freely.
-            remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: remoteControlEnabled)
-        }
+        .task { await bootstrap() }
         // RULE — DECLARATION ORDER IS LOAD-BEARING: the ACCOUNT (server +
         // user, `activeAccountKey`) must be observed BEFORE `currentUserId`. A
         // switch — of server or of account — mutates them in one transaction,
@@ -603,6 +645,12 @@ struct AppNavigation: View {
         // refresh owner. Keyed on the account, not the server, since
         // multi-account: a same-server switch never moves `activeServerId`.
         .onChange(of: appState.activeAccountKey) { _, newKey in
+            // FIRST, before anything else, sign-out (`nil`) included: the
+            // Seerr identity of the account being left is dropped
+            // synchronously, so no answer of a parent's can land on a child's
+            // screen. `reload` repeats it before its first `await` — this is
+            // the early close, not the only one.
+            seerr.accountDidChange(to: newKey)
             // Signed out (`nil`): keep the loaded profile, as `activate(nil)`
             // always did — re-signing in must find it intact.
             guard let newKey else { return }
@@ -764,6 +812,10 @@ struct AppNavigation: View {
             // is per-network, so re-run the transport probe.
             if online {
                 StreamTransportPolicy.shared.refresh()
+                // Seerr makes no call offline: back online, its identity is
+                // read again (an offline cold launch would otherwise keep it
+                // dark until the next foreground).
+                Task { await seerr.reload(appState: appState) }
             }
         }
         #if !DEBUG
@@ -887,5 +939,29 @@ private extension AppNavigation {
             CinemaColor.surface.ignoresSafeArea()
             LoadingStateView()
         }
+    }
+}
+
+/// Seerr's links in the root chain. `AppNavigation.body` is ONE expression,
+/// and with the Seerr wiring inline its RELEASE build — which also carries the
+/// `#if !DEBUG` early-adopter observer — failed with « unable to type-check
+/// this expression in reasonable time » (CI, PR #330), while every Debug build
+/// passed. RULE: a new Seerr link goes here, never inline in the root chain.
+/// The order-sensitive lines stay in their existing handlers
+/// (`seerr.accountDidChange` FIRST in `onChange(of: activeAccountKey)`, the
+/// language, the network); the hooks are wired in `bootstrap()`.
+private struct SeerrRootWiring: ViewModifier {
+    let seerr: SeerrSession
+    let appState: AppState
+    let proAccess: ProFeatureAccess
+
+    func body(content: Content) -> some View {
+        content
+            .environment(seerr)
+            // Seerr follows the tier too: refused ⇒ the session forgets its
+            // identity and makes no call; granted again ⇒ it comes back.
+            .onChange(of: proAccess.allows(.requests)) { _, _ in
+                Task { await seerr.reload(appState: appState) }
+            }
     }
 }

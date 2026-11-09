@@ -217,14 +217,20 @@ struct PrivacySecurityScreen: View {
     private func ageRow(_ option: ParentalAgeOption) -> some View {
         let isSelected = maxContentAge == option.age
         Button {
-            maxContentAge = option.age
-            appState.apiClient.applyContentRatingLimit(maxAge: option.age)
-            // The widget and the Top Shelf read the cap from the shared session
-            // blob, and nothing else republishes it on a settings change — so
-            // without this the new ceiling would only reach them at the next
-            // login or foreground (#230).
-            appState.republishExtensionSession()
-            NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            if let key = appState.activeAccountKey {
+                // The same sequence as below, plus `onAgeCapChanged` (the Seerr
+                // session comes back when the cap is lifted).
+                appState.setAgeCap(option.age, forAccountKey: key)
+            } else {
+                maxContentAge = option.age
+                appState.apiClient.applyContentRatingLimit(maxAge: option.age)
+                // The widget and the Top Shelf read the cap from the shared session
+                // blob, and nothing else republishes it on a settings change — so
+                // without this the new ceiling would only reach them at the next
+                // login or foreground (#230).
+                appState.republishExtensionSession()
+                NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: nil)
+            }
         } label: {
             HStack {
                 Text(loc.localized(option.localizationKey))

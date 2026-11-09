@@ -205,6 +205,38 @@ public struct KeychainService: Sendable {
         }
     }
 
+    // MARK: - Seerr secrets
+
+    /// Account holding `[accountKey: {session cookie, Seerr address}]`.
+    static let seerrSessionsAccount = "seerr_sessions"
+    /// Account holding `[activeServerId: {API key, Seerr address}]`.
+    static let seerrAPIKeysAccount = "seerr_api_keys"
+
+    /// An unreadable map (or one in a pre-release shape) reads as empty: the
+    /// user signs in to Seerr again, nothing is sent anywhere.
+    private func seerrMap(_ account: String) -> [String: SeerrBoundSecret] {
+        guard let data = getData(for: account) else { return [:] }
+        return (try? JSONDecoder().decode([String: SeerrBoundSecret].self, from: data)) ?? [:]
+    }
+
+    private func saveSeerrMap(_ map: [String: SeerrBoundSecret], account: String) {
+        guard let data = try? JSONEncoder().encode(map) else { return }
+        do {
+            try save(data: data, for: account)
+        } catch {
+            keychainLog.error("Saving Seerr secrets failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    public func seerrSessions() -> [String: SeerrBoundSecret] { seerrMap(Self.seerrSessionsAccount) }
+    public func saveSeerrSessions(_ sessions: [String: SeerrBoundSecret]) {
+        saveSeerrMap(sessions, account: Self.seerrSessionsAccount)
+    }
+    public func seerrAPIKeys() -> [String: SeerrBoundSecret] { seerrMap(Self.seerrAPIKeysAccount) }
+    public func saveSeerrAPIKeys(_ keys: [String: SeerrBoundSecret]) {
+        saveSeerrMap(keys, account: Self.seerrAPIKeysAccount)
+    }
+
     // MARK: - Parental-controls lock
 
     /// Account holding the JSON `ParentalLockCredential`.
@@ -379,6 +411,7 @@ public struct KeychainService: Sendable {
         serversAccount, activeServerIdAccount, trustedCertificatesAccount,
         earlyAdopterAccount,
         parentalLockAccount,
+        seerrSessionsAccount, seerrAPIKeysAccount
     ]
 
     private static let privateGroupMigratedKey = "keychain.privateAccessGroup.migrated"
