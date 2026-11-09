@@ -284,6 +284,26 @@ final class HomeViewModel {
         self.snapshotStore = snapshotStore
     }
 
+    /// Waits for the route the launch (or a path change) is deciding — LAN at
+    /// home — before a load's first request (`load`). A seam: a test holds it
+    /// open with a latch.
+    @ObservationIgnored var awaitRoute: @MainActor () async -> Void = {
+        await ServerRouteController.shared.awaitPendingProbe()
+    }
+    /// Loads parked in `awaitRoute`: they will go out on the route being decided.
+    @ObservationIgnored private(set) var loadsAwaitingRoute = 0
+    /// The dial the last load's requests went out on (`currentDialURL()` once
+    /// `awaitRoute` returned).
+    @ObservationIgnored private var loadedDial: URL?
+    /// Whether the route owner's launch refresh (`.cinemaxShouldRefreshCatalogue`
+    /// posted by `ServerRouteController`) must reload Home: only when its last
+    /// load went out on ANOTHER dial (tunnel down at launch, a launch decision
+    /// superseded). At home the first load waited for the route and already
+    /// went out on the LAN — reloading it would load Home twice per launch.
+    func needsRouteReload(currentDial: URL?) -> Bool {
+        hasLoaded && loadsAwaitingRoute == 0 && loadedDial != currentDial
+    }
+
     /// True while the rails on screen came from `HomeSnapshot` rather than
     /// from this session's phase 1 — see `load`.
     @ObservationIgnored private(set) var isShowingSnapshot = false
@@ -436,6 +456,14 @@ final class HomeViewModel {
                 self.applySnapshot(snapshot, rails: rails)
             }
         }
+
+        // LAN first: wait for the route being decided (≤ 1 s on a foreign
+        // Wi-Fi, none on cellular, a few ms at home) — AFTER the snapshot read
+        // is dispatched, so the last known Home is still painted meanwhile.
+        loadsAwaitingRoute += 1
+        await awaitRoute()
+        loadsAwaitingRoute -= 1
+        loadedDial = appState.apiClient.currentDialURL()
 
         await withTaskGroup(of: Section?.self) { group in
             group.addTask {

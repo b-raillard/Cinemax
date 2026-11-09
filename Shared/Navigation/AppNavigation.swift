@@ -316,11 +316,12 @@ struct AppNavigation: View {
         appState.apiClient.setPreferredLanguage(loc.languageCode)
         seerr.setLanguage(loc.languageCode)
         // The route owner (LAN first): wired BEFORE `restoreSession`, whose
-        // background task awaits `prepareRoute` ahead of its first request.
+        // background task awaits `prepareRoute` ahead of its first request
+        // (scheduled synchronously: Home and the views wait for it too).
         // Process singletons on both ends: captured strongly.
         serverRoute.attach(appState: appState, reach: { [network] in network.reach })
         network.onPathChange = { [serverRoute] in serverRoute.pathChanged() }
-        appState.prepareRoute = { [serverRoute] in await serverRoute.evaluate(.launch) }
+        appState.prepareRoute = { [serverRoute] in serverRoute.scheduleLaunchEvaluation() }
         appState.onClientRepointed = { [serverRoute] in
             Task { await serverRoute.evaluate(.serverChange) }
         }

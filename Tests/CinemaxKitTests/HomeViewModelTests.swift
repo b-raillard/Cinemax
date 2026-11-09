@@ -964,3 +964,44 @@ struct HomeResumeHereTests {
         #expect(vm.elsewhere.isEmpty)
     }
 }
+
+/// Launch ordering (local server address): Home's load waits for the route
+/// being decided before its first request, and the route owner's launch
+/// refresh does not reload a Home whose load already went out on that dial.
+@MainActor
+@Suite("Home — route décidée avant le premier chargement")
+struct HomeRouteWaitTests {
+    @MainActor private final class Flag { var raised = false }
+
+    @Test("load() parks before its first request until the route is applied")
+    func loadWaitsForTheRoute() async {
+        let api = MockAPIClient()
+        let appState = AppState(apiClient: api, keychain: MockKeychain())
+        appState.currentUserId = "user1"
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        let route = TestLatch()
+        let entered = Flag()
+        vm.awaitRoute = {
+            entered.raised = true
+            await route.wait()
+        }
+        let lan = URL(string: "https://192.168.1.128:8920")!
+
+        let loading = Task { await vm.load(using: appState) }
+        #expect(await eventually { entered.raised })
+        #expect(api.getResumeItemsCallCount == 0, "no request before the route")
+        #expect(vm.loadsAwaitingRoute == 1)
+        // The launch refresh lands while the load is parked: it will go out
+        // on the new route anyway — no second load.
+        #expect(!vm.needsRouteReload(currentDial: lan))
+
+        api.setDialURL(lan)
+        route.open()
+        await loading.value
+
+        #expect(api.getResumeItemsCallCount == 1)
+        #expect(vm.loadsAwaitingRoute == 0)
+        #expect(!vm.needsRouteReload(currentDial: lan), "at home: loaded once, on the LAN")
+        #expect(vm.needsRouteReload(currentDial: nil), "a load that went out on another dial is reloaded")
+    }
+}

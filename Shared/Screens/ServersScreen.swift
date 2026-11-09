@@ -39,7 +39,9 @@ final class ServersViewModel {
     }
 
     private(set) var statuses: [String: PingStatus] = [:]
-    /// Which road answered each online entry: its LAN address or its public one.
+    /// The road each online entry answers on, derived from the HOST of the
+    /// URL that answered (its LAN address, else its public one) — a server
+    /// whose only URL is `http://192.168.x.y` reads « Local ».
     private(set) var routes: [String: ServerRouteKind] = [:]
 
     /// Attempt flag. The tvOS Settings surface re-presents (and re-fires its
@@ -47,6 +49,10 @@ final class ServersViewModel {
     /// would re-ping the whole fleet on each menu interaction — same precedent
     /// as `SettingsScreen.serverUsersLoadAttempted`.
     private var hasPinged = false
+
+    /// One sweep's answers so far, per entry — the public ping and the LAN
+    /// probe land separately (`apply(_:using:)`).
+    private var progress: [String: Progress] = [:]
 
     func status(for id: String) -> PingStatus? { statuses[id] }
 
@@ -59,6 +65,7 @@ final class ServersViewModel {
     func forget(id: String) {
         statuses[id] = nil
         routes[id] = nil
+        progress[id] = nil
     }
 
     /// Probes one entry again — after its local address was saved or removed,
@@ -66,7 +73,11 @@ final class ServersViewModel {
     func refresh(id: String, using appState: AppState) async {
         guard let entry = appState.servers.first(where: { $0.id == id }) else { return }
         let reach = ServerRouteController.shared.currentReach
-        apply(await Self.probe(entry, reach: reach), using: appState)
+        progress[id] = Progress()
+        await withTaskGroup(of: Answer.self) { group in
+            Self.addProbes(for: entry, reach: reach, to: &group)
+            for await answer in group { apply(answer, using: appState) }
+        }
     }
 
     func pingIfNeeded(using appState: AppState) async {
@@ -78,11 +89,14 @@ final class ServersViewModel {
     /// Fans every registered server out to the **unauthenticated** public probe
     /// (`ServerReachability` — see the RULE in its header: no auth header, own
     /// `URLSession`, so it can never feed the shared 401 machinery and a dead
-    /// secondary server can't sign the user out of the active one).
+    /// secondary server can't sign the user out of the active one), and to
+    /// its LAN address's probe when it has one.
     ///
-    /// Results are applied as they land, so a slow server never holds up the
-    /// others and never blocks first paint; a discovered name / version
-    /// self-heals the stored entry through `AppState.updateServerMetadata`.
+    /// Results are applied as they land — each answer of each server on its
+    /// own — so a slow server never holds up the others, the public answer
+    /// never waits for the LAN timeout away from home, and nothing blocks
+    /// first paint; a discovered name / version self-heals the stored entry
+    /// through `AppState.updateServerMetadata`.
     func ping(using appState: AppState) async {
         let entries = appState.servers
         guard !entries.isEmpty else { return }
@@ -91,13 +105,14 @@ final class ServersViewModel {
         }
 
         let reach = ServerRouteController.shared.currentReach
-        await withTaskGroup(of: Probe.self) { group in
+        for entry in entries { progress[entry.id] = Progress() }
+        await withTaskGroup(of: Answer.self) { group in
             for entry in entries {
-                group.addTask { await Self.probe(entry, reach: reach) }
+                Self.addProbes(for: entry, reach: reach, to: &group)
             }
-            for await probe in group {
+            for await answer in group {
                 guard !Task.isCancelled else { break }
-                apply(probe, using: appState)
+                apply(answer, using: appState)
             }
         }
 
@@ -108,30 +123,56 @@ final class ServersViewModel {
         if Task.isCancelled { hasPinged = false }
     }
 
-    private func apply(_ probe: Probe, using appState: AppState) {
-        switch probe.result {
-        case .online(let name, let version, let serverID):
-            statuses[probe.id] = .online
-            routes[probe.id] = probe.answeredLocally ? .local : .internet
-            appState.updateServerMetadata(id: probe.id, name: name, version: version, serverID: serverID)
-        case .offline:
-            // The LAN address proved the same server even with the public one down.
-            statuses[probe.id] = probe.answeredLocally ? .online : .offline
-            routes[probe.id] = probe.answeredLocally ? .local : nil
+    private func apply(_ answer: Answer, using appState: AppState) {
+        var state = progress[answer.id] ?? Progress()
+        switch answer.kind {
+        case .publicAnswer(let result):
+            state.publicResult = result
+            if case .online(let name, let version, let serverID) = result {
+                appState.updateServerMetadata(id: answer.id, name: name, version: version, serverID: serverID)
+            }
+        case .localAnswer(let dial):
+            state.localDone = true
+            state.localDial = dial
+        }
+        progress[answer.id] = state
+        guard let card = Self.cardState(publicResult: state.publicResult, localDone: state.localDone,
+                                        localDial: state.localDial, identity: answer.identity) else { return }
+        statuses[answer.id] = card.status
+        routes[answer.id] = card.route
+    }
+
+    /// What a card shows from the answers so far; `nil` = nothing decided yet
+    /// (the dot stays « probing »). Online as soon as EITHER answers — the
+    /// public ping no longer waits for the LAN timeout away from home —, the
+    /// road from the host of what answered (the LAN dial wins: « Internet »
+    /// first, then « Local » once the LAN probe proves it). Offline only once
+    /// both have failed. Pure (`ServersRouteIndicationTests`).
+    nonisolated static func cardState(
+        publicResult: PingResult?, localDone: Bool, localDial: URL?, identity: URL
+    ) -> (status: PingStatus, route: ServerRouteKind?)? {
+        if let localDial { return (.online, ServerRoutePolicy.kind(ofDialURL: localDial)) }
+        switch publicResult {
+        case .online?: return (.online, ServerRoutePolicy.kind(ofDialURL: identity))
+        case .offline?: return localDone ? (.offline, nil) : nil
+        case nil: return nil
         }
     }
 
-    /// The LAN address (decided as the route owner decides: https, a local
-    /// peer answering with the entry's own `Id`) and the public ping, run side
-    /// by side so a user away from home never waits for the LAN timeout. The
-    /// card is online when either answers; the local answer names the road.
-    /// Nothing here is logged: no address may reach a log line.
-    nonisolated private static func probe(_ entry: ServerEntry, reach: NetworkReach) async -> Probe {
-        async let publicResult = ServerReachability.ping(url: entry.url)
-        async let localDial = localDial(for: entry, reach: reach)
-        let result = await publicResult
-        let answeredLocally = await localDial != nil
-        return Probe(id: entry.id, result: result, answeredLocally: answeredLocally)
+    /// The public ping and the LAN address (decided as the route owner
+    /// decides: https, a local peer answering with the entry's own `Id`), as
+    /// two separate answers. Nothing here is logged: no address may reach a
+    /// log line.
+    nonisolated private static func addProbes(
+        for entry: ServerEntry, reach: NetworkReach, to group: inout TaskGroup<Answer>
+    ) {
+        let id = entry.id, identity = entry.url
+        group.addTask {
+            Answer(id: id, identity: identity, kind: .publicAnswer(await ServerReachability.ping(url: identity)))
+        }
+        group.addTask {
+            Answer(id: id, identity: identity, kind: .localAnswer(await localDial(for: entry, reach: reach)))
+        }
     }
 
     nonisolated private static func localDial(for entry: ServerEntry, reach: NetworkReach) async -> URL? {
@@ -141,10 +182,20 @@ final class ServersViewModel {
         return ServerRoutePolicy.decide(localURL: local, reach: reach, expectedServerID: expected, probe: outcome)
     }
 
-    private struct Probe: Sendable {
+    private struct Progress {
+        var publicResult: PingResult?
+        var localDone = false
+        var localDial: URL?
+    }
+
+    private struct Answer: Sendable {
+        enum Kind: Sendable {
+            case publicAnswer(PingResult)
+            case localAnswer(URL?)
+        }
         let id: String
-        let result: PingResult
-        let answeredLocally: Bool
+        let identity: URL
+        let kind: Kind
     }
 }
 
@@ -183,7 +234,8 @@ struct LocalCertificateApproval: Identifiable {
 }
 
 /// The route line under the active server's address in Réglages → Serveur:
-/// « Local · 192.168.1.128:8920 » or « Internet ». Reads the route owner
+/// « Local · 192.168.1.128:8920 » or « Internet », from the host of the
+/// address in use (`ServerRouteController.activeDialURL`). Reads the route owner
 /// directly (no environment injection) — a standalone `View`, so it redraws
 /// on a route change even inside a pushed destination.
 struct ServerRouteLine: View {
@@ -191,8 +243,10 @@ struct ServerRouteLine: View {
     let font: Font
 
     var body: some View {
-        let route = ServerRouteController.shared
-        let local = route.route == .local ? route.dialURL.flatMap(Self.hostAndPort) : nil
+        // The address in use, its class from its host (`ServerRouteController.route`):
+        // a LAN dial, or an identity that is itself a LAN address.
+        let dial = ServerRouteController.shared.activeDialURL
+        let local = dial.flatMap { ServerRoutePolicy.kind(ofDialURL: $0) == .local ? Self.hostAndPort($0) : nil }
         // One line; else « Local » over the address; « Local » alone only as
         // the last resort — never a cut address (memory
         // `feedback_short_label_over_truncation`).
@@ -694,13 +748,14 @@ struct ServersScreen: View {
     }
 
     /// The road this card's server answers on, shown only once the card's
-    /// own probe found it online (never « Internet » beside a red dot). The
-    /// server we are on reads the route owner — what is actually dialled; it
-    /// reads `.internet` while signed out (reset at logout, `sessionEnded`).
-    /// Every other card reads its own probe.
+    /// own probe found it online (never « Internet » beside a red dot), always
+    /// derived from a HOST, never a dial-state flag. The server we are on
+    /// reads the URL actually dialled (`routeKind(for:)` — the identity once
+    /// signed out, the LAN dial reset at logout); every other card the URL its
+    /// own probe reached.
     private func displayedRoute(_ entry: ServerEntry) -> ServerRouteKind? {
         guard viewModel.status(for: entry.id) == .online else { return nil }
-        if isActive(entry) { return ServerRouteController.shared.route }
+        if isActive(entry) { return ServerRouteController.shared.routeKind(for: entry) }
         return viewModel.route(for: entry.id)
     }
 

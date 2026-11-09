@@ -271,11 +271,89 @@ struct LocalServerImageRouteTests {
         #expect(spy.urls.map(\.absoluteString) == ["http://192.168.1.128:8899/Items/1/Images/Primary"])
     }
 
-    @Test func cacheKeyStaysIdentity() {
-        ImageRouteTable.shared.set(identity: identity, dial: dial)
-        defer { ImageRouteTable.shared.set(identity: nil, dial: nil) }
+    /// A loader that records what it was asked to fetch, then fails — so a
+    /// pipeline request through it ends instead of hanging.
+    private final class FailingSpyLoader: DataLoading, @unchecked Sendable {
+        private let lock = NSLock()
+        private var _urls: [URL] = []
+        var urls: [URL] { lock.lock(); defer { lock.unlock() }; return _urls }
+        private final class Token: Nuke.Cancellable { func cancel() {} }
+        func loadData(with request: URLRequest,
+                      didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
+                      completion: @escaping @Sendable (Error?) -> Void) -> any Nuke.Cancellable {
+            lock.lock(); _urls.append(request.url!); lock.unlock()
+            DispatchQueue.global().async { completion(URLError(.notConnectedToInternet)) }
+            return Token()
+        }
+    }
+
+    /// Through a REAL pipeline: the transport dials the LAN, while the request
+    /// and both cache keys stay on the identity — a route change never
+    /// re-downloads nor double-stores an image. A private table, never
+    /// `.shared` (parallel suites).
+    @Test func cacheKeyStaysIdentity() async {
+        let table = ImageRouteTable()
+        table.set(identity: identity, dial: dial)
+        let spy = FailingSpyLoader()
+        var configuration = ImagePipeline.Configuration(dataLoader: RoutedImageDataLoader(wrapping: spy, table: table))
+        configuration.imageCache = nil
+        configuration.dataCache = nil
+        let pipeline = ImagePipeline(configuration: configuration)
         let url = URL(string: "https://movies.nivadax.net/Items/1/Images/Primary")!
-        #expect(ImageRequest(url: url).imageId == url.absoluteString)
+        let request = ImageRequest(url: url)
+
+        _ = try? await pipeline.data(for: request)
+
+        #expect(spy.urls.map(\.absoluteString) == ["http://192.168.1.128:8899/Items/1/Images/Primary"])
+        #expect(request.imageId == url.absoluteString)
+        let dataKey = pipeline.cache.makeDataCacheKey(for: request)
+        #expect(dataKey.hasPrefix(url.absoluteString))
+        #expect(!dataKey.contains("192.168.1.128"))
+        #expect(pipeline.cache.makeImageCacheKey(for: request) == pipeline.cache.makeImageCacheKey(for: ImageRequest(url: url)))
+    }
+}
+
+/// « Local » / « Internet » on the cards that are NOT the active server: from
+/// the HOST of the URL that answered, as soon as either probe answers.
+@Suite("Adresse locale — indication des cartes")
+struct ServersRouteIndicationTests {
+    private let lanIdentity = URL(string: "http://192.168.1.128:8899")!
+    private let publicIdentity = URL(string: "https://movies.nivadax.net")!
+    private let lan = URL(string: "https://192.168.1.128:8920")!
+    private let online = PingResult.online(name: nil, version: nil, serverID: "S")
+
+    @Test func lanIdentityReadsLocalWithNoLocalAddress() {
+        let card = ServersViewModel.cardState(publicResult: online, localDone: true, localDial: nil, identity: lanIdentity)
+        #expect(card?.status == .online)
+        #expect(card?.route == .local)
+    }
+
+    @Test func publicAnswerShowsAtOnceThenTheLANUpgrades() {
+        // Away from home the LAN probe is still running: the card is online,
+        // « Internet », without waiting for its timeout.
+        let early = ServersViewModel.cardState(publicResult: online, localDone: false, localDial: nil, identity: publicIdentity)
+        #expect(early?.status == .online)
+        #expect(early?.route == .internet)
+        // At home the LAN probe then answers: « Local ».
+        let late = ServersViewModel.cardState(publicResult: online, localDone: true, localDial: lan, identity: publicIdentity)
+        #expect(late?.status == .online)
+        #expect(late?.route == .local)
+    }
+
+    @Test func lanAnswerAloneIsOnlineLocal() {
+        let card = ServersViewModel.cardState(publicResult: nil, localDone: true, localDial: lan, identity: publicIdentity)
+        #expect(card?.status == .online)
+        #expect(card?.route == .local)
+        let tunnelDown = ServersViewModel.cardState(publicResult: .offline, localDone: true, localDial: lan, identity: publicIdentity)
+        #expect(tunnelDown?.route == .local)
+    }
+
+    @Test func offlineOnlyOnceBothFailed() {
+        #expect(ServersViewModel.cardState(publicResult: .offline, localDone: false, localDial: nil, identity: publicIdentity) == nil)
+        #expect(ServersViewModel.cardState(publicResult: nil, localDone: true, localDial: nil, identity: publicIdentity) == nil)
+        let card = ServersViewModel.cardState(publicResult: .offline, localDone: true, localDial: nil, identity: publicIdentity)
+        #expect(card?.status == .offline)
+        #expect(card?.route == nil)
     }
 }
 

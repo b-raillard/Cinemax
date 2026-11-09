@@ -58,11 +58,13 @@ final class AppState {
             url: url, accessToken: token, deviceId: KeychainService.getOrCreateDeviceID()
         )
     }
-    /// Decides the active server's route (LAN first) before the restored
-    /// session's first request. Awaited FIRST inside `restoreSession`'s
-    /// background task, never on its awaited path. Wired by `AppNavigation`
-    /// to `ServerRouteController.evaluate(.launch)`.
-    var prepareRoute: @MainActor () async -> Void = {}
+    /// Schedules the decision of the active server's route (LAN first) for
+    /// the restored session. Called SYNCHRONOUSLY by `restoreSession`, before
+    /// it returns, so the evaluation is already recorded when the UI's first
+    /// loads ask `ServerRouteController.awaitPendingProbe()`; its task is
+    /// awaited first inside the background task, never on the awaited path.
+    /// Wired by `AppNavigation` to `ServerRouteController.scheduleLaunchEvaluation()`.
+    var prepareRoute: @MainActor () -> Task<Void, Never>? = { nil }
     /// Called right after every `apiClient.reconnect` of `applyActiveServer`
     /// (server AND same-server account switches): the rebuilt client dials
     /// the identity, the route owner re-evaluates. Wired by `AppNavigation`.
@@ -268,6 +270,10 @@ final class AppState {
         // `reconnect` rebuilds the Jellyfin client and resets its in-memory state.
         let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
         apiClient.applyContentRatingLimit(maxAge: storedAge)
+        // LAN first: the launch evaluation is recorded NOW, before
+        // `isAuthenticated` reaches the UI's first loads (Home, the library
+        // views, the remote-control socket), which wait for it.
+        let launchRoute = prepareRoute()
 
         // Non-blocking: kick the server-info + admin-policy fetches behind the
         // launch transition. They populate `serverInfo` / `isAdministrator`
@@ -277,7 +283,7 @@ final class AppState {
             guard let self else { return }
             // LAN first: the route is decided before the session's first
             // request (bounded by the launch probe timeout, ~1 s).
-            await self.prepareRoute()
+            await launchRoute?.value
             if let info = try? await self.apiClient.fetchServerInfo() {
                 self.serverInfo = info
             }

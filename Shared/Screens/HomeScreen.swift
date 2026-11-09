@@ -158,7 +158,11 @@ struct HomeScreen: View {
                 }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { note in
+            // The route owner's launch refresh: only when Home's load went out
+            // on another dial — at home it waited for the route already.
+            if note.object is ServerRouteController,
+               !viewModel.needsRouteReload(currentDial: appState.apiClient.currentDialURL()) { return }
             // Tier-1: full reload while visible, otherwise defer to next appear.
             if isVisible { performFullReload() } else { pendingFullReload = true }
         }

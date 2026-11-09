@@ -457,4 +457,141 @@ struct ServerRouteControllerTests {
         #expect(stub.calls == 0)
         #expect(api.dialURLs.isEmpty)
     }
+
+    // MARK: - The indication, derived from the host
+
+    @Test func lanIdentityWithNoLocalAddressReadsLocal() async {
+        let api = MockAPIClient()
+        let lanIdentity = URL(string: "http://192.168.1.128:8899")!
+        let server = entry(url: lanIdentity, local: false)
+        let app = makeApp(api: api, entries: [server])
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        let controller = makeController(stub, app: app)
+
+        await controller.evaluate(.launch)
+
+        #expect(stub.calls == 0, "no local address: no probe")
+        #expect(controller.dialURL == nil)
+        #expect(controller.route == .local)
+        #expect(controller.routeKind(for: server) == .local)
+        #expect(controller.activeDialURL == lanIdentity)
+        // The diagnostics header reads the same derivation.
+        var facts = DiagnosticsFacts.current(serverVersion: nil, engine: "vlc", lastPlayback: nil)
+        facts.serverRoute = controller.route.rawValue
+        #expect(DiagnosticsReport.header(facts).last == "server_route: local")
+    }
+
+    @Test func publicIdentityOnTheLANDialReadsLocal() async {
+        let api = MockAPIClient()
+        let server = entry()
+        let app = makeApp(api: api, entries: [server])
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        let controller = makeController(stub, app: app)
+
+        await controller.evaluate(.launch)
+
+        #expect(controller.route == .local)
+        #expect(controller.routeKind(for: server) == .local)
+        #expect(controller.effectiveDialURL(for: server) == lan)
+        #expect(controller.activeDialURL == lan)
+        // Another server is never read through this one's dial.
+        let elsewhere = entry(id: "E2", url: other, local: false)
+        #expect(controller.routeKind(for: elsewhere) == .internet)
+        #expect(controller.effectiveDialURL(for: elsewhere) == other)
+    }
+
+    @Test func publicIdentityOnTheIdentityReadsInternet() async {
+        let api = MockAPIClient()
+        let server = entry()
+        let app = makeApp(api: api, entries: [server])
+        let stub = ProbeStub(.failed(localNetworkDenied: false))
+        let controller = makeController(stub, app: app)
+
+        await controller.evaluate(.launch)
+
+        #expect(controller.route == .internet)
+        #expect(controller.routeKind(for: server) == .internet)
+        #expect(controller.activeDialURL == identity)
+        var facts = DiagnosticsFacts.current(serverVersion: nil, engine: "vlc", lastPlayback: nil)
+        facts.serverRoute = controller.route.rawValue
+        #expect(DiagnosticsReport.header(facts).last == "server_route: internet")
+    }
+
+    // MARK: - Launch ordering
+
+    /// The launch evaluation is recorded BEFORE `restoreSession` returns, so
+    /// the UI's first loads (Home, the views, the socket), which ask right
+    /// after, wait for the launch's apply instead of going out on the identity.
+    @Test func restoreSessionRecordsTheLaunchEvaluationForWaiters() async {
+        let api = MockAPIClient()
+        let keychain = MockKeychain()
+        keychain.savedServers = [entry()]
+        keychain.savedActiveServerId = "E1"
+        keychain.savedServerURL = identity
+        keychain.savedSession = UserSession(userID: "U", username: "Alice", accessToken: "tok-E1", serverID: "S")
+        let app = AppState(apiClient: api, keychain: keychain)
+        app.settingsDefaults = UserDefaults.isolatedForTesting()
+        let latch = TestLatch()
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        stub.set(latch: latch)
+        let controller = makeController(stub, app: app)
+        app.prepareRoute = { controller.scheduleLaunchEvaluation() }
+        let refreshed = TestLatch()
+        app.onCurrentUserRefreshed = { refreshed.open() }
+
+        await preservingSharedExtensionSession {
+            await app.restoreSession()
+            // Synchronously after the return: already recorded.
+            #expect(controller.pendingEvaluation != nil)
+            let waiter = Task { @MainActor in
+                await controller.awaitPendingProbe()
+                return api.dialURLs.last
+            }
+            latch.open()
+            let seen = await waiter.value
+            #expect(seen == .some(lan), "the waiter resumed only once the launch route was applied")
+            // The background task publishes the extension session: let it end
+            // before the shared item is put back.
+            await refreshed.wait()
+        }
+        #expect(controller.route == .local)
+    }
+
+    /// A launch refresh owed by a session that ended is not paid by the next.
+    @Test func sessionEndDropsAnOwedLaunchRefresh() async {
+        let api = MockAPIClient()
+        let app = makeApp(api: api, entries: [entry()])
+        let latch = TestLatch()
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        stub.set(latch: latch)
+        let controller = makeController(stub, app: app)
+        let refreshes = Counter()
+        let token = NotificationCenter.default.addObserver(
+            forName: .cinemaxShouldRefreshCatalogue, object: controller, queue: nil
+        ) { _ in refreshes.bump() }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        let launch = Task { await controller.evaluate(.launch) }
+        await eventually { stub.calls == 1 }
+        controller.sessionEnded()   // the launch's answer is dropped
+        latch.open()
+        await launch.value
+        #expect(refreshes.count == 0)
+
+        stub.set(latch: nil)
+        await controller.evaluate(.serverChange)
+
+        #expect(controller.route == .local)
+        #expect(refreshes.count == 0, "no refresh owed by the ended session")
+    }
+}
+
+/// The test host IS the app: on a signed device the shared extension session
+/// is the widget's live one — put it back (root CLAUDE.md test RULE, T4).
+@MainActor
+private func preservingSharedExtensionSession(_ body: () async -> Void) async {
+    let keychain = KeychainService()
+    let original = keychain.readSharedSession()
+    await body()
+    if let original { keychain.saveSharedSession(original) } else { keychain.deleteSharedSession() }
 }

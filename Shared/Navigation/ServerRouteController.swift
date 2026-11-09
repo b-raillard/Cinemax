@@ -37,7 +37,9 @@ struct RouteTransports {
 /// API client, images, stream policy, socket. The public URL stays the
 /// server's identity everywhere; only the transport dials the LAN.
 ///
-/// Evaluated after the session is restored at launch (`AppState.prepareRoute`),
+/// Evaluated after the session is restored at launch (`AppState.prepareRoute`
+/// → `scheduleLaunchEvaluation`, recorded synchronously so the launch's first
+/// loads can wait for it through `awaitPendingProbe`),
 /// on return to the foreground, on every network path change (identity first,
 /// then the probe) and after every client rebuild (`AppState.onClientRepointed`,
 /// which covers server AND account switches) and once each sign-in hold is
@@ -47,21 +49,20 @@ struct RouteTransports {
 final class ServerRouteController {
     static let shared = ServerRouteController()
 
-    /// The ACTIVE server's route, read by the servers list, Settings and the
-    /// diagnostics header.
-    private(set) var route: ServerRouteKind = .internet
     /// The LAN address being dialled; `nil` = the identity.
     private(set) var dialURL: URL?
 
     @ObservationIgnored var transports: RouteTransports = .live
-    /// The evaluation `pathChanged()` started — awaited by the tests.
+    /// The evaluation last SCHEDULED (launch, path change, sign-in release),
+    /// recorded before it starts — what `awaitPendingProbe` waits for.
     @ObservationIgnored private(set) var pendingEvaluation: Task<Void, Never>?
 
     private let probe: @Sendable (URL, TimeInterval) async -> LocalProbeOutcome
     @ObservationIgnored private weak var appState: AppState?
     @ObservationIgnored private var reach: @MainActor () -> NetworkReach = { .offline }
     /// The identity `dialURL` was decided for (`transportURL(identity:)`).
-    @ObservationIgnored private var dialIdentity: URL?
+    /// Observed like `dialURL`: the indication derives from both.
+    private var dialIdentity: URL?
     /// Bumped by every evaluation and path change: a probe answer that is no
     /// longer the newest question is dropped.
     @ObservationIgnored private var evaluationGeneration = 0
@@ -116,18 +117,19 @@ final class ServerRouteController {
     }
 
     /// The session ended (a logout, a confirmed-expired session): nothing is
-    /// routed any more. The published route goes back to the identity, so no
-    /// list or header reads a stale « Local » while signed out; the memo and
+    /// routed any more. The dial goes back to the identity, so no list or
+    /// header reads a stale « Local » from a LAN dial while signed out; the memo and
     /// any evaluation still in flight belong to a session that is gone. The
     /// images and the stream policy, which a later sign-in's no-op `apply`
     /// would not touch, go back to the identity too.
     func sessionEnded() {
         evaluationGeneration &+= 1
         memo = nil
+        // A refresh owed by the session that ended is not this one's to pay.
+        owesLaunchRefresh = false
         let hadDial = dialURL != nil
         if hadDial { dialURL = nil }
-        if route != .internet { route = .internet }
-        dialIdentity = nil
+        if dialIdentity != nil { dialIdentity = nil }
         guard hadDial else { return }
         transports.setImageRoute(nil, nil)
         transports.configureStream(appState?.serverURL)
@@ -207,17 +209,51 @@ final class ServerRouteController {
         return identity
     }
 
-    /// Waits until the route a playback is about to negotiate on is DECIDED
-    /// AND APPLIED — so it never opens on a route about to be abandoned. Not
-    /// only the probe: the probe's own continuation (→ `apply` → `setDialURL`)
-    /// and this one both resume on the main actor in no guaranteed order. So it
-    /// also waits for the evaluation a path change or a sign-in release has
-    /// scheduled (`pendingEvaluation`, possibly not started yet) and for every
-    /// evaluation past its gate to end. Each is bounded by its probe's timeout;
-    /// returns at once when nothing is pending.
+    // MARK: - The indication (« Local » / « Internet »)
+
+    /// The URL `entry` is dialled on right now: the LAN dial while it belongs
+    /// to this entry's identity, else the identity itself.
+    func effectiveDialURL(for entry: ServerEntry) -> URL {
+        transportURL(identity: entry.url) ?? entry.url
+    }
+
+    /// « Local » / « Internet » of what `entry` is dialled on, DERIVED FROM
+    /// THE HOST (spec: never a stored flag) — a server whose only URL is
+    /// already `http://192.168.x.y` reads « Local » with no local address.
+    func routeKind(for entry: ServerEntry) -> ServerRouteKind {
+        ServerRoutePolicy.kind(ofDialURL: effectiveDialURL(for: entry))
+    }
+
+    /// The URL the ACTIVE server is dialled on (its entry, else the session's
+    /// identity); `nil` with no server at all. Read by Settings' route line.
+    var activeDialURL: URL? {
+        transportURL(identity: activeAddresses?.identity ?? appState?.serverURL)
+    }
+
+    /// The ACTIVE server's indication — the servers list's active card,
+    /// Settings and the diagnostics header all read this one derivation.
+    var route: ServerRouteKind {
+        activeDialURL.map(ServerRoutePolicy.kind(ofDialURL:)) ?? .internet
+    }
+
+    /// Waits until the route a playback — or one of the launch's first loads
+    /// (Home, the library views, the remote-control socket) — is about to use
+    /// is DECIDED AND APPLIED, so it never goes out on a route about to be
+    /// abandoned. Not only the probe: the probe's own continuation (→ `apply`
+    /// → `setDialURL`) and this one both resume on the main actor in no
+    /// guaranteed order. So it also waits for the evaluation the launch, a
+    /// path change or a sign-in release has scheduled (`pendingEvaluation`,
+    /// possibly not started yet — and the one replacing it while waited for)
+    /// and for every evaluation past its gate to end. Each is bounded by its
+    /// probe's timeout (launch 1 s, none on cellular); returns at once when
+    /// nothing is pending.
     func awaitPendingProbe() async {
         if let inFlightProbe { _ = await inFlightProbe.value }
-        if let pendingEvaluation { await pendingEvaluation.value }
+        var awaited: Task<Void, Never>?
+        while let pending = pendingEvaluation, pending != awaited {
+            awaited = pending
+            await pending.value
+        }
         guard evaluationsInFlight > 0 else { return }
         await withCheckedContinuation { evaluationWaiters.append($0) }
     }
@@ -267,6 +303,16 @@ final class ServerRouteController {
         return .open(Session(appState: appState, entry: entry))
     }
 
+    /// The launch evaluation (`AppState.restoreSession`), recorded as
+    /// `pendingEvaluation` BEFORE it starts: a load issued right after the
+    /// session is restored waits for it (`awaitPendingProbe`) instead of
+    /// going out on the identity ahead of the ~1 s probe.
+    func scheduleLaunchEvaluation() -> Task<Void, Never> {
+        let task = Task { [self] in await evaluate(.launch) }
+        pendingEvaluation = task
+        return task
+    }
+
     /// The last sign-in hold is released: ONE evaluation — whatever was
     /// deferred meanwhile, and the route of a session that sign-in has just
     /// established (a first sign-in at home goes local right away).
@@ -310,12 +356,13 @@ final class ServerRouteController {
         let client = appState.apiClient
         let owedRefresh = owesLaunchRefresh
         if settled { owesLaunchRefresh = false }
-        let kind: ServerRouteKind = dial == nil ? .internet : .local
+        // The class of what is dialled, from its host — as the indication.
+        let kind = ServerRoutePolicy.kind(ofDialURL: dial ?? entry.url)
         let previousDial = dialURL
         let previousIdentity = dialIdentity
         if dialURL != dial { dialURL = dial }
-        if route != kind { route = kind }
-        dialIdentity = dial == nil ? nil : entry.url
+        let identity = dial == nil ? nil : entry.url
+        if dialIdentity != identity { dialIdentity = identity }
 
         // Unchanged only when BOTH agree: the client (a `reconnect` resets it
         // to the identity behind this controller's back) and what was last
@@ -340,7 +387,9 @@ final class ServerRouteController {
             }
         }
         logger.notice("route → \(kind.rawValue, privacy: .public) (reason: \(reason.rawValue, privacy: .public))")
-        // Home's first load may have gone to a dead public URL (tunnel down).
+        // A first load may have gone to a dead public URL (tunnel down) — one
+        // that did not wait for this route. Home, which waits, skips it when
+        // its load already went out on this dial (`HomeViewModel.needsRouteReload`).
         if dial != nil, settled, reason == .launch || owedRefresh {
             NotificationCenter.default.post(name: .cinemaxShouldRefreshCatalogue, object: self)
         }
