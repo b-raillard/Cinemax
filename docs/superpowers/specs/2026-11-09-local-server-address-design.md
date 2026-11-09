@@ -37,6 +37,7 @@ Family members watch from outside, so the public URL stays. Tailscale was reject
   - The active server's card, and the server page in Settings, print « Local » or « Internet » for the address **currently in use**.
   - It is derived from that address's host: a server whose only URL is already `http://192.168.x.y` shows « Local » with no local address configured.
   - Purely informative: no badge on Home, nothing in the player.
+  - **Form (owner's choice, mockup variant A, https://claude.ai/artifact/TygAqSnDNfoZaBk6tMpf7j)**: on the card, a small pill right of the name (after « Actuel » on the active card), with a house icon + « Local » or a globe icon + « Internet ». The address line keeps the public URL. Settings → Serveur adds one line under the address: « Local · <local address> » or « Internet ». The mockup's tvOS rendering is broken: design the tvOS card and text entry properly during implementation (owner's note).
 - **Nothing else changes.** Same server entry, same accounts, same Continue Watching. Images already on disk are not downloaded again.
 
 ## Choosing the route
