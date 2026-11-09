@@ -248,6 +248,15 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
         return pendingApprovals[key]
     }
 
+    /// Drops a host's pending approval, so that one found after the next
+    /// connection attempt was presented BY that attempt — never a leftover of
+    /// an earlier one (the LAN address save clears it right before its probe).
+    public func clearPending(forTrustKey key: String) {
+        lock.lock()
+        pendingApprovals[key] = nil
+        lock.unlock()
+    }
+
     /// Whether this host currently carries a pin.
     public func isPinned(trustKey key: String) -> Bool {
         pin(forTrustKey: key) != nil
@@ -346,8 +355,14 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
 
     private func rememberPending(trust: SecTrust, host: String, port: Int, key: String) {
         guard let summary = ServerCertificateTrust.summary(for: trust, host: host, port: port) else { return }
+        recordPending(summary)
+    }
+
+    /// Records the leaf a refused challenge presented (internal: the tests
+    /// stand in for a TLS challenge through it).
+    func recordPending(_ summary: ServerCertificateSummary) {
         lock.lock()
-        pendingApprovals[key] = summary
+        pendingApprovals[summary.trustKey] = summary
         lock.unlock()
     }
 }

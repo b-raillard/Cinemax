@@ -754,14 +754,23 @@ final class AppState {
         return decision.outcome
     }
 
-    /// Approves the LAN certificate the last save probe refused for the typed
-    /// address (exactly as `ServerSetupViewModel.trustPendingCertificate`),
-    /// then saves again. Nothing pending: saves again as is.
-    func trustLocalCertificate(id: String, raw: String) async -> LocalAddressSaveOutcome {
-        if let pending = pendingLocalCertificate(raw: raw) {
-            ServerTrustDelegate.shared.trust(fingerprint: pending.fingerprint, forTrustKey: pending.trustKey)
+    /// Approves the LAN certificate the user was SHOWN (`fingerprint`, read
+    /// from `pendingLocalCertificate`) and saves again — pinned as
+    /// `ServerSetupViewModel.trustPendingCertificate` does, but only while the
+    /// pending summary for that host:port still carries exactly that
+    /// fingerprint; otherwise nothing is pinned and the save answers
+    /// `needsCertificateApproval` again with the new summary. A pin the save
+    /// then does not use (refused, other server…) is forgotten at once.
+    func trustLocalCertificate(id: String, raw: String, fingerprint: String) async -> LocalAddressSaveOutcome {
+        guard let pending = pendingLocalCertificate(raw: raw), pending.fingerprint == fingerprint,
+              case .success(let url) = ServerURLNormalizer.normalizeLocal(raw) else {
+            return await setLocalAddress(id: id, raw: raw)
         }
-        return await setLocalAddress(id: id, raw: raw)
+        ServerTrustDelegate.shared.trust(fingerprint: pending.fingerprint, forTrustKey: pending.trustKey)
+        let outcome = await setLocalAddress(id: id, raw: raw)
+        // Kept when the save stored the address (or any entry names the key).
+        forgetLocalPinIfUnused(url)
+        return outcome
     }
 
     /// The LAN certificate awaiting approval for a typed address, for the UI.
@@ -785,6 +794,11 @@ final class AppState {
     private func localSaveDecision(
         for url: URL, knownServerID: String?, publicServerID: String?
     ) async -> LocalAddressSaveDecision {
+        // A pending approval read after a failed probe must be THIS probe's
+        // challenge, never one left by an earlier attempt or a route probe.
+        if let key = ServerCertificateTrust.trustKey(for: url) {
+            ServerTrustDelegate.shared.clearPending(forTrustKey: key)
+        }
         var probe = await localProbe(url, LocalRouteProbe.runtimeTimeout)
         // A TLS pass is trust: the certificate only matters on a failure.
         var certificate = LocalCertificateState.trusted
@@ -1023,6 +1037,9 @@ final class AppState {
         onServerForgotten(entry.id)
         servers.removeAll { $0.id == entry.id }
         persistRegistry()
+        // Its LAN pin too, unless another entry still names that host:port
+        // (read after the removal) — same reason as the public pin below.
+        if let old = entry.localURL { forgetLocalPinIfUnused(old) }
         // Its search history goes with it. Nothing could ever read it again —
         // a re-added server mints a fresh id — so keeping it would only leave
         // that library's queries on the device.
