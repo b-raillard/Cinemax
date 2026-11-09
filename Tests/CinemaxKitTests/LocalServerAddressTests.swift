@@ -278,3 +278,13 @@ struct LocalServerImageRouteTests {
         #expect(ImageRequest(url: url).imageId == url.absoluteString)
     }
 }
+
+@Suite("Adresse locale — réseau")
+struct LocalNetworkReachTests {
+    @Test func reachMapping() {
+        #expect(NetworkMonitor.reach(isSatisfied: true, usesWiFiOrWired: true) == .lanCapable)
+        #expect(NetworkMonitor.reach(isSatisfied: true, usesWiFiOrWired: false) == .cellularOnly)
+        #expect(NetworkMonitor.reach(isSatisfied: false, usesWiFiOrWired: true) == .offline)
+        #expect(NetworkMonitor.reach(isSatisfied: false, usesWiFiOrWired: false) == .offline)
+    }
+}
