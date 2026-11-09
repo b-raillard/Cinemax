@@ -140,6 +140,8 @@ final class SeerrMyRequestsModel {
 
     var rows: [SeerrRequestRow] { pages.rows }
     var canLoadMore: Bool { pages.canLoadMore }
+    /// The listing's total, every page included (the summary's row).
+    var count: Int { pages.total }
 
     @ObservationIgnored private var snapshot: SeerrSession.Snapshot?
     @ObservationIgnored private var userId: SeerrUserID?

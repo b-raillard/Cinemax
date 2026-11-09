@@ -129,6 +129,7 @@ enum SeerrArrivalWatcher {
         settingsNav.selectedInterfaceSub = nil
         settingsNav.showsAppIconPage = false
         settingsNav.requestsUserId = nil
+        settingsNav.requestsPage = nil
         settingsNav.selectedCategory = .requests
         appState.pendingDeepLinkTabId = MenuEntry.settingsID
     }

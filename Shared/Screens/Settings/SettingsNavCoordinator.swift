@@ -31,5 +31,10 @@ final class SettingsNavCoordinator {
     /// category — iOS pushes the page instead.
     var requestsUserId: String?
 
+    /// tvOS: Demandes → one of its pages (« À valider », « Qui peut
+    /// demander »…, layout A). Closed by the « ‹ Demandes » row after a
+    /// user's page and before the category; iOS pushes the page instead.
+    var requestsPage: RequestsPage?
+
     init() {}
 }

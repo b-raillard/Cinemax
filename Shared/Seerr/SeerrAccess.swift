@@ -62,6 +62,55 @@ enum SeerrAccess {
     }
 }
 
+/// The card on top of an administrator's Réglages → Demandes summary (layout
+/// A, owner 2026-11-09): the connection, and the one action that helps. Pure.
+enum SeerrSummaryCard: Equatable {
+    /// No address yet: a welcome card and « Configurer Seerr », nothing else.
+    case setup
+    /// Account mode without a live session: « Se connecter à Seerr ».
+    case signIn
+    /// Seerr not answering, or not known yet: « Réessayer ».
+    case unavailable
+    /// Key mode, Seerr has no user for this account or refuses the key: what
+    /// to fix, with no action (the fix is in Seerr).
+    case failure(SeerrTestFailure)
+    case connected(SeerrUser, usesDeviceKey: Bool)
+
+    static func of(url: URL?, connection: SeerrSession.Connection, usesDeviceKey: Bool) -> Self {
+        guard url != nil else { return .setup }
+        switch connection {
+        case .connected(let user): return .connected(user, usesDeviceKey: usesDeviceKey)
+        case .notConnected: return .signIn
+        case .notLinked: return .failure(.notInSeerr)
+        case .keyRefused: return .failure(.keyRefused)
+        case .unavailable: return .unavailable
+        }
+    }
+
+    /// The request rows (« À valider », « Mes demandes ») under the card:
+    /// open when connected, greyed with this reason while Seerr cannot be
+    /// read yet — `nil` there means they are left out (no address, or a
+    /// failure the card explains).
+    var lockedReasonKey: String? {
+        switch self {
+        case .signIn: "seerr.hub.locked.signIn"
+        case .unavailable: "seerr.hub.locked.unavailable"
+        case .setup, .failure, .connected: nil
+        }
+    }
+
+    var showsRequestRows: Bool {
+        switch self {
+        case .signIn, .unavailable, .connected: true
+        case .setup, .failure: false
+        }
+    }
+
+    /// « Administration » (who may request, the Seerr server): every card
+    /// but the welcome one, whose button opens the server page itself.
+    var showsAdministration: Bool { self != .setup }
+}
+
 /// Why a Seerr connection failed. One enum so the connection test and every
 /// « Se connecter à Seerr » entry show the same message for the same reason.
 enum SeerrTestFailure: Equatable, Sendable {

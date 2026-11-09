@@ -70,6 +70,7 @@ extension SettingsScreen {
                     selectedInterfaceSub = nil
                     showsAppIconPage = false
                     settingsNav.requestsUserId = nil
+                    settingsNav.requestsPage = nil
                     tierChipFocusable = false
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
@@ -444,9 +445,12 @@ extension SettingsScreen {
                 // Back button
                 let backFocused = focusedItem == .back
                 Button {
-                    // Demandes → a user's page: back to the list first.
+                    // Demandes → a user's page, then a page: closed first,
+                    // newest first.
                     if category == .requests, settingsNav.requestsUserId != nil {
                         settingsNav.requestsUserId = nil
+                    } else if category == .requests, settingsNav.requestsPage != nil {
+                        settingsNav.requestsPage = nil
                     } else {
                         selectedCategory = nil
                     }

@@ -1,13 +1,21 @@
 import SwiftUI
 import CinemaxKit
 
-/// Réglages → Demandes (Seerr, spec 2026-11-06), iOS AND tvOS. Five sections,
-/// in this order: **Mes demandes** (an enabled account signed in to Seerr,
-/// admin or not), **À valider** (a Seerr user who may manage requests —
-/// Seerr's permission, never Jellyfin's admin flag), **Connexion** (everyone
-/// who sees the page), then — Jellyfin admin only — **Configuration** (the
-/// address, « Tester la connexion » and its report, who may request) and
-/// **Sur cet appareil** (the optional API key).
+/// Réglages → Demandes (Seerr, spec 2026-11-06), iOS AND tvOS.
+///
+/// A Jellyfin ADMIN gets a summary (layout A, owner 2026-11-09): a card for
+/// the connection and its one useful action (`SeerrSummaryCard`), then rows
+/// that each open a page — **À valider**, **Mes demandes**, and under
+/// « Administration » **Qui peut demander** and **Serveur Seerr** (Connexion,
+/// address + « Tester la connexion », Sur cet appareil). iOS pushes the page
+/// (`RequestsSubpageHost`); tvOS draws it in place
+/// (`SettingsNavCoordinator.requestsPage`). Anyone else keeps one page:
+/// **À valider** (a Seerr user who may manage requests — Seerr's permission,
+/// never Jellyfin's admin flag), **Mes demandes**, **Connexion**.
+///
+/// The pages are this view's own sections: the state stays here, the loaders
+/// sit on the outer container (`lifecycle`) so a page drawn in place on tvOS
+/// never cancels them.
 ///
 /// A standalone view with its own environment: iOS pushes it inside the
 /// Settings detail wrapper, where an extension method returning `some View`
@@ -52,10 +60,11 @@ struct RequestsSettingsScreen: View {
     /// « Actualiser » is under way (the iOS pull or bar button, the tvOS row):
     /// the bar button turns into a spinner, the tvOS row says so.
     @State private var isRefreshing = false
-    /// « À valider » comes first: requests were waiting when the page opened.
-    /// Decided ONCE per page (`nil` until then): a later `onAppear` — a tab
-    /// round-trip, a cover closing — never swaps the sections.
-    @State private var pendingFirst: Bool?
+    /// The summary card's « Réessayer » (Seerr not answering) is on its way.
+    @State private var isRetryingSummary = false
+    /// iOS: the page pushed over the summary (tvOS:
+    /// `SettingsNavCoordinator.requestsPage`).
+    @State private var openedPage: RequestsPage?
     /// A « Réessayer » press is on its way: the failed panel stays, its row
     /// turning, rather than giving way to the spinner (on tvOS the pressed row
     /// would vanish under focus).
@@ -157,42 +166,85 @@ struct RequestsSettingsScreen: View {
         // The page owns its scroll view (like Administration): `.refreshable`
         // only reaches the scroll view it is set on, and the bar button lives
         // here with the state it shows.
-        ScrollView(showsIndicators: false) {
-            page
-                .padding(.horizontal, CinemaSpacing.spacing3)
-                .padding(.bottom, CinemaSpacing.spacing8)
-        }
-        .background(CinemaColor.surface.ignoresSafeArea())
-        .navigationTitle(SettingsCategory.requests.localizedName(loc))
-        .navigationBarTitleDisplayMode(.large)
-        // Not awaited: while the pull's own spinner runs, the bar does not
-        // redraw (measured: the button kept its arrow over the skeleton). The
-        // pull lets go at once; the bar button and the skeleton show the rest.
-        .refreshable { Task { await refresh() } }
-        .navigationDestination(item: $openedUser) { opened in
-            SeerrAccountPage(activation: activation, userId: opened.id)
-        }
-        .toolbar {
-            if showsRefresh {
-                ToolbarItem(placement: .topBarTrailing) { refreshBarButton }
-            }
-        }
-        #else
-        Group {
-            if let id = settingsNav.requestsUserId {
-                SeerrAccountPage(activation: activation, userId: id)
-                    .tvBackAction { settingsNav.requestsUserId = nil }
-            } else {
+        lifecycle(
+            ScrollView(showsIndicators: false) {
                 page
+                    .padding(.horizontal, CinemaSpacing.spacing3)
+                    .padding(.bottom, CinemaSpacing.spacing8)
             }
-        }
-        // Back from the account page (Menu or the « ‹ Demandes » row): focus
-        // returns to that user's row once the list is drawn again.
-        .onChange(of: settingsNav.requestsUserId) { closed, now in
-            guard now == nil, let closed else { return }
-            Task { @MainActor in focusedItem = .toggle("seerr.user.\(closed)") }
-        }
+            .background(CinemaColor.surface.ignoresSafeArea())
+            .navigationTitle(SettingsCategory.requests.localizedName(loc))
+            .navigationBarTitleDisplayMode(.large)
+            // Not awaited: while the pull's own spinner runs, the bar does not
+            // redraw (measured: the button kept its arrow over the skeleton). The
+            // pull lets go at once; the bar button and the skeleton show the rest.
+            .refreshable { Task { await refresh() } }
+            // A member's page has no summary: the account page opens from here
+            // only for an admin, through « Qui peut demander ».
+            .navigationDestination(item: $openedPage) { target in
+                RequestsSubpageHost(screen: self, page: target)
+            }
+            .toolbar {
+                if showsRefresh {
+                    ToolbarItem(placement: .topBarTrailing) { refreshBarButton }
+                }
+            }
+            // Under a pushed page the summary is covered: the page itself
+            // presents the confirmations.
+            .modifier(RequestAlerts(screen: self, isActive: openedPage == nil))
+        )
+        #else
+        lifecycle(
+            Group {
+                if let id = settingsNav.requestsUserId {
+                    SeerrAccountPage(activation: activation, userId: id)
+                        .tvBackAction { settingsNav.requestsUserId = nil }
+                } else if let target = settingsNav.requestsPage {
+                    subpageContent(target)
+                        .tvBackAction { settingsNav.requestsPage = nil }
+                } else {
+                    page
+                }
+            }
+            // Back from the account page (Menu or the « ‹ Demandes » row): focus
+            // returns to that user's row once the list is drawn again.
+            .onChange(of: settingsNav.requestsUserId) { closed, now in
+                guard now == nil, let closed else { return }
+                Task { @MainActor in focusedItem = .toggle("seerr.user.\(closed)") }
+            }
+            // Back from a page: focus returns to its row of the summary.
+            .onChange(of: settingsNav.requestsPage) { closed, now in
+                guard now == nil, let closed else { return }
+                Task { @MainActor in focusedItem = .toggle(hubRowId(closed)) }
+            }
+            .modifier(RequestAlerts(screen: self, isActive: true))
+        )
         #endif
+    }
+
+    /// The loaders and the account-change reset, on the OUTER container: a
+    /// page drawn in place (tvOS) replaces the summary, and a `.task` on the
+    /// summary would be cancelled — `loadPendingIfNeeded` then records
+    /// nothing, and the page would stay empty.
+    private func lifecycle<Content: View>(_ content: Content) -> some View {
+        content
+            .task(id: trigger) { await loadLinesIfNeeded() }
+            .task(id: myRequestsTrigger) { await loadMyRequestsIfNeeded() }
+            .task(id: pendingTrigger) { await loadPendingIfNeeded() }
+            .onAppear {
+                seedAddress()
+                refreshStoredKey()
+            }
+            .onChange(of: seerr.config?.url) { _, _ in seedAddress() }
+            // A report says what one address answered: editing the field to name
+            // another takes it away (recette R27).
+            .onChange(of: addressText) { _, typed in
+                if report != nil, !SeerrTestReport.stillApplies(typed: typed, testedAddress: reportAddress) {
+                    report = nil
+                    reportAddress = nil
+                }
+            }
+            .onChange(of: appState.activeAccountKey) { _, _ in resetForAccountChange() }
     }
 
     /// Something to re-read: one of the two lists is on the page.
@@ -204,7 +256,7 @@ struct RequestsSettingsScreen: View {
     /// Liquid Glass draws the bar item itself (no `.glass` style — root RULE).
     /// While a refresh runs — pulled or pressed — the arrow gives way to a
     /// spinner, as the tvOS row's « Actualisation… ».
-    private var refreshBarButton: some View {
+    fileprivate var refreshBarButton: some View {
         Button {
             Task { await refresh() }
         } label: {
@@ -220,82 +272,365 @@ struct RequestsSettingsScreen: View {
     }
     #endif
 
+    #if os(tvOS)
+    /// No pull on a remote: the row, first under the back button. Never
+    /// disabled while it runs (tvOS busy RULE): it keeps the focus while both
+    /// lists turn to their skeleton.
+    @ViewBuilder
+    private var tvRefreshRow: some View {
+        if showsRefresh {
+            panel {
+                actionRow(id: "seerr.refresh", icon: "arrow.clockwise",
+                          label: loc.localized(isRefreshing ? "seerr.settings.refreshing" : "seerr.settings.refresh"),
+                          isBusy: isRefreshing) {
+                    Task { await refresh() }
+                }
+            }
+        }
+    }
+    #endif
+
     private var page: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
-            if isVisible {
-                #if os(tvOS)
-                // No pull on a remote: the row, first under the back button.
-                // Never disabled while it runs (tvOS busy RULE): it keeps the
-                // focus while both lists turn to their skeleton.
-                if showsRefresh {
-                    panel {
-                        actionRow(id: "seerr.refresh", icon: "arrow.clockwise",
-                                  label: loc.localized(isRefreshing ? "seerr.settings.refreshing" : "seerr.settings.refresh"),
-                                  isBusy: isRefreshing) {
-                            Task { await refresh() }
-                        }
+            if !isVisible {
+                noteText(loc.localized("seerr.settings.unavailable"))
+            } else if appState.isAdministrator {
+                summary
+            } else {
+                memberPage
+            }
+        }
+    }
+
+    /// Not an admin: one page, as before the summary.
+    @ViewBuilder
+    private var memberPage: some View {
+        #if os(tvOS)
+        tvRefreshRow
+        #endif
+        if pendingTrigger != nil {
+            pendingSection
+        }
+        if myRequestsTrigger != nil {
+            myRequestsSection
+        }
+        connectionSection
+    }
+
+    // MARK: - Summary (admin)
+
+    private var summaryCard: SeerrSummaryCard {
+        SeerrSummaryCard.of(url: seerr.config?.url, connection: seerr.connection, usesDeviceKey: seerr.usesDeviceKey)
+    }
+
+    @ViewBuilder
+    private var summary: some View {
+        let card = summaryCard
+        #if os(tvOS)
+        tvRefreshRow
+        #endif
+        summaryCardView(card)
+        if card.showsRequestRows {
+            requestRows(lockedBy: card.lockedReasonKey.map { loc.localized($0) })
+        }
+        if card.showsAdministration {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                sectionHeader(loc.localized("seerr.hub.admin"))
+                panel {
+                    hubRow(.users, detail: usersDetail)
+                    divider
+                    hubRow(.server, detail: loc.localized("seerr.hub.server.detail"))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func summaryCardView(_ card: SeerrSummaryCard) -> some View {
+        switch card {
+        case .setup:
+            panel {
+                contentRow {
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                        Text(loc.localized("seerr.hub.welcome.title"))
+                            .font(rowLabelFont.weight(.semibold))
+                            .foregroundStyle(CinemaColor.onSurface)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(loc.localized("seerr.hub.welcome.text"))
+                            .font(rowDetailFont)
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                #endif
-                // Requests waiting ⇒ the page opens on « À valider » (the
-                // Réglages bubble brought the manager here). Decided on
-                // appear, so the sections never swap under the user.
-                if pendingFirst == true, pendingTrigger != nil {
-                    pendingSection
+                .accessibilityElement(children: .combine)
+                divider
+                actionRow(id: hubRowId(.server), icon: "gearshape", label: loc.localized("seerr.hub.welcome.action")) {
+                    openPage(.server)
                 }
+            }
+            noteText(loc.localized("seerr.hub.welcome.note"))
+        case .signIn:
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                panel {
+                    infoRow(icon: "person.crop.circle", text: loc.localized("seerr.hub.signedOut"),
+                            tint: CinemaColor.onSurfaceVariant)
+                    divider
+                    actionRow(id: "seerr.signIn", icon: "person.crop.circle.badge.checkmark",
+                              label: loc.localized("seerr.settings.signIn"), isBusy: isSigningIn) {
+                        Task { await signIn() }
+                    }
+                    .disabled(busy(isSigningIn))
+                }
+                noteText(loc.localized("seerr.hub.signIn.note"))
+            }
+        case .unavailable:
+            panel {
+                infoRow(icon: "exclamationmark.triangle", text: loc.localized("seerr.settings.connection.unavailable"),
+                        tint: CinemaColor.error)
+                divider
+                actionRow(id: "seerr.summary.retry", icon: "arrow.clockwise", label: loc.localized("action.retry"),
+                          isBusy: isRetryingSummary) {
+                    Task { await retrySummary() }
+                }
+                .disabled(busy(isRetryingSummary))
+            }
+        case .failure(let failure):
+            panel { failureRow(failure) }
+        case .connected(let user, let usesDeviceKey):
+            let name = user.displayName ?? appState.currentUser?.name ?? ""
+            panel {
+                if usesDeviceKey {
+                    infoRow(icon: "key.fill", text: loc.localized("seerr.settings.deviceKeyProfile", name))
+                } else {
+                    infoRow(icon: "checkmark.circle.fill", text: loc.localized("seerr.settings.connectedAs", name),
+                            tint: CinemaColor.success)
+                }
+            }
+        }
+    }
+
+    /// « À valider » and « Mes demandes ». Connected: each one only when it
+    /// applies (a Seerr manager; Seerr enabled for this account). Otherwise
+    /// both greyed with `lockedBy` — who manages requests is Seerr's to say.
+    @ViewBuilder
+    private func requestRows(lockedBy: String?) -> some View {
+        let isLocked = lockedBy != nil
+        let showsPending = isLocked || pendingTrigger != nil
+        let showsMine = isLocked ? seerr.config?.isEnabled == true : myRequestsTrigger != nil
+        if showsPending || showsMine {
+            panel {
+                if showsPending {
+                    hubRow(.pending, detail: lockedBy ?? pendingDetail, badge: isLocked ? nil : pendingBadge,
+                           isLocked: isLocked)
+                }
+                if showsPending, showsMine { divider }
+                if showsMine {
+                    hubRow(.mine, detail: lockedBy ?? myRequestsDetail, isLocked: isLocked)
+                }
+            }
+        }
+    }
+
+    private var pendingDetail: String {
+        switch pending.phase {
+        case .idle, .loading: loc.localized("seerr.hub.loading")
+        case .failed: loc.localized("seerr.settings.connection.unavailable")
+        case .loaded: Self.countDetail(pending.count, none: "seerr.hub.pending.none", some: "seerr.hub.pending.count", loc: loc)
+        }
+    }
+
+    /// The listing's own total, once it said it (nothing at 0).
+    private var pendingBadge: Int? {
+        pending.phase == .loaded ? pending.count : nil
+    }
+
+    private var myRequestsDetail: String {
+        switch myRequests.phase {
+        case .idle, .loading: loc.localized("seerr.hub.loading")
+        case .failed: loc.localized("seerr.settings.connection.unavailable")
+        case .loaded: Self.countDetail(myRequests.count, none: "seerr.hub.mine.none", some: "seerr.hub.mine.count", loc: loc)
+        }
+    }
+
+    /// « Rien en attente » at 0, else the counted line.
+    private static func countDetail(_ total: Int, none: String, some: String, loc: LocalizationManager) -> String {
+        if total < 1 { return loc.localized(none) }
+        return loc.counted(some, total)
+    }
+
+    private var usersDetail: String {
+        let lines = activation.lines
+        if lines.isEmpty { return loc.localized("seerr.hub.loading") }
+        return loc.localized("seerr.hub.users.detail", activation.enabledCount, lines.count)
+    }
+
+    private func hubRowId(_ target: RequestsPage) -> String { "seerr.hub.\(target.rawValue)" }
+
+    private func openPage(_ target: RequestsPage) {
+        #if os(tvOS)
+        settingsNav.requestsPage = target
+        #else
+        openedPage = target
+        #endif
+    }
+
+    /// One summary row: icon, title, what it holds, a count bubble, a
+    /// chevron. ONE focusable unit on tvOS; greyed and inert while Seerr
+    /// cannot be read (a data condition, so disabling is allowed there).
+    private func hubRow(_ target: RequestsPage, detail: String, badge: Int? = nil, isLocked: Bool = false) -> some View {
+        let id = hubRowId(target)
+        let title = loc.localized(target.titleKey)
+        return Button {
+            openPage(target)
+        } label: {
+            rowChrome(id: id) {
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    rowIcon(target.icon, tint: themeManager.accent)
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                        Text(title)
+                            .font(rowLabelFont)
+                            .foregroundStyle(CinemaColor.onSurface)
+                        Text(detail)
+                            .font(rowDetailFont)
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    #if os(tvOS)
+                    .padding(.vertical, CinemaSpacing.spacing2)
+                    #endif
+                    Spacer(minLength: CinemaSpacing.spacing3)
+                    // Never inverted: a focused row here is outlined, not
+                    // filled with the accent as the Réglages entry is.
+                    if let badge, let label = SeerrPendingModel.badgeLabel(badge) {
+                        SettingsCountBadge(label: label)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(rowDetailFont.weight(.semibold))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(isLocked)
+        .opacity(isLocked ? 0.5 : 1)
+        .modifier(RowFocus(id: id, focus: focusBinding))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(detail)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    // MARK: - Pages (admin)
+
+    /// One page of the summary. iOS wraps it (`subpage`); tvOS draws it in
+    /// place, its title first since the category's back row only says
+    /// « ‹ Demandes ».
+    fileprivate func subpageContent(_ target: RequestsPage) -> some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing5) {
+            #if os(tvOS)
+            Text(loc.localized(target.titleKey))
+                .font(CinemaFont.headline(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+                .accessibilityAddTraits(.isHeader)
+            if target == .pending || target == .mine {
+                tvRefreshRow
+            }
+            #endif
+            switch target {
+            case .pending:
+                if pendingTrigger != nil {
+                    pendingContent
+                } else {
+                    noteText(loc.localized(summaryCard.lockedReasonKey ?? "seerr.hub.locked.signIn"))
+                }
+            case .mine:
                 if myRequestsTrigger != nil {
-                    myRequestsSection
+                    myRequestsContent
+                } else {
+                    noteText(loc.localized(summaryCard.lockedReasonKey ?? "seerr.hub.locked.signIn"))
                 }
-                if pendingFirst != true, pendingTrigger != nil {
-                    pendingSection
+            case .users:
+                if seerr.config?.url != nil {
+                    usersBlock
+                } else {
+                    noteText(loc.localized("seerr.settings.connection.noAddress"))
                 }
+            case .server:
                 connectionSection
-                if appState.isAdministrator {
-                    configurationSection
-                    deviceSection
+                configurationSection
+                deviceSection
+            }
+        }
+    }
+
+    #if os(iOS)
+    /// The pushed page: its own scroll view, title, pull and bar button (the
+    /// two lists only), the account page's destination (« Qui peut
+    /// demander »), and the confirmations — the summary under it is covered.
+    fileprivate func subpage(_ target: RequestsPage) -> some View {
+        let isList = target == .pending || target == .mine
+        return ScrollView(showsIndicators: false) {
+            subpageContent(target)
+                .padding(.horizontal, CinemaSpacing.spacing3)
+                .padding(.bottom, CinemaSpacing.spacing8)
+        }
+        .background(CinemaColor.surface.ignoresSafeArea())
+        .navigationTitle(loc.localized(target.titleKey))
+        .navigationBarTitleDisplayMode(.large)
+        .modifier(PullToRefresh(action: isList ? { Task { await refresh() } } : nil))
+        .navigationDestination(item: $openedUser) { opened in
+            SeerrAccountPage(activation: activation, userId: opened.id)
+        }
+        .toolbar {
+            if isList, showsRefresh {
+                ToolbarItem(placement: .topBarTrailing) { refreshBarButton }
+            }
+        }
+        .modifier(RequestAlerts(screen: self, isActive: true))
+    }
+    #endif
+
+    // MARK: - Confirmations
+
+    /// « Tout désactiver », « Refuser », « Annuler la demande ». `isActive`
+    /// false leaves them to the page on top (iOS: the summary under a pushed
+    /// page presents nothing).
+    fileprivate struct RequestAlerts: ViewModifier {
+        let screen: RequestsSettingsScreen
+        let isActive: Bool
+
+        func body(content: Content) -> some View {
+            screen.withAlerts(content, isActive: isActive)
+        }
+    }
+
+    fileprivate func withAlerts<Content: View>(_ content: Content, isActive: Bool) -> some View {
+        content
+            .alert(loc.localized("seerr.settings.disableAll"),
+                   isPresented: Binding(get: { isActive && showsDisableAllConfirm },
+                                        set: { if !$0 { showsDisableAllConfirm = false } })) {
+                Button(loc.localized("seerr.settings.disableAll"), role: .destructive) {
+                    Task { await disableAll() }
                 }
-            } else {
-                noteText(loc.localized("seerr.settings.unavailable"))
+                Button(loc.localized("action.cancel"), role: .cancel) {}
+            } message: {
+                Text(loc.localized("seerr.settings.disableAll.confirm"))
             }
-        }
-        .task(id: trigger) { await loadLinesIfNeeded() }
-        .task(id: myRequestsTrigger) { await loadMyRequestsIfNeeded() }
-        .task(id: pendingTrigger) { await loadPendingIfNeeded() }
-        .onAppear {
-            if pendingFirst == nil { pendingFirst = (seerr.pendingBadgeCount ?? 0) > 0 }
-            seedAddress()
-            refreshStoredKey()
-        }
-        .onChange(of: seerr.config?.url) { _, _ in seedAddress() }
-        // A report says what one address answered: editing the field to name
-        // another takes it away (recette R27).
-        .onChange(of: addressText) { _, typed in
-            if report != nil, !SeerrTestReport.stillApplies(typed: typed, testedAddress: reportAddress) {
-                report = nil
-                reportAddress = nil
+            .alert(declineCandidate.map { loc.localized("seerr.pending.decline.confirm", requestTitle($0)) } ?? "",
+                   isPresented: Binding(get: { isActive && declineCandidate != nil },
+                                        set: { if !$0 { declineCandidate = nil } }),
+                   presenting: declineCandidate) { row in
+                Button(loc.localized("seerr.pending.decline"), role: .destructive) { settle(row, .decline) }
+                Button(loc.localized("action.cancel"), role: .cancel) {}
             }
-        }
-        .onChange(of: appState.activeAccountKey) { _, _ in resetForAccountChange() }
-        .alert(loc.localized("seerr.settings.disableAll"), isPresented: $showsDisableAllConfirm) {
-            Button(loc.localized("seerr.settings.disableAll"), role: .destructive) {
-                Task { await disableAll() }
+            .alert(cancelCandidate.map { loc.localized("seerr.myRequests.cancel.confirm", requestTitle($0)) } ?? "",
+                   isPresented: Binding(get: { isActive && cancelCandidate != nil },
+                                        set: { if !$0 { cancelCandidate = nil } }),
+                   presenting: cancelCandidate) { row in
+                Button(loc.localized("seerr.myRequests.cancel"), role: .destructive) { withdraw(row) }
+                Button(loc.localized("seerr.myRequests.cancel.keep"), role: .cancel) {}
             }
-            Button(loc.localized("action.cancel"), role: .cancel) {}
-        } message: {
-            Text(loc.localized("seerr.settings.disableAll.confirm"))
-        }
-        .alert(declineCandidate.map { loc.localized("seerr.pending.decline.confirm", requestTitle($0)) } ?? "",
-               isPresented: Binding(get: { declineCandidate != nil }, set: { if !$0 { declineCandidate = nil } }),
-               presenting: declineCandidate) { row in
-            Button(loc.localized("seerr.pending.decline"), role: .destructive) { settle(row, .decline) }
-            Button(loc.localized("action.cancel"), role: .cancel) {}
-        }
-        .alert(cancelCandidate.map { loc.localized("seerr.myRequests.cancel.confirm", requestTitle($0)) } ?? "",
-               isPresented: Binding(get: { cancelCandidate != nil }, set: { if !$0 { cancelCandidate = nil } }),
-               presenting: cancelCandidate) { row in
-            Button(loc.localized("seerr.myRequests.cancel"), role: .destructive) { withdraw(row) }
-            Button(loc.localized("seerr.myRequests.cancel.keep"), role: .cancel) {}
-        }
     }
 
     // MARK: - Mes demandes
@@ -817,10 +1152,6 @@ struct RequestsSettingsScreen: View {
             if let report {
                 reportView(report)
             }
-
-            if seerr.config?.url != nil {
-                usersBlock
-            }
         }
     }
 
@@ -838,10 +1169,8 @@ struct RequestsSettingsScreen: View {
 
     @ViewBuilder
     private var usersBlock: some View {
+        // No header: the page's title says it, and its summary row the count.
         let lines = activation.lines
-        sectionHeader(loc.localized("seerr.settings.whoCanRequest", activation.enabledCount, lines.count))
-            .padding(.top, CinemaSpacing.spacing3)
-
         if lines.isEmpty {
             if isLoadingLines {
                 ProgressView()
@@ -992,10 +1321,12 @@ struct RequestsSettingsScreen: View {
     }
 
     private func resetForAccountChange() {
-        // Another account's user page is never left on screen.
+        // Another account's pages are never left on screen.
         openedUser = nil
+        openedPage = nil
         #if os(tvOS)
         settingsNav.requestsUserId = nil
+        settingsNav.requestsPage = nil
         #endif
         activation = SeerrActivationModel()
         loadedTrigger = nil
@@ -1003,7 +1334,6 @@ struct RequestsSettingsScreen: View {
         myRequestsLoadedFor = nil
         pending = SeerrPendingModel()
         pendingLoadedFor = nil
-        pendingFirst = nil
         isRetryingMyRequests = false
         isRetryingPending = false
         report = nil
@@ -1132,6 +1462,16 @@ struct RequestsSettingsScreen: View {
         if let failure = await seerr.signInToSavedAddress(appState: appState) {
             showFailure(failure)
         }
+    }
+
+    /// The summary's « Réessayer »: the identity read again; still nothing
+    /// from Seerr ⇒ the connection test's message for it.
+    private func retrySummary() async {
+        guard !isRetryingSummary else { return }
+        isRetryingSummary = true
+        defer { isRetryingSummary = false }
+        await seerr.reload(appState: appState)
+        if seerr.connection == .unavailable { showFailure(.unreachable) }
     }
 
     private func showFailure(_ failure: SeerrTestFailure) {
@@ -1393,6 +1733,63 @@ struct RequestsSettingsScreen: View {
 /// The account page open over Réglages → Demandes (a Jellyfin user id).
 struct OpenedSeerrUser: Hashable, Identifiable {
     let id: String
+}
+
+/// A page of an admin's Réglages → Demandes summary (layout A).
+enum RequestsPage: String, Hashable, Identifiable {
+    case pending, mine, users, server
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .pending: "seerr.settings.section.pending"
+        case .mine: "seerr.settings.section.myRequests"
+        case .users: "seerr.hub.users"
+        case .server: "seerr.hub.server"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .pending: "tray.full"
+        case .mine: "clock"
+        case .users: "person.2"
+        case .server: "server.rack"
+        }
+    }
+}
+
+#if os(iOS)
+/// A page pushed over the summary. A standalone view (root RULE: a pushed
+/// destination built by a method never redraws on an `@Observable` change):
+/// the screen's section runs inside THIS body, so its reads of the shared
+/// models are tracked here, and a change of the screen's own state redraws
+/// the screen, which hands the destination a fresh copy.
+private struct RequestsSubpageHost: View {
+    let screen: RequestsSettingsScreen
+    let page: RequestsPage
+    /// Never read: a text-size change must redraw the page (its fonts are
+    /// point sizes computed in the body, as on the screen).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        screen.subpage(page)
+    }
+}
+#endif
+
+/// `.refreshable` only where there is something to re-read.
+private struct PullToRefresh: ViewModifier {
+    let action: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let action {
+            content.refreshable { action() }
+        } else {
+            content
+        }
+    }
 }
 
 /// tvOS: a row is ONE focusable unit in the screen's lane, without the

@@ -2102,6 +2102,31 @@ struct SeerrActivationTests {
         #expect(Access.of(usersManager, me: usersManager) == .ownAccount)
     }
 
+    @Test("the admin summary's card, and what it lets under it")
+    func summaryCard() {
+        let url = URL(string: "http://seerr.local:5055")
+        typealias Card = SeerrSummaryCard
+        // No address: the welcome card alone.
+        let setup = Card.of(url: nil, connection: .connected(alice), usesDeviceKey: false)
+        #expect(setup == .setup)
+        #expect(!setup.showsRequestRows && !setup.showsAdministration)
+        // Signed out / not answering: the rows greyed, with the reason.
+        let signIn = Card.of(url: url, connection: .notConnected, usesDeviceKey: false)
+        #expect(signIn == .signIn)
+        #expect(signIn.showsRequestRows && signIn.lockedReasonKey == "seerr.hub.locked.signIn")
+        let down = Card.of(url: url, connection: .unavailable, usesDeviceKey: true)
+        #expect(down == .unavailable && down.lockedReasonKey == "seerr.hub.locked.unavailable")
+        // Key mode failures: the fix in the card, no request rows, admin open.
+        let notLinked = Card.of(url: url, connection: .notLinked, usesDeviceKey: true)
+        #expect(notLinked == .failure(.notInSeerr))
+        #expect(!notLinked.showsRequestRows && notLinked.showsAdministration)
+        #expect(Card.of(url: url, connection: .keyRefused, usesDeviceKey: true) == .failure(.keyRefused))
+        // Connected: rows open.
+        let connected = Card.of(url: url, connection: .connected(alice), usesDeviceKey: true)
+        #expect(connected == .connected(alice, usesDeviceKey: true))
+        #expect(connected.showsRequestRows && connected.lockedReasonKey == nil && connected.showsAdministration)
+    }
+
     @Test("the line kind truth table")
     func lineKinds() {
         let request = SeerrUser(id: SeerrUserID(rawValue: 2), permissions: .request)
