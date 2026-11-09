@@ -190,6 +190,18 @@ struct AppNavigation: View {
         whatsNewPages = []
     }
 
+    /// Debug-only diagnostics (`VerboseDiagnostics`) on exactly where the
+    /// Debug page shows — a Debug build, or a test environment the App Store
+    /// has CONFIRMED (TestFlight answers `.sandbox`) — and nowhere else.
+    private func updateVerboseDiagnostics() {
+        let environment = earlyAdopter.transaction?.environment
+        let isDebugBuild = SettingsCategory.isDebugBuild
+        VerboseDiagnostics.setEnabled(
+            SettingsCategory.showsDebug(environment: environment, isDebugBuild: isDebugBuild),
+            environment: isDebugBuild ? "debug-build" : (environment?.rawValue ?? "unknown")
+        )
+    }
+
     var body: some View {
         ZStack {
             Group {
@@ -569,6 +581,10 @@ struct AppNavigation: View {
             // `AppState.apiClient` is the same instance for the process's life,
             // `reconnect` repointing it in place rather than replacing it.
             DiagnosticsUploader.client = appState.apiClient
+            // Debug-only diagnostics follow the Debug page's own decision.
+            // A Debug build knows at once; a TestFlight build once the App
+            // Store has answered (the `onChange` below).
+            updateVerboseDiagnostics()
             // Advertise this device as a remote-control target and start
             // listening. Idempotent — `apply` no-ops when nothing changed, so
             // the observers below can call it freely.
@@ -666,7 +682,19 @@ struct AppNavigation: View {
             // just closing the socket would leave the stale declaration standing.
             remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: enabled)
         }
+        .onChange(of: earlyAdopter.transaction?.environment) { _, _ in
+            // The App Store's verified answer arrives after launch: that is
+            // when a TestFlight build learns it may log more.
+            updateVerboseDiagnostics()
+        }
         .onChange(of: scenePhase) { _, newPhase in
+            VerboseDiagnostics.notePhase(String(describing: newPhase))
+            if newPhase == .background {
+                // Debug / TestFlight only: a fault this launch had already
+                // reported is followed by what came after it, before the user
+                // can kill the app and take those minutes with it.
+                DiagnosticsUploader.noteEnteredBackground()
+            }
             if newPhase == .active {
                 seasonal.reevaluate()
                 // Synchronize the iCloud key-value store on every return to
