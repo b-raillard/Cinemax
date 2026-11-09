@@ -17,6 +17,10 @@ final class NetworkMonitor {
 
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
+            // Debug / TestFlight builds only: every path CHANGE (Wi-Fi ⇄
+            // cellular, constrained, lost) reaches the log the uploaded
+            // diagnostics carry. A no-op for the App Store build.
+            VerboseDiagnostics.notePath(path)
             let online = path.status == .satisfied
             Task { @MainActor [weak self] in
                 self?.isOnline = online
