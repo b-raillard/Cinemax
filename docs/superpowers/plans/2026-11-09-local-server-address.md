@@ -192,6 +192,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - `probeRejectsPublicConnectedAddress`: the same body with `connectedAddress: "86.245.10.3"` → `.answered("S", false)`.
     - `probeRejectsNon200`: statuses 301, 401 and 500 → `.failed(localNetworkDenied: false)`.
     - `probeRejectsBodyWithoutId`: `#"{"ServerName":"NAS"}"#` → `.failed(localNetworkDenied: false)`.
+    - `probeUnknownAddressIsNotLocal`: the valid body with `connectedAddress: nil` (a `.local` name with no metrics) → `.answered(serverID: "S", connectedAddressIsLocal: false)`. An unclassified machine never counts as local.
   - `@Suite("Adresse locale — réécriture d'URL")`:
     - `rewriteNoBasePaths`: `rewrite("https://movies.nivadax.net/Items/1/Images/Primary?tag=t", identityBase: "https://movies.nivadax.net", dialBase: "http://192.168.1.128:8899")` gives `http://192.168.1.128:8899/Items/1/Images/Primary?tag=t`.
     - `rewriteIdentityBasePathToRoot`: identity `https://box.example.org/jellyfin`, dial `http://192.168.1.128:8096`. `https://box.example.org/jellyfin/Items/1/Images/Primary` gives `http://192.168.1.128:8096/Items/1/Images/Primary`.
@@ -369,6 +370,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - Decide with `expectedServerID: entry.serverID`.
     - Drop the result when `activeServerId` changed or a newer evaluation started (generation counter).
     - Then `apply`.
+  - **One probe per switch.** `dialURL(for:)` memoises its last decision per `(entry id, path generation)` for 10 s; `pathChanged()` bumps the generation. `evaluate(.serverChange)` for that same entry reuses the memo instead of probing again after the switch validated on it. Test: `switchReusesTargetProbe` — `dialURL(for: entry)` and then `evaluate(.serverChange)` call the probe closure exactly once.
   - `apply(dial:)`:
     - `apiClient.setDialURL(dial)`
     - `ImageRouteTable.shared.set(identity: entry.url, dial: dial)`
