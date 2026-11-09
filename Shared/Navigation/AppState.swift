@@ -300,15 +300,8 @@ final class AppState {
         // The parental cap travels with the session: it lives in app-private
         // `UserDefaults`, which the extensions cannot read, so without this the
         // widget and the Top Shelf display titles the app itself hides (#230).
-        ExtensionSessionBridge.publish(
-            serverURL: serverURL,
-            accessToken: accessToken,
-            userId: currentUserId,
-            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
-            // A self-signed server's approved certificate: the pins live in
-            // the app-private Keychain group the extensions cannot read.
-            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
-        )
+        // One publish body for both paths: `republishExtensionSession()`.
+        republishExtensionSession()
         guard let id = currentUserId else {
             if currentUser != nil { currentUser = nil }
             if isAdministrator { isAdministrator = false }
@@ -827,6 +820,10 @@ final class AppState {
         if let serverID { adoptServerID(id: id, serverID: serverID) }
         if let old = before.localURL { forgetLocalPinIfUnused(old) }
         if id == activeServerId, url != nil || before.localURL != nil { onLocalAddressChanged() }
+        // The extensions read the address, the id and the LAN pin from the
+        // shared blob, whose only other publishers run at sign-in and on
+        // foreground. Idempotent: an unchanged session costs nothing.
+        if id == activeServerId { republishExtensionSession() }
     }
 
     /// A LAN pin outliving its address would pre-approve whatever answers on
@@ -1019,7 +1016,12 @@ final class AppState {
     /// `publish` is already idempotent (in-process memo + field-wise Keychain
     /// compare), and the cap is part of `Session`, so an unchanged cap costs
     /// nothing and a changed one is written and pokes both extensions.
+    ///
+    /// Also the body `refreshCurrentUser()` publishes through, and called when
+    /// the ACTIVE server's LAN address changes (`commitLocalAddress`).
     func republishExtensionSession() {
+        let entry = activeEntryIfAny
+        let localURL = entry?.localURL
         ExtensionSessionBridge.publish(
             serverURL: serverURL,
             accessToken: accessToken,
@@ -1027,7 +1029,13 @@ final class AppState {
             maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
             // A self-signed server's approved certificate: the pins live in
             // the app-private Keychain group the extensions cannot read.
-            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
+            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:)),
+            // « At home, the LAN first » in the extensions too: the address,
+            // the id their probe must find there, and the LAN certificate's
+            // own pin (https only, keyed on the LAN host:port).
+            localServerURL: localURL,
+            serverID: entry?.serverID,
+            localPinnedCertificateSHA256: localURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
         )
     }
 
@@ -1082,7 +1090,10 @@ final class AppState {
         }
 
         keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
-        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)
+        ExtensionSessionBridge.publish(
+            serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil,
+            localServerURL: nil, serverID: nil, localPinnedCertificateSHA256: nil
+        )
         serverTransitionGeneration &+= 1
         isAuthenticated = false
         currentUserId = nil

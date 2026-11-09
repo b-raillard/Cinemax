@@ -101,11 +101,14 @@ private enum IntentRouter {
 /// The cross-server guard, applied a second time at perform time: a shortcut
 /// saved against another server must fail rather than act on whatever happens
 /// to be active now.
+///
+/// Reads the active context alone: it needs the server id, not a client, so it
+/// builds none (and runs no route probe).
 private func activeServerItemId(for entity: MediaItemEntity) throws -> String {
-    guard let session = IntentSessionProvider.makeSession() else {
+    guard let context = IntentSessionProvider.resolveContext(keychain: KeychainService()) else {
         throw CinemaxIntentError.notSignedIn
     }
-    guard let parsed = entity.entityID, parsed.belongs(to: session.context.serverId) else {
+    guard let parsed = entity.entityID, parsed.belongs(to: context.serverId) else {
         throw CinemaxIntentError.itemUnavailable
     }
     return parsed.itemId
@@ -121,7 +124,7 @@ struct ResumePlaybackIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult {
         try IntentProGate.admit()
-        guard let session = IntentSessionProvider.makeSession() else {
+        guard let session = await IntentSessionProvider.makeSession() else {
             throw CinemaxIntentError.notSignedIn
         }
         let resume = try? await session.api.getResumeItems(userId: session.context.userId, limit: 1)
@@ -159,7 +162,9 @@ struct PlayMediaItemIntent: AppIntent {
 /// corrected rather than dead-ending.
 @MainActor
 private func playBestMatch(for spokenTitle: String) async throws {
-    guard IntentSessionProvider.makeSession() != nil else {
+    // A signed-in check only: the context alone, no client, no route probe
+    // (the query below builds its own session).
+    guard IntentSessionProvider.resolveContext(keychain: KeychainService()) != nil else {
         throw CinemaxIntentError.notSignedIn
     }
     if let best = try await MediaItemQuery().entities(matching: spokenTitle).first {

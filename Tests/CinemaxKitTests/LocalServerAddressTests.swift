@@ -289,6 +289,128 @@ struct LocalNetworkReachTests {
     }
 }
 
+/// The widget's and the Top Shelf's own probe (`ExtensionServerRoute.swift`,
+/// shared by source — the app targets carry it only for these tests).
+@Suite("Adresse locale — extensions")
+struct ExtensionServerRouteTests {
+    private let body = Data(#"{"Id":"S","ServerName":"NAS"}"#.utf8)
+    private let pub = URL(string: "https://jelly.example.com")!
+    private let lan = URL(string: "https://192.168.1.128:8920")!
+
+    @Test func extensionProbeTimeout() {
+        #expect(ExtensionServerRoute.probeTimeout == 1.0)
+    }
+
+    @Test func extensionAcceptsMatchingLocal() {
+        #expect(ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "S", connectedAddress: "192.168.1.128"))
+        #expect(ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "S", connectedAddress: "::ffff:192.168.1.128"))
+    }
+
+    @Test func extensionRejectsMismatch() {
+        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "OTHER", connectedAddress: "192.168.1.128"))
+    }
+
+    @Test func extensionRejectsPublicAddress() {
+        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "S", connectedAddress: "86.245.10.3"))
+        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "S", connectedAddress: "100.64.0.1"))
+        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "S", connectedAddress: nil))
+    }
+
+    @Test func extensionRejectsNon200AndBodyWithoutId() {
+        for status in [301, 401, 500] {
+            #expect(!ExtensionServerRoute.accepts(statusCode: status, body: body, serverID: "S", connectedAddress: "192.168.1.128"))
+        }
+        let noId = Data(#"{"ServerName":"NAS"}"#.utf8)
+        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: noId, serverID: "S", connectedAddress: "192.168.1.128"))
+        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: Data(#"{"Id":""}"#.utf8), serverID: "", connectedAddress: "192.168.1.128"))
+    }
+
+    /// All three return at once, without a request.
+    @Test func extensionNoLocalAddressIsPublic() async {
+        #expect(await ExtensionServerRoute.dialURL(publicURL: pub, localURL: nil, serverID: "S", localPin: nil) == pub)
+        #expect(await ExtensionServerRoute.dialURL(publicURL: pub, localURL: lan, serverID: nil, localPin: nil) == pub)
+        // The LAN address is https only (amendment).
+        let http = URL(string: "http://192.168.1.128:8096")!
+        #expect(await ExtensionServerRoute.dialURL(publicURL: pub, localURL: http, serverID: "S", localPin: nil) == pub)
+    }
+
+    /// Once dialling the LAN, the session's fetches validate with the LAN pin.
+    @Test func extensionDialingSwapsPin() {
+        let local = ExtensionServerRoute.endpoint(publicURL: pub, publicPin: "ab12", dialURL: lan, localPin: "cd34")
+        #expect(local == .init(serverURL: lan, pinnedCertificateSHA256: "cd34"))
+        let internet = ExtensionServerRoute.endpoint(publicURL: pub, publicPin: "ab12", dialURL: pub, localPin: "cd34")
+        #expect(internet == .init(serverURL: pub, pinnedCertificateSHA256: "ab12"))
+    }
+
+    @Test func extensionPinKeyIsTheLANHostPort() throws {
+        let pin = try #require(ExtensionServerTrust.pin(serverURL: lan, fingerprint: "cd34"))
+        #expect(pin.trustKey == "192.168.1.128:8920")
+    }
+}
+
+/// App Intents: after `reconnect`, the headless client dials the LAN when the
+/// same probe and policy as the app's say so.
+@Suite("Adresse locale — App Intents")
+struct IntentRouteTests {
+    private final class Calls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var timeouts: [TimeInterval] = []
+        func record(_ timeout: TimeInterval) { lock.lock(); timeouts.append(timeout); lock.unlock() }
+        var recorded: [TimeInterval] { lock.lock(); defer { lock.unlock() }; return timeouts }
+    }
+
+    private func context(localURL: URL?, serverID: String?) -> IntentSessionContext {
+        IntentSessionContext(
+            serverId: "entry", serverURL: URL(string: "https://jelly.example.com")!,
+            accessToken: "t", userId: "u", localURL: localURL, serverID: serverID)
+    }
+
+    private let lan = URL(string: "https://192.168.1.128:8920")!
+
+    @Test func intentDialsLANWhenProbeMatches() async {
+        let calls = Calls()
+        let dial = await IntentSessionProvider.dialURL(for: context(localURL: lan, serverID: "S")) { _, timeout in
+            calls.record(timeout)
+            return .answered(serverID: "S", connectedAddressIsLocal: true)
+        }
+        #expect(dial == lan)
+        #expect(calls.recorded == [LocalRouteProbe.launchTimeout])
+    }
+
+    @Test func intentStaysPublicOnMismatchOrNonLocal() async {
+        let other = await IntentSessionProvider.dialURL(for: context(localURL: lan, serverID: "S")) { _, _ in
+            .answered(serverID: "OTHER", connectedAddressIsLocal: true)
+        }
+        #expect(other == nil)
+        let remote = await IntentSessionProvider.dialURL(for: context(localURL: lan, serverID: "S")) { _, _ in
+            .answered(serverID: "S", connectedAddressIsLocal: false)
+        }
+        #expect(remote == nil)
+    }
+
+    @Test func intentContextCarriesLocalAddress() throws {
+        let keychain = MockKeychain()
+        keychain.savedServers = [ServerEntry(
+            id: "a", name: "NAS", url: URL(string: "https://jelly.example.com")!, serverID: "S",
+            accessToken: "t", userId: "u", localURL: lan)]
+        keychain.savedActiveServerId = "a"
+        let context = try #require(IntentSessionProvider.resolveContext(keychain: keychain))
+        #expect(context.localURL == lan)
+        #expect(context.serverID == "S")
+        #expect(context.serverURL == URL(string: "https://jelly.example.com")!)
+    }
+
+    @Test func intentNoLocalAddressMakesNoProbe() async {
+        let calls = Calls()
+        let dial = await IntentSessionProvider.dialURL(for: context(localURL: nil, serverID: "S")) { _, timeout in
+            calls.record(timeout)
+            return .answered(serverID: "S", connectedAddressIsLocal: true)
+        }
+        #expect(dial == nil)
+        #expect(calls.recorded.isEmpty)
+    }
+}
+
 @Suite("Adresse locale — enregistrement")
 struct LocalAddressSavePolicyTests {
     private func decide(

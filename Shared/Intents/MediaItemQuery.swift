@@ -32,7 +32,7 @@ struct MediaItemQuery: EntityStringQuery {
     /// active server are dropped, and App Intents surfaces that as an
     /// unresolvable parameter.
     func entities(for identifiers: [String]) async throws -> [MediaItemEntity] {
-        guard let session = IntentSessionProvider.makeSession() else { return [] }
+        guard let session = await IntentSessionProvider.makeSession() else { return [] }
         let serverId = session.context.serverId
 
         var resolved: [MediaItemEntity] = []
@@ -52,7 +52,7 @@ struct MediaItemQuery: EntityStringQuery {
     // MARK: Matching a spoken or typed title
 
     func entities(matching string: String) async throws -> [MediaItemEntity] {
-        guard let session = IntentSessionProvider.makeSession() else { return [] }
+        guard let session = await IntentSessionProvider.makeSession() else { return [] }
         let query = LibrarySearchRanker.sanitize(string)
         guard !query.isEmpty else { return [] }
 
@@ -76,7 +76,7 @@ struct MediaItemQuery: EntityStringQuery {
     /// things someone building a shortcut is overwhelmingly likely to want.
     /// Cheap: no search, just the two rails the home screen already loads.
     func suggestedEntities() async throws -> [MediaItemEntity] {
-        guard let session = IntentSessionProvider.makeSession() else { return [] }
+        guard let session = await IntentSessionProvider.makeSession() else { return [] }
         let serverId = session.context.serverId
         let userId = session.context.userId
 

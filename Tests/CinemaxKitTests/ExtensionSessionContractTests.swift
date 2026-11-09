@@ -106,6 +106,42 @@ struct ExtensionSessionContractTests {
         #expect(try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: legacy).pinnedCertificateSHA256 == nil)
     }
 
+    /// Adresse locale (2026-11-09) : l'adresse LAN, l'`Id` Jellyfin et
+    /// l'empreinte du certificat LAN voyagent avec la session. Les trois copies
+    /// décodent par NOM de propriété : ces trois chaînes exactes sont le contrat.
+    @Test("L'adresse locale, l'Id serveur et l'épingle LAN font l'aller-retour")
+    func blobCarriesLocalAddress() throws {
+        let session = ExtensionSessionBridge.Session(
+            serverURL: URL(string: "https://jelly.example.com")!, accessToken: "t", userId: "u",
+            localServerURL: URL(string: "https://192.168.1.128:8920")!,
+            serverID: "S",
+            localPinnedCertificateSHA256: "cd34")
+        let data = try JSONEncoder().encode(session)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["localServerURL"] as? String == "https://192.168.1.128:8920")
+        #expect(object["serverID"] as? String == "S")
+        #expect(object["localPinnedCertificateSHA256"] as? String == "cd34")
+        // The exact wire shape an extension reads back.
+        let wire = Data("""
+        {"serverURL":"https://jelly.example.com","accessToken":"t","userId":"u",\
+        "localServerURL":"https://192.168.1.128:8920","serverID":"S","localPinnedCertificateSHA256":"cd34"}
+        """.utf8)
+        let back = try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: wire)
+        #expect(back == session)
+    }
+
+    @Test("Un blob d'avant l'adresse locale se décode, les trois champs absents")
+    func oldBlobDecodes() throws {
+        let legacy = Data("""
+        {"serverURL":"https://jelly.example.com","accessToken":"t","userId":"u","maxContentAge":12,"pinnedCertificateSHA256":"ab12"}
+        """.utf8)
+        let session = try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: legacy)
+        #expect(session.localServerURL == nil)
+        #expect(session.serverID == nil)
+        #expect(session.localPinnedCertificateSHA256 == nil)
+        #expect(session.pinnedCertificateSHA256 == "ab12")
+    }
+
     @Test("La forme de fil AVEC plafond se décode telle que les extensions la lisent")
     func decodesWireShapeWithCap() throws {
         let json = Data("""
