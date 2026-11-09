@@ -67,6 +67,21 @@ public protocol ServerAPI: Sendable {
     /// construction — see the implementation for why a refusal is a legitimate
     /// server configuration rather than an error to surface.
     func uploadDiagnostics(_ document: String) async -> String?
+
+    /// Repoints the TRANSPORT at `dialURL` — the server's local address while
+    /// the route owner has chosen it — keeping the identity URL, the token and
+    /// the learned version. `nil` = dial the identity. Every `reconnect` and
+    /// `connectToServer(url:)` resets it to `nil`.
+    func setDialURL(_ dialURL: URL?)
+
+    /// The base the client dials now (the identity when no dial URL is set),
+    /// `nil` before any connection.
+    func currentDialURL() -> URL?
+
+    /// `connectToServer(url:)` probing through `dialURL` (`nil` = `url`):
+    /// `url` stays the server's identity, and the returned `ServerInfo.url`
+    /// is `url` whatever was dialled.
+    func connectToServer(url: URL, dialURL: URL?) async throws -> ServerInfo
 }
 
 public extension ServerAPI {
@@ -89,6 +104,18 @@ public extension ServerAPI {
     /// Default `nil`: a mock has no server to upload to, and every caller must
     /// already treat "no file name" as the ordinary outcome.
     func uploadDiagnostics(_ document: String) async -> String? { nil }
+
+    /// Default no-op: a mock has no transport to repoint.
+    func setDialURL(_ dialURL: URL?) {}
+
+    /// Default `nil`: a mock dials nothing.
+    func currentDialURL() -> URL? { nil }
+
+    /// Default: a conformer without a separate transport just connects to the
+    /// identity.
+    func connectToServer(url: URL, dialURL: URL?) async throws -> ServerInfo {
+        try await connectToServer(url: url)
+    }
 }
 
 /// Authentication, user listing, and active-session queries.

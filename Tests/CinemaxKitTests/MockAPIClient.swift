@@ -120,8 +120,25 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var learnedVersion: ServerVersion?
     func knownServerVersion() -> ServerVersion? { recordLock.withLock { learnedVersion } }
 
+    /// Every `setDialURL` the code performed, in order (`nil` = back to the
+    /// identity).
+    private(set) var dialURLs: [URL?] = []
+    /// The dial URL in force: the last `setDialURL`, reset by `reconnect` —
+    /// the real client's contract.
+    private var dialURL: URL?
+
+    func setDialURL(_ dialURL: URL?) {
+        recordLock.withLock {
+            dialURLs.append(dialURL)
+            self.dialURL = dialURL
+        }
+    }
+
+    func currentDialURL() -> URL? { recordLock.withLock { dialURL } }
+
     func reconnect(url: URL, accessToken: String) {
         recordLock.withLock {
+            dialURL = nil
             if reconnectedURLs.last != url { learnedVersion = nil }
             reconnectCalled = true
             reconnectedURLs.append(url)
