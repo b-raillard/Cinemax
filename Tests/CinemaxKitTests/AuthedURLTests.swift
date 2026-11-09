@@ -153,40 +153,59 @@ struct VLCPinnedHostProxyTests {
     }
 }
 
-/// R13 — AVPlayer cannot honour a pin: on a LAN dial the native engine plays
-/// the IDENTITY (public) URL of the same stream, never with trust disabled.
+/// R13 / R16 — AVPlayer cannot honour a pin: a stream on the server's LAN
+/// address plays from the IDENTITY (public) URL, never with trust disabled —
+/// whatever the route dialled now.
 @Suite("Native engine plays the identity")
 struct NativeStreamRouteTests {
-    @Test("a stream on the LAN dial is rewritten to the identity, path and query kept")
+    private let identity = URL(string: "https://movies.nivadax.net")!
+    private let local = URL(string: "https://192.168.1.128:8920")!
+
+    @Test("a stream on the LAN address is rewritten to the identity, path and query kept")
     func lanStreamPlaysIdentity() throws {
-        let identity = try #require(URL(string: "https://movies.nivadax.net"))
-        let dial = try #require(URL(string: "https://192.168.1.128:8920"))
         let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/master.m3u8?PlaySessionId=abc&ApiKey=t"))
-        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: identity, dial: dial)
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: identity, local: local)
                 == URL(string: "https://movies.nivadax.net/Videos/1/master.m3u8?PlaySessionId=abc&ApiKey=t"))
     }
 
     @Test("identity and LAN base paths are both respected")
     func basePaths() throws {
-        let identity = try #require(URL(string: "https://example.org/jellyfin"))
-        let dial = try #require(URL(string: "https://192.168.1.128:8920"))
+        let subPathIdentity = try #require(URL(string: "https://example.org/jellyfin"))
         let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream?static=true"))
-        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: identity, dial: dial)
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: subPathIdentity, local: local)
                 == URL(string: "https://example.org/jellyfin/Videos/1/stream?static=true"))
     }
 
-    @Test("no LAN dial, a stream elsewhere, or a dial equal to the identity: played as negotiated")
+    @Test("no LAN address, a stream elsewhere, or a LAN address equal to the identity: played as negotiated")
     func untouched() throws {
-        let identity = try #require(URL(string: "https://movies.nivadax.net"))
-        let dial = try #require(URL(string: "https://192.168.1.128:8920"))
         let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream"))
-        let staleLAN = try #require(URL(string: "https://192.168.1.50:8920/Videos/1/stream"))
-        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, dial: dial) == publicStream)
-        #expect(NativeVideoPresenter.nativePlayURL(staleLAN, identity: identity, dial: dial) == staleLAN)
-        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, dial: nil) == publicStream)
-        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, dial: identity) == publicStream)
+        let otherLAN = try #require(URL(string: "https://192.168.1.50:8920/Videos/1/stream"))
+        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, local: local) == publicStream)
+        #expect(NativeVideoPresenter.nativePlayURL(otherLAN, identity: identity, local: local) == otherLAN)
+        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, local: nil) == publicStream)
+        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, local: identity) == publicStream)
         let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream"))
-        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: nil, dial: dial) == lan)
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: nil, local: local) == lan)
+    }
+
+    /// Leave home: negotiated on the LAN, the dial is back on the identity.
+    @Test("after leaving home the retry re-negotiates, and never plays the LAN url raw")
+    func leaveHomeRenegotiates() throws {
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream?static=true"))
+        #expect(PlaybackRetryPolicy.routeChanged(negotiated: lan, currentDial: identity))
+        // Even with no LAN dial active, the LAN url is played from the identity.
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: identity, local: local)
+                == URL(string: "https://movies.nivadax.net/Videos/1/stream?static=true"))
+    }
+
+    /// At home: negotiated on the LAN, still dialling the LAN.
+    @Test("at home the retry plays direct, without re-negotiating")
+    func atHomeKeepsSession() throws {
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream?static=true"))
+        #expect(!PlaybackRetryPolicy.routeChanged(negotiated: lan, currentDial: local))
+        // Arriving home: negotiated on the identity, now dialling the LAN.
+        let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream"))
+        #expect(PlaybackRetryPolicy.routeChanged(negotiated: publicStream, currentDial: local))
     }
 }
 

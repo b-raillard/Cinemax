@@ -5607,6 +5607,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 lastKnownPositionMs: lastKnownPositionMs, startTime: startTime
             )
             if rebuildSpendingRecovery(from: fromMs) { return }
+            // Refused because the player is closing: nothing to surface — the
+            // old `.retry` did nothing on teardown either (no alert, no
+            // session release, no diagnostics upload on a closing player).
+            guard !isTearingDown else { return }
             releaseStickyProxy = usingProxy
         case .retry(let noteDirectFailure):
             didRetry = true

@@ -61,13 +61,17 @@ final class ServerRouteController {
     @ObservationIgnored private weak var appState: AppState?
     @ObservationIgnored private var reach: @MainActor () -> NetworkReach = { .offline }
     /// The identity `dialURL` was decided for (`transportURL(identity:)`).
-    @ObservationIgnored private(set) var dialIdentity: URL?
+    @ObservationIgnored private var dialIdentity: URL?
     /// Bumped by every evaluation and path change: a probe answer that is no
     /// longer the newest question is dropped.
     @ObservationIgnored private var evaluationGeneration = 0
     /// Bumped by every path change: a memoised decision belongs to one network.
     @ObservationIgnored private var pathGeneration = 0
     @ObservationIgnored private var memo: Memo?
+    /// Evaluations past their gate and not yet over (applied or dropped), and
+    /// who waits for the last of them (`awaitPendingProbe`).
+    @ObservationIgnored private var evaluationsInFlight = 0
+    @ObservationIgnored private var evaluationWaiters: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored private var inFlightProbe: Task<LocalProbeOutcome, Never>?
     /// Socket repoints, chained so they reach the hub in decision order.
     @ObservationIgnored private var socketRepoint: Task<Void, Never>?
@@ -115,6 +119,8 @@ final class ServerRouteController {
     /// newer evaluation started while the probe ran.
     func evaluate(_ reason: ServerRouteReason) async {
         guard case .open(let session) = gate() else { return }
+        evaluationsInFlight += 1
+        defer { evaluationEnded() }
         let entry = session.entry
         let transition = session.appState.serverTransitionGeneration
         evaluationGeneration &+= 1
@@ -177,11 +183,37 @@ final class ServerRouteController {
         return identity
     }
 
-    /// Waits for a probe in flight, bounded by that probe's own timeout — so a
-    /// playback never opens on a route about to be abandoned.
+    /// Waits until the route a playback is about to negotiate on is DECIDED
+    /// AND APPLIED — so it never opens on a route about to be abandoned. Not
+    /// only the probe: the probe's own continuation (→ `apply` → `setDialURL`)
+    /// and this one both resume on the main actor in no guaranteed order. So it
+    /// also waits for the evaluation a path change or a sign-in release has
+    /// scheduled (`pendingEvaluation`, possibly not started yet) and for every
+    /// evaluation past its gate to end. Each is bounded by its probe's timeout;
+    /// returns at once when nothing is pending.
     func awaitPendingProbe() async {
-        guard let inFlightProbe else { return }
-        _ = await inFlightProbe.value
+        if let inFlightProbe { _ = await inFlightProbe.value }
+        if let pendingEvaluation { await pendingEvaluation.value }
+        guard evaluationsInFlight > 0 else { return }
+        await withCheckedContinuation { evaluationWaiters.append($0) }
+    }
+
+    private func evaluationEnded() {
+        evaluationsInFlight -= 1
+        guard evaluationsInFlight == 0, !evaluationWaiters.isEmpty else { return }
+        let waiters = evaluationWaiters
+        evaluationWaiters = []
+        waiters.forEach { $0.resume() }
+    }
+
+    /// The ACTIVE server's identity and LAN address, whatever the current
+    /// route — what the native engine needs to never play a LAN URL
+    /// (`NativeVideoPresenter.nativePlayURL`), even once the dial has gone back
+    /// to the identity.
+    var activeAddresses: (identity: URL, local: URL?)? {
+        guard let appState, let id = appState.activeServerId,
+              let entry = appState.servers.first(where: { $0.id == id }) else { return nil }
+        return (entry.url, entry.localURL)
     }
 
     // MARK: - Private

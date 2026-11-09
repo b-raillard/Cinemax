@@ -21,9 +21,6 @@ final class NativeVideoPresenter {
     private var itemEndObserver: NSObjectProtocol?
     private var hasRetriedDirectURL = false
     private var playbackInfo: PlaybackInfo?
-    /// The URL the current item actually plays (`playURL(for:)` at build
-    /// time) — what the retry's `routeChanged` compares, not `info.url`.
-    private var playedURL: URL?
 
     // `itemId` / `startTime` are mutable so episode navigation can rebind them;
     // PlaybackReporter.Context reads `self.itemId` each tick, and reportStart
@@ -422,11 +419,10 @@ final class NativeVideoPresenter {
     private func retryWithDirectURL(player: AVPlayer, startTime: Double?) {
         guard let info = playbackInfo, !hasRetriedDirectURL else { return }
         hasRetriedDirectURL = true
-        // Both sides through the same identity rewrite: on a LAN dial this
-        // engine plays the identity, so a LAN dial reads as « unchanged ».
-        let currentBase = apiClient.currentDialURL().map(playURL(for:))
-        let played = playedURL ?? playURL(for: info.url)
-        guard PlaybackRetryPolicy.routeChanged(negotiated: played, currentDial: currentBase) else {
+        // The NEGOTIATED url against the base dialled now: at home both are on
+        // the LAN origin (no re-negotiation); after leaving home the dial is
+        // the identity and the LAN-negotiated session is re-negotiated.
+        guard PlaybackRetryPolicy.routeChanged(negotiated: info.url, currentDial: apiClient.currentDialURL()) else {
             playDirect(info, player: player, startTime: startTime)
             return
         }
@@ -471,7 +467,6 @@ final class NativeVideoPresenter {
     private func playDirect(_ info: PlaybackInfo, player: AVPlayer, startTime: Double?) {
         logger.info("Retrying playback without HLSManifestLoader (direct URL fallback)")
         let url = playURL(for: info.url)
-        playedURL = url
         let playerItem: AVPlayerItem
         if let token = info.authToken {
             let asset = AVURLAsset(url: url, options: [
@@ -1022,28 +1017,30 @@ final class NativeVideoPresenter {
     // MARK: - Helpers
 
     /// The URL AVPlayer plays for a negotiated `url`: the IDENTITY (public)
-    /// URL when `url` is on the current LAN dial (`nativePlayURL`).
+    /// URL when `url` is on the active server's LAN address (`nativePlayURL`)
+    /// — read from the registry entry, NOT the current dial, so a LAN url is
+    /// never played raw once the route has gone back to the identity.
     private func playURL(for url: URL) -> URL {
-        let route = ServerRouteController.shared
-        return Self.nativePlayURL(url, identity: route.dialIdentity, dial: route.dialURL)
+        let addresses = ServerRouteController.shared.activeAddresses
+        return Self.nativePlayURL(url, identity: addresses?.identity, local: addresses?.local)
     }
 
     /// AVPlayer cannot honour a `ServerTrustDelegate` pin (the LAN address is
     /// https with a pinned self-signed certificate), and trust is never
-    /// disabled: a stream on the LAN `dial` plays from the `identity` instead
-    /// (`ServerRoutePolicy.rewrite`, both base paths respected). Anything else
-    /// — no LAN dial, a dial equal to the identity, a stream on another
+    /// disabled: a stream on the server's LAN address `local` plays from the
+    /// `identity` instead (`ServerRoutePolicy.rewrite`, both base paths
+    /// respected), whether or not the LAN is the route dialled now. Anything
+    /// else — no LAN address, one equal to the identity, a stream on another
     /// origin — is played as negotiated. Pure (`NativeStreamRouteTests`).
-    nonisolated static func nativePlayURL(_ url: URL, identity: URL?, dial: URL?) -> URL {
-        guard let identity, let dial, !ServerRoutePolicy.isSameOrigin(dial, identity),
-              ServerRoutePolicy.isSameOrigin(url, dial) else { return url }
-        return ServerRoutePolicy.rewrite(url, identityBase: dial, dialBase: identity) ?? url
+    nonisolated static func nativePlayURL(_ url: URL, identity: URL?, local: URL?) -> URL {
+        guard let identity, let local, !ServerRoutePolicy.isSameOrigin(local, identity),
+              ServerRoutePolicy.isSameOrigin(url, local) else { return url }
+        return ServerRoutePolicy.rewrite(url, identityBase: local, dialBase: identity) ?? url
     }
 
     private func makePlayerItem(for info: PlaybackInfo) -> AVPlayerItem {
         let item: AVPlayerItem
         let url = playURL(for: info.url)
-        playedURL = url
 
         #if os(iOS)
         // Route transcoded HLS through HLSManifestLoader to strip CLOSED-CAPTIONS

@@ -177,6 +177,60 @@ struct ServerRouteControllerTests {
         #expect(controller.route == .local)
     }
 
+    /// R16 — a playback open waits for the DECISION, not only for the probe:
+    /// the probe's own continuation (→ `apply` → `setDialURL`) and the
+    /// waiter's both resume on the main actor in no guaranteed order.
+    @Test func probeWaitCoversTheApply() async {
+        let api = MockAPIClient()
+        let app = makeApp(api: api, entries: [entry()])
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        let controller = makeController(stub, app: app)
+        await controller.evaluate(.launch)
+        #expect(api.dialURLs.last == lan)
+
+        // The path change falls back to the identity and schedules the
+        // evaluation, which has not even started its probe yet.
+        controller.pathChanged()
+        #expect(api.dialURLs.last == .some(nil))
+        await controller.awaitPendingProbe()
+
+        #expect(api.dialURLs.last == lan, "the open sees the decision already applied")
+        #expect(controller.route == .local)
+    }
+
+    @Test func probeWaitCoversAHeldEvaluation() async {
+        let api = MockAPIClient()
+        let app = makeApp(api: api, entries: [entry()])
+        let latch = TestLatch()
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        stub.set(latch: latch)
+        let controller = makeController(stub, app: app)
+
+        let evaluation = Task { await controller.evaluate(.launch) }
+        await eventually { stub.calls == 1 }
+        let waiter = Task { @MainActor in
+            await controller.awaitPendingProbe()
+            return api.dialURLs.last
+        }
+        latch.open()
+        let seen = await waiter.value
+        await evaluation.value
+
+        #expect(seen == .some(lan), "applied before the waiter resumed")
+    }
+
+    @Test func probeWaitReturnsAtOnceWithNothingPending() async {
+        let api = MockAPIClient()
+        let app = makeApp(api: api, entries: [entry()])
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        let controller = makeController(stub, app: app)
+
+        await controller.awaitPendingProbe()
+
+        #expect(stub.calls == 0)
+        #expect(api.dialURLs.isEmpty)
+    }
+
     @Test func staleProbeDropped() async {
         let api = MockAPIClient()
         let keychain = MockKeychain()
