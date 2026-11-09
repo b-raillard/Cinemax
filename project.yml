@@ -173,7 +173,7 @@ targets:
           UIColorName: LaunchBackground
         NSSpeechRecognitionUsageDescription: "Cinemax uses speech recognition for voice search to find movies and shows."
         NSMicrophoneUsageDescription: "Cinemax uses the microphone for voice search."
-        NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi."
+        NSLocalNetworkUsageDescription: "JellyGlass uses your local network to find Jellyfin servers on your Wi-Fi and connect to them directly at home."
         # Face ID / Touch ID is offered ONLY as a shortcut past the parental
         # lock's PIN — the PIN always stays a valid path, so a refusal here
         # costs a shortcut, never access. tvOS carries no counterpart: it has
@@ -299,7 +299,7 @@ targets:
         # Standard HTTPS encryption only — exempt from US export compliance.
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
-        NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers on your Wi-Fi."
+        NSLocalNetworkUsageDescription: "JellyGlass uses your local network to find Jellyfin servers on your Wi-Fi and connect to them directly at home."
         # Alternate icons of Réglages → Apparence → « Icône de l'app » (Pro),
         # each a full parallax image stack (Front + Back) in the catalogue. On
         # tvOS the key is an ARRAY of names, written here by hand: actool's

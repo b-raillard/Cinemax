@@ -381,3 +381,50 @@ struct LocalAddressSavePolicyTests {
         #expect(ServerCertificateTrust.addressClass(ofTrustKey: "8.8.8.8:443") == "internet")
     }
 }
+
+@Suite("Adresse locale — messages")
+struct LocalAddressToastTests {
+    static let keys = [
+        "servers.localAddress", "servers.localAddress.title", "servers.localAddress.message",
+        "servers.localAddress.placeholder", "servers.localAddress.notHTTPS",
+        "servers.localAddress.savedNeedsApproval", "servers.localAddress.reachable",
+        "servers.localAddress.savedUnreachable", "servers.localAddress.denied",
+        "servers.localAddress.otherServer", "servers.localAddress.notLocal",
+        "servers.localAddress.signInFirst", "servers.localAddress.removed",
+        "servers.route.local", "servers.route.internet", "settings.server.route.local"
+    ]
+
+    @Test func toastMapping() {
+        let expected: [(LocalAddressSaveOutcome, String, Toast.Level)] = [
+            (.reachable, "servers.localAddress.reachable", .success),
+            (.savedUnreachable, "servers.localAddress.savedUnreachable", .info),
+            (.savedLocalNetworkDenied, "servers.localAddress.denied", .error),
+            (.refusedOtherServer, "servers.localAddress.otherServer", .error),
+            (.refusedNotLocal, "servers.localAddress.notLocal", .error),
+            (.needsSignIn, "servers.localAddress.signInFirst", .error),
+            (.removed, "servers.localAddress.removed", .info),
+            (.refusedNotHTTPS, "servers.localAddress.notHTTPS", .error),
+            (.savedNeedsApproval, "servers.localAddress.savedNeedsApproval", .info)
+        ]
+        for (outcome, key, level) in expected {
+            let message = LocalAddressToast.message(for: outcome)
+            #expect(message?.key == key, "\(outcome)")
+            #expect(message?.level == level, "\(outcome)")
+        }
+        // The screen shows the certificate approval instead of a toast.
+        #expect(LocalAddressToast.message(for: .needsCertificateApproval) == nil)
+    }
+
+    @Test func everyKeyExistsInAllLanguages() throws {
+        for lang in AppLanguage.supported {
+            let path = try #require(Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: lang))
+            let table = try #require(NSDictionary(contentsOfFile: path) as? [String: String])
+            for key in Self.keys {
+                let value = table[key]
+                #expect(value?.isEmpty == false, "\(lang) \(key)")
+            }
+            #expect(table["settings.server.route.local"]?.contains("%@") == true, "\(lang)")
+            #expect(table["servers.localAddress.placeholder"] == "192.168.1.128:8920", "\(lang)")
+        }
+    }
+}

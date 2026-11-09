@@ -39,6 +39,8 @@ final class ServersViewModel {
     }
 
     private(set) var statuses: [String: PingStatus] = [:]
+    /// Which road answered each online entry: its LAN address or its public one.
+    private(set) var routes: [String: ServerRouteKind] = [:]
 
     /// Attempt flag. The tvOS Settings surface re-presents (and re-fires its
     /// `.task`) on **every** `MenuConfigStore` mutation, so an unguarded probe
@@ -48,9 +50,24 @@ final class ServersViewModel {
 
     func status(for id: String) -> PingStatus? { statuses[id] }
 
+    /// The road the last probe of this entry answered on; nil while unknown or
+    /// offline.
+    func route(for id: String) -> ServerRouteKind? { routes[id] }
+
     /// Drops a removed entry's status so a re-added server starts from a clean
     /// "probing" state instead of inheriting a stale dot.
-    func forget(id: String) { statuses[id] = nil }
+    func forget(id: String) {
+        statuses[id] = nil
+        routes[id] = nil
+    }
+
+    /// Probes one entry again — after its local address was saved or removed,
+    /// so its card's « Local » / « Internet » follows without reopening.
+    func refresh(id: String, using appState: AppState) async {
+        guard let entry = appState.servers.first(where: { $0.id == id }) else { return }
+        let reach = ServerRouteController.shared.currentReach
+        apply(await Self.probe(entry, reach: reach), using: appState)
+    }
 
     func pingIfNeeded(using appState: AppState) async {
         guard !hasPinged else { return }
@@ -73,11 +90,10 @@ final class ServersViewModel {
             statuses[entry.id] = .pinging
         }
 
+        let reach = ServerRouteController.shared.currentReach
         await withTaskGroup(of: Probe.self) { group in
             for entry in entries {
-                let id = entry.id
-                let url = entry.url
-                group.addTask { Probe(id: id, result: await ServerReachability.ping(url: url)) }
+                group.addTask { await Self.probe(entry, reach: reach) }
             }
             for await probe in group {
                 guard !Task.isCancelled else { break }
@@ -96,15 +112,116 @@ final class ServersViewModel {
         switch probe.result {
         case .online(let name, let version, let serverID):
             statuses[probe.id] = .online
+            routes[probe.id] = probe.answeredLocally ? .local : .internet
             appState.updateServerMetadata(id: probe.id, name: name, version: version, serverID: serverID)
         case .offline:
-            statuses[probe.id] = .offline
+            // The LAN address proved the same server even with the public one down.
+            statuses[probe.id] = probe.answeredLocally ? .online : .offline
+            routes[probe.id] = probe.answeredLocally ? .local : nil
         }
+    }
+
+    /// The LAN address (decided as the route owner decides: https, a local
+    /// peer answering with the entry's own `Id`) and the public ping, run side
+    /// by side so a user away from home never waits for the LAN timeout. The
+    /// card is online when either answers; the local answer names the road.
+    /// Nothing here is logged: no address may reach a log line.
+    nonisolated private static func probe(_ entry: ServerEntry, reach: NetworkReach) async -> Probe {
+        async let publicResult = ServerReachability.ping(url: entry.url)
+        async let localDial = localDial(for: entry, reach: reach)
+        let result = await publicResult
+        let answeredLocally = await localDial != nil
+        return Probe(id: entry.id, result: result, answeredLocally: answeredLocally)
+    }
+
+    nonisolated private static func localDial(for entry: ServerEntry, reach: NetworkReach) async -> URL? {
+        guard ServerRoutePolicy.shouldProbe(localURL: entry.localURL, reach: reach), let local = entry.localURL,
+              let expected = entry.serverID, !expected.isEmpty else { return nil }
+        let outcome = await LocalRouteProbe.probe(local, timeout: LocalRouteProbe.runtimeTimeout)
+        return ServerRoutePolicy.decide(localURL: local, reach: reach, expectedServerID: expected, probe: outcome)
     }
 
     private struct Probe: Sendable {
         let id: String
         let result: PingResult
+        let answeredLocally: Bool
+    }
+}
+
+// MARK: - Local address feedback
+
+/// What saving a local address says, as a toast. Pure, so the mapping is tested.
+enum LocalAddressToast {
+    /// `nil` for `.needsCertificateApproval`: the screen asks for the
+    /// certificate's approval instead of toasting.
+    static func message(for outcome: LocalAddressSaveOutcome) -> (key: String, level: Toast.Level)? {
+        switch outcome {
+        case .removed:                 ("servers.localAddress.removed", .info)
+        case .reachable:               ("servers.localAddress.reachable", .success)
+        case .savedUnreachable:        ("servers.localAddress.savedUnreachable", .info)
+        case .savedLocalNetworkDenied: ("servers.localAddress.denied", .error)
+        case .refusedNotLocal:         ("servers.localAddress.notLocal", .error)
+        case .refusedOtherServer:      ("servers.localAddress.otherServer", .error)
+        case .needsSignIn:             ("servers.localAddress.signInFirst", .error)
+        case .refusedNotHTTPS:         ("servers.localAddress.notHTTPS", .error)
+        case .savedNeedsApproval:      ("servers.localAddress.savedNeedsApproval", .info)
+        case .needsCertificateApproval: nil
+        }
+    }
+}
+
+/// A LAN certificate waiting for the user's approval: the entry id (re-resolved
+/// at action time, like every pending action here), the text typed, and the
+/// summary SHOWN — its exact fingerprint is what gets pinned (R15).
+struct LocalCertificateApproval: Identifiable {
+    let entryId: String
+    let raw: String
+    let summary: ServerCertificateSummary
+    /// The host already carried a pin: the certificate CHANGED since.
+    let isRotation: Bool
+    var id: String { summary.fingerprint }
+}
+
+/// The route line under the active server's address in Réglages → Serveur:
+/// « Local · 192.168.1.128:8920 » or « Internet ». Reads the route owner
+/// directly (no environment injection) — a standalone `View`, so it redraws
+/// on a route change even inside a pushed destination.
+struct ServerRouteLine: View {
+    @Environment(LocalizationManager.self) private var loc
+    let font: Font
+
+    var body: some View {
+        let route = ServerRouteController.shared
+        let local = route.route == .local ? route.dialURL.flatMap(Self.hostAndPort) : nil
+        // Too narrow for the address: « Local » alone, never a cut address
+        // (memory `feedback_short_label_over_truncation`).
+        ViewThatFits(in: .horizontal) {
+            if let local {
+                line(loc.localized("settings.server.route.local", local), icon: "house.fill")
+                    .fixedSize(horizontal: true, vertical: false)
+                line(loc.localized("servers.route.local"), icon: "house.fill")
+            } else {
+                line(loc.localized("servers.route.internet"), icon: "globe")
+            }
+        }
+        .font(font)
+        .foregroundStyle(CinemaColor.onSurfaceMuted)
+    }
+
+    /// Icon and text side by side at a set gap — a `Label` spreads them far
+    /// apart on tvOS.
+    private func line(_ text: String, icon: String) -> some View {
+        HStack(spacing: CinemaSpacing.spacing1) {
+            Image(systemName: icon)
+            Text(text).lineLimit(1)
+        }
+    }
+
+    /// `host[:port]`, an IPv6 literal in brackets.
+    static func hostAndPort(_ url: URL) -> String? {
+        guard let host = url.host(percentEncoded: false), !host.isEmpty else { return nil }
+        let shown = host.contains(":") ? "[\(host)]" : host
+        return url.port.map { "\(shown):\($0)" } ?? shown
     }
 }
 
@@ -180,6 +297,11 @@ struct ServersScreen: View {
     /// A switch refused with `.locked`: the server whose account needs a code.
     @State private var lockedSwitch: ServerEntry?
     @State private var renameText = ""
+    /// Id of the entry whose local address is being edited (same freshness RULE).
+    @State private var pendingLocalAddressId: String?
+    @State private var localAddressText = ""
+    /// The LAN certificate the last save asked to approve.
+    @State private var pendingApproval: LocalCertificateApproval?
     #if !os(tvOS)
     @State private var editMode: EditMode = .inactive
     #endif
@@ -205,6 +327,10 @@ struct ServersScreen: View {
     }
 
     var body: some View {
+        localAddressPresentations(screen)
+    }
+
+    private var screen: some View {
         NavigationStack {
             #if os(tvOS)
             tvOSChrome
@@ -264,6 +390,49 @@ struct ServersScreen: View {
         } message: { id in
             Text(loc.localized("servers.rename.message", serverOwnName(for: id)))
         }
+    }
+
+    /// The local-address entry alert and the LAN certificate approval, kept
+    /// out of `screen`'s chain. The entry is an `.alert` with a `TextField` on
+    /// both platforms (tvOS: the system text entry, as the rename alert). The
+    /// approval is `serverConfirmation`: an alert on iOS, a confirmation
+    /// dialog on tvOS (a SwiftUI alert has focus bugs there), whose first
+    /// button « Faire confiance à ce certificat » takes the focus.
+    @ViewBuilder
+    private func localAddressPresentations(_ content: some View) -> some View {
+        content
+            .alert(
+                loc.localized("servers.localAddress.title"),
+                isPresented: Binding(
+                    get: { pendingLocalAddressId != nil },
+                    set: { if !$0 { pendingLocalAddressId = nil } }
+                ),
+                presenting: pendingLocalAddressId
+            ) { id in
+                TextField(loc.localized("servers.localAddress.placeholder"), text: $localAddressText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .keyboardType(.URL)
+                    #endif
+                Button(loc.localized("action.save")) { commitLocalAddress(id: id) }
+                Button(loc.localized("action.cancel"), role: .cancel) {}
+            } message: { _ in
+                Text(loc.localized("servers.localAddress.message"))
+            }
+            .serverConfirmation(
+                loc.localized("server.certificate.title"),
+                isPresented: Binding(
+                    get: { pendingApproval != nil },
+                    set: { if !$0 { pendingApproval = nil } }
+                ),
+                presenting: pendingApproval
+            ) { approval in
+                Button(loc.localized("server.certificate.trust")) { trust(approval) }
+                Button(loc.localized("action.cancel"), role: .cancel) {}
+            } message: { approval in
+                Text(approvalMessage(approval))
+            }
     }
 
     // MARK: - Actions
@@ -345,6 +514,79 @@ struct ServersScreen: View {
         }
     }
 
+    /// Opens the local-address alert pre-filled with the stored address.
+    private func beginLocalAddress(id: String) {
+        localAddressText = appState.servers.first(where: { $0.id == id })?.localURL?.absoluteString ?? ""
+        pendingLocalAddressId = id
+    }
+
+    private func commitLocalAddress(id: String) {
+        let raw = localAddressText
+        Task { await handleLocalAddress(await appState.setLocalAddress(id: id, raw: raw), id: id, raw: raw) }
+    }
+
+    /// Pins exactly the fingerprint the user was shown (R15): `AppState` pins
+    /// it only while the pending certificate still carries it, and otherwise
+    /// answers `.needsCertificateApproval` again with the new one.
+    private func trust(_ approval: LocalCertificateApproval) {
+        Task {
+            let outcome = await appState.trustLocalCertificate(
+                id: approval.entryId, raw: approval.raw, fingerprint: approval.summary.fingerprint
+            )
+            await handleLocalAddress(outcome, id: approval.entryId, raw: approval.raw)
+        }
+    }
+
+    /// Every save's outcome lands here: a toast, or the certificate approval.
+    private func handleLocalAddress(_ outcome: LocalAddressSaveOutcome, id: String, raw: String) async {
+        if outcome == .needsCertificateApproval {
+            guard appState.servers.contains(where: { $0.id == id }),
+                  let summary = appState.pendingLocalCertificate(raw: raw) else {
+                // The pending certificate is gone (the entry was removed, or
+                // another probe replaced it): nothing to show, nothing saved.
+                toasts.error(loc.localized("server.connectFailed"))
+                return
+            }
+            pendingApproval = LocalCertificateApproval(
+                entryId: id,
+                raw: raw,
+                summary: summary,
+                isRotation: ServerTrustDelegate.shared.isPinned(trustKey: summary.trustKey)
+            )
+            return
+        }
+        if let message = LocalAddressToast.message(for: outcome) {
+            let text = loc.localized(message.key)
+            switch message.level {
+            case .success: toasts.success(text)
+            case .error:   toasts.error(text)
+            case .info:    toasts.info(text)
+            }
+        }
+        // The card's « Local » / « Internet » follows the new address (the
+        // active one through the route owner, which the save re-evaluates).
+        await viewModel.refresh(id: id, using: appState)
+    }
+
+    /// What the approval shows, in the server-setup panel's order: why, what
+    /// to check, then the host, the subject and the SHA-256 fingerprint in its
+    /// grouped form — the thing that gets pinned.
+    private func approvalMessage(_ approval: LocalCertificateApproval) -> String {
+        let summary = approval.summary
+        var lines = [
+            loc.localized(approval.isRotation ? "server.certificate.changed" : "server.certificate.untrusted"),
+            loc.localized("server.certificate.explain"),
+            "",
+            loc.localized("server.certificate.host").uppercased(),
+            summary.host
+        ]
+        if let subject = summary.subject, !subject.isEmpty {
+            lines += ["", loc.localized("server.certificate.subject").uppercased(), subject]
+        }
+        lines += ["", loc.localized("server.certificate.fingerprint").uppercased(), summary.formattedFingerprint]
+        return lines.joined(separator: "\n")
+    }
+
     /// Moves one card a step up (`-1`) or down (`+1`) — tvOS's « Monter » /
     /// « Descendre ». Always writes the COMPLETE displayed order, the only
     /// shape `ServerRegistry.applyingOrder` accepts.
@@ -371,14 +613,7 @@ struct ServersScreen: View {
             initialBadge(for: entry)
 
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: CinemaSpacing.spacing2) {
-                    Text(entry.displayName)
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurface)
-                        .lineLimit(1)
-
-                    if isActive(entry) { currentPill }
-                }
+                titleLine(entry)
 
                 Text(displayAddress(entry))
                     .font(CinemaFont.label(.medium))
@@ -391,6 +626,10 @@ struct ServersScreen: View {
                     .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.8))
                     .lineLimit(1)
             }
+            // Served before the spacer: shared out evenly, the text column got
+            // half the free width and the title line fell back to its short
+            // form on a card with room to spare.
+            .layoutPriority(1)
 
             Spacer(minLength: CinemaSpacing.spacing2)
 
@@ -417,6 +656,73 @@ struct ServersScreen: View {
                 .foregroundStyle(themeManager.onAccentContainer)
         }
         .accessibilityHidden(true)
+    }
+
+    /// The name, then « Actuel », then the road (« Local » / « Internet »).
+    /// The pills never truncate the name: when the line runs out the road
+    /// pill shrinks to its icon first, and only a name too long for the card
+    /// on its own is cut (memory `feedback_short_label_over_truncation`).
+    private func titleLine(_ entry: ServerEntry) -> some View {
+        let route = displayedRoute(entry)
+        return ViewThatFits(in: .horizontal) {
+            titleRow(entry, route: route, compactRoute: false, nameFits: true)
+            titleRow(entry, route: route, compactRoute: true, nameFits: true)
+            titleRow(entry, route: route, compactRoute: true, nameFits: false)
+        }
+    }
+
+    private func titleRow(
+        _ entry: ServerEntry, route: ServerRouteKind?, compactRoute: Bool, nameFits: Bool
+    ) -> some View {
+        HStack(spacing: CinemaSpacing.spacing2) {
+            Text(entry.displayName)
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+                .lineLimit(1)
+                .fixedSize(horizontal: nameFits, vertical: false)
+                .layoutPriority(1)
+
+            if isActive(entry) { currentPill.fixedSize() }
+            if let route { routePill(route, compact: compactRoute).fixedSize() }
+        }
+    }
+
+    /// The road this card's server answers on. The server we are on reads the
+    /// route owner — while signed in; signed out (this screen opened from the
+    /// pre-auth screens) the owner holds no route, so it reads its own probe
+    /// like every other card, shown only once that probe found it online.
+    private func displayedRoute(_ entry: ServerEntry) -> ServerRouteKind? {
+        if isActive(entry), appState.isAuthenticated { return ServerRouteController.shared.route }
+        guard viewModel.status(for: entry.id) == .online else { return nil }
+        return viewModel.route(for: entry.id)
+    }
+
+    /// « Local » (`house.fill`) / « Internet » (`globe`), or the icon alone as
+    /// the short form — which keeps the word for VoiceOver.
+    private func routePill(_ route: ServerRouteKind, compact: Bool) -> some View {
+        let label = loc.localized(route == .local ? "servers.route.local" : "servers.route.internet")
+        return HStack(spacing: 3) {
+            Image(systemName: route == .local ? "house.fill" : "globe")
+            if !compact { Text(label) }
+        }
+        .font(CinemaFont.label(.small))
+        .foregroundStyle(CinemaColor.onSurfaceVariant)
+        .padding(.horizontal, CinemaSpacing.spacing2)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(routePillFill))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+    }
+
+    /// iOS: `surfaceContainerHigh` over the glass card. tvOS: one step up —
+    /// the tvOS card itself is `surfaceContainerHigh` (`tvSettingsFocusable`),
+    /// where the same fill would vanish.
+    private var routePillFill: Color {
+        #if os(tvOS)
+        CinemaColor.surfaceContainerHighest
+        #else
+        CinemaColor.surfaceContainerHigh
+        #endif
     }
 
     private var currentPill: some View {
@@ -619,6 +925,14 @@ struct ServersScreen: View {
         }
     }
 
+    private func localAddressAction(_ entry: ServerEntry) -> some View {
+        Button {
+            beginLocalAddress(id: entry.id)
+        } label: {
+            Label(loc.localized("servers.localAddress"), systemImage: "house")
+        }
+    }
+
     @ViewBuilder
     private func iOSRow(_ entry: ServerEntry) -> some View {
         let active = isActive(entry)
@@ -641,6 +955,7 @@ struct ServersScreen: View {
         // stays reachable on the active card — the one most worth renaming.
         .contextMenu {
             renameAction(entry)
+            localAddressAction(entry)
             if !active {
                 Button(role: .destructive) {
                     pendingDeleteId = entry.id
@@ -652,6 +967,8 @@ struct ServersScreen: View {
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             renameAction(entry)
                 .tint(themeManager.accent)
+            localAddressAction(entry)
+                .tint(themeManager.accentDim)
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
@@ -785,6 +1102,11 @@ struct ServersScreen: View {
                 beginRename(id: entry.id)
             } label: {
                 Label(loc.localized("servers.rename"), systemImage: "pencil")
+            }
+            Button {
+                beginLocalAddress(id: entry.id)
+            } label: {
+                Label(loc.localized("servers.localAddress"), systemImage: "house")
             }
             if index > 0 {
                 Button {

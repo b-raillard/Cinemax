@@ -409,10 +409,14 @@ extension SettingsScreen {
                     }
 
                     IOSActiveServerLabel()
+                        // Served before the `Spacer`: shared out evenly, the
+                        // lines were cut with room to spare.
+                        .layoutPriority(1)
 
                     Spacer()
 
                     liveBadge
+                        .fixedSize()
                 }
                 .padding(CinemaSpacing.spacing4)
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
@@ -817,6 +821,9 @@ struct IOSActiveServerLabel: View {
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .lineLimit(1)
                 .truncationMode(.middle)
+
+            // The road being dialled: « Local · 192.168.1.128:8920 » / « Internet ».
+            ServerRouteLine(font: CinemaFont.dynamicLabel(.medium))
         }
     }
 }

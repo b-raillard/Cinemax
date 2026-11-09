@@ -104,6 +104,10 @@ final class ServerRouteController {
         self.probe = probe
     }
 
+    /// What the device's network can reach right now — the servers list's own
+    /// LAN probes are decided against it (`ServersViewModel`).
+    var currentReach: NetworkReach { reach() }
+
     func attach(appState: AppState, reach: @escaping @MainActor () -> NetworkReach) {
         self.appState = appState
         self.reach = reach

@@ -1,5 +1,5 @@
 /* Zugriff auf das lokale Netzwerk (Erkennung von Jellyfin-Servern) */
-"NSLocalNetworkUsageDescription" = "JellyGlass nutzt dein lokales Netzwerk, um Jellyfin-Server in deinem WLAN automatisch zu finden.";
+"NSLocalNetworkUsageDescription" = "JellyGlass nutzt dein lokales Netzwerk, um Jellyfin-Server in deinem WLAN zu finden und dich zu Hause direkt mit ihnen zu verbinden.";
 
 /* Mikrofon (Sprachsuche) */
 "NSMicrophoneUsageDescription" = "JellyGlass nutzt das Mikrofon für die Sprachsuche.";
