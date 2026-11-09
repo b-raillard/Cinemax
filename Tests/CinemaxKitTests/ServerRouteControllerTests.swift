@@ -112,6 +112,32 @@ struct ServerRouteControllerTests {
         #expect(refreshes.count == 1)
     }
 
+    /// R17 — signed out, nothing reads a stale « Local »: the route, the dial,
+    /// the memo and the images go back to the identity at logout.
+    @Test func logoutResetsRoute() async {
+        let api = MockAPIClient()
+        let app = makeApp(api: api, entries: [entry()])
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        let controller = makeController(stub, app: app)
+        let log = TransportLog()
+        controller.transports = log.transports
+        await controller.evaluate(.launch)
+        #expect(controller.route == .local)
+        _ = await controller.dialURL(for: entry())
+
+        _ = await app.logout(reason: .sessionExpired)
+
+        #expect(controller.route == .internet)
+        #expect(controller.dialURL == nil)
+        #expect(controller.transportURL(identity: identity) == identity)
+        #expect(log.imageRoutes.last.map { $0.identity == nil && $0.dial == nil } == true)
+        #expect(log.streamURLs.last == .some(identity))
+        // The memo went with the session: the next decision probes again.
+        let calls = stub.calls
+        _ = await controller.dialURL(for: entry())
+        #expect(stub.calls == calls + 1)
+    }
+
     @Test func unchangedRouteIsNoOp() async {
         let api = MockAPIClient()
         let app = makeApp(api: api, entries: [entry()])

@@ -75,6 +75,9 @@ final class AppState {
     /// address: the route owner re-evaluates. Wired by `AppNavigation` to
     /// `ServerRouteController.evaluate(.addressChanged)`.
     var onLocalAddressChanged: @MainActor () -> Void = {}
+    /// Called by `logout` once the session is gone (both reasons): the route
+    /// owner drops its published route. Wired by `ServerRouteController.attach`.
+    @ObservationIgnored var onSessionEnded: @MainActor () -> Void = {}
     /// The save probe of `setLocalAddress`: its own token-less session, never
     /// the shared client. A seam for the tests.
     var localProbe: @Sendable (URL, TimeInterval) async -> LocalProbeOutcome = { url, timeout in
@@ -1086,6 +1089,7 @@ final class AppState {
         accessToken = nil
         currentUser = nil
         isAdministrator = false
+        onSessionEnded()
         // A logout ends whatever add / re-login flow was pending: a stale
         // snapshot would otherwise drive the LoginScreen's "go back to the
         // server you came from" affordance toward a session that no longer exists.

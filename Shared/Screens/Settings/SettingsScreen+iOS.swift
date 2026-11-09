@@ -408,15 +408,7 @@ extension SettingsScreen {
                             .foregroundStyle(themeManager.accent)
                     }
 
-                    IOSActiveServerLabel()
-                        // Served before the `Spacer`: shared out evenly, the
-                        // lines were cut with room to spare.
-                        .layoutPriority(1)
-
-                    Spacer()
-
-                    liveBadge
-                        .fixedSize()
+                    IOSActiveServerLabel { liveBadge }
                 }
                 .padding(CinemaSpacing.spacing4)
                 .glassPanel(cornerRadius: CinemaRadius.extraLarge)
@@ -806,15 +798,27 @@ extension SettingsScreen {
 /// re-render on `@Observable` changes (see the iOS `NavigationStack` RULE) —
 /// a switch made from « Mes serveurs », presented over this page, left the
 /// previous server's name on it.
-struct IOSActiveServerLabel: View {
+///
+/// The status badge (« EN LIGNE ») rides the NAME row, so the address and
+/// route lines under it span the card's full width: beside the badge they had
+/// ~135 pt on an iPhone, the public address was cut and « Local · host:port »
+/// never fit.
+struct IOSActiveServerLabel<Badge: View>: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
+    @ViewBuilder let badge: () -> Badge
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(appState.activeServerDisplayName)
-                .font(CinemaFont.dynamicLabel(.large))
-                .foregroundStyle(CinemaColor.onSurface)
+            HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
+                Text(appState.activeServerDisplayName)
+                    .font(CinemaFont.dynamicLabel(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                badge()
+                    .fixedSize()
+            }
 
             Text(appState.activeServerAddress ?? loc.localized("settings.server.unknownAddress"))
                 .font(CinemaFont.dynamicLabel(.medium))

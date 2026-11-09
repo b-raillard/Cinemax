@@ -112,6 +112,26 @@ final class ServerRouteController {
         self.appState = appState
         self.reach = reach
         appState.onSignInHoldReleased = { [weak self] in self?.signInHoldReleased() }
+        appState.onSessionEnded = { [weak self] in self?.sessionEnded() }
+    }
+
+    /// The session ended (a logout, a confirmed-expired session): nothing is
+    /// routed any more. The published route goes back to the identity, so no
+    /// list or header reads a stale « Local » while signed out; the memo and
+    /// any evaluation still in flight belong to a session that is gone. The
+    /// images and the stream policy, which a later sign-in's no-op `apply`
+    /// would not touch, go back to the identity too.
+    func sessionEnded() {
+        evaluationGeneration &+= 1
+        memo = nil
+        let hadDial = dialURL != nil
+        if hadDial { dialURL = nil }
+        if route != .internet { route = .internet }
+        dialIdentity = nil
+        guard hadDial else { return }
+        transports.setImageRoute(nil, nil)
+        transports.configureStream(appState?.serverURL)
+        logger.notice("route → internet (reason: sessionEnded)")
     }
 
     // MARK: - Deciding

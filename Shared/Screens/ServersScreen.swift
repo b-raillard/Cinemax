@@ -193,12 +193,18 @@ struct ServerRouteLine: View {
     var body: some View {
         let route = ServerRouteController.shared
         let local = route.route == .local ? route.dialURL.flatMap(Self.hostAndPort) : nil
-        // Too narrow for the address: « Local » alone, never a cut address
-        // (memory `feedback_short_label_over_truncation`).
+        // One line; else « Local » over the address; « Local » alone only as
+        // the last resort — never a cut address (memory
+        // `feedback_short_label_over_truncation`).
         ViewThatFits(in: .horizontal) {
             if let local {
                 line(loc.localized("settings.server.route.local", local), icon: "house.fill")
                     .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 2) {
+                    line(loc.localized("servers.route.local"), icon: "house.fill")
+                    Text(local).lineLimit(1)
+                }
+                .fixedSize(horizontal: true, vertical: false)
                 line(loc.localized("servers.route.local"), icon: "house.fill")
             } else {
                 line(loc.localized("servers.route.internet"), icon: "globe")
@@ -626,12 +632,10 @@ struct ServersScreen: View {
                     .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.8))
                     .lineLimit(1)
             }
-            // Served before the spacer: shared out evenly, the text column got
-            // half the free width and the title line fell back to its short
-            // form on a card with room to spare.
-            .layoutPriority(1)
-
-            Spacer(minLength: CinemaSpacing.spacing2)
+            // The column takes every point up to the status dot — no Spacer
+            // between them: its minimum length plus a second HStack gap
+            // left ~27 pt empty, enough to push « Local » down to its icon.
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if switchingId == entry.id {
                 ProgressView()
@@ -674,7 +678,9 @@ struct ServersScreen: View {
     private func titleRow(
         _ entry: ServerEntry, route: ServerRouteKind?, compactRoute: Bool, nameFits: Bool
     ) -> some View {
-        HStack(spacing: CinemaSpacing.spacing2) {
+        // `spacing1`, as the mockup's tight gap: at `spacing2` « Nivadax ·
+        // Actuel · 🏠 Local » missed the iPhone 17 Pro card by a few points.
+        HStack(spacing: CinemaSpacing.spacing1) {
             Text(entry.displayName)
                 .font(CinemaFont.label(.large))
                 .foregroundStyle(CinemaColor.onSurface)
@@ -687,13 +693,14 @@ struct ServersScreen: View {
         }
     }
 
-    /// The road this card's server answers on. The server we are on reads the
-    /// route owner — while signed in; signed out (this screen opened from the
-    /// pre-auth screens) the owner holds no route, so it reads its own probe
-    /// like every other card, shown only once that probe found it online.
+    /// The road this card's server answers on, shown only once the card's
+    /// own probe found it online (never « Internet » beside a red dot). The
+    /// server we are on reads the route owner — what is actually dialled; it
+    /// reads `.internet` while signed out (reset at logout, `sessionEnded`).
+    /// Every other card reads its own probe.
     private func displayedRoute(_ entry: ServerEntry) -> ServerRouteKind? {
-        if isActive(entry), appState.isAuthenticated { return ServerRouteController.shared.route }
         guard viewModel.status(for: entry.id) == .online else { return nil }
+        if isActive(entry) { return ServerRouteController.shared.route }
         return viewModel.route(for: entry.id)
     }
 
@@ -701,7 +708,7 @@ struct ServersScreen: View {
     /// the short form — which keeps the word for VoiceOver.
     private func routePill(_ route: ServerRouteKind, compact: Bool) -> some View {
         let label = loc.localized(route == .local ? "servers.route.local" : "servers.route.internet")
-        return HStack(spacing: 3) {
+        return HStack(spacing: CinemaSpacing.spacing1) {
             Image(systemName: route == .local ? "house.fill" : "globe")
             if !compact { Text(label) }
         }
