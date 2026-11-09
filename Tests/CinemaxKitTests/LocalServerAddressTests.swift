@@ -288,3 +288,96 @@ struct LocalNetworkReachTests {
         #expect(NetworkMonitor.reach(isSatisfied: false, usesWiFiOrWired: false) == .offline)
     }
 }
+
+@Suite("Adresse locale — enregistrement")
+struct LocalAddressSavePolicyTests {
+    private func decide(
+        known: String?, publicID: String? = nil, probe: LocalProbeOutcome,
+        certificate: LocalCertificateState = .trusted
+    ) -> LocalAddressSaveDecision {
+        LocalAddressSavePolicy.decide(knownServerID: known, publicServerID: publicID, probe: probe, certificate: certificate)
+    }
+
+    @Test func saveRefusesPublicConnectedAddress() {
+        let decision = decide(known: "S", probe: .answered(serverID: "S", connectedAddressIsLocal: false))
+        #expect(decision == LocalAddressSaveDecision(outcome: .refusedNotLocal, saves: false, serverIDToAdopt: nil))
+    }
+
+    @Test func answeredWithNoExpectedIdAdoptsLocalId() {
+        let decision = decide(known: nil, probe: .answered(serverID: "S", connectedAddressIsLocal: true))
+        #expect(decision == LocalAddressSaveDecision(outcome: .reachable, saves: true, serverIDToAdopt: "S"))
+    }
+
+    @Test func answeredMatchingKnownIdAdoptsNothing() {
+        let decision = decide(known: "S", probe: .answered(serverID: "S", connectedAddressIsLocal: true))
+        #expect(decision == LocalAddressSaveDecision(outcome: .reachable, saves: true, serverIDToAdopt: nil))
+    }
+
+    @Test func answeredMatchingPublicIdAdoptsIt() {
+        let decision = decide(known: nil, publicID: "S", probe: .answered(serverID: "S", connectedAddressIsLocal: true))
+        #expect(decision == LocalAddressSaveDecision(outcome: .reachable, saves: true, serverIDToAdopt: "S"))
+    }
+
+    @Test func answeredOtherIdIsRefused() {
+        let decision = decide(known: "S", probe: .answered(serverID: "OTHER", connectedAddressIsLocal: true))
+        #expect(decision == LocalAddressSaveDecision(outcome: .refusedOtherServer, saves: false, serverIDToAdopt: nil))
+        let fromPublic = decide(known: nil, publicID: "S", probe: .answered(serverID: "OTHER", connectedAddressIsLocal: true))
+        #expect(fromPublic.outcome == .refusedOtherServer)
+        #expect(!fromPublic.saves)
+    }
+
+    @Test func failedWithNoExpectedIdNeedsSignIn() {
+        let decision = decide(known: nil, probe: .failed(localNetworkDenied: false))
+        #expect(decision == LocalAddressSaveDecision(outcome: .needsSignIn, saves: false, serverIDToAdopt: nil))
+        #expect(decide(known: nil, probe: .failed(localNetworkDenied: true)).outcome == .needsSignIn)
+    }
+
+    @Test func failedLocalNetworkDeniedSaves() {
+        let decision = decide(known: "S", probe: .failed(localNetworkDenied: true))
+        #expect(decision == LocalAddressSaveDecision(outcome: .savedLocalNetworkDenied, saves: true, serverIDToAdopt: nil))
+        let learned = decide(known: nil, publicID: "S", probe: .failed(localNetworkDenied: true))
+        #expect(learned == LocalAddressSaveDecision(outcome: .savedLocalNetworkDenied, saves: true, serverIDToAdopt: "S"))
+    }
+
+    @Test func failedUnreachablePinnedSaves() {
+        let decision = decide(known: "S", probe: .failed(localNetworkDenied: false), certificate: .trusted)
+        #expect(decision == LocalAddressSaveDecision(outcome: .savedUnreachable, saves: true, serverIDToAdopt: nil))
+        let learned = decide(known: nil, publicID: "S", probe: .failed(localNetworkDenied: false), certificate: .trusted)
+        #expect(learned == LocalAddressSaveDecision(outcome: .savedUnreachable, saves: true, serverIDToAdopt: "S"))
+    }
+
+    @Test func failedPendingCertificateNeedsApproval() {
+        for known in ["S", nil] as [String?] {
+            for denied in [false, true] {
+                let decision = decide(known: known, probe: .failed(localNetworkDenied: denied), certificate: .pendingApproval)
+                #expect(decision == LocalAddressSaveDecision(outcome: .needsCertificateApproval, saves: false, serverIDToAdopt: nil))
+            }
+        }
+    }
+
+    @Test func failedUnreachableUnpinnedSavesNeedingApproval() {
+        let decision = decide(known: "S", probe: .failed(localNetworkDenied: false), certificate: .unknown)
+        #expect(decision == LocalAddressSaveDecision(outcome: .savedNeedsApproval, saves: true, serverIDToAdopt: nil))
+        let learned = decide(known: nil, publicID: "S", probe: .failed(localNetworkDenied: false), certificate: .unknown)
+        #expect(learned == LocalAddressSaveDecision(outcome: .savedNeedsApproval, saves: true, serverIDToAdopt: "S"))
+    }
+
+    @Test func answeredIgnoresCertificateState() {
+        let decision = decide(known: "S", probe: .answered(serverID: "S", connectedAddressIsLocal: true), certificate: .pendingApproval)
+        #expect(decision.outcome == .reachable)
+        #expect(decision.saves)
+    }
+
+    @Test func emptyIdsCountAsUnknown() {
+        let decision = decide(known: "", publicID: "", probe: .failed(localNetworkDenied: false))
+        #expect(decision.outcome == .needsSignIn)
+    }
+
+    @Test func certificateChangeLogNamesOnlyTheClass() {
+        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "192.168.1.128:8920") == "local")
+        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "nas-raillard.local:8920") == "local")
+        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "fd00::1:8920") == "local")
+        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "movies.nivadax.net:443") == "internet")
+        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "8.8.8.8:443") == "internet")
+    }
+}

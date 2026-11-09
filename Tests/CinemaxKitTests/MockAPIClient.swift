@@ -103,6 +103,23 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// opened — the race window, never a sleep.
     var connectGate: TestLatch?
 
+    /// One `connectToServer(url:dialURL:)` call: the identity and the route dialled.
+    struct ConnectCall: Equatable {
+        let url: URL
+        let dialURL: URL?
+    }
+
+    /// Every `connectToServer(url:dialURL:)` the code performed, in order.
+    private(set) var connectCalls: [ConnectCall] = []
+
+    func connectToServer(url: URL, dialURL: URL?) async throws -> ServerInfo {
+        recordLock.withLock { connectCalls.append(ConnectCall(url: url, dialURL: dialURL)) }
+        // Gate, throw and identity reset stay in the one-argument handshake.
+        let info = try await connectToServer(url: url)
+        recordLock.withLock { self.dialURL = dialURL }
+        return info
+    }
+
     func connectToServer(url: URL) async throws -> ServerInfo {
         recordLock.withLock { connectCalled = true }
         await connectGate?.wait()

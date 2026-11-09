@@ -579,6 +579,7 @@
 		AB4E35033CD55AD0E8067BEB /* MetadataEditorScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D083F5B426B3BAA9F95AB35F /* MetadataEditorScreen.swift */; };
 		AB852E98D29291AA07F0AA23 /* TVBackNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51EA3ACED7C511625904B26B /* TVBackNavigation.swift */; };
 		ABD57E24D2A91AA6E3D05A72 /* ExtensionServerTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = 809F99BE7D6CE419D78212E4 /* ExtensionServerTrust.swift */; };
+		AC352018D7C47CD7ED208AB8 /* LocalNetworkPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B77B73BC49074054163CF37 /* LocalNetworkPermission.swift */; };
 		ACD8797639561A3D0B499B49 /* LibraryFolderBrowseScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E10A15CDEB97FA76C37B4A /* LibraryFolderBrowseScreen.swift */; };
 		AD0A92DBB6D9815B0137250C /* EarlyAdopterStoreKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 578DD2F53EE999AA23445742 /* EarlyAdopterStoreKitTests.swift */; };
 		AD47EC1B4B389194AB19051F /* TVLayoutMetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 391D964B3A0643928983242D /* TVLayoutMetricsTests.swift */; };
@@ -637,6 +638,7 @@
 		C1FB5A147625D57F5B251C88 /* EntitlementTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69EE4D05EC75A6AA1F33A881 /* EntitlementTests.swift */; };
 		C20E16BB64AFF1A1C12F0D7E /* WhatsNewHalloweenScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB7FA28DFA0088FAC846EED1 /* WhatsNewHalloweenScene.swift */; };
 		C26E055881A898E3B284F62B /* LibraryHeroNavigationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95ACF77EE85DCBFAF2ACC530 /* LibraryHeroNavigationTests.swift */; };
+		C277159865F75D8DB433ECA0 /* LocalNetworkPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B77B73BC49074054163CF37 /* LocalNetworkPermission.swift */; };
 		C29097B0D079DD881E7EC4E3 /* PlayerTransportViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BDB7771E48A8279519D115 /* PlayerTransportViews.swift */; };
 		C3194EF5E469646EF1FDB9AF /* NetworkLogoCatalogue.swift in Sources */ = {isa = PBXBuildFile; fileRef = B57EDB2280862CE06D0A8515 /* NetworkLogoCatalogue.swift */; };
 		C342655D1C9FD75A639C79F1 /* DiagnosticsReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE5214DD9F50345475DB6E05 /* DiagnosticsReport.swift */; };
@@ -1068,6 +1070,7 @@
 		69FA0DC94A5D41FE4D6DC0A2 /* HomeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModelTests.swift; sourceTree = "<group>"; };
 		6A95C622F89111741037C483 /* MotionEffectsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionEffectsTests.swift; sourceTree = "<group>"; };
 		6B63AFBF054B1A7A1253C755 /* AdminFormScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminFormScreen.swift; sourceTree = "<group>"; };
+		6B77B73BC49074054163CF37 /* LocalNetworkPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNetworkPermission.swift; sourceTree = "<group>"; };
 		6BE8FCB2FC95C053274F05B3 /* AdminActivityScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminActivityScreen.swift; sourceTree = "<group>"; };
 		6C9E3A0CDA86FD6E609A719F /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		6D6E31E703D3ED859CB5BD99 /* MissingTitlesRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MissingTitlesRow.swift; sourceTree = "<group>"; };
@@ -1910,6 +1913,7 @@
 				78377E8E832D65F7226A2A06 /* AppNavigation.swift */,
 				678E44D384225A39AF7509B2 /* AppState.swift */,
 				47DAD3A324A7F68226FB0DDA /* DeepLinkRoute.swift */,
+				6B77B73BC49074054163CF37 /* LocalNetworkPermission.swift */,
 				DC1B61BF8E4B4D7BFFEEDF40 /* MainTabView.swift */,
 				6E2E6BDC1B376722400F1A3C /* MenuConfig.swift */,
 				07FC69547A3D53FC6B2DA508 /* RoutedImageDataLoader.swift */,
@@ -2676,6 +2680,7 @@
 				8EA6683BCA87AA552B36C4CA /* LicensesView.swift in Sources */,
 				68AA55262737A0C2563E1414 /* LiveSessionsRow.swift in Sources */,
 				E4AF1097C891473701C8C2C9 /* LoadingStateView.swift in Sources */,
+				C277159865F75D8DB433ECA0 /* LocalNetworkPermission.swift in Sources */,
 				70247C5A32673CC464D68A32 /* LocalizationManager.swift in Sources */,
 				F3AB01F4B3E98B4F0B9107BC /* LogScrubber.swift in Sources */,
 				8D24463B5C884F60485FD40C /* LoginScreen.swift in Sources */,
@@ -3095,6 +3100,7 @@
 				775886D386630AB477D44DBD /* LicensesView.swift in Sources */,
 				6397545252AE02187DB3C89B /* LiveSessionsRow.swift in Sources */,
 				EF860827AC026C15AEF6574B /* LoadingStateView.swift in Sources */,
+				AC352018D7C47CD7ED208AB8 /* LocalNetworkPermission.swift in Sources */,
 				2FA1FE57761F94C1764861F9 /* LocalizationManager.swift in Sources */,
 				8EFADBED264B9B445D504ECB /* LogScrubber.swift in Sources */,
 				B17B6055000707C83658C8DF /* LoginScreen.swift in Sources */,

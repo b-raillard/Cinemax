@@ -71,6 +71,22 @@ final class AppState {
     /// answers as that server). Wired by `AppNavigation` to
     /// `ServerRouteController.dialURL(for:)`.
     var routeURL: @MainActor (ServerEntry) async -> URL = { $0.url }
+    /// Called when `setLocalAddress` saved or removed the ACTIVE server's LAN
+    /// address: the route owner re-evaluates. Wired by `AppNavigation` to
+    /// `ServerRouteController.evaluate(.addressChanged)`.
+    var onLocalAddressChanged: @MainActor () -> Void = {}
+    /// The save probe of `setLocalAddress`: its own token-less session, never
+    /// the shared client. A seam for the tests.
+    var localProbe: @Sendable (URL, TimeInterval) async -> LocalProbeOutcome = { url, timeout in
+        await LocalRouteProbe.probe(url, timeout: timeout)
+    }
+    /// Learns a missing `serverID` from the public URL (`/System/Info/Public`).
+    var publicPing: @Sendable (URL) async -> PingResult = { await ServerReachability.ping(url: $0) }
+    /// Whether iOS's local-network permission refused a failed save probe.
+    var localNetworkDenied: @Sendable (URL) async -> Bool = { await LocalNetworkPermission.isDenied($0) }
+    /// The LAN certificate's standing after a failed save probe (pending
+    /// approval, pinned, or unknown) — read from `ServerTrustDelegate`.
+    var localCertificateState: @MainActor (URL) -> LocalCertificateState = { AppState.certificateState(ofLocalURL: $0) }
     /// Revokes ONE token server-side (`ServerSessionRevoker`, `POST /Sessions/Logout`).
     /// A seam so the multi-account tests can see which tokens were revoked.
     var sessionRevoker: @Sendable (URL, String) async -> Void = { url, token in
@@ -706,6 +722,107 @@ final class AppState {
         return entry
     }
 
+    // MARK: - Local address
+
+    /// Saves the LAN address typed for a registered server — blank removes
+    /// it — after probing it, through the owner's decision table
+    /// (`LocalAddressSavePolicy`). https only; an unpinned or changed LAN
+    /// certificate saves nothing and asks for its approval
+    /// (`trustLocalCertificate`). Never touches the shared client: the probe
+    /// and the public ping run on their own token-less sessions.
+    func setLocalAddress(id: String, raw: String) async -> LocalAddressSaveOutcome {
+        if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            commitLocalAddress(id: id, to: nil, adopting: nil)
+            return .removed
+        }
+        let url: URL
+        switch ServerURLNormalizer.normalizeLocal(raw) {
+        case .success(let normalized): url = normalized
+        case .failure(.notHTTPS): return .refusedNotHTTPS
+        case .failure: return .refusedNotLocal
+        }
+        guard let entry = servers.first(where: { $0.id == id }) else { return .needsSignIn }
+        let known = entry.serverID.flatMap { $0.isEmpty ? nil : $0 }
+        var publicID: String?
+        if known == nil { publicID = await learnedServerID(of: entry.url) }
+        let decision = await localSaveDecision(for: url, knownServerID: known, publicServerID: publicID)
+        logger.notice("[Servers] adresse locale : \(String(describing: decision.outcome), privacy: .public)")
+        guard decision.saves else { return decision.outcome }
+        // The entry may have been removed while the probe ran.
+        guard servers.contains(where: { $0.id == id }) else { return .needsSignIn }
+        commitLocalAddress(id: id, to: url, adopting: decision.serverIDToAdopt)
+        return decision.outcome
+    }
+
+    /// Approves the LAN certificate the last save probe refused for the typed
+    /// address (exactly as `ServerSetupViewModel.trustPendingCertificate`),
+    /// then saves again. Nothing pending: saves again as is.
+    func trustLocalCertificate(id: String, raw: String) async -> LocalAddressSaveOutcome {
+        if let pending = pendingLocalCertificate(raw: raw) {
+            ServerTrustDelegate.shared.trust(fingerprint: pending.fingerprint, forTrustKey: pending.trustKey)
+        }
+        return await setLocalAddress(id: id, raw: raw)
+    }
+
+    /// The LAN certificate awaiting approval for a typed address, for the UI.
+    func pendingLocalCertificate(raw: String) -> ServerCertificateSummary? {
+        guard case .success(let url) = ServerURLNormalizer.normalizeLocal(raw),
+              let key = ServerCertificateTrust.trustKey(for: url) else { return nil }
+        return ServerTrustDelegate.shared.pendingApproval(forTrustKey: key)
+    }
+
+    static func certificateState(ofLocalURL url: URL) -> LocalCertificateState {
+        guard let key = ServerCertificateTrust.trustKey(for: url) else { return .unknown }
+        if ServerTrustDelegate.shared.pendingApproval(forTrustKey: key) != nil { return .pendingApproval }
+        return ServerTrustDelegate.shared.isPinned(trustKey: key) ? .trusted : .unknown
+    }
+
+    private func learnedServerID(of url: URL) async -> String? {
+        guard case .online(_, _, let serverID) = await publicPing(url) else { return nil }
+        return serverID
+    }
+
+    private func localSaveDecision(
+        for url: URL, knownServerID: String?, publicServerID: String?
+    ) async -> LocalAddressSaveDecision {
+        var probe = await localProbe(url, LocalRouteProbe.runtimeTimeout)
+        // A TLS pass is trust: the certificate only matters on a failure.
+        var certificate = LocalCertificateState.trusted
+        if case .failed(let deniedByProbe) = probe {
+            var denied = deniedByProbe
+            if !denied { denied = await localNetworkDenied(url) }
+            probe = .failed(localNetworkDenied: denied)
+            certificate = localCertificateState(url)
+        }
+        return LocalAddressSavePolicy.decide(
+            knownServerID: knownServerID, publicServerID: publicServerID,
+            probe: probe, certificate: certificate
+        )
+    }
+
+    /// Writes a saved (or removed) LAN address, forgets the previous one's pin
+    /// when nothing uses its host:port any more, and has the route owner
+    /// re-evaluate when the server is the active one — even for an unchanged
+    /// address, re-saved from home after its certificate was approved.
+    private func commitLocalAddress(id: String, to url: URL?, adopting serverID: String?) {
+        guard let before = servers.first(where: { $0.id == id }) else { return }
+        setLocalURL(id: id, to: url)
+        if let serverID { adoptServerID(id: id, serverID: serverID) }
+        if let old = before.localURL { forgetLocalPinIfUnused(old) }
+        if id == activeServerId, url != nil || before.localURL != nil { onLocalAddressChanged() }
+    }
+
+    /// A LAN pin outliving its address would pre-approve whatever answers on
+    /// that host:port later — unless some entry's public or local URL (the
+    /// edited one's own public URL included) still names it.
+    private func forgetLocalPinIfUnused(_ oldURL: URL) {
+        guard let key = ServerCertificateTrust.trustKey(for: oldURL) else { return }
+        let inUse = servers.contains { entry in
+            [entry.url, entry.localURL].contains { $0.flatMap(ServerCertificateTrust.trustKey(for:)) == key }
+        }
+        if !inUse { ServerTrustDelegate.shared.forget(trustKey: key) }
+    }
+
     /// Stores a manual order for the servers list — `orderedIds` is the
     /// COMPLETE list as displayed after the user's move (see
     /// `ServerRegistry.applyingOrder`). The other writer of the user-owned
@@ -749,7 +866,9 @@ final class AppState {
         // Validated OFF the shared client: it stays on the working server until
         // the target is known good, so nothing on screen can reach the target
         // with the wrong user id, and a refusal has nothing to undo (B4/B10).
-        switch await sessionValidator(entry.url, token) {
+        // On the TARGET's route (its LAN address when it answers as that
+        // server), decided for its own entry — still off the shared client.
+        switch await sessionValidator(await routeURL(entry), token) {
         case .valid:
             await applyActiveServer(entry)       // the one repoint of a switch
             return .commit
@@ -782,7 +901,10 @@ final class AppState {
         // and B's credentials would then go to A).
         beginSignIn()
         defer { endSignIn() }
-        let info = try? await apiClient.connectToServer(url: entry.url)
+        // Handshake on the entry's route (its LAN address at home), the
+        // identity unchanged; a dial URL only when it is not the identity.
+        let route = await routeURL(entry)
+        let info = try? await apiClient.connectToServer(url: entry.url, dialURL: route == entry.url ? nil : route)
         // Race guard: a newer transition (another switch, an add, a logout)
         // started while this handshake was in flight — its state has already been
         // committed and must not be overwritten by this stale one.
@@ -1157,7 +1279,7 @@ final class AppState {
             pendingSignInKey = key
             return .needsLogin
         }
-        switch await sessionValidator(entry.url, token) {
+        switch await sessionValidator(await routeURL(entry), token) {
         case .valid:
             expiredAccountIds.remove(key)
             await applyActiveServer(target)

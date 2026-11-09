@@ -100,6 +100,13 @@ public enum ServerCertificateTrust {
         "\(host.lowercased()):\(port)"
     }
 
+    /// `local` or `internet` for a pin key — what a log line prints instead
+    /// of the key: no address in any log (a LAN pin's key is a LAN address).
+    public static func addressClass(ofTrustKey key: String) -> String {
+        let host = key.lastIndex(of: ":").map { String(key[..<$0]) } ?? key
+        return LocalNetworkAddress.isEligibleHost(host) ? "local" : "internet"
+    }
+
     /// The pin key for a server URL, or `nil` when it names no host.
     public static func trustKey(for url: URL) -> String? {
         guard let host = url.host, !host.isEmpty else { return nil }
@@ -219,7 +226,7 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
         pendingApprovals[key] = nil
         lock.unlock()
         keychain.saveTrustedCertificates(pins)
-        trustLog.info("ServerTrust ▸ certificat approuvé pour \(key, privacy: .public)")
+        trustLog.info("ServerTrust ▸ certificat approuvé pour un hôte \(ServerCertificateTrust.addressClass(ofTrustKey: key), privacy: .public)")
     }
 
     /// Forgets a host's pin (used when its server is removed).
@@ -313,7 +320,7 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
         case .accept:
             completionHandler(.useCredential, URLCredential(trust: trust))
         case .fingerprintChanged:
-            trustLog.error("ServerTrust ▸ le certificat de \(key, privacy: .public) a CHANGÉ — refusé, nouvelle approbation requise")
+            trustLog.error("ServerTrust ▸ le certificat d'un hôte \(ServerCertificateTrust.addressClass(ofTrustKey: key), privacy: .public) a CHANGÉ — refusé, nouvelle approbation requise")
             rememberPending(trust: trust, host: space.host, port: space.port, key: key)
             completionHandler(.performDefaultHandling, nil)
         }

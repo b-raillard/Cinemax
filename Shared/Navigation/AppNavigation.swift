@@ -325,6 +325,9 @@ struct AppNavigation: View {
             Task { await serverRoute.evaluate(.serverChange) }
         }
         appState.routeURL = { [serverRoute] entry in await serverRoute.dialURL(for: entry) }
+        appState.onLocalAddressChanged = { [serverRoute] in
+            Task { await serverRoute.evaluate(.addressChanged) }
+        }
         await appState.restoreSession()
         // An install that already knows a server is not a first run whatever
         // the flag says — it upgraded from a version without onboarding.
