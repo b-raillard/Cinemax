@@ -19,7 +19,7 @@ Family members watch from outside, so the public URL stays. Tailscale was reject
 | How the app learns the local address | **Typed by hand, once per device**, next to the public URL. No auto-discovery: the NAS's Jellyfin runs in Docker and reports `LocalAddress = http://172.17.0.3:8096`, unreachable from the LAN (checked 2026-11-09 on `/System/Info/Public`). The app's UDP discovery would see the same address. |
 | « Local » vs « Internet » indication | **Derived from the IP address itself** (private ranges are standardised), never a stored flag or a user setting. |
 | Addresses per server | **Two at most**: the public URL and one optional local address. |
-| Written spec first | Yes (this file). |
+| Written spec first | Yes (this file). Validated by the owner on 2026-11-09, the seven builder calls included. |
 | How far the local route goes | **« Si tu détectes que je suis en local, on passe en local en priorité »**: everywhere the app talks to this server, the local address is tried first when the device may be at home, and the public URL is the fallback. The local address is a failover too: with the home internet or the tunnel down, the app keeps working at home (see *Where the route applies*). |
 
 ## What the user sees
@@ -151,7 +151,12 @@ So:
   - **Playback transport**: `StreamTransportPolicy.configure` is fed the dial URL on every route change (`CinemaxStreamProxy.swift:49-62`), which also resets the sticky-proxy flag. An IPv4 literal never prefers the proxy, so a LAN stream goes direct.
 - **Switches reset the route.** A server or account switch, and every `reconnect(url:)`, sets the dial URL back to the identity URL, then re-evaluates for the new active entry. Otherwise the previous server's LAN address could receive the new server's token.
 - **The registry keeps the field.** `ServerRegistry.upsert` rebuilds every field by hand, so the new optional field (the local address) must be carried over from the stored entry, like `displayNameOverride` / `sortIndex`. No login, switch or reachability write may drop it.
-- **No `serverID`, no local address** (my call). The probe compares against `entry.serverID`, which is optional, and the « Mes serveurs » ping does not record it (`ServersScreen.swift:99`). If it is missing when the user saves a local address, learn it first from `/System/Info/Public` on the public URL. If that fails too, refuse with « Connectez-vous d'abord à ce serveur ».
+- **Missing `serverID`** (product owner, 2026-11-09). The probe compares against `entry.serverID`, which is optional, and the « Mes serveurs » ping does not record it (`ServersScreen.swift:99`). If it is missing when the user saves a local address:
+  1. learn it first from `/System/Info/Public` on the public URL;
+  2. if the public URL does not answer (home internet or tunnel down) but the local address does, **adopt the local `Id` as the entry's `serverID`** and save. This is the owner's decision: nothing then proves that the local machine is the same server, which is accepted for a one-time, hand-typed setup;
+  3. if neither answers, refuse with « Connectez-vous d'abord à ce serveur ».
+
+  Once learned, the `serverID` is written to the entry through `ServerRegistry.upsert` and every later probe compares against it.
 - **Route owner.** One `@MainActor` owner of the current route: the probe, the decision, and pushing the dial URL into the client / image loader / socket / transport policy.
   - It must get network path changes **without a new modifier on `AppNavigation.body`**, which sits at the type-checker limit (memory `project_appnavigation_body_typecheck_limit`).
   - `NetworkMonitor` only exposes `isOnline` (`NetworkMonitor.swift:14`), so a Wi-Fi⇄cellular change with both up is invisible to it today. Extend it, e.g. with the interface kinds, or a callback the owner subscribes to.
