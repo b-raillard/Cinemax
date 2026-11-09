@@ -32,6 +32,15 @@ public enum SeerrAddress {
         return components.url
     }
 
+    /// `endpoint` (starting with `/`) under `base`, keeping the sub-path of a
+    /// Seerr hosted at `https://host/seerr` (`setEndpointPath`). The endpoint is NOT percent-escaped: for fixed root
+    /// routes outside `/api/v1` (e.g. the image proxy) only.
+    public static func endpoint(_ endpoint: String, on base: URL) -> URL? {
+        guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return nil }
+        components.setEndpointPath(endpoint, preservingBasePathOf: base)
+        return components.url
+    }
+
     /// Whether two addresses name the same Seerr: scheme, host, port and path,
     /// exactly, once normalized (a default port written out or not is the same
     /// port). A Seerr secret — a session cookie, an API key — is only ever sent

@@ -13,7 +13,7 @@ The household's server runs Seerr next to Jellyfin. Today, wanting a title that 
 | Question | Answer |
 |---|---|
 | Where requesting happens | Search results, series fiche (missing seasons), saga, actor page. Plus follow-up and admin approval. |
-| Look of a missing title | **Dashed outline**, no artwork, title inside (mockup option C). |
+| Look of a missing title | **Dashed outline**, title inside (mockup option C) — over Seerr's poster, dimmed under a 62 % `surfaceContainerLowest` veil (owner, 2026-11-08, variant A); no poster ⇒ the outline alone. Season cards keep the bare outline. |
 | Order | **Missing titles always AFTER the owned ones**, everywhere — so nothing already on screen moves when Seerr answers. |
 | While Seerr loads | **Skeletons** in the place the Seerr items will take — only when Seerr is configured for this user. Not configured ⇒ nothing at all, the screen is today's. |
 | Naming Seerr | **Only where the tool matters**: Settings, and the prompts that invite a user to connect. **Never** on search, fiches, lists. |
@@ -57,7 +57,7 @@ The household's server runs Seerr next to Jellyfin. Today, wanting a title that 
 
 ### Search (iOS + tvOS)
 
-Below the library results — also when there are none — a section **« Pas encore dans ta bibliothèque »** with the Seerr matches (movies and series only; people and collections dropped). Skeleton cards while it loads, after the library results are already on screen. Titles present in Jellyfin are removed (see *Who is "in the library"*). A card is a dashed-outline card; its badge says « Demander » or the request state. Tap ⇒ request sheet (iOS) / confirmation (tvOS): title, kind, year, a two-line overview, « Demander ce film » / « Demander la série », and one line saying what happens next (auto-approved: « le téléchargement démarre tout de suite »; otherwise « l'admin doit valider ta demande, tu seras prévenu à son arrivée »). After the request: a toast « Demande envoyée : <titre> », the card flips to its state.
+Below the library results — also when there are none — a section **« Pas encore dans ta bibliothèque »** with the Seerr matches (movies and series only; people and collections dropped). Skeleton cards while it loads, after the library results are already on screen. Titles present in Jellyfin are removed (see *Who is "in the library"*). A card is a dashed-outline card; its badge says « Demander » or the request state. Tap ⇒ request sheet (iOS) / confirmation (tvOS): title, kind, year, a two-line overview, « Demander ce film » / « Demander la série », and one line saying what happens next (auto-approved: « le téléchargement démarre tout de suite »; otherwise « l'admin doit d'abord valider ta demande. On te prévient dès qu'elle arrive. »). After the request: a toast « Demande envoyée : <titre> », the card flips to its state.
 
 A user who is enabled but not yet connected to Seerr (account mode) sees, in place of the section, one card: « Il te manque un titre ? — Ton serveur utilise Seerr pour les demandes. Connecte-toi une fois avec ton compte Jellyfin : rien à taper. » + « Se connecter à Seerr ». Shown at most in search and in Settings → Demandes; dismissible (« Plus tard » hides it from search for that user on that device).
 
@@ -139,7 +139,7 @@ There is no server-wide "mode": the key is typed by a Jellyfin admin on a given 
 - `GET /auth/me` → `permissions` bitmask (`ADMIN` 2 passes everything; `MANAGE_REQUESTS` 16, `REQUEST` 32, `AUTO_APPROVE` 128, `REQUEST_MOVIE` 262144, `REQUEST_TV` 524288 …).
 - Enums — **code, not the YAML spec** (they disagree): `MediaStatus` 1 unknown, 2 pending, 3 processing, 4 partially available, 5 available, 6 blocklisted (« blacklisted » ≤ 2.7), 7 deleted; `MediaRequestStatus` 1 pending, 2 approved, 3 declined, 4 failed, 5 completed.
 - Unauthenticated probes: `GET /status` (`version`), `GET /settings/public` (`mediaServerType`, `mediaServerLogin`, `newPlexLogin`, `jellyfinServerName`, `partialRequestsEnabled`, `enableSpecialEpisodes`, …).
-- Images: TMDb paths, `https://image.tmdb.org/t/p/w300{path}` — irrelevant to the dashed look, used only in the request sheet and Mes demandes. When `cacheImages` is on, use Seerr's unauthenticated `/imageproxy/tmdb/t/p/{size}{path}` instead (no device → TMDb traffic).
+- Images: TMDb paths, `https://image.tmdb.org/t/p/w300{path}` — used by the request sheet, Mes demandes and, dimmed, the missing-title cards (`SeerrSession.posterURL`). When `cacheImages` is on, use Seerr's unauthenticated `/imageproxy/tmdb/t/p/{size}{path}` instead (no device → TMDb traffic).
 - Traps: when Seerr's CSRF protection is on, every non-GET needs the `_csrf` cookie and the `XSRF-TOKEN` value echoed in `X-XSRF-TOKEN`, API key included (see the spike: handled by the client, not an error); `express-openapi-validator` 400s on query parameters not in the spec — send only listed ones; error bodies are `{message}` or `{error}`.
 
 ## Spike findings (2026-11-07, Seerr 3.5.1 against Jellyfin 10.11.0 AND 12.0.0, throwaway Docker bench)

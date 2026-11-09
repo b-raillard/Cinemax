@@ -496,6 +496,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     /// `enableTotalRecordCount` of every `searchItems` call, in order.
     private(set) var searchCountFlags: [Bool] = []
+    /// `includeProviderIds` of every `searchItems` call, in order.
+    private(set) var searchProviderIdFlags: [Bool] = []
 
     /// Holds `getResumeItems` open until opened — keeps Home's phase 1 in
     /// flight so a test can observe what is on screen meanwhile.
@@ -715,8 +717,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedSimilarItems
     }
 
-    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, enableTotalRecordCount: Bool) async throws -> [BaseItemDto] {
-        recordLock.withLock { searchCountFlags.append(enableTotalRecordCount) }
+    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, extras: SearchItemsExtras) async throws -> [BaseItemDto] {
+        recordLock.withLock {
+            searchCountFlags.append(extras.contains(.totalRecordCount))
+            searchProviderIdFlags.append(extras.contains(.providerIds))
+        }
         if let handler = searchItemsHandler {
             return try await handler(searchTerm)
         }

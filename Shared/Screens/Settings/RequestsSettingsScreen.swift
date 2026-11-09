@@ -423,24 +423,10 @@ struct RequestsSettingsScreen: View {
     /// « Se connecter à Seerr », toward the SAVED address only. A failure says
     /// what the connection test would say for the same reason.
     private func signIn() async {
-        guard let address = seerr.config?.url, !isSigningIn else { return }
+        guard seerr.config?.url != nil, !isSigningIn else { return }
         isSigningIn = true
         defer { isSigningIn = false }
-        // Without Quick Connect, Jellyfin's refusal would read as a device one.
-        // A probe that does not get through says nothing about Quick Connect.
-        let quickConnectOn: Bool
-        do {
-            quickConnectOn = try await appState.apiClient.isQuickConnectEnabled()
-        } catch {
-            showFailure(.unreachable)
-            return
-        }
-        guard quickConnectOn else {
-            showFailure(.quickConnectOff)
-            return
-        }
-        if case .failure(let error) = await seerr.signIn(address: address, appState: appState),
-           let failure = SeerrAccess.signInFailure(error, policy: appState.currentUser?.policy) {
+        if let failure = await seerr.signInToSavedAddress(appState: appState) {
             showFailure(failure)
         }
     }

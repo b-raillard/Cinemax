@@ -532,6 +532,26 @@ final class SeerrSession {
         return .success(signedIn.user)
     }
 
+    /// « Se connecter à Seerr » — from Settings → Demandes and from the
+    /// search screen's invitation — toward the SAVED address only. Quick
+    /// Connect is probed first: without it, Jellyfin's refusal would read as
+    /// a device one (and a probe that does not get through says nothing about
+    /// Quick Connect). `nil` = signed in, or nothing to say (cancelled).
+    func signInToSavedAddress(appState: AppState) async -> SeerrTestFailure? {
+        guard let address = config?.url else { return nil }
+        let quickConnectOn: Bool
+        do {
+            quickConnectOn = try await appState.apiClient.isQuickConnectEnabled()
+        } catch {
+            return .unreachable
+        }
+        guard quickConnectOn else { return .quickConnectOff }
+        if case .failure(let error) = await signIn(address: address, appState: appState) {
+            return SeerrAccess.signInFailure(error, policy: appState.currentUser?.policy)
+        }
+        return nil
+    }
+
     /// « Se déconnecter »: the cookie goes first, then Seerr is told (best
     /// effort — a failed logout changes nothing the user can act on), and only
     /// the Seerr that issued it.

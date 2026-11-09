@@ -29,6 +29,9 @@ final class StubSeerrTransport: SeerrTransport, @unchecked Sendable {
         self.replies = replies
     }
 
+    /// Called after each request is recorded (before its answer is served).
+    nonisolated(unsafe) var onSend: (@Sendable () -> Void)?
+
     func enqueue(_ reply: Reply) {
         lock.withLock { replies.append(reply) }
     }
@@ -43,6 +46,7 @@ final class StubSeerrTransport: SeerrTransport, @unchecked Sendable {
             if replies.isEmpty { ranDry = true }
             return replies.isEmpty ? nil : replies.removeFirst()
         }
+        onSend?()
         switch reply {
         case nil:
             throw Exhausted()

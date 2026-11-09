@@ -164,6 +164,20 @@ public enum ItemFieldSet: Sendable, Equatable {
     case card
 }
 
+/// What one `searchItems` pass asks for beyond the items themselves.
+public struct SearchItemsExtras: OptionSet, Sendable {
+    public let rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+
+    /// `totalRecordCount` — a second, `COUNT` query server-side, for a caller
+    /// that READS the total (see the `enableTotalRecordCount` RULE).
+    public static let totalRecordCount = Self(rawValue: 1 << 0)
+    /// `ProviderIds` (the TMDb id) on each item — asked only by the search
+    /// screen while its Seerr section is visible, to tell owned titles from
+    /// missing ones.
+    public static let providerIds = Self(rawValue: 1 << 1)
+}
+
 /// Library queries: items, genres, search, series/seasons/episodes.
 public protocol LibraryAPI: Sendable {
     func getResumeItems(userId: String, limit: Int) async throws -> [BaseItemDto]
@@ -215,7 +229,9 @@ public protocol LibraryAPI: Sendable {
     func getUserViews(userId: String) async throws -> [BaseItemDto]
     func getItem(userId: String, itemId: String) async throws -> BaseItemDto
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
-    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, enableTotalRecordCount: Bool) async throws -> [BaseItemDto]
+    /// Callers go through the extension's `enableTotalRecordCount:` /
+    /// `includeProviderIds:` labels; see `SearchItemsExtras`.
+    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, extras: SearchItemsExtras) async throws -> [BaseItemDto]
 
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto]
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto]
@@ -826,11 +842,15 @@ public extension LibraryAPI {
         searchTerm: String,
         includeItemTypes: [BaseItemKind] = [.movie, .series, .episode],
         limit: Int = 20,
-        enableTotalRecordCount: Bool = true
+        enableTotalRecordCount: Bool = true,
+        includeProviderIds: Bool = false
     ) async throws -> [BaseItemDto] {
-        try await searchItems(
+        var extras: SearchItemsExtras = []
+        if enableTotalRecordCount { extras.insert(.totalRecordCount) }
+        if includeProviderIds { extras.insert(.providerIds) }
+        return try await searchItems(
             userId: userId, searchTerm: searchTerm, includeItemTypes: includeItemTypes,
-            limit: limit, enableTotalRecordCount: enableTotalRecordCount
+            limit: limit, extras: extras
         )
     }
     func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
