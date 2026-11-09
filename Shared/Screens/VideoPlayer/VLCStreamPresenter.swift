@@ -508,6 +508,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Watches the INPUT, which dies ~20 s before the picture does when the
     /// origin cancels a direct stream. See `FeedStallPolicy`.
     private var feedStall = FeedStallPolicy()
+    /// `logVerboseFeedSample`'s cadence and its previous byte count (Debug /
+    /// TestFlight builds only).
+    private var verboseFeedTicks = 0
+    private var verboseFeedLastReadBytes: UInt64?
     /// The follow-up that escalates a re-anchor to a full rebuild if the byte
     /// count has not moved since. Without it a re-anchor onto a genuinely dead
     /// link would hold its own seek-settle window (30 s backstop) with both
@@ -1147,6 +1151,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         refreshTimeUI()
         checkFeedStall()
         checkPictureStall()
+        logVerboseFeedSample()
         #if os(iOS)
         // The film bar's thumbnail, retaken every 10 s while the deck shows:
         // the one taken on entry predates the first picture (black), and a
@@ -1282,6 +1287,31 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // under an endless spinner, with no alert (M6-07).
             _ = reResolveAndResume(from: currentMs, surfacingFailure: true)
         }
+    }
+
+    /// Debug / TestFlight builds only (`VerboseDiagnostics`): one
+    /// `CINEMAX-FEED` line every `feedSampleSeconds` — position, engine state,
+    /// route, bytes read since the previous line, pictures. A stall document
+    /// shows the moment of the fault; this shows whether the feed was already
+    /// thinning before it, and whether the relay actually fed after it.
+    /// Rides the existing heartbeat, never a timer of its own.
+    private func logVerboseFeedSample() {
+        guard VerboseDiagnostics.isEnabled else { return }
+        verboseFeedTicks += 1
+        guard verboseFeedTicks % VerboseDiagnostics.feedSampleSeconds == 0 else { return }
+        let stats = player.statistics
+        let line = VerboseDiagnostics.FeedSample(
+            positionSeconds: Int(currentMs / 1000),
+            state: player.state.description,
+            route: isAdaptiveStream ? "hls" : (usingProxy ? "relay" : "direct"),
+            readBytes: stats?.readBytes,
+            previousReadBytes: verboseFeedLastReadBytes,
+            inputBitrate: stats.map { Double($0.inputBitrate) },
+            displayedPictures: stats?.displayedPictures,
+            lostPictures: stats?.lostPictures
+        ).line
+        verboseFeedLastReadBytes = stats?.readBytes
+        logger.notice("\(line, privacy: .public)")
     }
 
     /// The guard that watches the INPUT instead of the picture — the origin
