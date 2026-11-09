@@ -124,6 +124,72 @@ struct StreamURLTests {
     }
 }
 
+/// R13 — libVLC has no per-connection trust hook: a stream on a PINNED
+/// (self-signed) host:port opens through the loopback proxy, whose URLSession
+/// honours `ServerTrustDelegate`, instead of failing direct first.
+@Suite("VLC pinned host → proxy")
+struct VLCPinnedHostProxyTests {
+    @Test("a stream on a pinned host:port goes through the proxy")
+    func pinnedHostRoutesThroughProxy() throws {
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream?static=true"))
+        var asked: [String] = []
+        let pinned = VLCStreamPresenter.targetIsPinned(lan) { key in
+            asked.append(key)
+            return key == "192.168.1.128:8920"
+        }
+        #expect(pinned)
+        #expect(asked == ["192.168.1.128:8920"])
+    }
+
+    @Test("an unpinned host, another port of a pinned host, or plain http stays direct")
+    func unpinnedStaysDirect() throws {
+        let isPinned: (String) -> Bool = { $0 == "192.168.1.128:8920" }
+        let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream"))
+        #expect(!VLCStreamPresenter.targetIsPinned(publicStream, isPinned: isPinned))
+        let otherPort = try #require(URL(string: "https://192.168.1.128/Videos/1/stream"))
+        #expect(!VLCStreamPresenter.targetIsPinned(otherPort, isPinned: isPinned))
+        let plain = try #require(URL(string: "http://192.168.1.128:8920/Videos/1/stream"))
+        #expect(!VLCStreamPresenter.targetIsPinned(plain) { _ in true })
+    }
+}
+
+/// R13 — AVPlayer cannot honour a pin: on a LAN dial the native engine plays
+/// the IDENTITY (public) URL of the same stream, never with trust disabled.
+@Suite("Native engine plays the identity")
+struct NativeStreamRouteTests {
+    @Test("a stream on the LAN dial is rewritten to the identity, path and query kept")
+    func lanStreamPlaysIdentity() throws {
+        let identity = try #require(URL(string: "https://movies.nivadax.net"))
+        let dial = try #require(URL(string: "https://192.168.1.128:8920"))
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/master.m3u8?PlaySessionId=abc&ApiKey=t"))
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: identity, dial: dial)
+                == URL(string: "https://movies.nivadax.net/Videos/1/master.m3u8?PlaySessionId=abc&ApiKey=t"))
+    }
+
+    @Test("identity and LAN base paths are both respected")
+    func basePaths() throws {
+        let identity = try #require(URL(string: "https://example.org/jellyfin"))
+        let dial = try #require(URL(string: "https://192.168.1.128:8920"))
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream?static=true"))
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: identity, dial: dial)
+                == URL(string: "https://example.org/jellyfin/Videos/1/stream?static=true"))
+    }
+
+    @Test("no LAN dial, a stream elsewhere, or a dial equal to the identity: played as negotiated")
+    func untouched() throws {
+        let identity = try #require(URL(string: "https://movies.nivadax.net"))
+        let dial = try #require(URL(string: "https://192.168.1.128:8920"))
+        let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream"))
+        let staleLAN = try #require(URL(string: "https://192.168.1.50:8920/Videos/1/stream"))
+        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, dial: dial) == publicStream)
+        #expect(NativeVideoPresenter.nativePlayURL(staleLAN, identity: identity, dial: dial) == staleLAN)
+        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, dial: nil) == publicStream)
+        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, dial: identity) == publicStream)
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream"))
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: nil, dial: dial) == lan)
+    }
+}
+
 // MARK: - Device profiles (moved here: a new test file needs an xcodegen run)
 
 /// The device profiles are what the server reads to decide between DirectPlay,

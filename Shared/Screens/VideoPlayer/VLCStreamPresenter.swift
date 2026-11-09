@@ -37,7 +37,7 @@ final class VLCStreamPresenter: NSObject {
     private let title: String
     private let startTime: Double?
     private let loc: LocalizationManager
-    private let apiClient: any PlaybackAPI & LibraryAPI
+    private let apiClient: any PlaybackAPI & LibraryAPI & ServerAPI
     private let userId: String
     private let autoPlayNext: Bool
     private let previousEpisode: EpisodeRef?
@@ -61,7 +61,7 @@ final class VLCStreamPresenter: NSObject {
         previousEpisode: EpisodeRef?,
         nextEpisode: EpisodeRef?,
         episodeNavigator: EpisodeNavigator?,
-        apiClient: any PlaybackAPI & LibraryAPI,
+        apiClient: any PlaybackAPI & LibraryAPI & ServerAPI,
         userId: String,
         autoPlayNext: Bool,
         maxBitrate: Int,
@@ -149,6 +149,17 @@ final class VLCStreamPresenter: NSObject {
         }
     }
 
+    /// Whether the stream `target` is on a host:port whose (self-signed)
+    /// certificate the user pinned. libVLC has no per-connection trust hook,
+    /// so such a stream opened DIRECT always fails; the loopback proxy's
+    /// URLSession honours `ServerTrustDelegate`. Only an `https` target can
+    /// carry a pin. Pure, so the decision is testable (`VLCPinnedHostProxyTests`).
+    nonisolated static func targetIsPinned(_ target: URL, isPinned: (String) -> Bool) -> Bool {
+        guard target.scheme?.lowercased() == "https",
+              let key = ServerCertificateTrust.trustKey(for: target) else { return false }
+        return isPinned(key)
+    }
+
     /// The URL a stream open hands on — to libVLC directly, or to the loopback
     /// proxy as its origin target. The ONE place that decides whether the
     /// account token rides the query string (#184):
@@ -208,7 +219,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private let titleText: String
     private let episodeNavigator: EpisodeNavigator?
-    private let apiClient: any PlaybackAPI & LibraryAPI
+    private let apiClient: any PlaybackAPI & LibraryAPI & ServerAPI
     private let userId: String
     private let autoPlayNext: Bool
     /// The `render4K`-derived bitrate ceiling the negotiation uses — reused on
@@ -690,7 +701,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     init(
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
-        episodeNavigator: EpisodeNavigator?, apiClient: any PlaybackAPI & LibraryAPI,
+        episodeNavigator: EpisodeNavigator?, apiClient: any PlaybackAPI & LibraryAPI & ServerAPI,
         userId: String, autoPlayNext: Bool, maxBitrate: Int, imageBuilder: ImageURLBuilder,
         loc: LocalizationManager, onDismiss: (() -> Void)?
     ) {
@@ -4236,8 +4247,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     /// Single decision point for opening a *fresh* stream through the proxy:
-    /// a probed black-hole, a prior direct failure this session, or a
-    /// seek-heavy container that would otherwise flood the server.
+    /// a probed black-hole, a prior direct failure this session, a
+    /// seek-heavy container that would otherwise flood the server, or a
+    /// pinned host:port (the LAN address, a self-signed public server) that
+    /// libVLC cannot open direct. The pin is NOT sticky: it is re-read per
+    /// open, so the give-up's `noteProxiedPlaybackFailed()` is unaffected.
     private var shouldRouteThroughProxy: Bool {
         #if DEBUG
         // Lets the proxy path be exercised on a network where the direct path
@@ -4247,6 +4261,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if ProcessInfo.processInfo.environment["CINEMAX_FORCE_PROXY"] != nil { return true }
         #endif
         return StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
+            || VLCStreamPresenter.targetIsPinned(info.url, isPinned: ServerTrustDelegate.shared.isPinned(trustKey:))
     }
 
     /// The ONE way this presenter obtains a loopback URL. Kept as a single choke
@@ -5568,10 +5583,31 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             didRetry: didRetry,
             errorAlertShowing: errorAlert != nil,
             retryPending: pendingRetryToken != nil,
-            usingProxy: usingProxy
+            usingProxy: usingProxy,
+            routeChanged: PlaybackRetryPolicy.routeChanged(
+                negotiated: info.url, currentDial: apiClient.currentDialURL()
+            )
         )
         let releaseStickyProxy: Bool
         switch decision {
+        case .rebuildOnCurrentRoute:
+            // The stream was negotiated on a route that is no longer dialled
+            // (LAN ⇄ public): a retry would reopen the dead host. A refused
+            // rebuild (budget spent, closing, or this IS a rebuild's own failed
+            // negotiation surfacing — `reResolve` still begun) gives up below.
+            // Spent BEFORE the rebuild: only `noteMediaOpened()` renews it (a
+            // successful rebuild re-arms it for its own open), and the shared
+            // rebuild budget bounds the rest.
+            didRetry = true
+            logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — route changed (now \(ServerRouteController.shared.route.rawValue, privacy: .public)), re-negotiating")
+            // Armed now, as the retry does: the failed attempt's trailing
+            // `.stopped` lands during the negotiation and must be ignored.
+            beginOpenLoading()
+            let fromMs = PlaybackRetryPolicy.rebuildFromMs(
+                lastKnownPositionMs: lastKnownPositionMs, startTime: startTime
+            )
+            if rebuildSpendingRecovery(from: fromMs) { return }
+            releaseStickyProxy = usingProxy
         case .retry(let noteDirectFailure):
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
@@ -5854,6 +5890,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         Task { [weak self] in
             guard let self else { return }
             defer { self.reResolve.end() }
+            // A route probe in flight decides which base the client dials: never
+            // re-negotiate on a route about to be abandoned.
+            await ServerRouteController.shared.awaitPendingProbe()
             // Routes through `notifyIfUnauthorized`: a genuinely revoked token
             // triggers the confirm-before-logout cycle in AppState. A transient
             // failure just returns nil → leave the watchdog / error path to it.

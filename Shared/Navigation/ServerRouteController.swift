@@ -61,7 +61,7 @@ final class ServerRouteController {
     @ObservationIgnored private weak var appState: AppState?
     @ObservationIgnored private var reach: @MainActor () -> NetworkReach = { .offline }
     /// The identity `dialURL` was decided for (`transportURL(identity:)`).
-    @ObservationIgnored private var dialIdentity: URL?
+    @ObservationIgnored private(set) var dialIdentity: URL?
     /// Bumped by every evaluation and path change: a probe answer that is no
     /// longer the newest question is dropped.
     @ObservationIgnored private var evaluationGeneration = 0
