@@ -11,8 +11,8 @@ private let logger = Logger(subsystem: "com.cinemax", category: "Seerr")
 enum SeerrUserLineKind: Equatable, Sendable {
     /// The account is capped by age on the server: Seerr is never opened to it.
     case ageCapped
-    /// Seerr knows the user; `autoApproves` = their requests need no approval.
-    case linked(autoApproves: Bool)
+    /// Seerr knows the user: their Seerr id and permissions.
+    case linked(SeerrUser)
     /// Seerr does not know them yet but creates the account on first sign-in.
     case willBeCreated
     /// Seerr does not know them and will not create them: the admin must add them.
@@ -29,10 +29,45 @@ enum SeerrUserLineKind: Equatable, Sendable {
         if policy?.maxParentalRating != nil { return .ageCapped }
         if lookupFailed { return .unknown }
         if let seerrUser {
-            return .linked(autoApproves: seerrUser.permissions.autoApproves(.movie)
-                           && seerrUser.permissions.autoApproves(.tv))
+            return .linked(seerrUser)
         }
         return newPlexLogin ? .willBeCreated : .mustBeAdded
+    }
+
+    var seerrUser: SeerrUser? {
+        if case .linked(let user) = self { user } else { nil }
+    }
+}
+
+/// Whether the account page may change a user's « Validation automatique »,
+/// and why not. Pure. Seerr approves an admin's and a manager's requests
+/// whatever the bits say, refuses (403) a change to the caller's own account,
+/// and needs `MANAGE_USERS` from the caller — never inferred from Jellyfin's
+/// admin flag.
+enum SeerrAutoApprovalAccess: Equatable, Sendable {
+    case editable
+    case alwaysAdmin
+    case alwaysManager
+    case notAllowed
+    case ownAccount
+
+    nonisolated static func of(_ target: SeerrUser, me: SeerrUser?) -> Self {
+        if target.permissions.contains(.admin) { return .alwaysAdmin }
+        if target.permissions.canManageRequests { return .alwaysManager }
+        guard let me, me.permissions.canManageUsers else { return .notAllowed }
+        if me.id == target.id { return .ownAccount }
+        return .editable
+    }
+
+    /// The sentence under the switches when they cannot be changed.
+    var noteKey: String? {
+        switch self {
+        case .editable: nil
+        case .alwaysAdmin: "seerr.user.autoApprove.admin"
+        case .alwaysManager: "seerr.user.autoApprove.manager"
+        case .notAllowed: "seerr.user.autoApprove.notAllowed"
+        case .ownAccount: "seerr.user.autoApprove.ownAccount"
+        }
     }
 }
 
@@ -50,6 +85,11 @@ struct SeerrUserLine: Identifiable, Equatable, Sendable {
 @MainActor @Observable
 final class SeerrActivationModel {
     private(set) var lines: [SeerrUserLine] = []
+    /// Users whose « Peut demander » write is under way.
+    private(set) var togglingUserIds: Set<String> = []
+    /// Users whose permissions are being written: ONE write per user at a
+    /// time, since each is a read-modify-write of the whole set.
+    private(set) var savingAutoApprove: Set<String> = []
 
     var enabledCount: Int { lines.filter(\.isEnabled).count }
 
@@ -291,6 +331,81 @@ final class SeerrActivationModel {
         }
         if adminWritten { address = url }
         return Self.failureSentence("seerr.activation.summary.addressFailed", failed, loc)
+    }
+
+    /// « Peut demander » pressed, from the list or the account page: a refusal
+    /// (age cap, no address yet) informs, a failed write is an error.
+    func toggle(
+        _ line: SeerrUserLine, appState: AppState, session: SeerrSession, toasts: ToastCenter, loc: LocalizationManager
+    ) async {
+        guard !togglingUserIds.contains(line.id) else { return }
+        togglingUserIds.insert(line.id)
+        defer { togglingUserIds.remove(line.id) }
+        let turningOn = !line.isEnabled
+        if let message = await setEnabled(turningOn, userId: line.id, appState: appState, loc: loc) {
+            if turningOn, line.kind == .ageCapped || session.config?.url == nil {
+                toasts.info(message)
+            } else {
+                toasts.error(message)
+            }
+            return
+        }
+        // The admin's own switch changes the admin's own configuration (R22).
+        if line.id == appState.currentUserId { await session.reload(appState: appState) }
+    }
+
+    /// Switches one kind's « Validation automatique » for a linked user:
+    /// Seerr's CURRENT set is read, only the auto-approve bits change
+    /// (`settingAutoApprove`), and the line takes what Seerr stored. `false`
+    /// only when Seerr refused or did not answer — a press ignored, or an
+    /// account that moved meanwhile, is not a failure to show.
+    func setAutoApprove(
+        _ kind: SeerrMediaKind, _ on: Bool, userId: String, session: SeerrSession, appState: AppState
+    ) async -> Bool {
+        guard !savingAutoApprove.contains(userId),
+              let line = lines.first(where: { $0.id == userId }), let target = line.kind.seerrUser else { return true }
+        savingAutoApprove.insert(userId)
+        defer { savingAutoApprove.remove(userId) }
+        let account = appState.activeAccountKey
+        do {
+            let stored = try await session.perform { client, credential in
+                let current = try await client.permissions(ofUser: target.id, credential)
+                return try await client.setPermissions(
+                    current.settingAutoApprove(kind, on), ofUser: target.id, credential)
+            }
+            guard appState.activeAccountKey == account,
+                  let index = lines.firstIndex(where: { $0.id == userId }) else { return true }
+            lines[index].kind = .linked(SeerrUser(
+                id: target.id, permissions: stored,
+                jellyfinUserId: target.jellyfinUserId, displayName: target.displayName))
+            return true
+        } catch is CancellationError {
+            return true
+        } catch {
+            logger.notice("Seerr ▸ auto-approval write failed")
+            return false
+        }
+    }
+
+    /// The line under a user's name: their state in Seerr, and for a linked
+    /// user what Seerr approves without review.
+    static func lineText(_ kind: SeerrUserLineKind, loc: LocalizationManager) -> String {
+        switch kind {
+        case .ageCapped: return loc.localized("seerr.settings.line.ageCapped")
+        case .linked(let user):
+            let movies = user.permissions.autoApproves(.movie)
+            let series = user.permissions.autoApproves(.tv)
+            let key = switch (movies, series) {
+            case (true, true): "seerr.settings.line.linkedAutoApprove"
+            case (true, false): "seerr.settings.line.linkedAutoApproveMovies"
+            case (false, true): "seerr.settings.line.linkedAutoApproveSeries"
+            case (false, false): "seerr.settings.line.linked"
+            }
+            return loc.localized(key)
+        case .willBeCreated: return loc.localized("seerr.settings.line.willBeCreated")
+        case .mustBeAdded: return loc.localized("seerr.settings.line.mustBeAdded")
+        case .unknown: return loc.localized("seerr.settings.line.unknown")
+        }
     }
 
     private static func failureSentence(_ key: String, _ names: [String], _ loc: LocalizationManager) -> String? {

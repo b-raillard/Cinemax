@@ -197,6 +197,47 @@ struct AppNavigation: View {
         whatsNewPages = []
     }
 
+    // MARK: Seerr arrival message
+
+    /// Held from the start of the process until the launch knows who is
+    /// watching (`SeerrArrivalGate`). A process singleton: released once, it
+    /// stays released whatever happens to this struct.
+    private static let arrivalGate = SeerrArrivalGate()
+
+    private static var isTVOS: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// The launch decided who is watching: the arrival check held back
+    /// meanwhile runs now, once.
+    private func releaseArrivals() {
+        guard Self.arrivalGate.release() else { return }
+        Task { [seerr, appState, toasts, loc, settingsNav] in
+            await Self.checkArrivals(
+                seerr: seerr, appState: appState, toasts: toasts, loc: loc, settingsNav: settingsNav)
+        }
+    }
+
+    /// One arrival check, its toast shown. « Voir » closes whatever is open
+    /// over the tabs first, as for a deep link: the Settings tab is underneath.
+    private static func checkArrivals(
+        seerr: SeerrSession, appState: AppState, toasts: ToastCenter, loc: LocalizationManager,
+        settingsNav: SettingsNavCoordinator
+    ) async {
+        let arrival = await SeerrArrivalWatcher.check(
+            session: seerr, appState: appState, defaults: .standard, loc: loc,
+            openRequests: {
+                PlayerPresentation.dismissPresentations {
+                    SeerrArrivalWatcher.openRequests(appState: appState, settingsNav: settingsNav)
+                }
+            })
+        if let arrival { toasts.show(arrival) }
+    }
+
     /// The root `.task`: wiring, session restore, the launch decisions. A
     /// method rather than the closure itself — a closure body is type-checked
     /// WITH the root `body` expression, which is already at the type
@@ -232,10 +273,23 @@ struct AppNavigation: View {
         // Every `refreshCurrentUser` (sign-in, switch, restore, foreground,
         // `UserUpdated`) re-reads the account's Seerr configuration and
         // identity. Wired BEFORE `restoreSession`, whose background task
-        // runs the cold launch's first refresh. Both are process
-        // singletons: captured strongly, nothing to protect.
-        appState.onCurrentUserRefreshed = { [seerr, appState] in
-            Task { await seerr.reload(appState: appState) }
+        // runs the cold launch's first refresh. The session and the app
+        // state are process singletons, the three others this root's own
+        // `@State`: captured strongly, nothing to protect.
+        // Once that reload has settled, the arrival message: launch and
+        // every return to the foreground both come through here
+        // (`refreshCurrentUser`, directly or after a re-validation) —
+        // unless the launch has not yet decided who is watching
+        // (`arrivalGate`, released below).
+        appState.onCurrentUserRefreshed = { [seerr, appState, toasts, loc, settingsNav] in
+            Task {
+                await seerr.reload(appState: appState)
+                // The Réglages bubble: re-read at launch and on every return.
+                await seerr.refreshPendingCount()
+                guard Self.arrivalGate.admit() else { return }
+                await Self.checkArrivals(
+                    seerr: seerr, appState: appState, toasts: toasts, loc: loc, settingsNav: settingsNav)
+            }
         }
         // Lifting the active account's age cap brings Seerr back at once.
         appState.onAgeCapChanged = { [seerr, appState] in
@@ -267,15 +321,22 @@ struct AppNavigation: View {
             onboardingSeen = true
         }
         hasCheckedSession = true
-        #if os(tvOS)
         // The living-room picker: only with several remembered accounts to
-        // choose from, and only when the household asked for it.
-        if appState.isAuthenticated, accountsAskOnLaunch,
-           proAccess.allows(.memorizedAccounts),
-           appState.activeAccounts.count >= 2 {
+        // choose from, and only when the household asked for it (tvOS).
+        // Decided from its inputs here, never from `showWhoIsWatching`'s
+        // timing: Seerr's arrival message waits on the same answer — the
+        // session restored is the PREVIOUS profile's, and its arrival must
+        // not be toasted (nor its seen set spent) over the picker.
+        let picksProfile = AccountSwitchFlow.showsLaunchPicker(
+            isTVOS: Self.isTVOS, isAuthenticated: appState.isAuthenticated,
+            askOnLaunch: accountsAskOnLaunch,
+            memorizedAccountsAllowed: proAccess.allows(.memorizedAccounts),
+            accountCount: appState.activeAccounts.count)
+        if picksProfile {
             showWhoIsWatching = true
+        } else {
+            releaseArrivals()
         }
-        #endif
         // Baseline attach so the menu editor has an API client even with
         // no session. The library-mode view refresh is NOT triggered here:
         // `onChange(of: appState.currentUserId)` below owns it for every
@@ -609,7 +670,13 @@ struct AppNavigation: View {
         }
         #if os(tvOS)
         .fullScreenCover(isPresented: $showWhoIsWatching) {
-            WhoIsWatchingScreen(mode: .launch) { showWhoIsWatching = false }
+            WhoIsWatchingScreen(mode: .launch) {
+                showWhoIsWatching = false
+                // Whoever is watching now: the held arrival check runs (a
+                // profile kept; a switch also runs its own, the seen set
+                // keeps them from announcing twice).
+                releaseArrivals()
+            }
                 .environment(appState)
                 .environment(themeManager)
                 .environment(loc)

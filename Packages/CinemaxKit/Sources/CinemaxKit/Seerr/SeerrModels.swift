@@ -36,6 +36,15 @@ private struct LossyPart: Decodable {
     }
 }
 
+/// `/movie/{id}`: Seerr serves it WITHOUT `mediaType` (measured on 3.5.1,
+/// 2026-11-07) — only search results and credits carry one.
+struct SeerrMovieDetails: Decodable {
+    let title: SeerrTitle
+    init(from decoder: Decoder) throws {
+        title = try SeerrTitle(from: decoder, defaultKind: .movie)
+    }
+}
+
 // MARK: - Server
 
 public struct SeerrStatusInfo: Sendable, Equatable, Decodable {
@@ -93,6 +102,7 @@ public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decoda
     public init(rawValue: Int) { self.rawValue = rawValue }
 
     public static let admin = Self(rawValue: 2)
+    public static let manageUsers = Self(rawValue: 8)
     public static let manageRequests = Self(rawValue: 16)
     public static let request = Self(rawValue: 32)
     public static let autoApprove = Self(rawValue: 128)
@@ -108,13 +118,41 @@ public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decoda
     }
 
     public var canManageRequests: Bool { allows(.manageRequests) }
+    /// May change another user's permissions (`POST /user/{id}/settings/permissions`).
+    public var canManageUsers: Bool { allows(.manageUsers) }
 
+    /// As Seerr decides when the request is created: an admin, a manager of
+    /// requests and the auto-approve bits all skip « À valider » (read in
+    /// Seerr 3.5.1's `MediaRequest`, which ORs `MANAGE_REQUESTS` in).
     public func autoApproves(_ kind: SeerrMediaKind) -> Bool {
-        if contains(.admin) || contains(.autoApprove) { return true }
+        allows(.manageRequests) || grantsAutoApprove(kind)
+    }
+
+    /// Approved without review because of the bits alone — never because the
+    /// user is an admin or a manager. What « Validation automatique » shows.
+    public func grantsAutoApprove(_ kind: SeerrMediaKind) -> Bool {
+        if contains(.autoApprove) { return true }
         switch kind {
         case .movie: return contains(.autoApproveMovie)
         case .tv: return contains(.autoApproveTV)
         }
+    }
+
+    /// The same permissions with one kind's auto-approval switched. Only the
+    /// three non-4K bits move: both kinds on ⇒ `autoApprove` alone, one ⇒ its
+    /// own bit; every other bit (4K, admin, request…) is kept as it was.
+    public func settingAutoApprove(_ kind: SeerrMediaKind, _ on: Bool) -> Self {
+        let movie = kind == .movie ? on : grantsAutoApprove(.movie)
+        let tv = kind == .tv ? on : grantsAutoApprove(.tv)
+        var next = subtracting([.autoApprove, .autoApproveMovie, .autoApproveTV])
+        if movie && tv {
+            next.insert(.autoApprove)
+        } else if movie {
+            next.insert(.autoApproveMovie)
+        } else if tv {
+            next.insert(.autoApproveTV)
+        }
+        return next
     }
 
     public init(from decoder: Decoder) throws {
@@ -350,15 +388,21 @@ public struct SeerrTVDetails: Sendable, Equatable, Decodable {
     public let name: String
     public let seasons: [SeerrSeason]
     public let mediaInfo: SeerrMediaInfo?
+    /// The TMDb poster path (Mes demandes' rows).
+    public let posterPath: String?
 
-    public init(tmdbId: Int, name: String, seasons: [SeerrSeason], mediaInfo: SeerrMediaInfo? = nil) {
+    public init(
+        tmdbId: Int, name: String, seasons: [SeerrSeason], mediaInfo: SeerrMediaInfo? = nil,
+        posterPath: String? = nil
+    ) {
         self.tmdbId = tmdbId
         self.name = name
         self.seasons = seasons
         self.mediaInfo = mediaInfo
+        self.posterPath = posterPath
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, seasons, mediaInfo }
+    private enum CodingKeys: String, CodingKey { case id, name, seasons, mediaInfo, posterPath }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -366,6 +410,7 @@ public struct SeerrTVDetails: Sendable, Equatable, Decodable {
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         seasons = try c.decodeIfPresent([SeerrSeason].self, forKey: .seasons) ?? []
         mediaInfo = try c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
+        posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
     }
 }
 
@@ -479,20 +524,34 @@ public struct SeerrRequest: Sendable, Equatable, Decodable {
 }
 
 public struct SeerrRequestPage: Sendable, Equatable, Decodable {
+    /// The rows that decoded: an odd one (no asker, an unknown kind…) is
+    /// skipped, never fatal to the page.
     public let results: [SeerrRequest]
     public let total: Int
+    /// How many rows the server SENT, skipped ones included: the next page's
+    /// `skip` — counting only `results` would re-ask the skipped rows forever.
+    public let served: Int
 
-    public init(results: [SeerrRequest], total: Int) {
+    public init(results: [SeerrRequest], total: Int, served: Int? = nil) {
         self.results = results
         self.total = total
+        self.served = served ?? results.count
     }
 
     private enum CodingKeys: String, CodingKey { case results, pageInfo }
     private struct PageInfo: Decodable { let results: Int }
+    private struct LossyRequest: Decodable {
+        let request: SeerrRequest?
+        init(from decoder: Decoder) throws {
+            request = try? SeerrRequest(from: decoder)
+        }
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        results = try c.decode([SeerrRequest].self, forKey: .results)
+        let rows = try c.decode([LossyRequest].self, forKey: .results)
+        results = rows.compactMap(\.request)
+        served = rows.count
         total = try c.decode(PageInfo.self, forKey: .pageInfo).results
     }
 }

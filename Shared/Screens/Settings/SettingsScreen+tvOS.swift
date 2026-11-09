@@ -69,6 +69,8 @@ extension SettingsScreen {
                 if newValue == nil {
                     selectedInterfaceSub = nil
                     showsAppIconPage = false
+                    settingsNav.requestsUserId = nil
+                    settingsNav.requestsPage = nil
                     tierChipFocusable = false
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
@@ -338,6 +340,10 @@ extension SettingsScreen {
                     .layoutPriority(0.5)
                 }
 
+                if !isLocked, category == .requests, let pending = pendingBadgeLabel {
+                    SettingsCountBadge(label: pending, onAccent: isFocused)
+                }
+
                 if isLocked {
                     ProBadge(ink: isFocused ? themeManager.onAccentContainer : nil)
                 } else if isFocused {
@@ -352,6 +358,7 @@ extension SettingsScreen {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .category(category.rawValue))
+        .accessibilityValue(category == .requests ? pendingBadgeValue : "")
         .accessibilityHint(isLocked ? loc.localized("pro.locked.hint") : "")
     }
 
@@ -438,7 +445,15 @@ extension SettingsScreen {
                 // Back button
                 let backFocused = focusedItem == .back
                 Button {
-                    selectedCategory = nil
+                    // Demandes → a user's page, then a page: closed first,
+                    // newest first.
+                    if category == .requests, settingsNav.requestsUserId != nil {
+                        settingsNav.requestsUserId = nil
+                    } else if category == .requests, settingsNav.requestsPage != nil {
+                        settingsNav.requestsPage = nil
+                    } else {
+                        selectedCategory = nil
+                    }
                 } label: {
                     HStack(spacing: CinemaSpacing.spacing2) {
                         Image(systemName: "chevron.left")

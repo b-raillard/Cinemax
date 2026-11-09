@@ -63,6 +63,14 @@ final class SeerrSession {
     /// The server half of the cap, as of the last `reload` (`true` until the
     /// policy is known).
     private var policyCapped = true
+    /// How many requests wait, as last read — the raw number behind the
+    /// Réglages bubble. Read it through `pendingBadgeCount`, which hides it
+    /// from anyone who may not manage requests.
+    private(set) var pendingCount: Int?
+    /// Bumped by every write of `pendingCount`: a read that started before a
+    /// fresher number landed (an approval, « À valider »'s listing) drops its
+    /// older answer.
+    @ObservationIgnored private var pendingCountWrites = 0
 
     /// Capped by age — the server policy, or this device's setting read LIVE.
     var isAgeCapped: Bool {
@@ -159,6 +167,7 @@ final class SeerrSession {
         publicSettings = nil
         usesDeviceKey = false
         policyCapped = true
+        pendingCount = nil
     }
 
     /// The account changed (`onChange(of: activeAccountKey)`, and the head of
@@ -229,6 +238,8 @@ final class SeerrSession {
             client = SeerrClient(baseURL: url, languageCode: languageCode, transport: transport)
             setConnection(.unavailable)
             if publicSettings != nil { publicSettings = nil }
+            // Another Seerr's queue: its count is not this one's.
+            if pendingCount != nil { pendingCount = nil }
         }
         guard let client else { return }
         // A key entered for another address is not this Seerr's: the device is
@@ -297,6 +308,51 @@ final class SeerrSession {
         } catch {
             // A blip: the last known state stands.
         }
+    }
+
+    // MARK: Requests waiting (the Réglages bubble)
+
+    /// The number the bubble on Réglages and on « Demandes » shows: only for a
+    /// connected Seerr user who may manage requests (Pro, not age-capped —
+    /// `credential()`'s gate), `nil` otherwise and while unknown.
+    var pendingBadgeCount: Int? {
+        showsPendingBadge ? pendingCount : nil
+    }
+
+    /// Whether this account may see the bubble at all (its count aside).
+    /// `servesActiveAccount` comes LAST: `accountKey` is not observed, so
+    /// short-circuiting on it first left `connection` unread — SwiftUI then
+    /// never redrew the bar when the count arrived (recette 2026-11-08).
+    var showsPendingBadge: Bool {
+        SeerrPendingModel.isShown(for: connection) && proAllowsProvider() && !isAgeCapped && servesActiveAccount
+    }
+
+    /// Re-reads the count: one row asked, the listing's total kept. Called
+    /// after the `reload` of `onCurrentUserRefreshed` (launch, foreground),
+    /// by `MainTabView` whenever `showsPendingBadge` turns true (back online,
+    /// sign-in, Pro or the age cap back — the identity coming back) and after
+    /// a withdrawal. A failure keeps the last number; a user who may not
+    /// manage requests asks nothing.
+    func refreshPendingCount() async {
+        guard SeerrPendingModel.isShown(for: connection), let snap = snapshot() else { return }
+        let asked = pendingCountWrites
+        let page: SeerrRequestPage
+        do {
+            page = try await perform { client, credential in
+                try await client.requests(filter: .pending, take: 1, skip: 0, requestedBy: nil, credential)
+            }
+        } catch {
+            return
+        }
+        guard pendingCountWrites == asked else { return }
+        notePendingCount(page.total, for: snap)
+    }
+
+    /// « À valider » read or settled a request: its total is the fresh count.
+    func notePendingCount(_ count: Int, for snapshot: Snapshot) {
+        guard isCurrent(snapshot) else { return }
+        pendingCountWrites &+= 1
+        if pendingCount != count { pendingCount = count }
     }
 
     // MARK: Stale-answer token
@@ -612,9 +668,15 @@ final class SeerrSession {
         return stored
     }
 
-    /// An account left this device for good (`AppState.onAccountForgotten`).
+    /// An account left this device for good (`AppState.onAccountForgotten`):
+    /// its cookie goes, and so does what this device remembered for it — the
+    /// arrivals already seen and the dismissed search invitation — so the
+    /// account added back starts afresh (its first arrival check seeds again,
+    /// in silence).
     func forgetAccount(_ accountKey: String) {
         dropCookie(nil, for: accountKey)
+        defaults.removeObject(forKey: SettingsKey.seerrArrivalsSeen(accountKey: accountKey))
+        defaults.removeObject(forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: accountKey))
     }
 
     /// A server was removed (`AppState.onServerForgotten`): its device key goes.
@@ -664,6 +726,8 @@ final class SeerrSession {
 
     private func forgetIdentity(keepingConfig: Bool) {
         if !keepingConfig, config != nil { config = nil }
+        // No identity, no count: a number kept here would come back unread.
+        if pendingCount != nil { pendingCount = nil }
         client = nil
         cookie = nil
         deviceKey = nil

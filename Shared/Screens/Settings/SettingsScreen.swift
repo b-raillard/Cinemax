@@ -277,6 +277,18 @@ struct SettingsScreen: View {
                                           config: seerr.config)
     }
 
+    /// The « Demandes » entry's bubble: « 3 », « 99+ », or nothing
+    /// (`SeerrSession.pendingBadgeCount` — Seerr managers only).
+    var pendingBadgeLabel: String? {
+        SeerrPendingModel.badgeLabel(seerr.pendingBadgeCount)
+    }
+
+    /// What VoiceOver reads after « Demandes »: « 3 demandes à valider ».
+    var pendingBadgeValue: String {
+        guard pendingBadgeLabel != nil, let count = seerr.pendingBadgeCount else { return "" }
+        return loc.counted("seerr.settings.pendingBubble", count)
+    }
+
     var headerTierLook: ProTierLook? {
         guard entitlements.showsProEntry else { return nil }
         return ProTierLook(tier: entitlements.proTier(earlyAdopter: earlyAdopter), themeManager: themeManager)
@@ -339,6 +351,12 @@ struct SettingsScreen: View {
     #if os(iOS)
     /// A landscape iPhone shrinks the landing header (`iOSHeader`).
     @Environment(\.verticalSizeClass) var verticalSizeClass
+    /// Never read: declaring it makes the landing redraw when the text size
+    /// changes. Its row titles (`CinemaFont.dynamic*`) are point sizes computed
+    /// while the body runs, so without it they kept the old size while the
+    /// « Demandes » bubble — which reads it — took the new one (recette
+    /// 2026-11-08: big titles + small bubble, or the reverse).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #endif
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode

@@ -1781,7 +1781,8 @@ private struct ActivationWorld {
 @MainActor
 private func activationWorld(
     users: [UserDto], enabled: Set<String> = [], lookups: [String: StubSeerrTransport.Reply] = [:],
-    credentialed: Bool = true, publicSettings: StubSeerrTransport.Reply = settingsReply
+    credentialed: Bool = true, publicSettings: StubSeerrTransport.Reply = settingsReply,
+    extraRoutes: [String: [StubSeerrTransport.Reply]] = [:]
 ) async -> ActivationWorld {
     let api = MockAPIClient()
     api.stubbedUsers = users
@@ -1797,6 +1798,7 @@ private func activationWorld(
     var routes: [String: [StubSeerrTransport.Reply]] = [
         "/settings/public": [publicSettings], "/auth/me": [userReply(adminJSON)]]
     for (id, reply) in lookups { routes["/user/jellyfin/\(id)"] = [reply] }
+    routes.merge(extraRoutes) { $1 }
     let transport = RoutedSeerrTransport(routes)
     let storage = MockKeychain()
     if credentialed { storage.saveSeerrSessions(["S1|ADMIN": bound("abc")]) }
@@ -1911,7 +1913,8 @@ struct SeerrActivationTests {
     func lookupFailureIsUnknown() async {
         let failing = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": .failure(URLError(.timedOut))])
         await failing.model.load(appState: failing.app, session: failing.session)
-        #expect(failing.model.lines.map(\.kind) == [.linked(autoApproves: true), .unknown])
+        #expect(failing.model.lines.map(\.kind) == [.linked(SeerrUser(
+            id: SeerrUserID(rawValue: 1), permissions: .admin, jellyfinUserId: "ADMIN", displayName: "Admin")), .unknown])
 
         let keyless = await activationWorld(users: [adminUser, ann], credentialed: false)
         let before = keyless.transport.requests.count
@@ -2039,6 +2042,91 @@ struct SeerrActivationTests {
         #expect(!world.stored("ANN").isEnabled)
     }
 
+    @Test("« Validation automatique » reads Seerr's current set, moves only its bit, and keeps what Seerr stored")
+    func autoApproveIsAReadModifyWrite() async throws {
+        // Ann, on the server now: request + 4K films auto-approved (65536).
+        let current = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":65568}"#)
+        let stored = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":65824}"#)
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()],
+            extraRoutes: ["/user/7/settings/permissions": [current, stored]])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let saved = await world.model.setAutoApprove(
+            .movie, true, userId: "ANN", session: world.session, appState: world.app)
+
+        #expect(saved)
+        let calls = world.transport.requests.filter { $0.url?.path.hasSuffix("/user/7/settings/permissions") == true }
+        #expect(calls.map(\.httpMethod) == ["GET", "POST"])
+        let body = try #require(calls.last?.httpBody)
+        let sent = try JSONSerialization.jsonObject(with: body) as? [String: Int]
+        #expect(sent == ["permissions": 65568 | 256])
+        let line = try #require(world.model.lines.first { $0.id == "ANN" })
+        #expect(line.kind.seerrUser?.permissions.rawValue == 65824)
+        #expect(world.model.savingAutoApprove.isEmpty)
+    }
+
+    @Test("a refused permission write says so and leaves the line as it was")
+    func autoApproveRefused() async throws {
+        let current = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":32}"#)
+        let refused = StubSeerrTransport.Reply.response(
+            status: 403, body: #"{"message":"You do not have permission to modify this user"}"#)
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()],
+            extraRoutes: ["/user/7/settings/permissions": [current, refused]])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let saved = await world.model.setAutoApprove(
+            .tv, true, userId: "ANN", session: world.session, appState: world.app)
+
+        #expect(saved == false)
+        #expect(world.model.lines.first { $0.id == "ANN" }?.kind.seerrUser?.permissions == .request)
+    }
+
+    @Test("who may change « Validation automatique »")
+    func autoApprovalAccess() {
+        let owner = SeerrUser(id: SeerrUserID(rawValue: 1), permissions: .admin)
+        let usersManager = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: [.request, .manageUsers])
+        let requester = SeerrUser(id: SeerrUserID(rawValue: 2), permissions: .request)
+        let manager = SeerrUser(id: SeerrUserID(rawValue: 3), permissions: [.request, .manageRequests])
+        let plain = SeerrUser(id: SeerrUserID(rawValue: 4), permissions: .request)
+        typealias Access = SeerrAutoApprovalAccess
+        #expect(Access.of(plain, me: owner) == .editable)
+        #expect(Access.of(plain, me: usersManager) == .editable)
+        #expect(Access.of(plain, me: requester) == .notAllowed)
+        #expect(Access.of(plain, me: nil) == .notAllowed)
+        #expect(Access.of(owner, me: owner) == .alwaysAdmin)
+        #expect(Access.of(manager, me: owner) == .alwaysManager)
+        #expect(Access.of(usersManager, me: usersManager) == .ownAccount)
+    }
+
+    @Test("the admin summary's card, and what it lets under it")
+    func summaryCard() {
+        let url = URL(string: "http://seerr.local:5055")
+        typealias Card = SeerrSummaryCard
+        // No address: the welcome card alone.
+        let setup = Card.of(url: nil, connection: .connected(alice), usesDeviceKey: false)
+        #expect(setup == .setup)
+        #expect(!setup.showsRequestRows && !setup.showsAdministration)
+        // Signed out / not answering: the rows greyed, with the reason.
+        let signIn = Card.of(url: url, connection: .notConnected, usesDeviceKey: false)
+        #expect(signIn == .signIn)
+        #expect(signIn.showsRequestRows && signIn.lockedReasonKey == "seerr.hub.locked.signIn")
+        let down = Card.of(url: url, connection: .unavailable, usesDeviceKey: true)
+        #expect(down == .unavailable && down.lockedReasonKey == "seerr.hub.locked.unavailable")
+        // Key mode failures: the fix in the card, no request rows, admin open.
+        let notLinked = Card.of(url: url, connection: .notLinked, usesDeviceKey: true)
+        #expect(notLinked == .failure(.notInSeerr))
+        #expect(!notLinked.showsRequestRows && notLinked.showsAdministration)
+        #expect(Card.of(url: url, connection: .keyRefused, usesDeviceKey: true) == .failure(.keyRefused))
+        // Connected: rows open.
+        let connected = Card.of(url: url, connection: .connected(alice), usesDeviceKey: true)
+        #expect(connected == .connected(alice, usesDeviceKey: true))
+        #expect(connected.showsRequestRows && connected.lockedReasonKey == nil && connected.showsAdministration)
+    }
+
     @Test("the line kind truth table")
     func lineKinds() {
         let request = SeerrUser(id: SeerrUserID(rawValue: 2), permissions: .request)
@@ -2051,10 +2139,18 @@ struct SeerrActivationTests {
         #expect(kind(policy(maxRating: 10), request) == .ageCapped)
         #expect(kind(policy(maxRating: 10), nil, failed: true) == .ageCapped)
         #expect(kind(policy(), request, failed: true) == .unknown)
-        #expect(kind(policy(), request) == .linked(autoApproves: false))
-        #expect(kind(policy(), approved) == .linked(autoApproves: true))
-        #expect(kind(policy(), adminSeerr) == .linked(autoApproves: true))
-        #expect(kind(policy(), movieOnly) == .linked(autoApproves: false))
+        #expect(kind(policy(), request) == .linked(request))
+        #expect(kind(policy(), approved) == .linked(approved))
+        #expect(kind(policy(), adminSeerr) == .linked(adminSeerr))
+        #expect(kind(policy(), movieOnly) == .linked(movieOnly))
+        let loc = LocalizationManager()
+        #expect(SeerrActivationModel.lineText(.linked(request), loc: loc) == loc.localized("seerr.settings.line.linked"))
+        #expect(SeerrActivationModel.lineText(.linked(approved), loc: loc)
+            == loc.localized("seerr.settings.line.linkedAutoApprove"))
+        #expect(SeerrActivationModel.lineText(.linked(adminSeerr), loc: loc)
+            == loc.localized("seerr.settings.line.linkedAutoApprove"))
+        #expect(SeerrActivationModel.lineText(.linked(movieOnly), loc: loc)
+            == loc.localized("seerr.settings.line.linkedAutoApproveMovies"))
         #expect(kind(policy(), nil, plex: true) == .willBeCreated)
         #expect(kind(policy(), nil, plex: false) == .mustBeAdded)
         #expect(kind(nil, nil) == .mustBeAdded)
@@ -2070,5 +2166,1092 @@ struct SeerrActivationTests {
         #expect(one.contains(loc.localized(loc.pluralKey("seerr.activation.summary.refused", 1), "Tom")))
         let two = SeerrActivationModel.activationSummary(enabled: 0, refusedNames: ["Tom", "Zoé"], loc: loc)
         #expect(two.contains(loc.localized(loc.pluralKey("seerr.activation.summary.refused", 2), "Tom, Zoé")))
+    }
+}
+
+// MARK: - Mes demandes (Settings → Demandes)
+
+private func requestJSON(
+    _ id: Int, status: Int = 1, type: String = "movie", seasons: [Int] = [],
+    tmdbId: Int = 11, mediaStatus: Int = 2, jellyfinId: String? = nil, by requester: String = aliceJSON
+) -> String {
+    let seasonList = seasons.map { #"{"seasonNumber":\#($0)}"# }.joined(separator: ",")
+    let jellyfin = jellyfinId.map { #","jellyfinMediaId":"\#($0)""# } ?? ""
+    return #"{"id":\#(id),"status":\#(status),"type":"\#(type)","seasons":[\#(seasonList)],"#
+        + #""createdAt":"2026-11-01T10:00:00.000Z","updatedAt":"2026-11-02T10:00:00.000Z","#
+        + #""requestedBy":\#(requester),"media":{"tmdbId":\#(tmdbId),"status":\#(mediaStatus)\#(jellyfin)}}"#
+}
+
+private func requestPage(_ items: [String], total: Int) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"pageInfo":{"pages":2,"pageSize":20,"results":\#(total),"page":1},"#
+        + #""results":[\#(items.joined(separator: ","))]}"#)
+}
+
+/// `/movie/{id}` as Seerr 3.5.1 serves it: no `mediaType` (measured on the bench).
+private func movieReply(_ id: Int, _ title: String) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"id":\#(id),"title":"\#(title)","posterPath":"/m\#(id).jpg"}"#)
+}
+
+private func tvReply(_ id: Int, _ name: String) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"id":\#(id),"name":"\#(name)","posterPath":"/t\#(id).jpg","seasons":[]}"#)
+}
+
+private func myRequest(
+    status: SeerrRequestStatus = .pending, kind: SeerrMediaKind = .movie, seasons: [Int] = [],
+    media: SeerrMediaStatus = .pending, jellyfinId: String? = nil
+) -> SeerrRequest {
+    SeerrRequest(
+        id: 1, status: status, kind: kind, seasons: seasons, createdAt: .distantPast, updatedAt: .distantPast,
+        requestedBy: alice, media: SeerrRequestMedia(tmdbId: 1, status: media, jellyfinMediaId: jellyfinId))
+}
+
+private func isRequestList(_ request: URLRequest) -> Bool {
+    request.url?.path.hasSuffix("/request") == true
+}
+
+private func queryValue(_ name: String, in request: URLRequest?) -> String? {
+    request?.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems }?
+        .first { $0.name == name }?.value
+}
+
+/// Signed in to Seerr (account mode) as Alice — Seerr id 7, with
+/// `permissions` — plus whatever `routes` the test answers.
+@MainActor
+private func myRequestsWorld(
+    permissions: Int = 32, routes: [String: [StubSeerrTransport.Reply]]
+) async -> (SeerrSession, AppState, RoutedSeerrTransport) {
+    var all = routes
+    all["/settings/public"] = [settingsReply]
+    all["/auth/me"] = [userReply(#"{"id":7,"permissions":\#(permissions),"jellyfinUserId":"A","displayName":"Alice"}"#)]
+    let transport = RoutedSeerrTransport(all)
+    let storage = MockKeychain()
+    storage.saveSeerrSessions(["S1|A": bound("abc")])
+    let (app, _) = signedIn()
+    let session = makeSession(transport, storage: storage, following: app)
+    await session.reload(appState: app)
+    return (session, app, transport)
+}
+
+@MainActor
+@Suite("Seerr — Mes demandes")
+struct SeerrMyRequestsTests {
+    private let pending = "seerr.myRequests.status.pending"
+    private let approved = "seerr.myRequests.status.approved"
+    private let declined = "seerr.myRequests.status.declined"
+    private let available = "seerr.myRequests.status.available"
+
+    @Test("only my requests: requestedBy is my Seerr id, even for a manager; a first page of 20")
+    func onlyMyRequests() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, tmdbId: 11)], total: 1)],
+            "/movie/11": [movieReply(11, "Dune")],
+        ])
+        #expect(session.connection == .connected(SeerrUser(
+            id: SeerrUserID(rawValue: 7), permissions: [.manageRequests, .request],
+            jellyfinUserId: "A", displayName: "Alice")))
+
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("requestedBy", in: sent) == "7")
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(queryValue("filter", in: sent) == "all")
+        #expect(model.rows.map(\.id) == [1])
+        #expect(model.rows.first?.title == "Dune")
+        #expect(!model.canLoadMore)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("the status line: arrived first, then refused, waiting, else approved")
+    func statusLines() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.statusKey(myRequest(status: .pending)) == pending)
+        // Someone else's request moved the media: mine still waits.
+        #expect(Model.statusKey(myRequest(status: .pending, media: .processing)) == pending)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .processing)) == approved)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .pending)) == approved)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .partiallyAvailable)) == approved)
+        // Sending it to the downloader failed: still approved, the admin retries.
+        #expect(Model.statusKey(myRequest(status: .failed, media: .processing)) == approved)
+        #expect(Model.statusKey(myRequest(status: .declined)) == declined)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .available)) == available)
+        #expect(Model.statusKey(myRequest(status: .pending, media: .available)) == available)
+        // A series whose requested seasons all arrived, others still missing.
+        #expect(Model.statusKey(myRequest(status: .completed, kind: .tv, media: .partiallyAvailable)) == available)
+        let loc = LocalizationManager()
+        for key in [pending, approved, declined, available] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
+    }
+
+    @Test("only a request still waiting for an admin can be withdrawn")
+    func onlyPendingCanBeCancelled() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.canCancel(myRequest(status: .pending)))
+        #expect(!Model.canCancel(myRequest(status: .approved, media: .processing)))
+        #expect(!Model.canCancel(myRequest(status: .declined)))
+        // Mine waits, but the title already arrived through someone else's.
+        #expect(!Model.canCancel(myRequest(status: .pending, media: .available)))
+    }
+
+    @Test("withdrawing a pending request sends DELETE, removes the row, says so")
+    func cancelRemovesRow() async {
+        let loc = LocalizationManager()
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [requestPage([requestJSON(1, tmdbId: 11), requestJSON(2, status: 2, tmdbId: 11)], total: 2)],
+            "/movie/11": [movieReply(11, "Dune"), movieReply(11, "Dune")],
+            "/request/1": [.response(status: 204, body: "")],
+        ])
+        let toasts = ToastCenter()
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        // An approved request is not withdrawable: nothing is sent.
+        await model.cancel(2, session: session, toasts: toasts, loc: loc)
+        #expect(!transport.requests.contains(where: isCall("/request/2")))
+
+        await model.cancel(1, session: session, toasts: toasts, loc: loc)
+        #expect(transport.requests.first(where: isCall("/request/1"))?.httpMethod == "DELETE")
+        #expect(model.rows.map(\.id) == [2])
+        #expect(model.cancelling == nil)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.myRequests.cancelled"))
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a request an admin settled meanwhile (401) says so and is read again; another failure keeps the row")
+    func cancelRefused() async {
+        let loc = LocalizationManager()
+        let (session, _, _) = await myRequestsWorld(routes: [
+            "/request": [
+                requestPage([requestJSON(1, tmdbId: 11), requestJSON(3, tmdbId: 11)], total: 2),
+                requestPage([requestJSON(1, status: 2, tmdbId: 11), requestJSON(3, tmdbId: 11)], total: 2),
+            ],
+            "/movie/11": Array(repeating: movieReply(11, "Dune"), count: 4),
+            "/request/1": [.response(status: 401, body: #"{"message":"You do not have permission to delete this request."}"#)],
+            "/request/3": [.response(status: 500, body: #"{"message":"boom"}"#)],
+        ])
+        let toasts = ToastCenter()
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        await model.cancel(1, session: session, toasts: toasts, loc: loc)
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.alreadyHandled"))
+        // Read again: request 1 now shows as approved, no longer withdrawable.
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(model.rows.first.map { SeerrMyRequestsModel.canCancel($0.request) } == false)
+
+        await model.cancel(3, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(model.cancelling == nil)
+        #expect(toasts.current?.level == .error)
+        #expect(toasts.current?.title == loc.localized("seerr.myRequests.cancelFailed"))
+    }
+
+    @Test("a series names its seasons, ascending, once each; a film names none")
+    func seasonsSuffix() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.seasonList(myRequest(kind: .tv, seasons: [5, 4, 4])) == "4, 5")
+        #expect(Model.seasonList(myRequest(kind: .tv, seasons: [])) == nil)
+        #expect(Model.seasonList(myRequest(kind: .movie, seasons: [1])) == nil)
+        let loc = LocalizationManager()
+        #expect(Model.seasonsSuffix(myRequest(kind: .tv, seasons: [5, 4]), loc: loc)
+                == loc.localized(loc.pluralKey("seerr.myRequests.seasons", 2), "4, 5"))
+        #expect(Model.seasonsSuffix(myRequest(kind: .tv, seasons: [4]), loc: loc)
+                == loc.localized(loc.pluralKey("seerr.myRequests.seasons", 1), "4"))
+        #expect(Model.seasonsSuffix(myRequest(kind: .movie), loc: loc) == nil)
+        #expect(loc.localized("seerr.myRequests.seasons.one", "4") != loc.localized("seerr.myRequests.seasons", "4"))
+    }
+
+    @Test("paging: 20, then the rest, then nothing once the total is reached")
+    func pagingStopsAtTotal() async {
+        let first = (1...20).map { requestJSON($0, tmdbId: 11) }
+        let second = (21...25).map { requestJSON($0, tmdbId: 11) }
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [requestPage(first, total: 25), requestPage(second, total: 25)],
+            "/movie/11": Array(repeating: movieReply(11, "Dune"), count: 25),
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.rows.count == 20)
+        #expect(model.canLoadMore)
+
+        await model.loadNextPage(session: session)
+        #expect(model.rows.map(\.id) == Array(1...25))
+        #expect(model.rows.allSatisfy { $0.title == "Dune" })
+        #expect(!model.canLoadMore)
+        let pages = transport.requests.filter(isRequestList)
+        #expect(pages.count == 2)
+        #expect(queryValue("skip", in: pages.last) == "20")
+        #expect(queryValue("requestedBy", in: pages.last) == "7")
+
+        // Past the total, « Afficher plus » asks for nothing.
+        await model.loadNextPage(session: session)
+        #expect(transport.requests.filter(isRequestList).count == 2)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a request already listed is not listed twice when the order moved between pages")
+    func pagingDeduplicates() async {
+        let first = (1...20).map { requestJSON($0, tmdbId: 11) }
+        // Request 20 was modified meanwhile: the second page repeats it.
+        let second = (20...24).map { requestJSON($0, tmdbId: 11) }
+        let (session, _, _) = await myRequestsWorld(routes: [
+            "/request": [requestPage(first, total: 25), requestPage(second, total: 25)],
+            "/movie/11": Array(repeating: movieReply(11, "Dune"), count: 24),
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        await model.loadNextPage(session: session)
+        #expect(model.rows.map(\.id) == Array(1...24))
+        // 25 rows were served: the total is reached, nothing more to ask.
+        #expect(!model.canLoadMore)
+    }
+
+    @Test("titles load row by row: a failed one reads unavailable, and the list never waits for them")
+    func titlesPerRow() async {
+        let held = TestLatch()
+        let asked = TestLatch()
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [requestPage([
+                requestJSON(1, tmdbId: 11), requestJSON(2, type: "tv", seasons: [4, 5], tmdbId: 22),
+                requestJSON(3, tmdbId: 33),
+            ], total: 3)],
+            "/movie/11": [movieReply(11, "Dune")],
+            "/tv/22": [tvReply(22, "The Expanse")],
+            "/movie/33": [notFoundReply],
+        ])
+        transport.onRequest { path, _ in
+            guard path == "/movie/11" else { return }
+            asked.open()
+            await held.wait()
+        }
+        let model = SeerrMyRequestsModel()
+        let load = Task { await model.loadFirstPage(session: session) }
+        await asked.wait()
+        // The rows are on screen while a title is still on its way.
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.rows.first?.isTitlePending == true)
+        held.open()
+        await load.value
+
+        #expect(model.rows[0].title == "Dune")
+        #expect(model.rows[0].posterPath == "/m11.jpg")
+        #expect(model.rows[1].title == "The Expanse")
+        #expect(model.rows[1].posterPath == "/t22.jpg")
+        #expect(model.rows[2].title == nil)
+        #expect(model.rows[2].isTitlePending == false)
+        #expect(model.phase == .loaded)
+    }
+
+    @Test("no request yet: loaded and empty")
+    func emptyList() async {
+        let (session, _, _) = await myRequestsWorld(routes: ["/request": [requestPage([], total: 0)]])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.phase == .loaded)
+        #expect(model.rows.isEmpty)
+        #expect(!model.canLoadMore)
+    }
+
+    @Test("a list Seerr does not serve ends in a failure, never a stranded spinner")
+    func failedList() async {
+        let (session, _, _) = await myRequestsWorld(routes: [
+            "/request": [.response(status: 500, body: #"{"message":"boom"}"#)],
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.phase == .failed)
+        #expect(model.rows.isEmpty)
+    }
+
+    @Test("« Regarder » opens the Jellyfin item, and only once the title has arrived")
+    func watchUsesJellyfinId() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .available, jellyfinId: "jf1")) == "jf1")
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .available)) == nil)
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .processing, jellyfinId: "jf1")) == nil)
+        #expect(Model.watchTarget(myRequest(status: .completed, media: .partiallyAvailable, jellyfinId: "jf1")) == nil)
+
+        let (app, _) = signedIn()
+        #expect(Model.watch(myRequest(media: .available, jellyfinId: "jf1"), appState: app))
+        #expect(app.pendingDeepLinkItemId == "jf1")
+        app.pendingDeepLinkItemId = nil
+        #expect(!Model.watch(myRequest(media: .processing, jellyfinId: "jf1"), appState: app))
+        #expect(app.pendingDeepLinkItemId == nil)
+    }
+}
+
+// MARK: - À valider (Settings → Demandes)
+
+private let leaJSON = #"{"id":9,"permissions":32,"jellyfinUserId":"L","displayName":"Léa"}"#
+
+/// Léa's pending requests 1…`count` (all for TMDb 11), and a title for each.
+private func pendingRoutes(
+    _ count: Int, total: Int, extra: [String: [StubSeerrTransport.Reply]] = [:]
+) -> [String: [StubSeerrTransport.Reply]] {
+    var routes = extra
+    routes["/request", default: []].insert(
+        requestPage((1...count).map { requestJSON($0, by: leaJSON) }, total: total), at: 0)
+    routes["/movie/11"] = Array(repeating: movieReply(11, "Dune"), count: count + 5)
+    return routes
+}
+
+private func settled(_ id: Int, status: Int) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: requestJSON(id, status: status, by: leaJSON))
+}
+
+private func isCall(_ suffix: String) -> (URLRequest) -> Bool {
+    { $0.url?.path.hasSuffix(suffix) == true }
+}
+
+@MainActor
+@Suite("Seerr — À valider")
+struct SeerrPendingTests {
+    private let loc = LocalizationManager()
+
+    @Test("a button in flight says so, on screen and to VoiceOver; the other keeps its name")
+    func buttonTitleFollowsInFlight() {
+        #expect(SeerrPendingModel.buttonTitleKey(.approve, inFlight: nil) == "seerr.pending.approve")
+        #expect(SeerrPendingModel.buttonTitleKey(.approve, inFlight: .approve) == "seerr.pending.approving")
+        #expect(SeerrPendingModel.buttonTitleKey(.approve, inFlight: .decline) == "seerr.pending.approve")
+        #expect(SeerrPendingModel.buttonTitleKey(.decline, inFlight: nil) == "seerr.pending.decline")
+        #expect(SeerrPendingModel.buttonTitleKey(.decline, inFlight: .decline) == "seerr.pending.declining")
+        #expect(SeerrPendingModel.buttonTitleKey(.decline, inFlight: .approve) == "seerr.pending.decline")
+    }
+
+    @Test("the count is the pending listing's own total, everyone's requests — never /request/count")
+    func countFromPendingFilter() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: pendingRoutes(20, total: 23))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("filter", in: sent) == "pending")
+        // The queue is the household's: never narrowed to the manager.
+        #expect(queryValue("requestedBy", in: sent) == nil)
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(model.count == 23)
+        #expect(model.rows.count == 20)
+        #expect(model.rows.allSatisfy { $0.request.requestedBy.displayName == "Léa" && $0.title == "Dune" })
+        #expect(model.canLoadMore)
+        #expect(model.phase == .loaded)
+        #expect(!transport.requests.contains(where: isCall("/request/count")))
+        #expect(transport.requests.filter(isRequestList).count == 1)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("approving or refusing removes the row, drops the count, says so — and the next page starts that much earlier")
+    func approveRemovesRow() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(20, total: 22, extra: [
+            "/request": [requestPage([requestJSON(21, by: leaJSON), requestJSON(22, by: leaJSON)], total: 20)],
+            "/request/2/approve": [settled(2, status: 2)],
+            "/request/3/decline": [settled(3, status: 3)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(!model.rows.contains { $0.id == 2 })
+        #expect(model.count == 21)
+        #expect(model.inFlight.isEmpty)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.approved"))
+        let approval = transport.requests.first(where: isCall("/request/2/approve"))
+        #expect(approval?.httpMethod == "POST")
+
+        await model.decline(3, session: session, toasts: toasts, loc: loc)
+        #expect(!model.rows.contains { $0.id == 3 })
+        #expect(model.count == 20)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.declined"))
+        #expect(transport.requests.first(where: isCall("/request/3/decline"))?.httpMethod == "POST")
+
+        // 20 served, 2 settled: the listing is 2 shorter, so the next page's skip is 18.
+        #expect(model.canLoadMore)
+        await model.loadNextPage(session: session)
+        #expect(queryValue("skip", in: transport.requests.filter(isRequestList).last) == "18")
+        #expect(queryValue("filter", in: transport.requests.filter(isRequestList).last) == "pending")
+        #expect(model.rows.map(\.id) == [1] + Array(4...22))
+        #expect(model.count == 20)
+        #expect(!model.canLoadMore)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a request settled elsewhere first (409) leaves quietly: row removed, an info toast")
+    func alreadyHandledIsQuiet() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [.response(status: 409, body: #"{"message":"Request is not pending."}"#)],
+            "/request/3/decline": [.response(status: 409, body: #"{"message":"Request is not pending."}"#)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(model.count == 2)
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.alreadyHandled"))
+
+        await model.decline(3, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1])
+        #expect(model.count == 1)
+        #expect(toasts.current?.level == .info)
+        #expect(model.inFlight.isEmpty)
+    }
+
+    @Test("any other failure keeps the row for another try, with an error toast")
+    func otherErrorKeepsRow() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [.response(status: 500, body: #"{"message":"boom"}"#), settled(2, status: 2)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.count == 3)
+        #expect(model.inFlight.isEmpty)
+        #expect(toasts.current?.level == .error)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.approveFailed"))
+
+        // The row is still there to be pressed again.
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(toasts.current?.level == .success)
+    }
+
+    @Test("while a request is being settled, a second press on its row sends nothing")
+    func secondPressIgnored() async {
+        let asked = TestLatch()
+        let held = TestLatch()
+        let (session, _, transport) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [settled(2, status: 2)],
+        ]))
+        transport.onRequest { path, _ in
+            guard path == "/request/2/approve" else { return }
+            asked.open()
+            await held.wait()
+        }
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        let first = Task { await model.approve(2, session: session, toasts: toasts, loc: loc) }
+        await asked.wait()
+        #expect(model.inFlight[2] == .approve)
+        #expect(model.inFlight[1] == nil)
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        await model.decline(2, session: session, toasts: toasts, loc: loc)
+        held.open()
+        await first.value
+
+        #expect(transport.requests.filter { $0.url?.path.contains("/request/2/") == true }.count == 1)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(!transport.exhausted)
+    }
+
+    @Test("an account change during the call writes and shows nothing")
+    func accountChangeMidCall() async {
+        let (session, app, transport) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [settled(2, status: 2)],
+        ]))
+        transport.onRequest { path, _ in
+            if path == "/request/2/approve" { await MainActor.run { app.currentUserId = "B" } }
+        }
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(toasts.current == nil)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.count == 3)
+    }
+
+    @Test("without Seerr's permission to manage requests: no section, no call — whatever Jellyfin says")
+    func hiddenWithoutManage() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: 32 | 128, routes: [:])
+        #expect(!SeerrPendingModel.isShown(for: session.connection))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+        #expect(model.phase == .idle)
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(!transport.exhausted)
+
+        func connected(_ permissions: SeerrPermissions) -> SeerrSession.Connection {
+            .connected(SeerrUser(id: SeerrUserID(rawValue: 1), permissions: permissions))
+        }
+        #expect(SeerrPendingModel.isShown(for: connected(.manageRequests)))
+        #expect(SeerrPendingModel.isShown(for: connected([.manageRequests, .request])))
+        // A Seerr admin passes every check, as on the server.
+        #expect(SeerrPendingModel.isShown(for: connected(.admin)))
+        #expect(!SeerrPendingModel.isShown(for: connected([.request, .autoApprove, .requestView])))
+        #expect(!SeerrPendingModel.isShown(for: .notConnected))
+        #expect(!SeerrPendingModel.isShown(for: .unavailable))
+        #expect(!SeerrPendingModel.isShown(for: .notLinked))
+    }
+
+    @Test("a pending list Seerr does not serve ends in a failure, and can be read again")
+    func failedThenRetried() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: [
+            "/request": [.response(status: 500, body: #"{"message":"boom"}"#), requestPage([], total: 0)],
+        ])
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+        #expect(model.phase == .failed)
+        await model.load(session: session)
+        #expect(model.phase == .loaded)
+        #expect(model.rows.isEmpty)
+        #expect(model.count == 0)
+        #expect(!model.canLoadMore)
+    }
+
+    @Test("who and when: « Demandé par Léa · il y a 2 h », in the app's language")
+    func requestedLine() {
+        let created = Date.now.addingTimeInterval(-7_200)
+        func request(by user: SeerrUser) -> SeerrRequest {
+            SeerrRequest(id: 1, status: .pending, kind: .movie, createdAt: created, updatedAt: created,
+                         requestedBy: user, media: SeerrRequestMedia(tmdbId: 1, status: .pending))
+        }
+        let style = SeerrPendingModel.relativeStyle(loc: loc)
+        #expect(style.locale == loc.locale)
+        let when = created.formatted(style)
+        let lea = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: .request, displayName: "Léa")
+        #expect(SeerrPendingModel.requestedLine(request(by: lea), loc: loc)
+                == loc.localized("seerr.pending.requestedBy", "Léa", when))
+        let nobody = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: .request)
+        #expect(SeerrPendingModel.requestedLine(request(by: nobody), loc: loc)
+                == loc.localized("seerr.pending.requestedAt", when))
+        #expect(loc.localized("seerr.pending.requestedBy", "Léa", when).contains("Léa"))
+        #expect(loc.localized("seerr.pending.requestedBy", "Léa", when).contains(when))
+        for key in ["seerr.pending.approved", "seerr.pending.declined", "seerr.pending.alreadyHandled",
+                    "seerr.pending.approveFailed", "seerr.pending.declineFailed", "seerr.pending.empty",
+                    "seerr.pending.approve", "seerr.pending.decline", "seerr.pending.approving",
+                    "seerr.pending.declining", "seerr.settings.section.pending"] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
+        #expect(loc.counted("seerr.settings.section.pendingCount", 3).contains("3"))
+    }
+
+    // MARK: The Réglages bubble (owner 2026-11-08, proposal A)
+
+    @Test("the bubble says nothing at 0 or unknown, the number up to 99, then « 99+ »")
+    func badgeLabel() {
+        #expect(SeerrPendingModel.badgeLabel(nil) == nil)
+        #expect(SeerrPendingModel.badgeLabel(0) == nil)
+        #expect(SeerrPendingModel.badgeLabel(1) == "1")
+        #expect(SeerrPendingModel.badgeLabel(99) == "99")
+        #expect(SeerrPendingModel.badgeLabel(100) == "99+")
+    }
+
+    @Test("a manager's count is read with ONE row asked, the pending listing's total kept")
+    func refreshReadsTheTotal() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 7)],
+        ])
+        await session.refreshPendingCount()
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("filter", in: sent) == "pending")
+        #expect(queryValue("take", in: sent) == "1")
+        #expect(queryValue("requestedBy", in: sent) == nil)
+        #expect(session.pendingBadgeCount == 7)
+        // A new account forgets it.
+        session.reset()
+        #expect(session.pendingBadgeCount == nil)
+    }
+
+    @Test("someone who may not manage requests asks nothing and gets no bubble")
+    func noBubbleForARequester() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: 32, routes: [:])
+        await session.refreshPendingCount()
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(session.pendingBadgeCount == nil)
+    }
+
+    @Test("« À valider » keeps the bubble in step: its listing, then every approval")
+    func listingAndApprovalUpdateTheBubble() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(20, total: 22, extra: [
+            "/request/2/approve": [settled(2, status: 2)],
+        ]))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+        #expect(session.pendingBadgeCount == 22)
+
+        await model.approve(2, session: session, toasts: ToastCenter(), loc: loc)
+        #expect(session.pendingBadgeCount == 21)
+    }
+
+    @Test("a read that started before an approval never writes its older number over it")
+    func olderReadLosesToAFresherNumber() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 5)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            guard path == "/request" else { return }
+            started.open()
+            await release.wait()
+        }
+        let read = Task { await session.refreshPendingCount() }
+        await started.wait()
+        // « À valider » settles one meanwhile: 3 is the fresher number.
+        session.notePendingCount(3, for: try #require(session.snapshot()))
+        release.open()
+        await read.value
+        #expect(session.pendingBadgeCount == 3)
+    }
+
+    @Test("an identity forgotten (Pro gone, cap on) forgets its count: it never comes back unread")
+    func forgottenIdentityForgetsTheCount() async {
+        let (session, app, _) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 4)],
+        ])
+        await session.refreshPendingCount()
+        #expect(session.pendingBadgeCount == 4)
+        #expect(session.showsPendingBadge)
+
+        session.proAllowsProvider = { false }
+        await session.reload(appState: app)
+        session.proAllowsProvider = { true }
+        #expect(session.pendingCount == nil)
+        #expect(!session.showsPendingBadge)
+    }
+
+    @Test("a request withdrawn in Mes demandes leaves « À valider » with the count; a 404 reads as already handled")
+    func withdrawalAndNotFoundLeaveTheQueue() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(20, total: 22, extra: [
+            "/request/3/approve": [notFoundReply],
+        ]))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        model.forget(2, session: session)
+        #expect(!model.rows.contains { $0.id == 2 })
+        #expect(session.pendingBadgeCount == 21)
+        // Not listed here: nothing moves.
+        model.forget(999, session: session)
+        #expect(session.pendingBadgeCount == 21)
+
+        // Withdrawn elsewhere before the approval reached Seerr.
+        await model.approve(3, session: session, toasts: ToastCenter(), loc: loc)
+        #expect(!model.rows.contains { $0.id == 3 })
+        #expect(session.pendingBadgeCount == 20)
+    }
+}
+
+@Suite("Seerr settings — connection report")
+struct SeerrConnectionReportTests {
+    @Test("the report stays while the field names the tested address, and goes as soon as it names another")
+    func reportFollowsTheField() throws {
+        let tested = try #require(URL(string: "http://127.0.0.1:5055"))
+        #expect(SeerrTestReport.stillApplies(typed: "http://127.0.0.1:5055", testedAddress: tested))
+        // `runTest` writes the normalized form back into the field.
+        #expect(SeerrTestReport.stillApplies(typed: tested.absoluteString, testedAddress: tested))
+        #expect(SeerrTestReport.stillApplies(typed: "127.0.0.1:5055/", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "http://127.0.0.1:505", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "http://127.0.0.1:8096", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "http://127.0.0.1:5055", testedAddress: nil))
+    }
+}
+
+// MARK: - Arrival message (launch / foreground)
+
+private let arrivalKey = SettingsKey.seerrArrivalsSeen(accountKey: "S1|A")
+private let jellyfinDune = "0123456789abcdef0123456789abcdef"
+
+/// One of my requests, approved, its media AVAILABLE.
+private func arrivedJSON(_ id: Int, type: String = "movie", tmdbId: Int = 11, jellyfinId: String? = nil) -> String {
+    requestJSON(id, status: 2, type: type, tmdbId: tmdbId, mediaStatus: 5, jellyfinId: jellyfinId)
+}
+
+private func isAvailableList(_ request: URLRequest) -> Bool {
+    isRequestList(request) && queryValue("filter", in: request) == "available"
+}
+
+/// How many times « Voir » asked for Réglages → Demandes.
+@MainActor
+private final class OpenCounter {
+    var count = 0
+}
+
+/// Signed in to Seerr (account mode) as Alice, Seerr id 7, with `permissions`.
+@MainActor
+private func arrivalWorld(
+    permissions: Int = 32, config: SeerrUserConfig = enabledConfig, admin: Bool = false,
+    defaults: UserDefaults = .isolatedForTesting(), routes: [String: [StubSeerrTransport.Reply]]
+) async -> (SeerrSession, AppState, MockAPIClient, RoutedSeerrTransport) {
+    var all = routes
+    all["/settings/public"] = [settingsReply]
+    all["/auth/me"] = [userReply(#"{"id":7,"permissions":\#(permissions),"jellyfinUserId":"A","displayName":"Alice"}"#)]
+    let transport = RoutedSeerrTransport(all)
+    let storage = MockKeychain()
+    storage.saveSeerrSessions(["S1|A": bound("abc")])
+    let (app, api) = signedIn(config: config)
+    if admin { await promoteToAdmin(app, api) }
+    let session = makeSession(transport, storage: storage, defaults: defaults, following: app)
+    await session.reload(appState: app)
+    return (session, app, api, transport)
+}
+
+/// One check, its toast shown the way `AppNavigation` shows it.
+@MainActor
+private func checkArrivals(
+    _ session: SeerrSession, _ app: AppState, defaults: UserDefaults, toasts: ToastCenter,
+    opened: OpenCounter = OpenCounter()
+) async {
+    let arrival = await SeerrArrivalWatcher.check(
+        session: session, appState: app, defaults: defaults, loc: LocalizationManager(),
+        openRequests: { opened.count += 1 })
+    if let arrival { toasts.show(arrival) }
+}
+
+@MainActor
+@Suite("Seerr — arrival message")
+struct SeerrArrivalTests {
+    private let loc = LocalizationManager()
+
+    @Test("a manager hears only of HIS arrivals: requestedBy is his own Seerr id, filter available, 20")
+    func managerOnlyHearsOwnArrivals() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set([Int](), forKey: arrivalKey)
+        let (session, app, _, transport) = await arrivalWorld(permissions: 48, routes: [
+            "/request": [requestPage([arrivedJSON(3)], total: 1)],
+            "/movie/11": [movieReply(11, "Dune")],
+        ])
+        let toasts = ToastCenter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("requestedBy", in: sent) == "7")
+        #expect(queryValue("filter", in: sent) == "available")
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(toasts.current?.title == loc.localized("seerr.arrival.title", "Dune"))
+        #expect(!transport.exhausted)
+    }
+
+    @Test("the first check on a device seeds in silence; an arrival after it is announced")
+    func firstCheckSeedsSilently() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        let (session, app, _, transport) = await arrivalWorld(defaults: defaults, routes: [
+            "/request": [
+                requestPage([arrivedJSON(2), arrivedJSON(1)], total: 2),
+                requestPage([arrivedJSON(3, tmdbId: 33), arrivedJSON(2), arrivedJSON(1)], total: 3),
+            ],
+            "/movie/33": [movieReply(33, "Arrival")],
+        ])
+        let toasts = ToastCenter()
+        #expect(defaults.object(forKey: arrivalKey) == nil)
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+
+        #expect(toasts.current == nil)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [2, 1])
+        // Nothing to announce: no title was looked up.
+        #expect(!transport.requests.contains { $0.url?.path.contains("/movie/") == true })
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+
+        #expect(toasts.current?.title == loc.localized("seerr.arrival.title", "Arrival"))
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [3, 2, 1])
+        #expect(!transport.exhausted)
+    }
+
+    @Test("only what was not seen yet is announced, named by Jellyfin, with « Regarder » opening its fiche")
+    func announcesOnlyNew() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set([1], forKey: arrivalKey)
+        let (session, app, api, transport) = await arrivalWorld(routes: [
+            "/request": [
+                requestPage([arrivedJSON(2, jellyfinId: jellyfinDune), arrivedJSON(1)], total: 2),
+                requestPage([arrivedJSON(2, jellyfinId: jellyfinDune), arrivedJSON(1)], total: 2),
+            ],
+        ])
+        api.getItemHandler = { id in
+            var item = BaseItemDto()
+            item.id = id
+            item.name = "Dune : Deuxième partie"
+            return item
+        }
+        let toasts = ToastCenter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+
+        let toast = try #require(toasts.current)
+        #expect(toast.title == loc.localized("seerr.arrival.title", "Dune : Deuxième partie"))
+        #expect(toast.action?.title == loc.localized("seerr.myRequests.watch"))
+        #expect(toast.duration >= 5)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [2, 1])
+        // Jellyfin named it: Seerr was not asked for its title.
+        #expect(!transport.requests.contains { $0.url?.path.contains("/movie/") == true })
+        toast.action?.perform()
+        #expect(app.pendingDeepLinkItemId == jellyfinDune)
+
+        toasts.dismiss()
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+        #expect(toasts.current == nil)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("Jellyfin failing, Seerr names it; both failing, the count says it; no fiche ⇒ « Voir »")
+    func titleFallsBack() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set([Int](), forKey: arrivalKey)
+        let (session, app, api, _) = await arrivalWorld(routes: [
+            "/request": [
+                requestPage([arrivedJSON(2, jellyfinId: jellyfinDune)], total: 1),
+                requestPage([arrivedJSON(3, tmdbId: 33), arrivedJSON(2, jellyfinId: jellyfinDune)], total: 2),
+            ],
+            "/movie/11": [movieReply(11, "Dune")],
+            "/movie/33": [notFoundReply],
+        ])
+        api.getItemHandler = { _ in throw URLError(.badServerResponse) }
+        let toasts = ToastCenter()
+        let opened = OpenCounter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts, opened: opened)
+        #expect(toasts.current?.title == loc.localized("seerr.arrival.title", "Dune"))
+        #expect(toasts.current?.action?.title == loc.localized("seerr.myRequests.watch"))
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts, opened: opened)
+        let toast = try #require(toasts.current)
+        #expect(toast.title == loc.counted("seerr.arrival.several", 1))
+        // Seerr knows no Jellyfin id for it: no fiche to open, Mes demandes instead.
+        #expect(toast.action?.title == loc.localized("seerr.arrival.view"))
+        toast.action?.perform()
+        #expect(opened.count == 1)
+    }
+
+    @Test("several arrivals are ONE toast, counted by title, « Voir » opening Réglages → Demandes")
+    func severalBecomeOneToast() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        // Stored but empty is not a first check: everything is new.
+        defaults.set([Int](), forKey: arrivalKey)
+        let (session, app, _, transport) = await arrivalWorld(routes: [
+            "/request": [requestPage([
+                arrivedJSON(1, tmdbId: 11), arrivedJSON(2, tmdbId: 12),
+                arrivedJSON(3, type: "tv", tmdbId: 22), arrivedJSON(4, type: "tv", tmdbId: 22),
+            ], total: 4)],
+        ])
+        let toasts = ToastCenter()
+        let opened = OpenCounter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts, opened: opened)
+
+        let toast = try #require(toasts.current)
+        #expect(toast.title == loc.counted("seerr.arrival.several", 3))
+        #expect(toast.title.contains("3"))
+        #expect(toast.action?.title == loc.localized("seerr.arrival.view"))
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [1, 2, 3, 4])
+        // No title looked up for a count.
+        #expect(transport.requests.filter { !isRequestList($0) }.allSatisfy { $0.url?.path.contains("/movie/") != true })
+        toast.action?.perform()
+        #expect(opened.count == 1)
+        // « Voir » once the app moved to another account opens nothing.
+        app.currentUserId = "B"
+        toast.action?.perform()
+        #expect(opened.count == 1)
+        #expect(app.pendingDeepLinkItemId == nil)
+    }
+
+    @Test("a capped account, or one Seerr is hidden for, is never checked: no call, no toast, nothing stored")
+    func cappedOrHiddenNoCheck() async {
+        let toasts = ToastCenter()
+
+        // The device cap, set while connected.
+        let capped = UserDefaults.isolatedForTesting()
+        var (session, app, _, transport) = await arrivalWorld(defaults: capped, routes: [:])
+        #expect(session.isVisible(proAllows: true, isOnline: true))
+        capped.set(12, forKey: SettingsKey.privacyMaxContentAge)
+        await checkArrivals(session, app, defaults: capped, toasts: toasts)
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(capped.object(forKey: arrivalKey) == nil)
+
+        // The server cap: nothing Seerr was even resolved.
+        let serverCapped = UserDefaults.isolatedForTesting()
+        let (cappedApp, _) = signedIn(policy: policy(maxRating: 12))
+        let cappedTransport = RoutedSeerrTransport([:])
+        let cappedSession = makeSession(cappedTransport, defaults: serverCapped, following: cappedApp)
+        await cappedSession.reload(appState: cappedApp)
+        await checkArrivals(cappedSession, cappedApp, defaults: serverCapped, toasts: toasts)
+        #expect(cappedTransport.requests.isEmpty)
+        #expect(serverCapped.object(forKey: arrivalKey) == nil)
+
+        // Connected, then no Pro, then offline.
+        let hidden = UserDefaults.isolatedForTesting()
+        (session, app, _, transport) = await arrivalWorld(routes: [:])
+        session.proAllowsProvider = { false }
+        await checkArrivals(session, app, defaults: hidden, toasts: toasts)
+        session.proAllowsProvider = { true }
+        app.isOnlineProvider = { false }
+        await checkArrivals(session, app, defaults: hidden, toasts: toasts)
+        #expect(!transport.requests.contains(where: isRequestList))
+
+        // An admin whose own switch is off: an identity, no browse surface.
+        (session, app, _, transport) = await arrivalWorld(
+            config: SeerrUserConfig(isEnabled: false, url: seerrURL), admin: true, routes: [:])
+        #expect(session.connection == .connected(alice))
+        await checkArrivals(session, app, defaults: hidden, toasts: toasts)
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(hidden.object(forKey: arrivalKey) == nil)
+        #expect(toasts.current == nil)
+    }
+
+    @Test("a failed fetch writes nothing: the next successful check is still the silent first one")
+    func failedFetchSeedsNothing() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        let (session, app, _, transport) = await arrivalWorld(defaults: defaults, routes: [
+            "/request": [
+                .response(status: 500, body: #"{"message":"boom"}"#),
+                requestPage([arrivedJSON(1)], total: 1),
+            ],
+        ])
+        let toasts = ToastCenter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+        #expect(transport.requests.contains(where: isAvailableList))
+        #expect(defaults.object(forKey: arrivalKey) == nil)
+        #expect(toasts.current == nil)
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+        #expect(toasts.current == nil)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [1])
+    }
+
+    @Test("two checks racing announce an arrival once: the seen set is read after the fetch")
+    func concurrentChecksAnnounceOnce() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set([Int](), forKey: arrivalKey)
+        let (session, app, _, transport) = await arrivalWorld(routes: [
+            "/request": [requestPage([arrivedJSON(1)], total: 1), requestPage([arrivedJSON(1)], total: 1)],
+            "/movie/11": [movieReply(11, "Dune"), movieReply(11, "Dune")],
+        ])
+        let asked = TestLatch()
+        let held = TestLatch()
+        transport.onRequest { path, index in
+            // The FIRST listing is held until the second check has finished.
+            guard path == "/request", index == 0 else { return }
+            asked.open()
+            await held.wait()
+        }
+        let loc = LocalizationManager()
+        let first = Task {
+            await SeerrArrivalWatcher.check(
+                session: session, appState: app, defaults: defaults, loc: loc, openRequests: {})
+        }
+        await asked.wait()
+        let second = await SeerrArrivalWatcher.check(
+            session: session, appState: app, defaults: defaults, loc: loc, openRequests: {})
+        held.open()
+        let late = await first.value
+
+        #expect(second?.title == loc.localized("seerr.arrival.title", "Dune"))
+        #expect(late == nil)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [1])
+    }
+
+    @Test("« Voir » closes any deeper Settings page, selects Demandes and asks for the Settings tab")
+    func openRequestsLandsOnRequests() {
+        let (app, _) = signedIn()
+        let nav = SettingsNavCoordinator()
+        nav.selectedCategory = .appearance
+        nav.selectedInterfaceSub = .menu
+        nav.showsAppIconPage = true
+
+        SeerrArrivalWatcher.openRequests(appState: app, settingsNav: nav)
+
+        #expect(nav.selectedCategory == .requests)
+        #expect(nav.selectedInterfaceSub == nil)
+        #expect(!nav.showsAppIconPage)
+        #expect(app.pendingDeepLinkTabId == MenuEntry.settingsID)
+    }
+
+    @Test("« Qui regarde ? » at launch holds the check until a profile is chosen, then runs ONE")
+    func launchPickerHoldsArrivals() {
+        typealias Flow = AccountSwitchFlow
+        #expect(Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 2))
+        // Every missing input: no picker, nothing held past the launch.
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: false, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: false, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: false, memorizedAccountsAllowed: true, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: false, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 1))
+
+        // Held from the start: the launch check (the PREVIOUS profile's) waits.
+        let gate = SeerrArrivalGate()
+        #expect(gate.isHeld)
+        #expect(!gate.admit())
+        #expect(!gate.admit())
+        // The picker closes: ONE check runs, then every check passes.
+        #expect(gate.release())
+        #expect(!gate.isHeld)
+        #expect(gate.admit())
+        #expect(!gate.release())
+
+        // No check came while held (the reload still running): nothing to run
+        // at release — the hook's own check passes the gate when it arrives.
+        let quiet = SeerrArrivalGate()
+        #expect(!quiet.release())
+        #expect(quiet.admit())
+    }
+
+    @Test("an account forgotten on this device forgets its seen arrivals and its dismissed invitation")
+    func forgetAccountForgetsArrivals() {
+        let defaults = UserDefaults.isolatedForTesting()
+        let otherKey = SettingsKey.seerrArrivalsSeen(accountKey: "S1|B")
+        defaults.set([3, 2], forKey: arrivalKey)
+        defaults.set(true, forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: "S1|A"))
+        defaults.set([9], forKey: otherKey)
+        let session = makeSession(StubSeerrTransport(), defaults: defaults)
+
+        session.forgetAccount("S1|A")
+
+        #expect(defaults.object(forKey: arrivalKey) == nil)
+        #expect(defaults.object(forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: "S1|A")) == nil)
+        #expect(defaults.array(forKey: otherKey) as? [Int] == [9])
+    }
+
+    @Test("the seen list keeps what is on the page first, the newest 200 at most")
+    func seenListCapped() {
+        func arrived(_ id: Int) -> SeerrRequest {
+            SeerrRequest(
+                id: id, status: .approved, kind: .movie, createdAt: .distantPast, updatedAt: .distantPast,
+                requestedBy: alice, media: SeerrRequestMedia(tmdbId: id, status: .available))
+        }
+        let previous = Array(1...200)
+        let stored = SeerrArrivalWatcher.stored(available: [arrived(300), arrived(150)], previous: previous)
+        #expect(stored.count == SeerrArrivalWatcher.maxSeen)
+        #expect(Array(stored.prefix(2)) == [300, 150])
+        #expect(!stored.contains(200))   // the oldest went
+        #expect(stored.contains(199))
+        #expect(Set(stored).count == stored.count)
+
+        let first = SeerrArrivalWatcher.newArrivals(available: [arrived(1)], seen: nil)
+        #expect(first.toAnnounce.isEmpty)
+        #expect(first.seen == [1])
+        let next = SeerrArrivalWatcher.newArrivals(available: [arrived(2), arrived(1)], seen: [1])
+        #expect(next.toAnnounce.map(\.id) == [2])
+        #expect(next.seen == [1, 2])
+        for key in ["seerr.arrival.title", "seerr.arrival.view"] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
     }
 }

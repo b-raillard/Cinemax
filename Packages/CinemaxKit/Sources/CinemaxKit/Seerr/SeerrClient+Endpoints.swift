@@ -78,6 +78,30 @@ extension SeerrClient {
         }
     }
 
+    /// Another user's permissions, as stored now (MANAGE_USERS).
+    public func permissions(ofUser id: SeerrUserID, _ credential: SeerrCredential) async throws -> SeerrPermissions {
+        struct Answer: Decodable { let permissions: Int }
+        let answer: Answer = try await get(
+            "/user/\(id.rawValue)/settings/permissions", query: [], auth: .credential(credential), localized: false)
+        return SeerrPermissions(rawValue: answer.permissions)
+    }
+
+    /// Replaces another user's WHOLE permission set (MANAGE_USERS): read it
+    /// first and change only what is meant. Seerr refuses (403) the owner
+    /// (id 1), the caller's own account, and granting `admin` unless the
+    /// caller is the owner. Returns what Seerr stored.
+    @discardableResult
+    public func setPermissions(
+        _ permissions: SeerrPermissions, ofUser id: SeerrUserID, _ credential: SeerrCredential
+    ) async throws -> SeerrPermissions {
+        struct Body: Codable { let permissions: Int }
+        let (stored, status): (Body?, Int) = try await mutate(
+            "POST", "/user/\(id.rawValue)/settings/permissions",
+            body: Body(permissions: permissions.rawValue), auth: .credential(credential))
+        guard let stored else { throw SeerrError.http(status) }
+        return SeerrPermissions(rawValue: stored.permissions)
+    }
+
     /// Reads `serverId` only: the rest of the body holds Seerr's own Jellyfin
     /// API key and is never logged.
     public func jellyfinServerId(adminKey: String) async throws -> String {
@@ -98,7 +122,9 @@ extension SeerrClient {
     }
 
     public func movie(tmdbId: Int, _ credential: SeerrCredential) async throws -> SeerrTitle {
-        try await get("/movie/\(tmdbId)", query: [], auth: .credential(credential), localized: true)
+        let details: SeerrMovieDetails = try await get(
+            "/movie/\(tmdbId)", query: [], auth: .credential(credential), localized: true)
+        return details.title
     }
 
     public func tv(tmdbId: Int, _ credential: SeerrCredential) async throws -> SeerrTVDetails {
@@ -165,7 +191,14 @@ extension SeerrClient {
             "POST", "/request/\(requestId)/decline", body: nil, auth: .credential(credential))
     }
 
-    /// A body nobody reads (approve, decline, logout): decoding it is skipped.
+    /// Withdraws a request. Seerr lets its asker do it only while it is
+    /// PENDING (401 otherwise, measured on 3.5.1); a manager, always.
+    public func deleteRequest(requestId: Int, _ credential: SeerrCredential) async throws {
+        let _: (Empty?, Int) = try await mutate(
+            "DELETE", "/request/\(requestId)", body: nil, auth: .credential(credential))
+    }
+
+    /// A body nobody reads (approve, decline, delete, logout): decoding it is skipped.
     struct Empty: Decodable {}
 }
 

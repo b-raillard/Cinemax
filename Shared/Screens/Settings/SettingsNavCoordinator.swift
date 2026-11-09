@@ -26,5 +26,15 @@ final class SettingsNavCoordinator {
     /// like an Interface sub-page. iOS pushes its own page instead.
     var showsAppIconPage = false
 
+    /// tvOS: Demandes → a user's page (the Jellyfin user id). Here rather
+    /// than in the page so the « ‹ Demandes » row can close it before the
+    /// category — iOS pushes the page instead.
+    var requestsUserId: String?
+
+    /// tvOS: Demandes → one of its pages (« À valider », « Qui peut
+    /// demander »…, layout A). Closed by the « ‹ Demandes » row after a
+    /// user's page and before the category; iOS pushes the page instead.
+    var requestsPage: RequestsPage?
+
     init() {}
 }
