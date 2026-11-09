@@ -94,9 +94,9 @@ final class ServersViewModel {
 
     private func apply(_ probe: Probe, using appState: AppState) {
         switch probe.result {
-        case .online(let name, let version):
+        case .online(let name, let version, let serverID):
             statuses[probe.id] = .online
-            appState.updateServerMetadata(id: probe.id, name: name, version: version)
+            appState.updateServerMetadata(id: probe.id, name: name, version: version, serverID: serverID)
         case .offline:
             statuses[probe.id] = .offline
         }

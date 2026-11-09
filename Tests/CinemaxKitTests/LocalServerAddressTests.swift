@@ -38,6 +38,12 @@ struct LocalNetworkAddressTests {
         }
     }
 
+    @Test("IPv4 mappée en IPv6 : classée par l'IPv4 embarquée")
+    func ipv4MappedIPv6() {
+        #expect(LocalNetworkAddress.kind(ofLiteral: "::ffff:192.168.1.128") == .privateIPv4)
+        #expect(LocalNetworkAddress.kind(ofLiteral: "::ffff:8.8.8.8") == .publicIPv4)
+    }
+
     @Test("Éligibilité d'un hôte")
     func eligibility() {
         #expect(LocalNetworkAddress.isEligibleHost("192.168.1.128"))
@@ -85,5 +91,121 @@ struct LocalAddressInputTests {
         #expect(ServerURLNormalizer.normalizeLocal("ftp://192.168.1.2") == .failure(.malformed))
         #expect(ServerURLNormalizer.normalizeLocal("   ") == .failure(.malformed))
         #expect(ServerURLNormalizer.normalizeLocal("http://") == .failure(.malformed))
+    }
+}
+
+@Suite("Adresse locale — décision de route")
+struct ServerRoutePolicyTests {
+    private let lan = URL(string: "http://192.168.1.128:8096")!
+
+    @Test func noLocalAddressIsInternet() {
+        #expect(ServerRoutePolicy.decide(localURL: nil, reach: .lanCapable, expectedServerID: "S", probe: nil) == nil)
+    }
+
+    @Test func cellularNeverProbes() {
+        #expect(!ServerRoutePolicy.shouldProbe(localURL: lan, reach: .cellularOnly))
+        #expect(!ServerRoutePolicy.shouldProbe(localURL: lan, reach: .offline))
+        #expect(ServerRoutePolicy.shouldProbe(localURL: lan, reach: .lanCapable))
+    }
+
+    @Test func probeOKIsLocal() {
+        let probe = LocalProbeOutcome.answered(serverID: "S", connectedAddressIsLocal: true)
+        #expect(ServerRoutePolicy.decide(localURL: lan, reach: .lanCapable, expectedServerID: "S", probe: probe) == lan)
+    }
+
+    @Test func failedProbeIsInternet() {
+        let probe = LocalProbeOutcome.failed(localNetworkDenied: false)
+        #expect(ServerRoutePolicy.decide(localURL: lan, reach: .lanCapable, expectedServerID: "S", probe: probe) == nil)
+    }
+
+    @Test func idMismatchIsInternet() {
+        let probe = LocalProbeOutcome.answered(serverID: "OTHER", connectedAddressIsLocal: true)
+        #expect(ServerRoutePolicy.decide(localURL: lan, reach: .lanCapable, expectedServerID: "S", probe: probe) == nil)
+    }
+
+    @Test func publicConnectedAddressIsInternet() {
+        let probe = LocalProbeOutcome.answered(serverID: "S", connectedAddressIsLocal: false)
+        #expect(ServerRoutePolicy.decide(localURL: lan, reach: .lanCapable, expectedServerID: "S", probe: probe) == nil)
+    }
+
+    @Test func unknownExpectedIdIsInternet() {
+        let probe = LocalProbeOutcome.answered(serverID: "S", connectedAddressIsLocal: true)
+        #expect(ServerRoutePolicy.decide(localURL: lan, reach: .lanCapable, expectedServerID: nil, probe: probe) == nil)
+    }
+}
+
+@Suite("Adresse locale — sonde")
+struct LocalRouteProbeTests {
+    private let body = Data(#"{"Id":"S","ServerName":"NAS"}"#.utf8)
+
+    @Test func probeAcceptsMatchingBody() {
+        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: body, connectedAddress: "192.168.1.128")
+            == .answered(serverID: "S", connectedAddressIsLocal: true))
+    }
+
+    @Test func probeAcceptsIPv4MappedAddress() {
+        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: body, connectedAddress: "::ffff:192.168.1.128")
+            == .answered(serverID: "S", connectedAddressIsLocal: true))
+    }
+
+    @Test func probeRejectsPublicConnectedAddress() {
+        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: body, connectedAddress: "86.245.10.3")
+            == .answered(serverID: "S", connectedAddressIsLocal: false))
+    }
+
+    @Test func probeRejectsNon200() {
+        for status in [301, 401, 500] {
+            #expect(LocalRouteProbe.evaluate(statusCode: status, body: body, connectedAddress: "192.168.1.128")
+                == .failed(localNetworkDenied: false))
+        }
+    }
+
+    @Test func probeRejectsBodyWithoutId() {
+        let noId = Data(#"{"ServerName":"NAS"}"#.utf8)
+        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: noId, connectedAddress: "192.168.1.128")
+            == .failed(localNetworkDenied: false))
+    }
+
+    @Test func probeUnknownAddressIsNotLocal() {
+        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: body, connectedAddress: nil)
+            == .answered(serverID: "S", connectedAddressIsLocal: false))
+    }
+}
+
+@Suite("Adresse locale — réécriture d'URL")
+struct ServerRouteRewriteTests {
+    private func url(_ s: String) -> URL { URL(string: s)! }
+
+    @Test func rewriteNoBasePaths() {
+        let out = ServerRoutePolicy.rewrite(url("https://movies.nivadax.net/Items/1/Images/Primary?tag=t"),
+                                            identityBase: url("https://movies.nivadax.net"),
+                                            dialBase: url("http://192.168.1.128:8899"))
+        #expect(out?.absoluteString == "http://192.168.1.128:8899/Items/1/Images/Primary?tag=t")
+    }
+
+    @Test func rewriteIdentityBasePathToRoot() {
+        let out = ServerRoutePolicy.rewrite(url("https://box.example.org/jellyfin/Items/1/Images/Primary"),
+                                            identityBase: url("https://box.example.org/jellyfin"),
+                                            dialBase: url("http://192.168.1.128:8096"))
+        #expect(out?.absoluteString == "http://192.168.1.128:8096/Items/1/Images/Primary")
+    }
+
+    @Test func rewriteRootToDialBasePath() {
+        let out = ServerRoutePolicy.rewrite(url("https://movies.nivadax.net/Items/1"),
+                                            identityBase: url("https://movies.nivadax.net"),
+                                            dialBase: url("http://nas.local/jellyfin"))
+        #expect(out?.absoluteString == "http://nas.local/jellyfin/Items/1")
+    }
+
+    @Test func rewriteLeavesForeignURL() {
+        #expect(ServerRoutePolicy.rewrite(url("https://other.example.com/Items/1"),
+                                          identityBase: url("https://movies.nivadax.net"),
+                                          dialBase: url("http://192.168.1.128:8899")) == nil)
+    }
+
+    @Test func kindOfDialURL() {
+        #expect(ServerRoutePolicy.kind(ofDialURL: url("http://192.168.1.128:8899")) == .local)
+        #expect(ServerRoutePolicy.kind(ofDialURL: url("http://nas.local")) == .local)
+        #expect(ServerRoutePolicy.kind(ofDialURL: url("https://movies.nivadax.net")) == .internet)
     }
 }

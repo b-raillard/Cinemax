@@ -7,7 +7,7 @@ private let logger = Logger(subsystem: "com.cinemax", category: "Servers")
 public enum PingResult: Sendable, Equatable {
     /// Reachable. `name` / `version` are opportunistic — the server list uses
     /// them to self-heal entries whose metadata is stale or was never fetched.
-    case online(name: String?, version: String?)
+    case online(name: String?, version: String?, serverID: String?)
     case offline
 }
 
@@ -52,7 +52,7 @@ public enum ServerReachability {
             guard let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode) else { return .offline }
             let info = try? JSONDecoder().decode(PublicSystemInfoLite.self, from: data)
-            return .online(name: info?.serverName, version: info?.version)
+            return .online(name: info?.serverName, version: info?.version, serverID: info?.serverID)
         } catch {
             return .offline
         }
@@ -63,10 +63,12 @@ public enum ServerReachability {
     private struct PublicSystemInfoLite: Decodable {
         let serverName: String?
         let version: String?
+        let serverID: String?
 
         private enum CodingKeys: String, CodingKey {
             case serverName = "ServerName"
             case version = "Version"
+            case serverID = "Id"
         }
     }
 

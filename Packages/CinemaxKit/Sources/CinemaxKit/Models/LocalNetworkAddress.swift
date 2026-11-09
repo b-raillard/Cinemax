@@ -62,6 +62,11 @@ public enum LocalNetworkAddress {
     }
 
     private static func classify(v6 b: [UInt8]) -> Kind {
+        // IPv4-mapped (`::ffff:a.b.c.d`): a dual-stack socket reports the peer
+        // this way, so classify by the embedded IPv4.
+        if b[0..<10].allSatisfy({ $0 == 0 }), b[10] == 0xFF, b[11] == 0xFF {
+            return classify(v4: Array(b[12..<16]))
+        }
         if b.dropLast().allSatisfy({ $0 == 0 }), b[15] == 1 { return .loopbackIPv6 }
         if b[0] & 0xFE == 0xFC { return .uniqueLocalIPv6 }
         if b[0] == 0xFE, b[1] & 0xC0 == 0x80 { return .linkLocalIPv6 }
