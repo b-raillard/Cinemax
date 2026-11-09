@@ -583,7 +583,7 @@ struct AppNavigation: View {
             DiagnosticsUploader.client = appState.apiClient
             // Debug-only diagnostics follow the Debug page's own decision.
             // A Debug build knows at once; a TestFlight build once the App
-            // Store has answered (the `onChange` below).
+            // Store has answered (`network.isOnline`'s `onChange` below).
             updateVerboseDiagnostics()
             // Advertise this device as a remote-control target and start
             // listening. Idempotent — `apply` no-ops when nothing changed, so
@@ -682,11 +682,6 @@ struct AppNavigation: View {
             // just closing the socket would leave the stale declaration standing.
             remoteControl.apply(appState: appState, toasts: toasts, loc: loc, enabled: enabled)
         }
-        .onChange(of: earlyAdopter.transaction?.environment) { _, _ in
-            // The App Store's verified answer arrives after launch: that is
-            // when a TestFlight build learns it may log more.
-            updateVerboseDiagnostics()
-        }
         .onChange(of: scenePhase) { _, newPhase in
             VerboseDiagnostics.notePhase(String(describing: newPhase))
             if newPhase == .background {
@@ -778,7 +773,15 @@ struct AppNavigation: View {
         // `AppTransaction` raises a sandbox account prompt nobody asked for
         // (`Shared/Entitlements/CLAUDE.md`). No-op once StoreKit has answered.
         .onChange(of: network.isOnline, initial: true) { _, online in
-            Task { await earlyAdopter.refreshIfNeeded(isOnline: online) }
+            Task {
+                await earlyAdopter.refreshIfNeeded(isOnline: online)
+                // The App Store's verified answer is when a TestFlight build
+                // learns it may log more (a sandbox answer is never cached,
+                // so every launch waits for it). Not a `.onChange` of its
+                // own: one more modifier on this chain and the Release
+                // type-checker gives up on `body`.
+                updateVerboseDiagnostics()
+            }
         }
         #endif
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxSessionExpired)) { _ in
