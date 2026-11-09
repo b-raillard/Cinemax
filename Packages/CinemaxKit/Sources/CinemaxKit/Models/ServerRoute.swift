@@ -20,13 +20,15 @@ public enum ServerRoutePolicy {
 
     /// The URL to dial; nil = dial the public URL. The token only goes to a
     /// machine that proved it is the expected server, over a local connection.
+    /// The LAN address is https only (spec amendment): any other scheme is
+    /// never dialled.
     public static func decide(
         localURL: URL?,
         reach: NetworkReach,
         expectedServerID: String?,
         probe: LocalProbeOutcome?
     ) -> URL? {
-        guard let localURL, reach == .lanCapable,
+        guard let localURL, localURL.scheme?.lowercased() == "https", reach == .lanCapable,
               let expectedServerID, !expectedServerID.isEmpty,
               case .answered(let serverID, let isLocal)? = probe,
               isLocal, serverID == expectedServerID else { return nil }

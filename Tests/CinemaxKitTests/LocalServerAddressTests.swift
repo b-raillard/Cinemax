@@ -61,9 +61,9 @@ struct LocalNetworkAddressTests {
 struct LocalAddressInputTests {
     private func url(_ s: String) -> URL { URL(string: s)! }
 
-    @Test("Un hôte nu part en HTTP")
-    func bareHostDefaultsToHTTP() {
-        #expect(ServerURLNormalizer.normalizeLocal("192.168.1.128:8899") == .success(url("http://192.168.1.128:8899")))
+    @Test("Un hôte nu part en HTTPS")
+    func bareHostDefaultsToHTTPS() {
+        #expect(ServerURLNormalizer.normalizeLocal("192.168.1.128:8899") == .success(url("https://192.168.1.128:8899")))
     }
 
     @Test("HTTPS et sous-chemin conservés")
@@ -74,19 +74,25 @@ struct LocalAddressInputTests {
 
     @Test("Un nom mDNS est accepté")
     func acceptsMDNS() {
-        #expect(ServerURLNormalizer.normalizeLocal("nas.local:8096") == .success(url("http://nas.local:8096")))
+        #expect(ServerURLNormalizer.normalizeLocal("nas.local:8096") == .success(url("https://nas.local:8096")))
     }
 
     @Test("Une IPv6 entre crochets est acceptée")
     func acceptsBracketedIPv6() {
-        #expect(ServerURLNormalizer.normalizeLocal("[fd00::5]:8096") == .success(url("http://[fd00::5]:8096")))
+        #expect(ServerURLNormalizer.normalizeLocal("[fd00::5]:8096") == .success(url("https://[fd00::5]:8096")))
+    }
+
+    @Test("HTTP refusé, sauf hôte non local qui reste notLocal")
+    func refusesHTTP() {
+        #expect(ServerURLNormalizer.normalizeLocal("http://192.168.1.128:8899") == .failure(.notHTTPS))
+        #expect(ServerURLNormalizer.normalizeLocal("http://nas.local") == .failure(.notHTTPS))
+        #expect(ServerURLNormalizer.normalizeLocal("http://8.8.8.8") == .failure(.notLocal))
     }
 
     @Test("Refus")
     func refusals() {
         #expect(ServerURLNormalizer.normalizeLocal("nas.lan") == .failure(.notLocal))
         #expect(ServerURLNormalizer.normalizeLocal("movies.nivadax.net") == .failure(.notLocal))
-        #expect(ServerURLNormalizer.normalizeLocal("http://8.8.8.8") == .failure(.notLocal))
         #expect(ServerURLNormalizer.normalizeLocal("100.64.1.2") == .failure(.notLocal))
         #expect(ServerURLNormalizer.normalizeLocal("ftp://192.168.1.2") == .failure(.malformed))
         #expect(ServerURLNormalizer.normalizeLocal("   ") == .failure(.malformed))
@@ -96,7 +102,7 @@ struct LocalAddressInputTests {
 
 @Suite("Adresse locale — décision de route")
 struct ServerRoutePolicyTests {
-    private let lan = URL(string: "http://192.168.1.128:8096")!
+    private let lan = URL(string: "https://192.168.1.128:8920")!
 
     @Test func noLocalAddressIsInternet() {
         #expect(ServerRoutePolicy.decide(localURL: nil, reach: .lanCapable, expectedServerID: "S", probe: nil) == nil)
@@ -126,6 +132,12 @@ struct ServerRoutePolicyTests {
     @Test func publicConnectedAddressIsInternet() {
         let probe = LocalProbeOutcome.answered(serverID: "S", connectedAddressIsLocal: false)
         #expect(ServerRoutePolicy.decide(localURL: lan, reach: .lanCapable, expectedServerID: "S", probe: probe) == nil)
+    }
+
+    @Test func httpLocalURLIsInternet() {
+        let http = URL(string: "http://192.168.1.128:8899")!
+        let probe = LocalProbeOutcome.answered(serverID: "S", connectedAddressIsLocal: true)
+        #expect(ServerRoutePolicy.decide(localURL: http, reach: .lanCapable, expectedServerID: "S", probe: probe) == nil)
     }
 
     @Test func unknownExpectedIdIsInternet() {
