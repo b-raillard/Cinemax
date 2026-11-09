@@ -1,6 +1,6 @@
 # Local server address — use the LAN at home, the public URL elsewhere (2026-11-09)
 
-Decided with the product owner on 2026-11-09, after two playback cuts the same day (memory `project_wife_iphone_cut_20261109`). Branch `claude/local-server-address`, from `main` at `07630196`. File references below are as of that commit.
+Decided with the product owner on 2026-11-09, after two playback cuts the same day (memory `project_wife_iphone_cut_20261109`). Branch `claude/local-server-address`, rebased on `main` at `d7901afb`. File references below were taken at `07630196`, before Seerr (#330→#333) landed; Seerr reworked `AppNavigation.swift` (~500 lines) and touched `AppState.swift`, so re-locate line numbers there.
 
 ## Why
 
