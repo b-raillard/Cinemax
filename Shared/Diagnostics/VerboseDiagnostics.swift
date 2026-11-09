@@ -99,6 +99,33 @@ enum VerboseDiagnostics {
         return message
     }
 
+    /// Pure. The phone's LOCAL address reduced to what a diagnosis needs —
+    /// which network it sat on — never the address itself, since the document
+    /// travels to a server log: a private IPv4 keeps its /24 (the home LAN
+    /// reads `192.168.1.0/24`, a carrier's NAT another one), the shared
+    /// carrier range is `cgnat`, the rest is a class. `cellular=` in the same
+    /// line already says which interface carried the request.
+    static func localAddressClass(_ address: String?) -> String? {
+        guard let address, !address.isEmpty else { return nil }
+        let octets = address.split(separator: ".").compactMap { UInt8($0) }
+        if octets.count == 4, !address.contains(":") {
+            let (a, b) = (octets[0], octets[1])
+            switch (a, b) {
+            case (10, _), (192, 168), (172, 16...31):
+                return "\(a).\(b).\(octets[2]).0/24"
+            case (100, 64...127): return "cgnat"
+            case (169, 254): return "link-local"
+            case (127, _): return "loopback"
+            default: return "public-ipv4"
+            }
+        }
+        let lower = address.lowercased()
+        if lower == "::1" { return "loopback" }
+        if lower.hasPrefix("fe80") { return "link-local-ipv6" }
+        if lower.hasPrefix("fc") || lower.hasPrefix("fd") { return "ula-ipv6" }
+        return "public-ipv6"
+    }
+
     fileprivate static func yesNo(_ value: Bool) -> String { value ? "yes" : "no" }
 }
 
@@ -222,8 +249,8 @@ extension VerboseDiagnostics {
 extension VerboseDiagnostics {
     /// One upstream request of the loopback relay, from its
     /// `URLSessionTaskMetrics`: which protocol (h2 / h3), which edge address,
-    /// which LOCAL address (a home LAN address vs a carrier one answers "was
-    /// the phone on Wi-Fi?"), whether the connection was reused, time to first
+    /// which LOCAL network (`localAddressClass` — a home LAN vs a carrier one
+    /// answers "was the phone on Wi-Fi?"), whether the connection was reused, time to first
     /// byte, and how much came down before it ended.
     struct UpstreamTransaction: Equatable {
         var status: Int?

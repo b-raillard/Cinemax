@@ -990,7 +990,7 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
             status: (transaction.response as? HTTPURLResponse)?.statusCode,
             protocolName: transaction.networkProtocolName,
             remote: transaction.remoteAddress.map { "\($0):\(transaction.remotePort.map(String.init) ?? "?")" },
-            local: transaction.localAddress,
+            local: VerboseDiagnostics.localAddressClass(transaction.localAddress),
             isReused: transaction.isReusedConnection,
             isCellular: transaction.isCellular,
             isExpensive: transaction.isExpensive,

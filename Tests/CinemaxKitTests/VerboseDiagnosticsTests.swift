@@ -120,6 +120,19 @@ struct VerboseDiagnosticsTests {
         #expect(failed.hasSuffix("bytes=0 error=-1005"))
     }
 
+    @Test("L'adresse locale ne sort jamais en clair : seul son réseau est gardé")
+    func localAddressIsReducedToItsNetwork() {
+        #expect(VerboseDiagnostics.localAddressClass("192.168.1.42") == "192.168.1.0/24")
+        #expect(VerboseDiagnostics.localAddressClass("10.12.200.7") == "10.12.200.0/24")
+        #expect(VerboseDiagnostics.localAddressClass("172.20.3.4") == "172.20.3.0/24")
+        #expect(VerboseDiagnostics.localAddressClass("100.72.1.9") == "cgnat")
+        #expect(VerboseDiagnostics.localAddressClass("86.245.10.3") == "public-ipv4")
+        #expect(VerboseDiagnostics.localAddressClass("2a01:cb00:1234::5") == "public-ipv6")
+        #expect(VerboseDiagnostics.localAddressClass("fd12:3456::1") == "ula-ipv6")
+        #expect(VerboseDiagnostics.localAddressClass("fe80::1c2b") == "link-local-ipv6")
+        #expect(VerboseDiagnostics.localAddressClass(nil) == nil)
+    }
+
     // MARK: - Envoi au passage en arrière-plan
 
     @Test("Quitter l'app après une panne de ce lancement renvoie la suite")
