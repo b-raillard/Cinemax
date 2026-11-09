@@ -412,10 +412,10 @@ final class NativeVideoPresenter {
     /// errors like -12881, retry playback using the direct HLS URL without manifest interception.
     /// Subtitles may show raw ASS tags, but playback works.
     ///
-    /// When the route changed since the negotiation (the URL actually played is
-    /// not on the origin this engine would play now), the stream is
-    /// re-negotiated on the current route first — reopening the dead host
-    /// would fail again. Still bounded to ONE retry by `hasRetriedDirectURL`.
+    /// When the route changed since the negotiation (the NEGOTIATED URL is not
+    /// on the origin the client dials now, `apiClient.currentDialURL()`), the
+    /// stream is re-negotiated on the current route first — reopening the dead
+    /// host would fail again. Still bounded to ONE retry by `hasRetriedDirectURL`.
     private func retryWithDirectURL(player: AVPlayer, startTime: Double?) {
         guard let info = playbackInfo, !hasRetriedDirectURL else { return }
         hasRetriedDirectURL = true

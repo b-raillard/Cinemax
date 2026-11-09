@@ -1009,9 +1009,9 @@ final class AppState {
     /// Re-publishes the extension session snapshot so the widget and the Top
     /// Shelf pick up a changed parental cap.
     ///
-    /// Needed because `refreshCurrentUser()` — the only publisher — runs on
-    /// session-establishing paths and on foreground, NOT when the user edits the
-    /// cap. Without this the extensions would keep the old ceiling until the next
+    /// Needed because `refreshCurrentUser()` — which publishes through this
+    /// method — runs on session-establishing paths and on foreground, NOT when
+    /// the user edits the cap (nor, for the LAN address, when it is saved). Without this the extensions would keep the old ceiling until the next
     /// login or app foreground, i.e. the setting would look applied and not be.
     /// `publish` is already idempotent (in-process memo + field-wise Keychain
     /// compare), and the cap is part of `Session`, so an unchanged cap costs
