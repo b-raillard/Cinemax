@@ -1,6 +1,8 @@
 import Testing
 import Foundation
 @testable import CinemaxKit
+@testable import Cinemax
+import Nuke
 
 @Suite("Adresse locale — classement")
 struct LocalNetworkAddressTests {
@@ -219,5 +221,60 @@ struct ServerRouteRewriteTests {
         #expect(ServerRoutePolicy.kind(ofDialURL: url("http://192.168.1.128:8899")) == .local)
         #expect(ServerRoutePolicy.kind(ofDialURL: url("http://nas.local")) == .local)
         #expect(ServerRoutePolicy.kind(ofDialURL: url("https://movies.nivadax.net")) == .internet)
+    }
+}
+
+@Suite("Adresse locale — images")
+struct LocalServerImageRouteTests {
+    private let identity = URL(string: "https://movies.nivadax.net")!
+    private let dial = URL(string: "http://192.168.1.128:8899")!
+
+    private final class SpyLoader: DataLoading, @unchecked Sendable {
+        private let lock = NSLock()
+        private var _urls: [URL] = []
+        var urls: [URL] { lock.lock(); defer { lock.unlock() }; return _urls }
+        private final class Token: Nuke.Cancellable { func cancel() {} }
+        func loadData(with request: URLRequest,
+                      didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
+                      completion: @escaping @Sendable (Error?) -> Void) -> any Nuke.Cancellable {
+            lock.lock(); _urls.append(request.url!); lock.unlock()
+            return Token()
+        }
+    }
+
+    @Test func tableRewritesUnderIdentity() {
+        let table = ImageRouteTable()
+        table.set(identity: identity, dial: dial)
+        var request = URLRequest(url: URL(string: "https://movies.nivadax.net/Items/1/Images/Primary")!)
+        request.setValue("MediaBrowser Token=\"t\"", forHTTPHeaderField: "Authorization")
+        let out = table.rewrite(request)
+        #expect(out.url?.absoluteString == "http://192.168.1.128:8899/Items/1/Images/Primary")
+        #expect(out.value(forHTTPHeaderField: "Authorization") == "MediaBrowser Token=\"t\"")
+    }
+
+    @Test func tableNoDialIsIdentity() {
+        let table = ImageRouteTable()
+        let request = URLRequest(url: URL(string: "https://movies.nivadax.net/Items/1/Images/Primary")!)
+        table.set(identity: identity, dial: nil)
+        #expect(table.rewrite(request).url == request.url)
+        table.set(identity: identity, dial: identity)
+        #expect(table.rewrite(request).url == request.url)
+    }
+
+    @Test func loaderForwardsRewrittenRequest() {
+        let table = ImageRouteTable()
+        table.set(identity: identity, dial: dial)
+        let spy = SpyLoader()
+        let loader = RoutedImageDataLoader(wrapping: spy, table: table)
+        _ = loader.loadData(with: URLRequest(url: URL(string: "https://movies.nivadax.net/Items/1/Images/Primary")!),
+                            didReceiveData: { _, _ in }, completion: { _ in })
+        #expect(spy.urls.map(\.absoluteString) == ["http://192.168.1.128:8899/Items/1/Images/Primary"])
+    }
+
+    @Test func cacheKeyStaysIdentity() {
+        ImageRouteTable.shared.set(identity: identity, dial: dial)
+        defer { ImageRouteTable.shared.set(identity: nil, dial: nil) }
+        let url = URL(string: "https://movies.nivadax.net/Items/1/Images/Primary")!
+        #expect(ImageRequest(url: url).imageId == url.absoluteString)
     }
 }

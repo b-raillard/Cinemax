@@ -155,12 +155,16 @@ struct AppNavigation: View {
         // Posters and backdrops come from the same server as everything else, so
         // they need the same explicit certificate approval — otherwise a
         // self-signed server would sign in and browse with every image blank.
-        // The existing `DataLoader` is MUTATED, never replaced: `withDataCache`
+        // The existing `DataLoader` is MUTATED and WRAPPED, never rebuilt: `withDataCache`
         // above already configured its session (notably `urlCache`), and a fresh
         // `DataLoader()` would silently restore Nuke's default HTTP cache on top
         // of the 500 MB data cache. Nuke's own documentation prescribes exactly
         // this line for handling authentication challenges.
         (config.dataLoader as? DataLoader)?.delegate = ServerTrustDelegate.shared
+        // Image URLs and cache keys stay on the identity URL; the wrapper swaps
+        // the base to the LAN dial URL at load time (`ImageRouteTable`). It
+        // wraps the SAME mutated loader, so the pin delegate keeps answering.
+        config.dataLoader = RoutedImageDataLoader(wrapping: config.dataLoader)
         ImagePipeline.shared = ImagePipeline(configuration: config)
     }()
 
