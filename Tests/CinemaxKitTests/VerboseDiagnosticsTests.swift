@@ -131,6 +131,8 @@ struct VerboseDiagnosticsTests {
         #expect(VerboseDiagnostics.localAddressClass("fd12:3456::1") == "ula-ipv6")
         #expect(VerboseDiagnostics.localAddressClass("fe80::1c2b") == "link-local-ipv6")
         #expect(VerboseDiagnostics.localAddressClass(nil) == nil)
+        #expect(VerboseDiagnostics.localAddressClass("999.1.1.1") == "unknown")
+        #expect(VerboseDiagnostics.localAddressClass("nas.local") == "unknown")
     }
 
     // MARK: - Envoi au passage en arrière-plan

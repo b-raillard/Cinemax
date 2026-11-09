@@ -1,3 +1,4 @@
+import CinemaxKit
 import Foundation
 import Network
 import OSLog
@@ -107,23 +108,19 @@ enum VerboseDiagnostics {
     /// line already says which interface carried the request.
     static func localAddressClass(_ address: String?) -> String? {
         guard let address, !address.isEmpty else { return nil }
-        let octets = address.split(separator: ".").compactMap { UInt8($0) }
-        if octets.count == 4, !address.contains(":") {
-            let (a, b) = (octets[0], octets[1])
-            switch (a, b) {
-            case (10, _), (192, 168), (172, 16...31):
-                return "\(a).\(b).\(octets[2]).0/24"
-            case (100, 64...127): return "cgnat"
-            case (169, 254): return "link-local"
-            case (127, _): return "loopback"
-            default: return "public-ipv4"
-            }
+        switch LocalNetworkAddress.kind(ofLiteral: address) {
+        case .privateIPv4:
+            let octets = address.split(separator: ".")
+            return "\(octets[0]).\(octets[1]).\(octets[2]).0/24"
+        case .cgnatIPv4: return "cgnat"
+        case .linkLocalIPv4: return "link-local"
+        case .loopbackIPv4, .loopbackIPv6: return "loopback"
+        case .publicIPv4: return "public-ipv4"
+        case .uniqueLocalIPv6: return "ula-ipv6"
+        case .linkLocalIPv6: return "link-local-ipv6"
+        case .publicIPv6: return "public-ipv6"
+        case .notAnIPLiteral: return "unknown"
         }
-        let lower = address.lowercased()
-        if lower == "::1" { return "loopback" }
-        if lower.hasPrefix("fe80") { return "link-local-ipv6" }
-        if lower.hasPrefix("fc") || lower.hasPrefix("fd") { return "ula-ipv6" }
-        return "public-ipv6"
     }
 
     fileprivate static func yesNo(_ value: Bool) -> String { value ? "yes" : "no" }
