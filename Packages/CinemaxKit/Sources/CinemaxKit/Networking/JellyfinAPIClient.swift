@@ -212,8 +212,25 @@ public final class JellyfinAPIClient: Sendable {
     /// responses are the same server's. A no-op when the dial is unchanged
     /// and before any connection (every `reconnect` resets it anyway).
     public func setDialURL(_ dialURL: URL?) {
+        installDial(dialURL, forIdentity: nil)
+    }
+
+    /// `ServerAPI` witness — `setDialURL` bound to the server it was decided
+    /// for: refused (no rebuild, no generation bump) unless the client's
+    /// identity is that same server (`ServerURLNormalizer.dedupKey`). A dial
+    /// decided for A can never land on a client a switch or a re-login has
+    /// already pointed at B — it would hand B's token or credentials to A.
+    public func setDialURL(_ dialURL: URL?, forIdentity identity: URL) {
+        installDial(dialURL, forIdentity: identity)
+    }
+
+    private func installDial(_ dialURL: URL?, forIdentity identity: URL?) {
         let snapshot = withState { state -> Connection? in
             guard let current = state.connection, (dialURL ?? current.identity) != current.dial else { return nil }
+            if let identity,
+               ServerURLNormalizer.dedupKey(identity) != ServerURLNormalizer.dedupKey(current.identity) {
+                return nil
+            }
             return current
         }
         guard let snapshot else { return }

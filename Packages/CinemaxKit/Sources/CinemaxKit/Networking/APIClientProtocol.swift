@@ -74,6 +74,11 @@ public protocol ServerAPI: Sendable {
     /// `connectToServer(url:)` resets it to `nil`.
     func setDialURL(_ dialURL: URL?)
 
+    /// `setDialURL` refused (a no-op, no client rebuild) unless the client's
+    /// current identity is the same server as `identity`. The route owner's
+    /// only entry point: a dial is never installed on a foreign identity.
+    func setDialURL(_ dialURL: URL?, forIdentity identity: URL)
+
     /// The base the client dials now (the identity when no dial URL is set),
     /// `nil` before any connection.
     func currentDialURL() -> URL?
@@ -107,6 +112,9 @@ public extension ServerAPI {
 
     /// Default no-op: a mock has no transport to repoint.
     func setDialURL(_ dialURL: URL?) {}
+
+    /// Default no-op: a mock has no transport to repoint.
+    func setDialURL(_ dialURL: URL?, forIdentity identity: URL) {}
 
     /// Default `nil`: a mock dials nothing.
     func currentDialURL() -> URL? { nil }

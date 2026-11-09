@@ -99,9 +99,19 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     // MARK: - APIClientProtocol
 
+    /// Holds `connectToServer` open (the handshake of `beginReLogin`) until
+    /// opened — the race window, never a sleep.
+    var connectGate: TestLatch?
+
     func connectToServer(url: URL) async throws -> ServerInfo {
         recordLock.withLock { connectCalled = true }
+        await connectGate?.wait()
         if shouldThrow { throw stubbedError }
+        // The real client's contract: the identity moves, the dial resets.
+        recordLock.withLock {
+            identityURL = url
+            dialURL = nil
+        }
         return stubbedServerInfo
     }
 
@@ -136,9 +146,28 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     func currentDialURL() -> URL? { recordLock.withLock { dialURL } }
 
+    /// The server the "client" is on: the last `reconnect` / `connectToServer`.
+    private(set) var identityURL: URL?
+    /// Every identity-bound dial the client REFUSED (another server, or no
+    /// connection) — the real client's `setDialURL(_:forIdentity:)` contract.
+    private(set) var refusedDialURLs: [URL?] = []
+
+    func setDialURL(_ dialURL: URL?, forIdentity identity: URL) {
+        recordLock.withLock {
+            guard let current = identityURL,
+                  ServerURLNormalizer.dedupKey(current) == ServerURLNormalizer.dedupKey(identity) else {
+                refusedDialURLs.append(dialURL)
+                return
+            }
+            dialURLs.append(dialURL)
+            self.dialURL = dialURL
+        }
+    }
+
     func reconnect(url: URL, accessToken: String) {
         recordLock.withLock {
             dialURL = nil
+            identityURL = url
             if reconnectedURLs.last != url { learnedVersion = nil }
             reconnectCalled = true
             reconnectedURLs.append(url)

@@ -71,6 +71,8 @@ struct ServerRouteControllerTests {
     private func makeApp(api: MockAPIClient, keychain: MockKeychain = MockKeychain(), entries: [ServerEntry]) -> AppState {
         keychain.savedServers = entries
         keychain.savedActiveServerId = entries.first?.id
+        // The client is on the active server, as after `restoreSession`.
+        if let first = entries.first { api.reconnect(url: first.url, accessToken: first.accessToken ?? "") }
         let app = AppState(apiClient: api, keychain: keychain)
         app.settingsDefaults = UserDefaults.isolatedForTesting()
         app.loadServersFromKeychain()
@@ -284,6 +286,81 @@ struct ServerRouteControllerTests {
         #expect(log.imageRoutes.count == 2)
         #expect(log.imageRoutes.last.map { $0.identity == identity && $0.dial == nil } == true)
         #expect(log.streamURLs == [lan, identity])
+    }
+
+    @Test func reLoginHandshakeIsNeverRerouted() async {
+        let api = MockAPIClient()
+        let home = entry(id: "E1")
+        let chalet = entry(id: "E2", url: other, serverID: "S2", local: false)
+        let app = makeApp(api: api, entries: [home, chalet])
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        let controller = makeController(stub, app: app)
+        await controller.evaluate(.launch)
+        #expect(api.dialURLs == [lan])
+
+        // B's handshake is held open while the session still reads as A's.
+        let latch = TestLatch()
+        api.connectGate = latch
+        let relogin = Task { await app.beginReLogin(for: chalet) }
+        await eventually { api.connectCalled }
+        controller.pathChanged()
+        await controller.evaluate(.foreground)
+        #expect(api.dialURLs == [lan], "nothing rebuilds the client under the handshake")
+        #expect(stub.calls == 1)
+
+        latch.open()
+        await relogin.value
+        await controller.pendingEvaluation?.value
+
+        #expect(api.dialURLs == [lan], "nothing applied for A after the release either")
+        #expect(api.refusedDialURLs.isEmpty)
+        #expect(api.identityURL == other, "the client is on B")
+        #expect(api.currentDialURL() == nil, "and dials B's own identity")
+        #expect(app.isAuthenticated == false)
+    }
+
+    @Test func signInHoldDefersThenEvaluatesOnce() async {
+        let api = MockAPIClient()
+        let app = makeApp(api: api, entries: [entry()])
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        let controller = makeController(stub, app: app)
+        await controller.evaluate(.launch)
+
+        app.beginSignIn()
+        controller.pathChanged()
+        await controller.evaluate(.foreground)
+        #expect(api.dialURLs == [lan], "held: the client is not touched")
+        #expect(stub.calls == 1)
+
+        stub.set(outcome: .failed(localNetworkDenied: false))
+        app.endSignIn()
+        await controller.pendingEvaluation?.value
+
+        #expect(stub.calls == 2, "the release runs ONE evaluation")
+        #expect(api.dialURLs == [lan, nil])
+        #expect(controller.route == .internet)
+    }
+
+    @Test func freshSignInRoutesLocal() async {
+        let api = MockAPIClient()
+        api.stubbedSession = UserSession(userID: "U", username: "Alice", accessToken: "tok-new", serverID: "S")
+        let app = makeApp(api: api, entries: [entry()])
+        // The login screen: a server, no session yet.
+        app.isAuthenticated = false
+        app.currentUserId = nil
+        app.accessToken = nil
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        let controller = makeController(stub, app: app)
+        let login = LoginViewModel()
+        login.username = "Alice"
+
+        await login.authenticate(using: app, loc: LocalizationManager())
+        await controller.pendingEvaluation?.value
+
+        #expect(app.isAuthenticated)
+        #expect(stub.calls == 1)
+        #expect(api.dialURLs.last == lan)
+        #expect(controller.route == .local)
     }
 
     @Test func signedOutNeverApplies() async {

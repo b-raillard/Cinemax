@@ -138,8 +138,19 @@ final class AppState {
     /// Bumped synchronously by every server-transition entry point. A transition
     /// that awaits the network re-checks it before writing, so a slow one can
     /// never overwrite the state a newer one already committed — same pattern as
-    /// `NowPlayingInfoController.generation`.
-    private var serverTransitionGeneration = 0
+    /// `NowPlayingInfoController.generation`. Readable outside: the route
+    /// owner drops a decision taken across a transition.
+    private(set) var serverTransitionGeneration = 0
+
+    /// Sign-ins in flight through the SHARED client (`beginSignIn` /
+    /// `endSignIn`, `withSignInHold`). While one is, the route owner applies
+    /// nothing: `setDialURL` rebuilds the client and the sign-in would fail
+    /// with `CancellationError` (or the credentials leave on the old route).
+    @ObservationIgnored private(set) var signInsInFlight = 0
+    /// Called when the last sign-in hold is released — the route owner runs
+    /// ONE evaluation then (which also routes a session that sign-in has just
+    /// established). Wired by `ServerRouteController.attach`.
+    @ObservationIgnored var onSignInHoldReleased: @MainActor () -> Void = {}
 
     let apiClient: any APIClientProtocol
     let keychain: any SecureStorageProtocol
@@ -159,6 +170,25 @@ final class AppState {
         apiClient.setOnUnauthorized {
             NotificationCenter.default.post(name: .cinemaxSessionExpired, object: nil)
         }
+    }
+
+    var isSignInInFlight: Bool { signInsInFlight > 0 }
+
+    /// Marks a sign-in through the shared client as in flight; pair with
+    /// `endSignIn()` on every exit.
+    func beginSignIn() { signInsInFlight += 1 }
+
+    func endSignIn() {
+        guard signInsInFlight > 0 else { return }
+        signInsInFlight -= 1
+        if signInsInFlight == 0 { onSignInHoldReleased() }
+    }
+
+    /// `body` with the sign-in hold set, released on every exit.
+    func withSignInHold<T>(_ body: () async throws -> T) async rethrows -> T {
+        beginSignIn()
+        defer { endSignIn() }
+        return try await body()
     }
 
     /// Image URLs for the current server. Derived from `serverURL` — reading it
@@ -747,6 +777,11 @@ final class AppState {
         }
         serverTransitionGeneration &+= 1
         let generation = serverTransitionGeneration
+        // The session still reads as A's until the handshake lands: no route
+        // change may rebuild the client under it (its install would be refused
+        // and B's credentials would then go to A).
+        beginSignIn()
+        defer { endSignIn() }
         let info = try? await apiClient.connectToServer(url: entry.url)
         // Race guard: a newer transition (another switch, an add, a logout)
         // started while this handshake was in flight — its state has already been

@@ -40,9 +40,9 @@ struct RouteTransports {
 /// Evaluated after the session is restored at launch (`AppState.prepareRoute`),
 /// on return to the foreground, on every network path change (identity first,
 /// then the probe) and after every client rebuild (`AppState.onClientRepointed`,
-/// which covers server AND account switches). A no-op unless a session is
-/// established: `setDialURL` cancels an in-flight sign-in, so nothing is ever
-/// pushed while `AppState.isAuthenticated` is false.
+/// which covers server AND account switches) and once each sign-in hold is
+/// released. A no-op unless a session is established and no sign-in holds the
+/// shared client: `setDialURL` cancels an in-flight sign-in.
 @MainActor @Observable
 final class ServerRouteController {
     static let shared = ServerRouteController()
@@ -103,16 +103,20 @@ final class ServerRouteController {
     func attach(appState: AppState, reach: @escaping @MainActor () -> NetworkReach) {
         self.appState = appState
         self.reach = reach
+        appState.onSignInHoldReleased = { [weak self] in self?.signInHoldReleased() }
     }
 
     // MARK: - Deciding
 
     /// Decides the active server's route and applies it. A no-op without an
-    /// established session; the answer is dropped when the active server moved
-    /// or a newer evaluation started while the probe ran.
+    /// established session, and deferred while a sign-in holds the client (the
+    /// hold's release evaluates). The answer is dropped when the active server
+    /// moved, a server transition started (`serverTransitionGeneration`) or a
+    /// newer evaluation started while the probe ran.
     func evaluate(_ reason: ServerRouteReason) async {
-        guard let session = establishedSession() else { return }
+        guard case .open(let session) = gate() else { return }
         let entry = session.entry
+        let transition = session.appState.serverTransitionGeneration
         evaluationGeneration &+= 1
         let generation = evaluationGeneration
         if reason == .launch { owesLaunchRefresh = true }
@@ -127,8 +131,11 @@ final class ServerRouteController {
         }
 
         guard generation == evaluationGeneration,
-              let current = establishedSession()?.entry,
-              current.id == entry.id, current.url == entry.url,
+              case .open(let now) = gate(),
+              now.appState.serverTransitionGeneration == transition
+        else { return }
+        let current = now.entry
+        guard current.id == entry.id, current.url == entry.url,
               current.localURL == entry.localURL, current.serverID == entry.serverID
         else { return }
         apply(dial: dial, entry: current, reason: reason, settled: true)
@@ -140,9 +147,12 @@ final class ServerRouteController {
     func pathChanged() {
         pathGeneration &+= 1
         memo = nil
-        guard let session = establishedSession() else { return }
         // A probe started on the previous network answers for that network.
         evaluationGeneration &+= 1
+        // Held by a sign-in: the client is not touched now; the release
+        // evaluates. No `await` between this gate and `apply`, so no transition
+        // can slip in between.
+        guard case .open(let session) = gate() else { return }
         apply(dial: nil, entry: session.entry, reason: .pathChange, settled: false)
         pendingEvaluation = Task { [self] in await evaluate(.pathChange) }
     }
@@ -176,15 +186,36 @@ final class ServerRouteController {
 
     // MARK: - Private
 
-    /// The active entry, only while a session is established. `isAuthenticated`
-    /// is false through every sign-in (`beginReLogin`, `beginAddServer`, the
-    /// login screen until `completeSession`'s last line), which is exactly
-    /// when a `setDialURL` would cancel the login in flight.
-    private func establishedSession() -> Session? {
-        guard let appState, appState.isAuthenticated,
+    private enum Gate {
+        /// No session: nothing to route.
+        case closed
+        /// A sign-in is using the shared client: nothing may rebuild it now.
+        case held
+        case open(Session)
+    }
+
+    /// Open only while a session is established AND no sign-in holds the
+    /// client. `isAuthenticated` is false through the login screen's sign-in
+    /// (until `completeSession`'s last line) and after `beginReLogin` /
+    /// `beginAddServer`; the hold (`AppState.signInsInFlight`) covers the rest:
+    /// `beginReLogin`'s handshake (the session still reads as the previous
+    /// server's), the add-account sign-ins (password and Quick Connect) and
+    /// `UserSwitchSheet`, all run while signed in. A `setDialURL` there would
+    /// cancel the exchange or send the credentials down the wrong route.
+    private func gate() -> Gate {
+        guard let appState else { return .closed }
+        if appState.isSignInInFlight { return .held }
+        guard appState.isAuthenticated,
               let id = appState.activeServerId,
-              let entry = appState.servers.first(where: { $0.id == id }) else { return nil }
-        return Session(appState: appState, entry: entry)
+              let entry = appState.servers.first(where: { $0.id == id }) else { return .closed }
+        return .open(Session(appState: appState, entry: entry))
+    }
+
+    /// The last sign-in hold is released: ONE evaluation — whatever was
+    /// deferred meanwhile, and the route of a session that sign-in has just
+    /// established (a first sign-in at home goes local right away).
+    private func signInHoldReleased() {
+        pendingEvaluation = Task { [self] in await evaluate(.serverChange) }
     }
 
     private func decide(for entry: ServerEntry, timeout: TimeInterval) async -> URL? {
@@ -238,7 +269,9 @@ final class ServerRouteController {
         let pushedUnchanged = previousDial == dial && (dial == nil || previousIdentity == entry.url)
         guard transportDial != dial || !pushedUnchanged else { return }
 
-        client.setDialURL(dial)
+        // Bound to the identity it was decided for: refused by the client if
+        // a transition has pointed it at another server meanwhile.
+        client.setDialURL(dial, forIdentity: entry.url)
         transports.setImageRoute(entry.url, dial)
         transports.configureStream(dial ?? entry.url)
         // Built AFTER `setDialURL`: the endpoint is derived from the installed dial.

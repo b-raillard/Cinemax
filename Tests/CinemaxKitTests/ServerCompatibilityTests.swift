@@ -271,6 +271,30 @@ struct JellyfinClientStateTests {
         #expect(api.connectionWithGeneration()?.generation == before)
     }
 
+    @Test("An identity-bound dial for another server is refused: dial and generation untouched")
+    func dialForForeignIdentityRefused() throws {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+        let before = try #require(api.connectionWithGeneration()).generation
+
+        api.setDialURL(Self.lan, forIdentity: Self.otherServer)
+
+        #expect(api.getDialURL() == Self.identity)
+        #expect(api.connectionWithGeneration()?.generation == before)
+        #expect(api.getConnection()?.client.configuration.url == Self.identity)
+    }
+
+    @Test("An identity-bound dial for the same server applies, whatever its spelling")
+    func dialForSameIdentityApplies() {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+
+        api.setDialURL(Self.lan, forIdentity: URL(string: "https://JELLYFIN.example.com/jellyfin/")!)
+
+        #expect(api.getDialURL() == Self.lan)
+        #expect(api.getServerURL() == Self.identity)
+    }
+
     @Test("A dial URL before any connection is dropped")
     func dialWithoutConnectionIsDropped() {
         let api = JellyfinAPIClient()
