@@ -105,13 +105,13 @@ Not local: loopback, CGNAT `100.64/10` (shared ISP space, not a LAN), and everyt
 
 It replaces `VerboseDiagnostics.localAddressClass` (`Shared/Diagnostics/VerboseDiagnostics.swift:108`), which keeps its output format. Two of its quirks must not survive: a hostname, or a malformed IPv4 such as `999.1.1.1`, currently classifies as `public-ipv6`.
 
-**What the field accepts:**
-- `http` or `https`;
+**What the field accepts** (amended by the owner on 2026-11-09, see « Amendment — HTTPS only »):
+- `https` only. `http://` is refused (« L'adresse locale doit être en https »);
 - a host that is either a private IP literal or a `.local` (mDNS) name.
 
 For a `.local` name, the probe classifies the address it actually connected to (`URLSessionTaskMetrics`). A qualified non-`.local` name such as `nas.lan` is refused: plain-http to it is blocked by ATS for API calls, and it cannot be classified before resolution.
 
-The field goes through `ServerURLNormalizer`, sub-path preserved. That normaliser defaults a bare host to `https://`, but a LAN Jellyfin is almost always `http`: **default a bare local host to `http://`**.
+The field goes through `ServerURLNormalizer`, sub-path preserved. That normaliser defaults a bare host to `https://`, and so does the local field (**amended 2026-11-09**: it used to default to `http://`).
 
 ## Architecture — identity URL vs dial URL (my call)
 
@@ -166,9 +166,22 @@ So:
 ## Security
 
 - The probe sends **no token**. The token goes to the local address only after the Jellyfin `Id` matched and the connected address is private.
-- At home the token and the traffic then travel in **plain HTTP on the LAN**, as any http LAN Jellyfin setup does. This is accepted.
-- **Residual risk, accepted**: the server `Id` is public. To be impersonated, a machine would need that `Id`, the **same address and port** on the network the device is on, and to answer as Jellyfin.
-- An `https` local address must pass the normal trust path. No pin-approval UI is offered for the local address. A self-signed LAN certificate makes the probe fail → public.
+- **Superseded on 2026-11-09 (owner).** The first version accepted plain HTTP on the LAN and the residual risk that the public `Id` is not a secret: a machine at the same address and port on a foreign Wi-Fi that echoes the `Id` would have received the token in clear. The owner chose HTTPS with a pinned certificate instead — see « Amendment — HTTPS only » below.
+
+## Amendment — HTTPS only, pinned certificate (owner, 2026-11-09)
+
+Found by an automated security review of the probe commit: the `Id` match plus a private connected address does not prove the machine is the user's server, since the `Id` is public. The owner chose « HTTPS local + épinglage » over a network fingerprint or accepting the risk.
+
+- **The local address is `https`.** A bare host gets `https://`; an explicit `http://` is refused at save (`notHTTPS`). The route policy and the extensions' probe also refuse a non-https local URL, defensively.
+- **The LAN certificate is pinned at save time** through the EXISTING certificate approval (`ServerCertificateSummary`, `ServerTrustDelegate.shared.trust(fingerprint:forTrustKey:)`, the « Certificat non reconnu » strings of server setup), keyed on the LAN `host:port`. The probe fails on an unpinned self-signed certificate (`decide` → `.systemDefault`), and the trust delegate records the pending summary; `setLocalAddress` then answers `needsCertificateApproval` and saves nothing. The user compares the fingerprint and approves; the save runs again and now passes.
+- **Trust-on-first-use at save is the accepted residue**: approving while on a hostile network would pin the impostor. The approval sheet shows the fingerprint to compare.
+- **A system-trusted certificate** (a private CA installed on the device) passes with no approval.
+- **Saved while away** (probe unreachable, host not pinned): the address is saved, but cannot be used until its certificate is approved; the toast says to save it again from home.
+- **A certificate change** (renewal, or an impostor) makes the probe fail → public, silently, as any unreachable LAN. Saving again offers the approval with the « a CHANGÉ » wording.
+- **Changing or removing the local address forgets the old LAN pin**, unless another registry entry's local URL or public URL uses the same `host:port`.
+- **Every transport already honours `ServerTrustDelegate` pins by `host:port`**: the API client, Nuke's loader, the socket, and `CinemaxStreamProxy` for libVLC. The native engine (AVPlayer, opt-in) must be checked: if it cannot honour the pin, it plays through the public URL or the proxy, never by disabling trust.
+- **Extensions**: the session blob carries the LAN pin (`localPinnedCertificateSHA256`, optional), and the extensions validate the LAN certificate against it with `ExtensionServerTrust`, exactly as they do for the public URL's pin.
+- **The owner's server, set up on 2026-11-09**: self-signed RSA-2048 certificate for `IP:192.168.1.128, DNS:nas-raillard.local`, valid until 2029-02-11, SHA-256 `A5:D9:DE:A9:4D:57:41:82:D7:86:4D:A6:32:7E:1B:9F:F9:0D:E3:23:BB:4F:C9:25:96:BD:C8:75:4C:6B:25:12`. Jellyfin `EnableHttps=true` (`RequireHttps=false`, so the tunnel's `http://192.168.1.128:8899` origin is unchanged), PKCS#12 at `/config/ssl/jellyfin-lan.pfx`, published as `8920:8920`. Local address to type: `192.168.1.128:8920`. Backups: `docker-compose.yaml.bak-20261109-https`, `config/config/network.xml.bak-20261109-https`.
 
 ## Diagnostics
 
@@ -212,7 +225,7 @@ So:
 - **Classifier**: every range boundary, IPv6 forms, malformed literals, hostnames.
 - **Route decision table**: no local address, cellular only, probe OK, probe timeout, `Id` mismatch, non-private connected address.
 - **`ServerEntry`**: a registry written before the field decodes unchanged. The new field is **optional** (the decode RULE in `ServerEntry.swift`).
-- **Normalisation of the local field**: bare host → `http://`, sub-path kept, `.local`, refusals.
+- **Normalisation of the local field**: bare host → `https://` (amended), `http://` refused, sub-path kept, `.local`, refusals.
 - **Base-prefix swap** for image URLs, with and without base paths on either side. Cache key unchanged.
 - **Retry after a route change** re-resolves instead of reusing the old host.
 

@@ -26,6 +26,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 - No address in any log or diagnostics line: only the class `local` / `internet` and the reason.
 - SwiftLint strict (`--strict` against `.swiftlint-baseline.json`); never re-baseline a new violation.
 - Probe timeouts: launch **1.0 s**, runtime **1.5 s**, extensions **1.0 s**. Every probe session sets `allowsCellularAccess = false`, `waitsForConnectivity = false`, `urlCache = nil`, and is ephemeral.
+- **The local address is https only, its certificate pinned at save** (owner amendment 2026-11-09, spec « Amendment — HTTPS only »). Bare host → `https://`; `http://` refused. Test data uses `https://192.168.1.128:8920`.
 - Local means: IPv4 `10/8`, `172.16/12`, `192.168/16`, `169.254/16`; IPv6 `fc00::/7`, `fe80::/10`. Not local: loopback, CGNAT `100.64/10`, everything else.
 - Test command (`RUN_TESTS`), run in full (`-only-testing` runs 0 swift-testing tests):
   ```bash
@@ -38,7 +39,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 1. **A same-server account switch** (`applyActiveServer` → `reconnect`, `serverURL` unchanged): the dial URL is reset to identity and must be re-evaluated. Covered by `accountSwitchReevaluatesRoute` (Task 8).
 2. **The launch race**: `StreamTransportPolicy.configure(serverURL:)` at `AppNavigation.swift:447` runs after `restoreSession` returns, while the probe may already have pushed the LAN URL. It must not put identity back. Covered by `transportURLKeepsDialForSameIdentity` (Task 8).
 3. **A `.local` name that resolves to a public address**: refused at save (`refusedNotLocal`) and never used as a route. Covered by `probeRejectsPublicConnectedAddress` (Task 3) and `saveRefusesPublicConnectedAddress` (Task 9).
-4. **An `https` LAN address with a self-signed certificate**: the probe fails through the normal trust path, the route stays internet, and no pin prompt appears. Covered by `failedProbeKeepsInternet` (Task 8, failure outcome). Checked on device in Task 13.
+4. **An unpinned or changed LAN certificate**: the probe fails through the normal trust path and the route stays internet; the ONLY approval offered is at save (`needsCertificateApproval`, Task 9). Covered by `failedProbeKeepsInternet` (Task 8) and `saveOffersCertificateApproval` (Task 9). Checked on device in Task 13.
 5. **Leaving home mid-stream on the native engine**: after a route change, `retryWithDirectURL` re-negotiates instead of reopening the dead host. Covered by `PlaybackRetryPolicy` route tests (Task 10) and checked on device (Task 13).
 
 ---
@@ -203,6 +204,24 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 - [ ] **Step 3: Implement** `ServerRoute.swift` and `LocalRouteProbe.swift`, and the `PingResult` change. Update the one pattern match in `ServersScreen.apply`, which passes the id through `updateServerMetadata(id:name:version:serverID:)` (`AppState.swift:607`). This also fills a missing `serverID` from the public URL.
 - [ ] **Step 4: `RUN_TESTS`.** Expected: pass.
 - [ ] **Step 5: Commit** `feat(kit): route policy, unauthenticated local probe, Id in the public ping`.
+
+### Task 3b: HTTPS-only local address (owner amendment)
+
+**Files:**
+- Modify: `Packages/CinemaxKit/Sources/CinemaxKit/Models/ServerURLNormalizer.swift` (`normalizeLocal`, `LocalAddressInputError`)
+- Modify: `Packages/CinemaxKit/Sources/CinemaxKit/Models/ServerRoute.swift` (`decide`)
+- Test: `LocalServerAddressTests.swift`
+
+**Interfaces:**
+- Produces: `LocalAddressInputError.notHTTPS` (a third case). `normalizeLocal` defaults a bare host to `https://` and returns `.failure(.notHTTPS)` for an explicit `http://` whose host is otherwise eligible (an ineligible host keeps `.notLocal`). `ServerRoutePolicy.decide` returns `nil` for a `localURL` whose scheme is not `https`.
+
+- [ ] **Step 1: Update the failing tests.**
+  - `@Suite("Adresse locale — saisie")`: `bareHostDefaultsToHTTP` is renamed `bareHostDefaultsToHTTPS` and expects `https://192.168.1.128:8899`; `acceptsMDNS` expects `https://nas.local:8096`; `acceptsBracketedIPv6` expects `https://[fd00::5]:8096`; new `refusesHTTP`: `normalizeLocal("http://192.168.1.128:8899") == .failure(.notHTTPS)`, `normalizeLocal("http://nas.local") == .failure(.notHTTPS)`, and `normalizeLocal("http://8.8.8.8") == .failure(.notLocal)` (moved out of `refusals` if it lives there). Every other refusal is unchanged.
+  - `@Suite("Adresse locale — décision de route")`: switch the suite's `lan` fixture to `https://192.168.1.128:8920`; new `httpLocalURLIsInternet`: `decide(localURL: http://192.168.1.128:8899, reach: .lanCapable, expectedServerID: "S", probe: .answered(serverID: "S", connectedAddressIsLocal: true)) == nil`.
+- [ ] **Step 2: `RUN_TESTS`.** Expected: compile failure on `.notHTTPS`.
+- [ ] **Step 3: Implement.** Update the doc comments (the « LAN Jellyfin is almost always http » rationale goes; cite the amendment).
+- [ ] **Step 4: `RUN_TESTS`.** Expected: pass.
+- [ ] **Step 5: Commit** `feat(kit): the local address is https only (owner amendment)`.
 
 ### Task 4: The API client dials a separate URL
 
@@ -398,7 +417,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - `header` appends `server_route: <value>` LAST, after `network`, only when non-nil.
     - Both callers set `facts.serverRoute = ServerRouteController.shared.route.rawValue`.
 
-- [ ] **Step 1: Write the failing tests** in `ServerRouteControllerTests.swift` — `@Suite("Adresse locale — route active")`, `@MainActor`. Use `MockAPIClient` + `MockKeychain` + a stub probe closure; the active entry has `url = https://movies.nivadax.net`, `serverID = "S"`, `localURL = http://192.168.1.128:8899`:
+- [ ] **Step 1: Write the failing tests** in `ServerRouteControllerTests.swift` — `@Suite("Adresse locale — route active")`, `@MainActor`. Use `MockAPIClient` + `MockKeychain` + a stub probe closure; the active entry has `url = https://movies.nivadax.net`, `serverID = "S"`, `localURL = https://192.168.1.128:8920`:
   - `launchAtHomeGoesLocal`: reach `.lanCapable`, probe `.answered("S", true)` → `api.dialURLs.last == lan`, `route == .local`, and one `.cinemaxShouldRefreshCatalogue` posted.
   - `cellularSkipsProbe`: reach `.cellularOnly` → the probe closure is never called; `route == .internet`; `api.dialURLs.last == nil` (or none).
   - `failedProbeKeepsInternet`: `.failed(false)` → `route == .internet`.
@@ -433,6 +452,9 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   public enum LocalAddressSaveOutcome: Equatable, Sendable {
       case removed, reachable, savedUnreachable, savedLocalNetworkDenied
       case refusedNotLocal, refusedOtherServer, needsSignIn
+      case refusedNotHTTPS            // amendment: `http://` typed
+      case needsCertificateApproval   // amendment: unpinned / changed LAN certificate; nothing saved
+      case savedNeedsApproval         // amendment: saved while unreachable, host not pinned yet
   }
   public struct LocalAddressSaveDecision: Equatable, Sendable {
       public let outcome: LocalAddressSaveOutcome
@@ -451,6 +473,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - `.failed` with `expected == nil` → `needsSignIn`, no save.
     - `.failed(localNetworkDenied: true)` → `savedLocalNetworkDenied`, saves.
     - `.failed(false)` → `savedUnreachable`, saves, adopts `publicServerID` when it was unknown.
+    - **Amendment (HTTPS, pinned):** `decide` gains `certificate: LocalCertificateState` (`enum LocalCertificateState: Equatable, Sendable { case trusted, pendingApproval, unknown }`, in the same file). On `.failed`, `.pendingApproval` → `needsCertificateApproval`, no save, whatever the expected id. `.failed(false)` with `.unknown` (unreachable, host not pinned) → `savedNeedsApproval` instead of `savedUnreachable` (same save and adoption); with `.trusted` (host already pinned) → `savedUnreachable`. `.answered` rows ignore it (a TLS pass is trust).
   - Wiring: in `bootstrap()`, beside the Task 8 seams, `appState.onLocalAddressChanged = { Task { await serverRoute.evaluate(.addressChanged) } }`.
   - In `AppState`:
     - `func setLocalAddress(id: String, raw: String) async -> LocalAddressSaveOutcome`:
@@ -458,9 +481,13 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
       2. `normalizeLocal` failure → `.refusedNotLocal`.
       3. If the entry has no `serverID`, read it from `ServerReachability.ping(url: entry.url)`.
       4. Probe the local URL with `runtimeTimeout`.
-      5. On `.failed`, ask `LocalNetworkPermission.isDenied(url)`.
+      5. On `.failed`, ask `LocalNetworkPermission.isDenied(url)`, and read the certificate state: `ServerTrustDelegate.shared.pendingApproval(forTrustKey:)` for the LAN `host:port` non-nil → `.pendingApproval`; else `isPinned(trustKey:)` → `.trusted`; else `.unknown`.
+      5b. `normalizeLocal` `.notHTTPS` → `.refusedNotHTTPS` (other failures stay `.refusedNotLocal`).
+      5c. When the stored local URL changes or is removed, `ServerTrustDelegate.shared.forget(trustKey:)` the OLD LAN `host:port`, unless another entry's `localURL` or `url` has that key.
       6. Run `decide`, then write via `setLocalURL` / `adoptServerID`.
       7. When the entry is the active one, call `ServerRouteController.shared.evaluate(.addressChanged)` through the `onClientRepointed`-style seam `var onLocalAddressChanged: @MainActor () -> Void = {}`.
+    - `func trustLocalCertificate(id: String, raw: String) async -> LocalAddressSaveOutcome`: reads the pending summary for the typed address's `host:port`, calls `ServerTrustDelegate.shared.trust(fingerprint:forTrustKey:)` (exactly as `ServerSetupViewModel.trustPendingCertificate`), then re-runs `setLocalAddress`. `nil` summary → re-runs as is.
+    - `func pendingLocalCertificate(raw: String) -> ServerCertificateSummary?` for the UI (normalizes `raw`, reads `pendingApproval`).
     - Seams for tests: `var localProbe: @Sendable (URL, TimeInterval) async -> LocalProbeOutcome = LocalRouteProbe.probe(_:timeout:)` and `var publicPing: @Sendable (URL) async -> PingResult = { await ServerReachability.ping(url: $0) }`.
     - `enum LocalNetworkPermission { static func isDenied(_ url: URL) async -> Bool }`: an `NWConnection` to host:port. `true` when it enters `.waiting` with `currentPath?.unsatisfiedReason == .localNetworkDenied`, bounded at 1 s. Verify on device in Task 13.
   - Switches and re-login:
@@ -476,6 +503,10 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - `setLocalAddressAdoptsLocalIdWhenPublicDown`: entry with no `serverID`, `publicPing` returns `.offline`, `localProbe` returns `.answered("S", true)` → outcome `.reachable`, and the entry gets `serverID == "S"` and its `localURL`.
     - `setLocalAddressOtherServerSavesNothing`: entry `serverID "S"`, probe `.answered("OTHER", true)` → `.refusedOtherServer`, `localURL` unchanged.
     - `setLocalAddressBlankRemoves`: → `.removed`, `localURL == nil`.
+    - `saveOffersCertificateApproval`: probe `.failed(false)` with the certificate state `.pendingApproval` → `.needsCertificateApproval`, `localURL` unchanged (pure table test in « enregistrement », plus this AppState test with a seam `var localCertificateState: @MainActor (URL) -> LocalCertificateState` defaulted to the `ServerTrustDelegate` reading).
+    - `savedAwayNeedsApproval`: `.failed(false)` + `.unknown` → `.savedNeedsApproval`, saved.
+    - `httpTypedIsRefused`: raw `http://192.168.1.128:8899` → `.refusedNotHTTPS`.
+    - `changingAddressForgetsOldPin`: pin `192.168.1.128:8920` (`ServerTrustDelegate.shared.trust`), change the address to `https://192.168.1.129:8920` → `isPinned("192.168.1.128:8920") == false`; clean the pins up in the test.
 - [ ] **Step 2: `xcodegen generate`, then `RUN_TESTS`.** Expected: compile failure.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: `RUN_TESTS`.** Expected: pass, `SessionResilienceTests` and `MultiAccountTests` included.
@@ -546,7 +577,9 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   | `servers.localAddress` | `Adresse locale…` |
   | `servers.localAddress.title` | `Adresse locale` |
   | `servers.localAddress.message` | `L'adresse de ce serveur sur le réseau de la maison. JellyGlass l'utilise en priorité quand cet appareil est sur ce réseau. Laissez vide pour la retirer.` |
-  | `servers.localAddress.placeholder` | `192.168.1.128:8899` |
+  | `servers.localAddress.placeholder` | `192.168.1.128:8920` |
+  | `servers.localAddress.notHTTPS` | `L'adresse locale doit être en https` |
+  | `servers.localAddress.savedNeedsApproval` | `Enregistrée — à la maison, enregistrez-la à nouveau pour approuver son certificat` |
   | `servers.localAddress.reachable` | `Adresse locale joignable` |
   | `servers.localAddress.savedUnreachable` | `Enregistrée — utilisée quand cet appareil est sur le même réseau` |
   | `servers.localAddress.denied` | `Accès au réseau local refusé — autorisez-le dans Réglages › JellyGlass` |
@@ -558,8 +591,8 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   | `servers.route.internet` | `Internet` |
   | `settings.server.route.local` | `Local · %@` |
 
-  - en: `Local address…`, `Local address`, `This server's address on your home network. JellyGlass uses it first when this device is on that network. Leave empty to remove it.`, `Local address reachable`, `Saved — used when this device is on the same network`, `Local network access denied — allow it in Settings › JellyGlass`, `That's not this server`, `Enter an address on your home network (e.g. 192.168.1.128)`, `Sign in to this server first`, `Local address removed`, `Local`, `Internet`, `Local · %@`.
-  - de: `Lokale Adresse…`, `Lokale Adresse`, `Die Adresse dieses Servers in deinem Heimnetz. JellyGlass nutzt sie zuerst, wenn dieses Gerät in diesem Netz ist. Leer lassen, um sie zu entfernen.`, `Lokale Adresse erreichbar`, `Gespeichert — wird genutzt, wenn dieses Gerät im selben Netz ist`, `Zugriff aufs lokale Netzwerk verweigert — erlaube ihn in Einstellungen › JellyGlass`, `Das ist nicht dieser Server`, `Gib eine Adresse aus deinem Heimnetz ein (z. B. 192.168.1.128)`, `Melde dich zuerst bei diesem Server an`, `Lokale Adresse entfernt`, `Lokal`, `Internet`, `Lokal · %@`.
+  - en: `Local address…`, `Local address`, `This server's address on your home network. JellyGlass uses it first when this device is on that network. Leave empty to remove it.`, `Local address reachable`, `Saved — used when this device is on the same network`, `Local network access denied — allow it in Settings › JellyGlass`, `That's not this server`, `Enter an address on your home network (e.g. 192.168.1.128)`, `Sign in to this server first`, `Local address removed`, `Local`, `Internet`, `Local · %@`, `The local address must use https`, `Saved — at home, save it again to approve its certificate`.
+  - de: `Lokale Adresse…`, `Lokale Adresse`, `Die Adresse dieses Servers in deinem Heimnetz. JellyGlass nutzt sie zuerst, wenn dieses Gerät in diesem Netz ist. Leer lassen, um sie zu entfernen.`, `Lokale Adresse erreichbar`, `Gespeichert — wird genutzt, wenn dieses Gerät im selben Netz ist`, `Zugriff aufs lokale Netzwerk verweigert — erlaube ihn in Einstellungen › JellyGlass`, `Das ist nicht dieser Server`, `Gib eine Adresse aus deinem Heimnetz ein (z. B. 192.168.1.128)`, `Melde dich zuerst bei diesem Server an`, `Lokale Adresse entfernt`, `Lokal`, `Internet`, `Lokal · %@`, `Die lokale Adresse muss https verwenden`, `Gespeichert — speichere sie zu Hause erneut, um ihr Zertifikat zu bestätigen`.
   - `NSLocalNetworkUsageDescription`, widened, in `project.yml` base (English) and the three `InfoPlist.strings`:
     - fr: `JellyGlass utilise votre réseau local pour trouver les serveurs Jellyfin de votre Wi-Fi et s'y connecter directement à la maison.`
     - en: `JellyGlass uses your local network to find Jellyfin servers on your Wi-Fi and connect to them directly at home.`
@@ -571,6 +604,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   - Pre-filled with the stored local URL's `absoluteString`, or empty.
   - The `TextField` placeholder is `servers.localAddress.placeholder`, with `.textInputAutocapitalization(.never)`, `.autocorrectionDisabled()`, and `.keyboardType(.URL)` on iOS.
   - « Sauvegarder » starts `Task { toast(await appState.setLocalAddress(id:raw:)) }`. The pending action holds an id and re-resolves from `appState.servers` (ServersScreen RULE b).
+- **Certificate approval (amendment).** On `.needsCertificateApproval`, show the server-setup approval content for `appState.pendingLocalCertificate(raw:)`: the `server.certificate.*` strings (title, explain, untrusted / changed — « changed » when the host was already pinned, host, subject, SHA-256 fingerprint in its grouped form) and the `server.certificate.trust` button → `appState.trustLocalCertificate(id:raw:)` → toast of its outcome. Reuse `ServerSetupScreen`'s certificate view if it is extractable without changing its look; otherwise an `.alert` with the fingerprint in its message. tvOS: same content, focus on « Faire confiance » / Cancel.
 - **Pill.** `routePill(_:)` sits right of the name, after `currentPill`:
   - SF Symbol `house.fill` + `servers.route.local`, or `globe` + `servers.route.internet`.
   - `CinemaFont.label(.small)`, `CinemaColor.onSurfaceVariant` on a `CinemaColor.surfaceContainerHigh` capsule, the same padding as `currentPill`.
@@ -590,6 +624,10 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   - `.refusedNotLocal → (…notLocal, .error)`
   - `.needsSignIn → (…signInFirst, .error)`
   - `.removed → (…removed, .info)`
+  - `.refusedNotHTTPS → (…notHTTPS, .error)`
+  - `.savedNeedsApproval → (…savedNeedsApproval, .info)`
+  - `.needsCertificateApproval` is not a toast: `message(for:)` returns `nil` for it (make the return optional) and the screen shows the approval instead.
+  - The plan's `ToastStyle` is `Toast.Level` (`Shared/DesignSystem/ToastCenter.swift`).
   
   Also `everyKeyExistsInAllLanguages`: each key above resolves in fr, en and de — follow the pattern `PluralRuleTests` / `OnboardingPolicyTests` use to load a table.
 - [ ] **Step 2: `RUN_TESTS`.** Expected: compile failure.
@@ -597,7 +635,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 - [ ] **Step 4: `RUN_TESTS`.** Expected: pass.
 - [ ] **Step 5: Simulator check, iOS and tvOS.**
   1. Open « Mes serveurs »: the pill shows and the action is in the menu.
-  2. Type `192.168.1.128:8899` on the bench: the toast matches.
+  2. Type `192.168.1.128:8920` on the bench: the approval shows, then the toast matches.
   3. Réglages → Serveur shows the third line.
   4. Check tvOS focus in the text entry.
   
@@ -626,18 +664,19 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 
 **Interfaces:**
 - Produces:
-  - `ExtensionSessionBridge.Session.localServerURL: URL?` and `.serverID: String?`, both optional, in all THREE copies (bridge, `JellyfinLite.Session`, `ContentProvider.Session`).
-  - `publish(serverURL:accessToken:userId:maxContentAge:pinnedCertificateSHA256:localServerURL:serverID:)` — the two new parameters have **no default**, like the cap. The app passes `activeEntryIfAny?.localURL` / `activeEntryIfAny?.serverID`; logout and `retryFailedClear` pass `nil`.
+  - `ExtensionSessionBridge.Session.localServerURL: URL?`, `.serverID: String?` and (amendment) `.localPinnedCertificateSHA256: String?` — the LAN pin, `ServerTrustDelegate.shared.pinnedFingerprint(for: localURL)` at publish — all optional, in all THREE copies (bridge, `JellyfinLite.Session`, `ContentProvider.Session`).
+  - `publish(serverURL:accessToken:userId:maxContentAge:pinnedCertificateSHA256:localServerURL:serverID:localPinnedCertificateSHA256:)` — the three new parameters have **no default**, like the cap. The app passes `activeEntryIfAny?.localURL` / `activeEntryIfAny?.serverID`; logout and `retryFailedClear` pass `nil`.
   - In `ExtensionServerRoute.swift`:
     ```swift
     enum ExtensionServerRoute {
         static let probeTimeout: TimeInterval = 1.0
-        static func dialURL(publicURL: URL, localURL: URL?, serverID: String?, trust: URLSessionTaskDelegate) async -> URL
+        static func dialURL(publicURL: URL, localURL: URL?, serverID: String?, localPin: String?) async -> URL
         static func accepts(statusCode: Int, body: Data, serverID: String, connectedAddress: String?) -> Bool   // pure
     }
     ```
     - The same rules as `LocalRouteProbe`: no token, no redirect, `Id == serverID`, connected address `LocalNetworkAddress.isLocal`.
-    - Its own ephemeral session with `allowsCellularAccess = false`, which makes « no probe on 4G » structural.
+    - Its own ephemeral session with `allowsCellularAccess = false`, which makes « no probe on 4G » structural, and an `ExtensionServerTrust` delegate built from `ExtensionServerTrust.pin(serverURL: localURL, fingerprint: localPin)`.
+    - A non-https `localURL` → `publicURL` at once (amendment).
     - `nil` `localURL` or `serverID` → `publicURL` at once.
     - Its own `endpointPath` copy for the base path.
   - `JellyfinLite.dialing(_ session: Session) async -> Session` and the Top Shelf equivalent: a copy whose `serverURL` is the dial URL. Every fetch already derives from `session.serverURL`.
@@ -653,7 +692,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - `extensionRejectsPublicAddress`: `"86.245.10.3"` → false.
     - `extensionNoLocalAddressIsPublic`: `await dialURL(publicURL: pub, localURL: nil, serverID: "S", …) == pub`.
 - [ ] **Step 2: `xcodegen generate`, then `RUN_TESTS`.** Expected: compile failure.
-- [ ] **Step 3: Implement.** In the widget, `loadEntry` resolves once per timeline: `let session = await JellyfinLite.dialing(stored)`. The Top Shelf `run` does the same. `ExtensionServerTrust`'s pin stays keyed on the public URL (an https LAN address with a self-signed certificate fails → public, as in the app).
+- [ ] **Step 3: Implement.** In the widget, `loadEntry` resolves once per timeline: `let session = await JellyfinLite.dialing(stored)`. The Top Shelf `run` does the same. `ExtensionServerTrust`'s pin for the main fetches stays keyed on the public URL; once dialing the LAN, the session's fetches must validate with the LAN pin instead (`dialing(_:)` returns a session whose pin is the LAN one when it switched). Test `extensionDialingSwapsPin`.
 - [ ] **Step 4: `RUN_TESTS`.** Then build both extensions' schemes (the widget comes with `Cinemax`, the Top Shelf with `CinemaxTV`) in Debug. Expected: `** BUILD SUCCEEDED **`.
 - [ ] **Step 5: Commit** `feat: widget, Top Shelf and App Intents try the local address first`.
 
@@ -661,7 +700,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 
 **Files:**
 - Modify: `docs/rules/server-setup-and-multi-server.md`, add a « Local address » subsection under Multi-server:
-  - identity vs dial;
+  - identity vs dial; https only, the LAN certificate pinned at save (owner amendment);
   - `localURL` user-owned and kept by `upsert`;
   - `setLocalAddress` is the only writer;
   - switches and re-login on the target's route;
@@ -681,13 +720,14 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   
   Expected: `** BUILD SUCCEEDED **` twice.
 - [ ] **Step 6: Device checks** (owner's iPhone + Apple TV, at home on `http://192.168.1.128:8899`). List each as passed or failed in the report:
-  1. API calls and a stream work over plain http to the LAN IP (ATS).
+  0. **Restart Jellyfin first** if not done (`docker compose up -d` in `/volume1/docker/jellyfin-server`, when nobody is playing): it activates HTTPS on 8920. Then `curl -k https://192.168.1.128:8920/System/Info/Public` answers the `Id`, and the tunnel and `http://192.168.1.128:8899` still answer.
+  1. Saving `192.168.1.128:8920` offers the certificate approval with fingerprint `A5:D9:DE:A9:…:6B:25:12`; once approved, API calls, images and a stream (VLC through the proxy; the native engine opt-in) work over https to the LAN IP.
   2. The « Réseau local » prompt appears on the first save, and denying it gives the `denied` toast.
   3. After a home playback, `docker logs cloudflared` shows no `/Videos/` request, and Jellyfin logs the client as `192.168.1.x`.
   4. With the router's WAN unplugged: launch, browse, play, switch, widget and Top Shelf still work.
   5. On 4G: behaviour as before, and launch is not slower.
   6. On iPhone, leaving the Wi-Fi mid-playback: VLC and the native engine (opt-in) recover on the public URL.
   7. The widget reaches the LAN: it inherits the app's local-network grant (no usage description on the extension).
-  8. An https LAN address with a self-signed certificate falls back silently.
+  8. A LAN certificate that changes (re-generate one on a copy, or point the address at another https host) falls back silently to the public URL; saving again shows « a CHANGÉ ».
   9. The tvOS card and text entry are legible (the owner's note).
 - [ ] **Step 7: Commit** `docs: local server address rules`. Report to the owner: what passed, what is blocked. **Do not push or open a PR without the owner's go.**
