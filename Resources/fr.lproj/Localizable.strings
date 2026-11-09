@@ -1652,6 +1652,7 @@
 "seerr.request.action.series" = "Demander la série";
 "seerr.request.action.season" = "Demander la saison %d";
 "seerr.request.action.seasonRange" = "Demander les saisons %d à %d";
+"seerr.request.action.specials" = "Demander les épisodes spéciaux";
 "seerr.request.action.seasons" = "Demander %d saisons";
 "seerr.request.action.seasons.one" = "Demander %d saison";
 "seerr.request.action.films" = "Demander les %d films";
@@ -1662,6 +1663,13 @@
 "seerr.badge.declined" = "Refusée";
 "seerr.missing.title" = "Pas encore dans ta bibliothèque";
 "seerr.missing.a11y" = "%@, pas encore dans ta bibliothèque, %@";
+"seerr.missing.requestAll" = "Demander les %d";
+"seerr.missing.requestAll.one" = "Demander la saison";
+"seerr.season.specials" = "Épisodes spéciaux";
+"seerr.saga.title" = "Pour compléter la saga";
+"seerr.saga.titleNamed" = "Pour compléter la saga %@";
+"seerr.saga.requestAll" = "Demander les %d";
+"seerr.saga.requestAll.one" = "Demander ce film";
 "seerr.searchPrompt.title" = "Il te manque un titre ?";
 "seerr.searchPrompt.body" = "Ton serveur utilise Seerr pour les demandes. Connecte-toi une fois avec ton compte Jellyfin : rien à taper.";
 "seerr.searchPrompt.later" = "Plus tard";

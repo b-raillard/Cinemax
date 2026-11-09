@@ -8,6 +8,13 @@ import WidgetKit
 
 private let logger = Logger(subsystem: "com.cinemax", category: "MediaDetail")
 
+/// What one `/collection/{id}` answer brings the fiche: the saga's name and
+/// the films the library lacks.
+private struct SeerrSagaAnswer: Equatable, Sendable {
+    let name: String
+    let missing: [SeerrMissingTitle]
+}
+
 @MainActor @Observable
 final class MediaDetailViewModel {
     var item: BaseItemDto?
@@ -130,6 +137,106 @@ final class MediaDetailViewModel {
     /// not even `isLoading`) once superseded.
     private var loadGeneration: Int = 0
 
+    // MARK: Seerr — « Pas encore dans ta bibliothèque » (series)
+
+    /// The active account's Seerr, set by the screen. `nil` ⇒ no row.
+    @ObservationIgnored var seerr: SeerrSession?
+    /// Whether the missing seasons may load — `SeerrSession.isVisible` with the
+    /// screen's Pro and network inputs, set by the screen (same wiring as the
+    /// search). Unwired, it answers `false`: fail closed.
+    @ObservationIgnored var allowsSeerr: @MainActor () -> Bool = { false }
+    /// `SeerrSession.loadSection`'s deadline — injectable for the tests.
+    @ObservationIgnored var seerrDeadline: @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(6)) }
+    /// The seasons Seerr knows that the library lacks, ascending. A side task
+    /// once the owned seasons and episodes are on screen, so nothing above the
+    /// episodes moves when it answers. Read through `seerrSeasons(for:)`,
+    /// which hides another account's answer.
+    private(set) var seerrSeasons: MissingSection<SeerrMissingSeason> = .hidden
+    /// The side task filling `seerrSeasons`. Internal so a test can await it.
+    private(set) var seerrSeasonsTask: Task<Void, Never>?
+    /// The Seerr account and generation `seerrSeasons` was loaded for.
+    @ObservationIgnored private var seerrSeasonsSnapshot: SeerrSession.Snapshot?
+    /// The `loadGeneration` of the `load()` pass that owns the side tasks it
+    /// started — the missing seasons, the collection rows, the saga. Not the
+    /// live counter: `refreshAfterPlayback` bumps that one without re-running
+    /// them, which would strand a skeleton, or drop a row, for good.
+    @ObservationIgnored private var sideTaskGeneration = 0
+
+    /// The series as the request flow names it, or `nil` without a TMDb id.
+    var seerrSeriesTitle: SeerrTitle? {
+        guard resolvedType == .series, let item, let tmdbId = SeerrMissing.tmdbId(of: item) else { return nil }
+        return SeerrTitle(
+            kind: .tv, tmdbId: tmdbId, title: item.name ?? "", year: item.productionYear, overview: item.overview)
+    }
+
+    /// The row to draw for the account Seerr serves right now
+    /// (`SeerrSession.snapshot()`): another profile's never shows.
+    func seerrSeasons(for current: SeerrSession.Snapshot?) -> MissingSection<SeerrMissingSeason> {
+        // Read FIRST, whatever the guard says: the view must observe the
+        // section, or it never re-renders once the section changes.
+        let section = seerrSeasons
+        guard let current, current == seerrSeasonsSnapshot else { return .hidden }
+        return section
+    }
+
+    private func setSeerrSeasons(_ section: MissingSection<SeerrMissingSeason>, snapshot: SeerrSession.Snapshot?) {
+        seerrSeasonsSnapshot = snapshot
+        if seerrSeasons != section { seerrSeasons = section }
+    }
+
+    // MARK: Seerr — the missing films of a saga
+
+    /// Where the saga's missing films go: always AFTER what the library shows,
+    /// so no owned card moves when Seerr answers.
+    enum SagaPlacement: Equatable {
+        /// Neither a film nor a collection: no saga.
+        case none
+        /// BoxSet fiche: a section of its own after « Dans cette collection ».
+        case afterCollectionContents
+        /// Film shown in a « Fait partie de » row: at that row's END.
+        case appendedToPartOfRow
+        /// Film with no such row: a row « Pour compléter la saga <nom> » at
+        /// the END of the fiche, after « Titres similaires ».
+        case endOfFiche
+    }
+
+    /// Read at render. Stable once the saga loads: the collection row is
+    /// written BEFORE the saga task starts (`collectionTask`).
+    var sagaPlacement: SagaPlacement {
+        switch resolvedType {
+        case .boxSet: .afterCollectionContents
+        case .movie: collectionItems.isEmpty ? .endOfFiche : .appendedToPartOfRow
+        default: .none
+        }
+    }
+
+    /// The films of the TMDb collection (the BoxSet's, or the film's) that the
+    /// library lacks, in release order. Read through `seerrSaga(for:)`.
+    private(set) var seerrSaga: MissingSection<SeerrMissingTitle> = .hidden
+    /// Seerr's name for the saga — the title of the row at the fiche's end.
+    private(set) var sagaName: String?
+    /// The side task filling the collection row (`collectionItems` /
+    /// `collectionChildren`), THEN the saga, whose owned set that row is.
+    /// Internal so a test can await it.
+    private(set) var collectionTask: Task<Void, Never>?
+    /// The Seerr account and generation `seerrSaga` was loaded for.
+    @ObservationIgnored private var seerrSagaSnapshot: SeerrSession.Snapshot?
+
+    /// The saga to draw for the account Seerr serves right now: another
+    /// profile's never shows.
+    func seerrSaga(for current: SeerrSession.Snapshot?) -> MissingSection<SeerrMissingTitle> {
+        // Read FIRST, whatever the guard says (see `seerrSeasons(for:)`).
+        let section = seerrSaga
+        guard let current, current == seerrSagaSnapshot else { return .hidden }
+        return section
+    }
+
+    private func setSeerrSaga(_ section: MissingSection<SeerrMissingTitle>, name: String?, snapshot: SeerrSession.Snapshot?) {
+        seerrSagaSnapshot = snapshot
+        if sagaName != name { sagaName = name }
+        if seerrSaga != section { seerrSaga = section }
+    }
+
     let itemId: String
     let itemType: BaseItemKind
 
@@ -172,6 +279,14 @@ final class MediaDetailViewModel {
         // body still took the `errorMessage` branch (and `hasLoaded` stayed
         // false, so every reappearance re-loaded behind it).
         errorMessage = nil
+        // The missing seasons belong to the pass that loads them: a reload
+        // (Retry, an identify's tier-1) never shows the previous answer. The
+        // body is the spinner meanwhile, so nothing visibly empties.
+        seerrSeasonsTask?.cancel()
+        collectionTask?.cancel()
+        sideTaskGeneration = generation
+        setSeerrSeasons(.hidden, snapshot: nil)
+        setSeerrSaga(.hidden, name: nil, snapshot: nil)
 
         do {
             // The series' own item and its seasons / next-up / episodes need
@@ -245,14 +360,21 @@ final class MediaDetailViewModel {
         if resolvedType != .boxSet, errorMessage == nil, let similarSourceId = item?.id {
             similarTask = Task { await loadSimilar(for: similarSourceId, using: appState) }
         }
+        // The seasons Seerr knows and the library lacks: a side task too, once
+        // the owned seasons and episodes are written — never on the critical
+        // path, silent on failure.
+        if resolvedType == .series, errorMessage == nil, let seriesItem = item {
+            seerrSeasonsTask = Task { await loadSeerrSeasons(for: seriesItem, generation: generation) }
+        }
         // Collections are a movie-only garnish — resolved after the main load
-        // so a slow boxset lookup never delays the detail render.
-        if resolvedType == .movie, item != nil {
-            Task { await loadCollection(using: appState) }
+        // so a slow boxset lookup never delays the detail render. The saga's
+        // missing films follow in the same task: its owned set is that row.
+        if resolvedType == .movie, let movie = item {
+            collectionTask = Task { await loadCollection(of: movie, using: appState, generation: generation) }
         }
         // The mirror image, for a collection's OWN fiche: what it contains.
-        if resolvedType == .boxSet, item != nil {
-            Task { await loadCollectionChildren(using: appState) }
+        if resolvedType == .boxSet, let boxSet = item {
+            collectionTask = Task { await loadCollectionChildren(of: boxSet, using: appState, generation: generation) }
         }
         // Same discipline for the "Play on…" probe: a side task, so `/Sessions`
         // being slow or unreachable costs the render nothing. Every item kind is
@@ -516,42 +638,106 @@ final class MediaDetailViewModel {
     ///
     /// Sorted by release date so the set reads in the order it was made — the
     /// one ordering a collection has that an alphabetical list destroys.
-    private func loadCollectionChildren(using appState: AppState) async {
-        guard resolvedType == .boxSet,
-              let userId = appState.currentUserId,
-              let id = item?.id else { return }
-        let members = (try? await appState.apiClient.getItems(
+    ///
+    /// A pass a newer `load()` superseded writes nothing (`sideTaskGeneration`).
+    /// Then the saga, owned = these members — skipped when Jellyfin could not
+    /// answer: Jellyfin decides what is « in the library ».
+    private func loadCollectionChildren(of boxSet: BaseItemDto, using appState: AppState, generation: Int) async {
+        guard let userId = appState.currentUserId, let id = boxSet.id else { return }
+        // ONE decision per pass: the members' fields and whether the saga is
+        // asked at all — members fetched without their TMDb ids prove nothing.
+        let sagaMayShow = allowsSeerr()
+        let members = try? await appState.apiClient.getItems(
             userId: userId,
             parentId: id,
             sortBy: [.premiereDate],
             sortOrder: [.ascending],
             limit: 100,
-            enableTotalRecordCount: false
-        ).items) ?? []
-        guard !members.isEmpty else { return }
-        collectionChildren = members
+            enableTotalRecordCount: false,
+            fieldSet: Self.memberFieldSet(sagaMayShow: sagaMayShow)
+        ).items
+        guard !Task.isCancelled, sideTaskGeneration == generation, let members else { return }
+        if !members.isEmpty { collectionChildren = members }
+        await loadSeerrSaga(
+            collectionId: SeerrMissing.tmdbCollectionId(of: boxSet),
+            owned: SeerrMissing.ownedTmdbIds(collectionChildren), fetchedProviderIds: sagaMayShow,
+            generation: generation)
     }
 
-    private func loadCollection(using appState: AppState) async {
-        guard let userId = appState.currentUserId, let id = item?.id else { return }
-        let tmdbCollectionId = item?.providerIDs?
+    /// The BoxSet holding this film (« Fait partie de ») and its other members,
+    /// then the saga, owned = that row + the film itself — so neither is ever
+    /// offered. Same guard and same Jellyfin-first rule as
+    /// `loadCollectionChildren`.
+    private func loadCollection(of movie: BaseItemDto, using appState: AppState, generation: Int) async {
+        guard let userId = appState.currentUserId, let id = movie.id else { return }
+        // ONE decision per pass (see `loadCollectionChildren`): the members'
+        // limit and fields, and whether the saga is asked.
+        let sagaMayShow = allowsSeerr()
+        let tmdbCollectionId = movie.providerIDs?
             .first { $0.key.caseInsensitiveCompare("TmdbCollection") == .orderedSame }?
             .value
-        guard let boxset = (try? await appState.apiClient.getCollections(
+        let boxsets = try? await appState.apiClient.getCollections(
             containingItemId: id, tmdbCollectionId: tmdbCollectionId, userId: userId
-        ))?.first, let boxsetId = boxset.id else { return }
-        let members = (try? await appState.apiClient.getItems(
-            userId: userId,
-            parentId: boxsetId,
-            sortBy: [.premiereDate],
-            sortOrder: [.ascending],
-            limit: 20,
-            enableTotalRecordCount: false
-        ).items) ?? []
-        let others = members.filter { $0.id != id }
-        guard !others.isEmpty else { return }
-        collectionName = boxset.name
-        collectionItems = others
+        )
+        guard !Task.isCancelled, sideTaskGeneration == generation, let boxsets else { return }
+        if let boxset = boxsets.first, let boxsetId = boxset.id {
+            // The whole BoxSet while the saga may show (like a BoxSet fiche's
+            // members): this row IS the owned set, and a 20-film cap would
+            // offer a film the library holds. Otherwise the row's 20.
+            let members = try? await appState.apiClient.getItems(
+                userId: userId,
+                parentId: boxsetId,
+                sortBy: [.premiereDate],
+                sortOrder: [.ascending],
+                limit: sagaMayShow ? 100 : 20,
+                enableTotalRecordCount: false,
+                fieldSet: Self.memberFieldSet(sagaMayShow: sagaMayShow)
+            ).items
+            guard !Task.isCancelled, sideTaskGeneration == generation, let members else { return }
+            let others = members.filter { $0.id != id }
+            if !others.isEmpty {
+                collectionName = boxset.name
+                collectionItems = others
+            }
+        }
+        await loadSeerrSaga(
+            collectionId: SeerrMissing.tmdbCollectionId(of: movie),
+            owned: SeerrMissing.ownedTmdbIds(collectionItems + [movie]), fetchedProviderIds: sagaMayShow,
+            generation: generation)
+    }
+
+    /// A collection's members carry their TMDb ids only while the saga may
+    /// show (`ProviderIds` costs every member's payload); otherwise the lean
+    /// card set — nothing reads their synopsis or genres.
+    private static func memberFieldSet(sagaMayShow: Bool) -> ItemFieldSet {
+        sagaMayShow ? .cardWithProviderIds : .card
+    }
+
+    /// The saga's films the library lacks — after the owned ones, never
+    /// instead of them. Silent like `loadSeerrSeasons`: no TMDb collection id,
+    /// or members fetched without their TMDb ids (`fetchedProviderIds`) ⇒ no
+    /// call; an error or the deadline hides it.
+    private func loadSeerrSaga(
+        collectionId: Int?, owned: Set<SeerrOwnedKey>, fetchedProviderIds: Bool, generation: Int
+    ) async {
+        guard !Task.isCancelled, sideTaskGeneration == generation else { return }
+        guard fetchedProviderIds, let collectionId, allowsSeerr(), let seerr, let snapshot = seerr.snapshot() else {
+            setSeerrSaga(.hidden, name: nil, snapshot: nil)
+            return
+        }
+        setSeerrSaga(.loading, name: nil, snapshot: snapshot)
+        let section = await seerr.loadSection(deadline: seerrDeadline) { client, credential in
+            let collection = try await client.collection(id: collectionId, credential)
+            // One answer carrying the name too: `loadSection` hands back a list.
+            return [SeerrSagaAnswer(name: collection.name, missing: SeerrMissing.saga(collection, owned: owned))]
+        }
+        guard !Task.isCancelled, sideTaskGeneration == generation else { return }
+        guard case .loaded(let answers) = section, let answer = answers.first else {
+            // An error, the deadline, or the account moved (`nil`).
+            setSeerrSaga(.hidden, name: nil, snapshot: nil)
+            return
+        }
+        setSeerrSaga(.loaded(answer.missing), name: answer.name.isEmpty ? nil : answer.name, snapshot: snapshot)
     }
 
     /// Side task, same discipline as `loadRemoteTargets`: having no trailer is
@@ -699,6 +885,35 @@ final class MediaDetailViewModel {
         else { return }
         guard item?.id == sourceId else { return }
         if loaded != similarItems { similarItems = loaded }
+    }
+
+    /// The seasons Seerr knows (TMDb) that the library lacks — after the owned
+    /// ones, never instead of them. Silent: no TMDb id ⇒ no call; an error or
+    /// the deadline hides the row, nothing says why (only Settings names
+    /// Seerr). A newer `load()` owns the row once it starts: this pass then
+    /// writes nothing (it was cancelled, and its generation is no longer the
+    /// owner's).
+    private func loadSeerrSeasons(for series: BaseItemDto, generation: Int) async {
+        // A pass cancelled or superseded before it even ran writes NOTHING —
+        // not the skeleton, not `.hidden` over the newer pass's row.
+        guard !Task.isCancelled, sideTaskGeneration == generation else { return }
+        guard !seasons.isEmpty, let tmdbId = SeerrMissing.tmdbId(of: series),
+              allowsSeerr(), let seerr, let snapshot = seerr.snapshot() else {
+            setSeerrSeasons(.hidden, snapshot: nil)
+            return
+        }
+        let owned = Set(seasons.compactMap(\.indexNumber))
+        let includeSpecials = seerr.publicSettings?.enableSpecialEpisodes ?? false
+        setSeerrSeasons(.loading, snapshot: snapshot)
+        let section = await seerr.loadSection(deadline: seerrDeadline) { client, credential in
+            let details = try await client.tv(tmdbId: tmdbId, credential)
+            return SeerrMissing.seasons(details, ownedSeasonNumbers: owned, includeSpecials: includeSpecials)
+                .sorted { $0.seasonNumber < $1.seasonNumber }
+        }
+        guard !Task.isCancelled, sideTaskGeneration == generation else { return }
+        // `nil` = the account moved: nothing of this answer is written, and
+        // the skeleton goes rather than wait for the next profile.
+        setSeerrSeasons(section ?? .hidden, snapshot: section == nil ? nil : snapshot)
     }
 
     func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {

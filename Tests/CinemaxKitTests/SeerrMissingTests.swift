@@ -12,6 +12,14 @@ private func movie(_ id: Int, _ status: SeerrMediaStatus? = nil, requests: [Seer
         mediaInfo: status.map { SeerrMediaInfo(status: $0, requests: requests) })
 }
 
+private func tvTitle(_ id: Int) -> SeerrTitle {
+    SeerrTitle(kind: .tv, tmdbId: id, title: "T\(id)")
+}
+
+private func creditKey(_ title: SeerrTitle) -> String {
+    "\(title.kind.rawValue)-\(title.tmdbId)"
+}
+
 private func show(
     seasons: [Int], info: SeerrMediaInfo? = nil
 ) -> SeerrTVDetails {
@@ -245,6 +253,18 @@ struct SeerrMissingTests {
         #expect(ids == [.init(kind: .movie, tmdbId: 10), .init(kind: .tv, tmdbId: 11), .init(kind: .movie, tmdbId: 12)])
     }
 
+    @Test("the TMDb collection id: `TmdbCollection` on a film or a BoxSet, Jellyfin's `Tmdb` on a BoxSet only")
+    func tmdbCollectionId() {
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["TmdbCollection": "1241", "Tmdb": "671"])) == 1241)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["tmdbcollection": "1241"])) == 1241)
+        // A film's `Tmdb` is the FILM's id, never its saga's.
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["Tmdb": "671"])) == nil)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["Tmdb": "1241"], .boxSet)) == 1241)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["Tmdb": "9", "TmdbCollection": "1241"], .boxSet)) == 1241)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["TmdbCollection": "x"], .boxSet)) == nil)
+        #expect(SeerrMissing.tmdbCollectionId(of: owned(["Tmdb": "1241"], .series)) == nil)
+    }
+
     // MARK: Badges
 
     @Test("badge: no info, unknown or no request asks for the title")
@@ -283,6 +303,16 @@ struct SeerrMissingTests {
         #expect(result.map(\.seasonNumber) == [1, 2])
         #expect(result.map(\.badge) == [.pending, .request])
         #expect(result.first?.id == "tv-9-s1")
+    }
+
+    @Test("a missing season carries its own poster, nil when TMDb has none")
+    func seasonPoster() {
+        let tv = SeerrTVDetails(tmdbId: 9, name: "S", seasons: [
+            SeerrSeason(seasonNumber: 1, episodeCount: 8, posterPath: "/s1.jpg"),
+            SeerrSeason(seasonNumber: 2, episodeCount: 8),
+        ], mediaInfo: nil)
+        let result = SeerrMissing.seasons(tv, ownedSeasonNumbers: [], includeSpecials: false)
+        #expect(result.map(\.posterPath) == ["/s1.jpg", nil])
     }
 
     @Test("specials only when enabled")
@@ -334,6 +364,43 @@ struct SeerrMissingTests {
         let series = SeerrTitle(kind: .tv, tmdbId: 42, title: "T")
         let result = SeerrMissing.titles([series, movie(42)], owned: [SeerrOwnedKey(kind: .movie, tmdbId: 42)])
         #expect(result.map(\.id) == ["tv-42"])
+    }
+
+    // MARK: Actor page
+
+    @Test("an actor's credits: the cast only, in Seerr's order")
+    func actorUsesCastOnly() {
+        let credits = SeerrCombinedCredits(cast: [movie(3), tvTitle(5), movie(1)], crew: [movie(7), tvTitle(8)])
+        let titles = SeerrMissing.creditTitles(credits, person: SeerrPerson(knownForDepartment: "Acting"))
+        #expect(titles.map(creditKey) == ["movie-3", "tv-5", "movie-1"])
+    }
+
+    @Test("a director's crew credits follow the cast; a title credited twice is listed once")
+    func directorAddsCrew() {
+        let credits = SeerrCombinedCredits(
+            cast: [movie(3)], crew: [movie(7), movie(3), tvTitle(3), movie(7), tvTitle(9)])
+        let titles = SeerrMissing.creditTitles(credits, person: SeerrPerson(knownForDepartment: "Directing"))
+        // TV 3 is not film 3: the ids overlap across kinds.
+        #expect(titles.map(creditKey) == ["movie-3", "movie-7", "tv-3", "tv-9"])
+    }
+
+    @Test("an unknown or empty department: the cast only (fail closed)")
+    func unknownDepartmentIsCastOnly() {
+        let credits = SeerrCombinedCredits(cast: [movie(3)], crew: [movie(7)])
+        #expect(SeerrMissing.creditTitles(credits, person: SeerrPerson()).map(creditKey) == ["movie-3"])
+        #expect(SeerrMissing.creditTitles(credits, person: SeerrPerson(knownForDepartment: "")).map(creditKey)
+            == ["movie-3"])
+    }
+
+    @Test("the person's owned titles are dropped, per kind; what Seerr has available too")
+    func ownedDropped() {
+        let credits = SeerrCombinedCredits(
+            cast: [movie(3), tvTitle(3), tvTitle(5), movie(8, .available), movie(9, .pending)], crew: [])
+        let ownedIds = SeerrMissing.ownedTmdbIds([owned(["Tmdb": "3"]), owned(["Tmdb": "5"], .series)])
+        let missing = SeerrMissing.titles(
+            SeerrMissing.creditTitles(credits, person: SeerrPerson(knownForDepartment: "Acting")), owned: ownedIds)
+        #expect(missing.map(\.id) == ["tv-3", "movie-9"])
+        #expect(missing.map(\.badge) == [.request, .pending])
     }
 
     @Test("a deleted title with old completed requests is requestable")
@@ -509,6 +576,16 @@ struct SeerrRequestFlowTests {
         #expect(label([1, 3]) == loc.counted("seerr.request.action.seasons", 2))
     }
 
+    @Test("the confirmation reads « Épisodes spéciaux » for season 0 alone, a count for a run from 0")
+    func specialsLabels() {
+        func label(_ s: [Int]) -> String { SeerrRequestPresenter.seasonsActionTitle(s, loc: loc) }
+        #expect(label([0]) == loc.localized("seerr.request.action.specials"))
+        #expect(label([0]) != loc.localized("seerr.request.action.season", 0))
+        // « Demander les saisons 0 à 2 » would name a season 0 nobody calls that.
+        #expect(label([0, 1, 2]) == loc.counted("seerr.request.action.seasons", 3))
+        #expect(label([0, 2]) == loc.counted("seerr.request.action.seasons", 2))
+    }
+
     @Test("without partial requests the label names what is sent")
     func nonPartialLabelMatchesPayload() async {
         let bench = await requestBench(partialRequests: false)
@@ -566,5 +643,321 @@ private final class KeyBox: @unchecked Sendable {
     var value: String {
         get { lock.withLock { key } }
         set { lock.withLock { key = newValue } }
+    }
+}
+
+// MARK: - Actor page (« Pas encore dans ta bibliothèque »)
+
+/// `/person/{id}/combined_credits` as Seerr answers it: cast and crew entries
+/// carrying their `mediaType`, in Seerr's order.
+private func creditsBody(cast: [(kind: String, id: Int)], crew: [(kind: String, id: Int)] = []) -> String {
+    func list(_ entries: [(kind: String, id: Int)]) -> String {
+        entries.map { #"{"mediaType":"\#($0.kind)","id":\#($0.id),"title":"Titre \#($0.id)","name":"Titre \#($0.id)"}"# }
+            .joined(separator: ",")
+    }
+    return #"{"cast":[\#(list(cast))],"crew":[\#(list(crew))]}"#
+}
+
+/// Answers Seerr for an actor page: the session's reload (`/settings/public`,
+/// `/auth/me`), then `/person/{id}` (`department`) and
+/// `/person/{id}/combined_credits` from `credits` — held by that id's gate
+/// when one is given. An id missing from `credits` fails its credits call.
+private final class PersonSeerrTransport: SeerrTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var sent: [URLRequest] = []
+    private let department: String
+    private let credits: [Int: String]
+    private let gates: [Int: TestLatch]
+    /// Opens when the first credits request reaches the transport.
+    let creditsArrived = TestLatch()
+
+    init(department: String = "Acting", credits: [Int: String], gates: [Int: TestLatch] = [:]) {
+        self.department = department
+        self.credits = credits
+        self.gates = gates
+    }
+
+    /// Every `/person/…` request, the credits included.
+    var personRequestCount: Int {
+        lock.withLock { sent }.filter { $0.url?.path.contains("/person/") == true }.count
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        lock.withLock { sent.append(request) }
+        let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
+        let body: String
+        switch path {
+        case "/settings/public":
+            body = #"{"mediaServerType":2,"partialRequestsEnabled":true,"enableSpecialEpisodes":false}"#
+        case "/auth/me":
+            body = #"{"id":7,"permissions":32,"jellyfinUserId":"A","displayName":"Alice"}"#
+        case let path where path.hasSuffix("/combined_credits"):
+            let id = Int(path.dropFirst("/person/".count).dropLast("/combined_credits".count))
+            creditsArrived.open()
+            if let id, let gate = gates[id] { await gate.wait() }
+            guard let id, let reply = credits[id] else { throw StubSeerrTransport.Exhausted() }
+            body = reply
+        case let path where path.hasPrefix("/person/"):
+            body = #"{"id":1,"knownForDepartment":"\#(department)"}"#
+        default:
+            throw StubSeerrTransport.Exhausted()
+        }
+        let url = request.url ?? URL(string: "http://192.168.1.20:5055")!
+        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [:])!
+        return (Data(body.utf8), response)
+    }
+}
+
+/// The section's titles as `kind-tmdbId`, `nil` unless loaded.
+private func personEntries(_ section: MissingSection<SeerrMissingTitle>) -> [String]? {
+    guard case .loaded(let missing) = section else { return nil }
+    return missing.map(\.id)
+}
+
+@MainActor
+@Suite("Person — missing titles")
+struct PersonDetailSeerrModelTests {
+    /// Jellyfin owns film 3 and series 5 of person 31.
+    private let ownedIds: Set<SeerrOwnedKey> = [.init(kind: .movie, tmdbId: 3), .init(kind: .tv, tmdbId: 5)]
+
+    private func makeModel(
+        _ session: SeerrSession, allowed: Bool = true,
+        deadline: @escaping @Sendable () async throws -> Void = neverExpires
+    ) -> PersonDetailSeerrModel {
+        let model = PersonDetailSeerrModel()
+        model.seerr = session
+        model.allowsSeerr = { allowed }
+        model.deadline = deadline
+        return model
+    }
+
+    @Test("the rest of the person's credits, minus what the library owns, per kind")
+    func missingCreditsAfterOwned() async {
+        let transport = PersonSeerrTransport(credits: [31: creditsBody(
+            cast: [("movie", 3), ("tv", 3), ("movie", 4), ("tv", 5), ("movie", 4)], crew: [("movie", 6)])])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let model = makeModel(session)
+
+        model.load(tmdbId: 31, owned: ownedIds, fetchedProviderIds: true)
+        await model.task?.value
+
+        // Film 3 and series 5 are owned; series 3 shares the film's number
+        // and stays missing; an actor's crew credit is not listed.
+        #expect(personEntries(model.section) == ["tv-3", "movie-4"])
+        #expect(model.section(for: session.snapshot()) == model.section)
+        #expect(model.section(for: SeerrSession.Snapshot(accountKey: "S1|B", generation: 99)) == .hidden)
+    }
+
+    @Test("a person primarily crew: the crew credits follow the cast")
+    func crewPersonListsCrew() async {
+        let transport = PersonSeerrTransport(
+            department: "Directing", credits: [31: creditsBody(cast: [("movie", 4)], crew: [("movie", 6), ("tv", 7)])])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let model = makeModel(session)
+
+        model.load(tmdbId: 31, owned: ownedIds, fetchedProviderIds: true)
+        await model.task?.value
+
+        #expect(personEntries(model.section) == ["movie-4", "movie-6", "tv-7"])
+    }
+
+    @Test("the filmography: 200 titles with their TMDb ids while the section may show, the page's 60 lean otherwise")
+    func filmographyOwnedSetIsWhole() async throws {
+        let api = MockAPIClient()
+        let allowed = PersonDetailSeerrModel()
+        allowed.allowsSeerr = { true }
+        let refused = PersonDetailSeerrModel()
+
+        let shown = try await allowed.filmography(personId: "p", userId: "A", using: api)
+        let hidden = try await refused.filmography(personId: "p", userId: "A", using: api)
+
+        // Newest first: a 60 cap would offer a prolific person's older owned titles.
+        #expect(api.personItemsLimits == [PersonDetailSeerrModel.ownedSetLimit, PersonDetailSeerrModel.pageLimit])
+        #expect(api.personItemsLimits == [200, 60])
+        #expect(api.personItemsProviderIdFlags == [true, false])
+        #expect(shown.withProviderIds && !hidden.withProviderIds)
+    }
+
+    @Test("no TMDb id on the person: no Seerr call, nothing shown")
+    func noTmdbIdNoCall() async {
+        let transport = PersonSeerrTransport(credits: [31: creditsBody(cast: [("movie", 4)])])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let model = makeModel(session)
+
+        model.load(tmdbId: nil, owned: ownedIds, fetchedProviderIds: true)
+        await model.task?.value
+
+        #expect(model.section == .hidden)
+        #expect(transport.personRequestCount == 0)
+    }
+
+    @Test("not allowed, or the filmography fetched without its TMDb ids: no Seerr call")
+    func notAllowedNoCall() async {
+        let transport = PersonSeerrTransport(credits: [31: creditsBody(cast: [("movie", 4)])])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+
+        let refused = makeModel(session, allowed: false)
+        refused.load(tmdbId: 31, owned: ownedIds, fetchedProviderIds: true)
+        await refused.task?.value
+        // Without the owned ids nothing could be subtracted: never asked.
+        let blind = makeModel(session)
+        blind.load(tmdbId: 31, owned: [], fetchedProviderIds: false)
+        await blind.task?.value
+
+        #expect(refused.section == .hidden)
+        #expect(blind.section == .hidden)
+        #expect(transport.personRequestCount == 0)
+    }
+
+    @Test("a failed credits call hides the section")
+    func failureHides() async {
+        let transport = PersonSeerrTransport(credits: [:])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let model = makeModel(session)
+
+        model.load(tmdbId: 31, owned: ownedIds, fetchedProviderIds: true)
+        await model.task?.value
+
+        #expect(model.section == .hidden)
+    }
+
+    @Test("one deadline bounds both calls: slow credits hide the section once it passes")
+    func deadlineBoundsBothCalls() async {
+        let gate = TestLatch()
+        let deadline = TestLatch()
+        let transport = PersonSeerrTransport(credits: [31: creditsBody(cast: [("movie", 4)])], gates: [31: gate])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let model = makeModel(session, deadline: { await deadline.wait() })
+
+        model.load(tmdbId: 31, owned: ownedIds, fetchedProviderIds: true)
+        await transport.creditsArrived.wait()
+        #expect(model.section == .loading)
+        deadline.open()
+        await model.task?.value
+        gate.open()
+
+        #expect(model.section == .hidden)
+    }
+
+    @Test("a superseded pass writes nothing")
+    func supersededPassDropped() async {
+        let gate = TestLatch()
+        let transport = PersonSeerrTransport(
+            credits: [31: creditsBody(cast: [("movie", 4)]), 32: creditsBody(cast: [("movie", 8)])], gates: [31: gate])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let model = makeModel(session)
+
+        model.load(tmdbId: 31, owned: ownedIds, fetchedProviderIds: true)
+        await transport.creditsArrived.wait()
+        let first = model.task
+        model.load(tmdbId: 32, owned: ownedIds, fetchedProviderIds: true)
+        await model.task?.value
+        gate.open()
+        await first?.value
+
+        #expect(personEntries(model.section) == ["movie-8"])
+    }
+
+    @Test("a reset hides the section, and the pass in flight writes nothing")
+    func resetDropsThePassInFlight() async {
+        let gate = TestLatch()
+        let transport = PersonSeerrTransport(credits: [31: creditsBody(cast: [("movie", 4)])], gates: [31: gate])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let model = makeModel(session)
+
+        model.load(tmdbId: 31, owned: ownedIds, fetchedProviderIds: true)
+        await transport.creditsArrived.wait()
+        let first = model.task
+        model.reset()
+        gate.open()
+        await first?.value
+
+        #expect(model.section == .hidden)
+    }
+
+    @Test("a pass cancelled before it starts writes nothing — not even the skeleton")
+    func cancelledPassWritesNothing() async {
+        let transport = PersonSeerrTransport(credits: [31: creditsBody(cast: [("movie", 4)])])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let model = makeModel(session)
+
+        model.load(tmdbId: 31, owned: ownedIds, fetchedProviderIds: true)
+        model.task?.cancel()
+        await model.task?.value
+
+        #expect(model.section == .hidden)
+        #expect(transport.personRequestCount == 0)
+    }
+}
+
+// MARK: - One presentation context at a time (I3)
+
+/// The deep-link fiche is a modal over the tabs: the root-hosted sheets cannot
+/// present over it, so it hosts its own — and the root stands down meanwhile.
+@MainActor
+@Suite("Root-hosted flows inside the deep-link modal")
+struct ModalPresentationHostTests {
+    private let film = SeerrTitle(kind: .movie, tmdbId: 5, title: "Film")
+
+    @Test("a Seerr request raised while the modal is up is presented by the modal only")
+    func seerrRequestHasOneHost() {
+        let presenter = SeerrRequestPresenter()
+        presenter.present(.movie(film))
+        #expect(presenter.draft(for: .root) == .movie(film))     // no modal: the root presents
+
+        presenter.modalChanged(isUp: true)
+        #expect(presenter.draft == nil)                           // a modal arriving takes no root draft in
+        presenter.present(.movie(film))
+        #expect(presenter.draft(for: .root) == nil)
+        #expect(presenter.draft(for: .modal) == .movie(film))
+
+        // The modal leaves with its request: the root never raises it afterwards.
+        presenter.modalChanged(isUp: false)
+        #expect(presenter.draft == nil)
+        #expect(presenter.draft(for: .root) == nil)
+        presenter.present(.movie(film))
+        #expect(presenter.draft(for: .root) == .movie(film))
+    }
+
+    /// The stand-down is an ASSIGNMENT from `MainTabView.deepLinkFallback`,
+    /// never a count of appear / disappear events: one unpaired appear left a
+    /// counter at 1 and silenced every root-hosted request until relaunch.
+    @Test("repeated « up » signals never leave the root silenced once the modal is gone")
+    func repeatedSignalsCannotStrandTheRoot() {
+        let seerr = SeerrRequestPresenter()
+        let playlists = AddToPlaylistPresenter()
+        for _ in 0..<3 {                      // a fiche replaced by another fiche, re-sent states
+            seerr.modalChanged(isUp: true)
+            playlists.modalChanged(isUp: true)
+        }
+        seerr.present(.movie(film))
+        playlists.present(itemId: "item", title: "Film")
+        #expect(seerr.draft(for: .root) == nil)
+        #expect(playlists.request(for: .root) == nil)
+
+        seerr.modalChanged(isUp: false)       // once, as `deepLinkFallback` goes nil
+        playlists.modalChanged(isUp: false)
+        seerr.present(.movie(film))
+        playlists.present(itemId: "item", title: "Film")
+        #expect(seerr.draft(for: .root) == .movie(film))
+        #expect(playlists.request(for: .root)?.itemId == "item")
+    }
+
+    @Test("« Ajouter à une playlist » follows the same rule")
+    func playlistRequestHasOneHost() {
+        let presenter = AddToPlaylistPresenter()
+        presenter.present(itemId: "item", title: "Film")
+        #expect(presenter.request(for: .root)?.itemId == "item")
+
+        presenter.modalChanged(isUp: true)
+        #expect(presenter.request == nil)
+        presenter.present(itemId: "item", title: "Film")
+        #expect(presenter.request(for: .root) == nil)
+        #expect(presenter.request(for: .modal)?.itemId == "item")
+
+        presenter.modalChanged(isUp: false)
+        #expect(presenter.request == nil)
+        presenter.present(itemId: "item", title: "Film")
+        #expect(presenter.request(for: .root)?.itemId == "item")
     }
 }

@@ -6,6 +6,40 @@ struct MissingHeaderAction {
     let perform: () -> Void
 }
 
+/// « Demander les N » as the card that CLOSES a row, shaped like its posters:
+/// Apple TV's `MissingTitlesRow` (a header link is out of the focus beam of a
+/// short row), and on both platforms the saga's films appended to the
+/// « Fait partie de » row, whose header belongs to the owned films.
+struct MissingActionCard: View {
+    @Environment(ThemeManager.self) private var themeManager
+
+    let action: MissingHeaderAction
+    let width: CGFloat
+
+    var body: some View {
+        Button(action: action.perform) {
+            Text(action.label)
+                .font(CinemaFont.label(.large))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(themeManager.accent)
+                .padding(CinemaSpacing.spacing3)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .aspectRatio(2 / 3, contentMode: .fit)
+                .background(CinemaColor.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: CinemaRadius.large))
+                .cinemaFocus()
+        }
+        #if os(tvOS)
+        .buttonStyle(CinemaTVCardButtonStyle())
+        .focusEffectDisabled()
+        .hoverEffectDisabled()
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .frame(width: width)
+        .accessibilityLabel(action.label)
+    }
+}
+
 /// « Pas encore dans ta bibliothèque »: header (title, count, action) over a
 /// row of caller-built cards. Renders NOTHING for `.hidden` and `.loaded([])`
 /// — never an empty header — and skeletons while `.loading`.
@@ -72,44 +106,74 @@ struct MissingTitlesRow<Element: Identifiable & Equatable & Sendable, Card: View
                     case .card(let element):
                         card(element).frame(width: cardWidth)
                     case .action(let action):
-                        #if os(tvOS)
-                        actionCard(action)
-                        #else
-                        EmptyView()
-                        #endif
+                        MissingActionCard(action: action, width: cardWidth)
                     }
                 }
             }
         }
     }
 
+    @ViewBuilder
     private func header(count: String?, action: MissingHeaderAction?) -> some View {
+        #if os(tvOS)
         HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
-            Text(title)
-                .font(titleFont)
-                .minimumScaleFactor(0.85)
-                .foregroundStyle(CinemaColor.onSurface)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-            if let count {
-                Text(count)
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurfaceMuted)
-                    .lineLimit(1)
-            }
-            Spacer()
-            #if !os(tvOS)
-            if let action {
-                Button(action: action.perform) {
-                    Text(action.label)
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(themeManager.accent)
-                }
-                .buttonStyle(.plain)
-            }
-            #endif
+            titleText(lineLimit: 1)
+            if let count { countText(count) }
         }
+        #else
+        if count == nil, action == nil {
+            titleText(lineLimit: 1)
+        } else {
+            // Title, count and action on one line when they all fit; otherwise
+            // the count and the action go UNDER the title — never a truncated
+            // title (« Pas encore dans ta… » beside « Demander les 3 » on an
+            // iPhone, in French; a saga's name beside « 3 films manquants »).
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
+                    titleText(lineLimit: 1)
+                    if let count { countText(count) }
+                    Spacer(minLength: CinemaSpacing.spacing2)
+                    if let action { actionButton(action) }
+                }
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                    titleText(lineLimit: 2)
+                    HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing3) {
+                        if let count { countText(count) }
+                        if let action { actionButton(action) }
+                    }
+                }
+            }
+        }
+        #endif
     }
+
+    private func titleText(lineLimit: Int) -> some View {
+        Text(title)
+            .font(titleFont)
+            .minimumScaleFactor(0.85)
+            .foregroundStyle(CinemaColor.onSurface)
+            .lineLimit(lineLimit)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func countText(_ count: String) -> some View {
+        Text(count)
+            .font(CinemaFont.label(.large))
+            .foregroundStyle(CinemaColor.onSurfaceMuted)
+            .lineLimit(1)
+    }
+
+    #if !os(tvOS)
+    private func actionButton(_ action: MissingHeaderAction) -> some View {
+        Button(action: action.perform) {
+            Text(action.label)
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(themeManager.accent)
+                .lineLimit(1)
+        }
+        .buttonStyle(.plain)
+    }
+    #endif
 
     private enum RowItem: Identifiable {
         case card(Element)
@@ -132,27 +196,6 @@ struct MissingTitlesRow<Element: Identifiable & Equatable & Sendable, Card: View
         #endif
         return items
     }
-
-    #if os(tvOS)
-    private func actionCard(_ action: MissingHeaderAction) -> some View {
-        Button(action: action.perform) {
-            Text(action.label)
-                .font(CinemaFont.label(.large))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(themeManager.accent)
-                .padding(CinemaSpacing.spacing3)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .aspectRatio(2 / 3, contentMode: .fit)
-                .background(CinemaColor.surfaceContainerHigh, in: RoundedRectangle(cornerRadius: CinemaRadius.large))
-                .cinemaFocus()
-        }
-        .buttonStyle(CinemaTVCardButtonStyle())
-        .focusEffectDisabled()
-        .hoverEffectDisabled()
-        .frame(width: cardWidth)
-        .accessibilityLabel(action.label)
-    }
-    #endif
 
     private var titleFont: Font {
         #if os(tvOS)

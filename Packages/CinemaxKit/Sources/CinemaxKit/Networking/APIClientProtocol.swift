@@ -159,9 +159,13 @@ public protocol AuthAPI: Sendable {
 /// by far the heaviest field of a `BaseItemDto`. Only pass `.card` from a
 /// query whose items are drawn as cards and nothing else — the detail screen
 /// always re-fetches its own item by id, so a card's lean DTO never reaches it.
+/// `.cardWithProviderIds` is `.card` plus `ProviderIds` (the TMDb id): asked
+/// only where a Seerr section must tell the owned cards from the missing ones
+/// (a fiche's collection rows), and only while that section may show.
 public enum ItemFieldSet: Sendable, Equatable {
     case detail
     case card
+    case cardWithProviderIds
 }
 
 /// What one `searchItems` pass asks for beyond the items themselves.
@@ -279,8 +283,10 @@ public protocol LibraryAPI: Sendable {
     func getItemUserData(itemId: String, userId: String) async throws -> UserItemDataDto?
 
     /// Filmography for a person (persons are items — fetch the person's own
-    /// bio via `getItem` with the person id).
-    func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
+    /// bio via `getItem` with the person id). `includeProviderIds`: each
+    /// item's TMDb id, asked only while the actor page's Seerr section may
+    /// show — what tells an owned title from a missing one.
+    func getPersonItems(personId: String, userId: String, limit: Int, includeProviderIds: Bool) async throws -> [BaseItemDto]
 
     /// Persons matching `searchTerm`, for the search screen's person row.
     /// Returns `BaseItemDto` (persons are Jellyfin items), so scoring and image
@@ -853,8 +859,10 @@ public extension LibraryAPI {
             limit: limit, extras: extras
         )
     }
-    func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
-        try await getPersonItems(personId: personId, userId: userId, limit: limit)
+    func getPersonItems(
+        personId: String, userId: String, limit: Int = 60, includeProviderIds: Bool = false
+    ) async throws -> [BaseItemDto] {
+        try await getPersonItems(personId: personId, userId: userId, limit: limit, includeProviderIds: includeProviderIds)
     }
 }
 

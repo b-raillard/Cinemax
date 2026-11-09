@@ -820,8 +820,23 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func markItemUnplayed(itemId: String, userId: String) async throws { recordLock.withLock { markUnplayedCalls.append(itemId) } }
     func markItemPlayed(itemId: String, userId: String) async throws { recordLock.withLock { markPlayedCalls.append(itemId) } }
     func setFavorite(itemId: String, userId: String, favorite: Bool) async throws {}
-    func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
-    func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] { [] }
+    /// `includeProviderIds` / `limit` of every `getPersonItems` call, in order.
+    private(set) var personItemsProviderIdFlags: [Bool] = []
+    private(set) var personItemsLimits: [Int] = []
+    func getPersonItems(personId: String, userId: String, limit: Int, includeProviderIds: Bool) async throws -> [BaseItemDto] {
+        recordLock.withLock {
+            personItemsProviderIdFlags.append(includeProviderIds)
+            personItemsLimits.append(limit)
+        }
+        return []
+    }
+    /// Answers `getCollections` when set (a movie's « Fait partie de »): the
+    /// BoxSets containing `containingItemId`. Unset ⇒ none.
+    var getCollectionsHandler: (@Sendable (_ itemId: String, _ tmdbCollectionId: String?) async throws -> [BaseItemDto])?
+    func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] {
+        guard let handler = getCollectionsHandler else { return [] }
+        return try await handler(containingItemId, tmdbCollectionId)
+    }
 
     /// Stub + capture for the library browse layout's « Collections » row.
     /// The real client answers `[]` below 12.0 without a request; the mock

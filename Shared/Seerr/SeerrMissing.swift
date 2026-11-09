@@ -24,6 +24,8 @@ struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
     let seriesTmdbId: Int
     let seasonNumber: Int
     let badge: SeerrBadge
+    /// The season's own poster (Seerr's `/tv/{id}`); nil ⇒ the bare outline.
+    var posterPath: String?
     var id: String { "tv-\(seriesTmdbId)-s\(seasonNumber)" }
 }
 
@@ -31,6 +33,15 @@ struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
 /// `hidden`; `loading` is the skeleton, bounded by `loadSection`'s deadline.
 enum MissingSection<Element: Equatable & Sendable>: Equatable {
     case hidden, loading, loaded([Element])
+
+    /// Draws nothing at all: hidden, or an empty answer.
+    var drawsNothing: Bool {
+        switch self {
+        case .hidden: true
+        case .loading: false
+        case .loaded(let elements): elements.isEmpty
+        }
+    }
 }
 
 extension SeerrSession {
@@ -67,11 +78,52 @@ enum SeerrMissing {
             case .series: kind = .tv
             default: continue
             }
-            guard let value = item.providerIDs?.first(where: { $0.key.lowercased() == "tmdb" })?.value,
-                  let id = Int(value) else { continue }
+            guard let id = tmdbId(of: item) else { continue }
             ids.insert(SeerrOwnedKey(kind: kind, tmdbId: id))
         }
         return ids
+    }
+
+    /// The item's TMDb id: provider key matched case-insensitively, a
+    /// non-numeric value ignored.
+    static func tmdbId(of item: BaseItemDto) -> Int? {
+        item.providerIDs?.first { $0.key.lowercased() == "tmdb" }.flatMap { Int($0.value) }
+    }
+
+    /// The TMDb collection (saga) the item names: `TmdbCollection` — a film's
+    /// saga, or the BoxSet built from it — matched case-insensitively. On a
+    /// BoxSet only, `Tmdb` counts too: a box set's TMDb id can only be a
+    /// collection's, whereas a film's `Tmdb` is the FILM. Non-numeric ⇒ ignored.
+    static func tmdbCollectionId(of item: BaseItemDto) -> Int? {
+        func provider(_ key: String) -> Int? {
+            item.providerIDs?.first { $0.key.caseInsensitiveCompare(key) == .orderedSame }.flatMap { Int($0.value) }
+        }
+        if let id = provider("TmdbCollection") { return id }
+        return item.type == .boxSet ? provider("Tmdb") : nil
+    }
+
+    /// The saga's films the library lacks (`titles`), in release order — the
+    /// one order a saga has, the owned row's too; same year ⇒ Seerr's order.
+    static func saga(_ collection: SeerrCollection, owned: Set<SeerrOwnedKey>) -> [SeerrMissingTitle] {
+        titles(collection.parts, owned: owned).enumerated()
+            .sorted { lhs, rhs in
+                let (left, right) = (lhs.element.title.year ?? .max, rhs.element.title.year ?? .max)
+                return left != right ? left < right : lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
+    /// The person's TMDb credits an actor page offers: the cast, and the crew
+    /// too only when the person is KNOWN to be primarily crew
+    /// (`knownForDepartment` present, non-empty, other than « Acting »; an
+    /// unknown department ⇒ cast only, fail closed). One entry per title —
+    /// kind and id, a film and a series may share a number — in Seerr's order.
+    static func creditTitles(_ credits: SeerrCombinedCredits, person: SeerrPerson) -> [SeerrTitle] {
+        let department = person.knownForDepartment ?? ""
+        let primarilyCrew = !department.isEmpty && department != "Acting"
+        let candidates = primarilyCrew ? credits.cast + credits.crew : credits.cast
+        var seen = Set<SeerrOwnedKey>()
+        return candidates.filter { seen.insert(SeerrOwnedKey(kind: $0.kind, tmdbId: $0.tmdbId)).inserted }
     }
 
     /// Candidates minus what Jellyfin owns and what Seerr has (partially)
@@ -120,7 +172,8 @@ enum SeerrMissing {
             if seerrStatus == .available || seerrStatus == .partiallyAvailable { continue }
             let badge = info.flatMap { seasonBadge(for: $0.requests.filter { $0.seasons.contains(number) }) }
                 ?? (seerrStatus == .processing ? .processing : .request)
-            result.append(SeerrMissingSeason(seriesTmdbId: tv.tmdbId, seasonNumber: number, badge: badge))
+            result.append(SeerrMissingSeason(
+                seriesTmdbId: tv.tmdbId, seasonNumber: number, badge: badge, posterPath: season.posterPath))
         }
         return result
     }

@@ -15,6 +15,12 @@ struct MainTabView: View {
     @Environment(SeasonalThemeController.self) private var seasonal
     @Environment(EntitlementStore.self) private var entitlements
     @Environment(EarlyAdopterService.self) private var earlyAdopter
+    /// The root-hosted flows the deep-link modal hosts itself while it is up
+    /// (`deepLinkDetail`, `PresentationHost`).
+    @Environment(AddToPlaylistPresenter.self) private var playlists
+    @Environment(SeerrRequestPresenter.self) private var seerrRequests
+    @Environment(SeerrSession.self) private var seerr
+    @Environment(ToastCenter.self) private var toasts
     @State private var selectedTabID: String = "home"
     /// Deep-link item to present modally from the tab root when the user's
     /// custom menu has no Home tab to route through (see the deep-link
@@ -56,7 +62,6 @@ struct MainTabView: View {
     @State private var topBarHasFocus = false
     @State private var showWhoIsWatching = false
     @Environment(\.motionEffectsEnabled) private var motionEffects
-    @Environment(ToastCenter.self) private var toasts
     @Environment(AccountLockStore.self) private var accountLocks
     @Environment(ParentalLockController.self) private var parentalLock
     @Environment(ProStore.self) private var proStore
@@ -189,6 +194,13 @@ struct MainTabView: View {
             deepLinkDetail(target)
         }
         #endif
+        // The root-hosted flows stand down while the modal is up, told by
+        // ASSIGNMENT from the one source of truth (`initial`: a remount never
+        // inherits a modal that is gone) — see `deepLinkDetail`.
+        .onChange(of: deepLinkFallback, initial: true) { _, target in
+            playlists.modalChanged(isUp: target != nil)
+            seerrRequests.modalChanged(isUp: target != nil)
+        }
         #if os(tvOS)
         .onAppear {
             // Initial seed — without this the bar is empty for one frame.
@@ -240,6 +252,13 @@ struct MainTabView: View {
     /// `NavigationStack` so cast / episode pushes work; the tvOS coordinator
     /// environment is re-injected because the cover renders outside the tab
     /// content that carries it.
+    ///
+    /// The playlist sheet and the Seerr request are hosted at the app's root,
+    /// which cannot present over this modal: on tvOS the root's dialog tore
+    /// this fiche down and came up over Accueil. While the modal is up it
+    /// hosts both itself (`host: .modal`) and the root stands down
+    /// (`PresentationHost`, told from `deepLinkFallback`) — one presentation
+    /// context at a time, one presenter.
     @ViewBuilder
     private func deepLinkDetail(_ target: DeepLinkFallback) -> some View {
         NavigationStack {
@@ -260,6 +279,12 @@ struct MainTabView: View {
                 }
             #endif
         }
+        .modifier(AddToPlaylistPresentation(
+            presenter: playlists, appState: appState, themeManager: themeManager, loc: loc, toast: toasts,
+            host: .modal))
+        .modifier(SeerrRequestPresentation(
+            presenter: seerrRequests, session: seerr, appState: appState, themeManager: themeManager,
+            loc: loc, toasts: toasts, host: .modal))
         #if os(tvOS)
         .environment(playerCoordinator)
         .onExitCommand { deepLinkFallback = nil }

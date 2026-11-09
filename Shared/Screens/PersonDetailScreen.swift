@@ -14,7 +14,15 @@ struct PersonDetailScreen: View {
 
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
+    @Environment(NetworkMonitor.self) private var network
+    @Environment(ToastCenter.self) private var toasts
+    /// Seerr's « Pas encore dans ta bibliothèque ». Optional, like the fiche's:
+    /// a host without them loses the section, never crashes.
+    @Environment(SeerrSession.self) private var seerr: SeerrSession?
+    @Environment(SeerrRequestPresenter.self) private var seerrRequests: SeerrRequestPresenter?
+    @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
 
+    @State private var seerrModel = PersonDetailSeerrModel()
     @State private var person: BaseItemDto?
     @State private var movies: [BaseItemDto] = []
     @State private var series: [BaseItemDto] = []
@@ -82,6 +90,10 @@ struct PersonDetailScreen: View {
                             title: loc.localized("person.empty")
                         )
                     }
+                    // AFTER everything the library owns — under the empty
+                    // state too, as in the search: nothing on screen moves
+                    // when Seerr answers.
+                    missingTitlesRow
                 }
             }
             .padding(.vertical, CinemaSpacing.spacing6)
@@ -95,7 +107,15 @@ struct PersonDetailScreen: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .task { await load(force: false) }
+        .task {
+            // Before the load, which reads them (same wiring as the fiche):
+            // wired after, the first load would run with Seerr off.
+            seerrModel.seerr = seerr
+            seerrModel.allowsSeerr = { [seerr, proAccess, network] in
+                seerr?.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline) ?? false
+            }
+            await load(force: false)
+        }
         // Always a pushed screen. Its header is focusable now (see `header`),
         // which is what stops an Up press escaping into the tab bar — the case
         // that surfaced the Menu-button bug this modifier answers.
@@ -210,16 +230,165 @@ struct PersonDetailScreen: View {
         guard let userId = appState.currentUserId else { return }
         isLoading = true
         errorMessage = nil
+        seerrModel.reset()
+        let withProviderIds: Bool
         do {
             async let personTask = appState.apiClient.getItem(userId: userId, itemId: personId)
-            async let itemsTask = appState.apiClient.getPersonItems(personId: personId, userId: userId)
+            async let filmographyTask = seerrModel.filmography(
+                personId: personId, userId: userId, using: appState.apiClient)
             person = try? await personTask
-            let items = try await itemsTask
-            movies = items.filter { $0.type == .movie }
-            series = items.filter { $0.type == .series }
+            let filmography = try await filmographyTask
+            withProviderIds = filmography.withProviderIds
+            movies = filmography.items.filter { $0.type == .movie }
+            series = filmography.items.filter { $0.type == .series }
         } catch {
+            // Jellyfin decides what is « in the library »: no answer, no Seerr.
             errorMessage = loc.userFacingMessage(for: error)
+            isLoading = false
+            return
         }
         isLoading = false
+        // Once the owned filmography is on screen, a side task of its own.
+        seerrModel.load(
+            tmdbId: person.flatMap(SeerrMissing.tmdbId(of:)),
+            owned: SeerrMissing.ownedTmdbIds(movies + series),
+            fetchedProviderIds: withProviderIds)
+    }
+
+    // MARK: - Missing titles (Seerr)
+
+    /// The section as this account may see it right now — Pro, age cap,
+    /// network and the Seerr account re-read at render, so a late answer
+    /// never paints where Seerr no longer applies.
+    private var missingTitles: MissingSection<SeerrMissingTitle> {
+        guard let seerr, seerrRequests != nil else { return seerrModel.section(for: nil) }
+        let visible = seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+        return seerrModel.section(for: visible ? seerr.snapshot() : nil)
+    }
+
+    /// « Pas encore dans ta bibliothèque »: films and series mixed, like the
+    /// search's — no count, no « Demander les N ».
+    @ViewBuilder
+    private var missingTitlesRow: some View {
+        let section = missingTitles
+        if !section.drawsNothing {
+            MissingTitlesRow(
+                title: loc.localized("seerr.missing.title"), count: nil, section: section,
+                headerAction: nil, cardWidth: cardWidth
+            ) { missing in
+                MissingTitleButton(missing: missing, onRequest: requestMissing)
+            }
+        }
+    }
+
+    /// A card: the request — or « Déjà demandé ».
+    private func requestMissing(_ missing: SeerrMissingTitle) {
+        guard let seerr, let seerrRequests else { return }
+        Task { await seerrRequests.request(missing, session: seerr, loc: loc, toasts: toasts) }
+    }
+}
+
+// MARK: - Seerr model
+
+/// The actor page's « Pas encore dans ta bibliothèque »: the rest of the
+/// person's TMDb credits (`SeerrMissing.creditTitles`), minus what the page's
+/// filmography owns. A side task started once that filmography is written,
+/// silent on failure (error or deadline ⇒ `.hidden`, nothing says why), and
+/// no call without the person's TMDb id, without the owned ids, or when
+/// `allowsSeerr` says no.
+///
+/// Its own task, not the screen's `.task`, which SwiftUI cancels once the
+/// view disappears (a fiche pushed over it): a cancelled pass writes nothing,
+/// so the skeleton would stay for good — the page never reloads on return.
+@MainActor
+@Observable
+final class PersonDetailSeerrModel {
+    /// The active account's Seerr, set by the screen. `nil` ⇒ no section.
+    @ObservationIgnored var seerr: SeerrSession?
+    /// Whether the section may load — `SeerrSession.isVisible` with the
+    /// screen's Pro gate and network, wired by the screen.
+    @ObservationIgnored var allowsSeerr: @MainActor () -> Bool = { false }
+    /// `SeerrSession.loadSection`'s deadline — injectable for the tests.
+    @ObservationIgnored var deadline: @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(6)) }
+    /// Read through `section(for:)`, which hides another account's.
+    private(set) var section: MissingSection<SeerrMissingTitle> = .hidden
+    /// The pass filling `section`. Internal so a test can await it.
+    @ObservationIgnored private(set) var task: Task<Void, Never>?
+    /// The Seerr account and generation `section` was loaded for.
+    @ObservationIgnored private var snapshot: SeerrSession.Snapshot?
+    /// Bumped by every `reset` / `load`: a pass compares it with its own.
+    @ObservationIgnored private var generation = 0
+
+    /// The section to draw for the account Seerr serves right now: another
+    /// profile's never shows.
+    func section(for current: SeerrSession.Snapshot?) -> MissingSection<SeerrMissingTitle> {
+        // Read FIRST, whatever the guard says: the view must observe it.
+        let section = self.section
+        guard let current, current == snapshot else { return .hidden }
+        return section
+    }
+
+    /// The owned set must be WHOLE while the section may show — Jellyfin
+    /// answers newest first, so a cap would offer a prolific person's older
+    /// owned titles as « Demander » (same flaw as a saga's 20-film row).
+    static let ownedSetLimit = 200
+    /// The page's own cap when Seerr is out of the picture.
+    static let pageLimit = 60
+
+    /// The page's filmography, ONE decision for it: while the section may
+    /// show, up to `ownedSetLimit` titles with their TMDb ids (what tells an
+    /// owned title from a missing one); otherwise `pageLimit`, lean.
+    /// `withProviderIds` goes back to `load` as `fetchedProviderIds`.
+    func filmography(
+        personId: String, userId: String, using api: any LibraryAPI
+    ) async throws -> (items: [BaseItemDto], withProviderIds: Bool) {
+        let withProviderIds = allowsSeerr()
+        let items = try await api.getPersonItems(
+            personId: personId, userId: userId,
+            limit: withProviderIds ? Self.ownedSetLimit : Self.pageLimit,
+            includeProviderIds: withProviderIds)
+        return (items, withProviderIds)
+    }
+
+    /// Hides the section; the pass in flight, if any, writes nothing.
+    func reset() {
+        task?.cancel()
+        task = nil
+        generation += 1
+        set(.hidden, snapshot: nil)
+    }
+
+    /// `owned`: the TMDb ids of the page's filmography, which carries them
+    /// only when `fetchedProviderIds` — without them nothing is asked.
+    func load(tmdbId: Int?, owned: Set<SeerrOwnedKey>, fetchedProviderIds: Bool) {
+        reset()
+        let pass = generation
+        task = Task { await run(tmdbId: tmdbId, owned: owned, fetchedProviderIds: fetchedProviderIds, pass: pass) }
+    }
+
+    private func run(tmdbId: Int?, owned: Set<SeerrOwnedKey>, fetchedProviderIds: Bool, pass: Int) async {
+        // A pass cancelled or superseded before it even ran writes NOTHING.
+        guard !Task.isCancelled, generation == pass else { return }
+        guard fetchedProviderIds, let tmdbId, allowsSeerr(), let seerr, let snapshot = seerr.snapshot() else {
+            set(.hidden, snapshot: nil)
+            return
+        }
+        set(.loading, snapshot: snapshot)
+        // Both calls in ONE op, so the one deadline bounds them both.
+        let section = await seerr.loadSection(deadline: deadline) { client, credential in
+            async let person = client.person(id: tmdbId, credential)
+            async let credits = client.combinedCredits(personId: tmdbId, credential)
+            let titles = SeerrMissing.creditTitles(try await credits, person: try await person)
+            return SeerrMissing.titles(titles, owned: owned)
+        }
+        guard !Task.isCancelled, generation == pass else { return }
+        // `nil` = the account moved: nothing of this answer is written, and
+        // the skeleton goes rather than wait for the next profile.
+        set(section ?? .hidden, snapshot: section == nil ? nil : snapshot)
+    }
+
+    private func set(_ section: MissingSection<SeerrMissingTitle>, snapshot: SeerrSession.Snapshot?) {
+        self.snapshot = snapshot
+        if self.section != section { self.section = section }
     }
 }

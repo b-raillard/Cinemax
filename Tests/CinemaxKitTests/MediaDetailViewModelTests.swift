@@ -749,3 +749,672 @@ struct MetadataEditorViewModelGateTests {
     }
 }
 #endif
+
+// MARK: - Seerr — missing seasons (« Pas encore dans ta bibliothèque »)
+
+/// `/tv/{id}` as Seerr answers it: the TMDb seasons, in Seerr's order.
+private func seerrTVBody(_ tmdbId: Int, seasons: [Int]) -> String {
+    let list = seasons.map { #"{"seasonNumber":\#($0),"episodeCount":8}"# }.joined(separator: ",")
+    return #"{"id":\#(tmdbId),"name":"Série du banc","seasons":[\#(list)]}"#
+}
+
+/// Answers Seerr for a series fiche: the session's reload (`/settings/public`,
+/// `/auth/me`), then `/tv/{id}` from `series` — held by that id's gate when
+/// one is given — and `/request`.
+private final class DetailSeerrTransport: SeerrTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var sent: [URLRequest] = []
+    private let series: [Int: String]
+    private let gates: [Int: TestLatch]
+    private let specials: Bool
+    private let collections: [Int: String]
+    /// Opens when the first `/tv/{id}` request reaches the transport.
+    let tvArrived = TestLatch()
+
+    init(series: [Int: String], gates: [Int: TestLatch] = [:], specials: Bool = false, collections: [Int: String] = [:]) {
+        self.series = series
+        self.gates = gates
+        self.specials = specials
+        self.collections = collections
+    }
+
+    var tvRequestCount: Int {
+        lock.withLock { sent }.filter { $0.url?.path.contains("/tv/") == true }.count
+    }
+
+    var collectionRequestCount: Int {
+        lock.withLock { sent }.filter { $0.url?.path.contains("/collection/") == true }.count
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        lock.withLock { sent.append(request) }
+        let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
+        let status: Int
+        let body: String
+        switch path {
+        case "/settings/public":
+            status = 200
+            body = #"{"mediaServerType":2,"partialRequestsEnabled":true,"enableSpecialEpisodes":\#(specials)}"#
+        case "/auth/me":
+            status = 200
+            body = #"{"id":7,"permissions":32,"jellyfinUserId":"A","displayName":"Alice"}"#
+        case "/request":
+            status = 201
+            body = """
+            {"id":1,"status":1,"type":"tv","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-01T10:00:00Z",
+            "requestedBy":{"id":7,"permissions":32},"media":{"tmdbId":1399,"status":2}}
+            """
+        case let saga where saga.hasPrefix("/collection/"):
+            guard let id = Int(saga.dropFirst("/collection/".count)), let reply = collections[id] else {
+                throw StubSeerrTransport.Exhausted()
+            }
+            status = 200
+            body = reply
+        case let tv where tv.hasPrefix("/tv/"):
+            guard let id = Int(tv.dropFirst("/tv/".count)), let reply = series[id] else {
+                throw StubSeerrTransport.Exhausted()
+            }
+            tvArrived.open()
+            if let gate = gates[id] { await gate.wait() }
+            status = 200
+            body = reply
+        default:
+            throw StubSeerrTransport.Exhausted()
+        }
+        let url = request.url ?? URL(string: "http://192.168.1.20:5055")!
+        let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: [:])!
+        return (Data(body.utf8), response)
+    }
+}
+
+/// A series the library holds `owned` seasons of, matched to TMDb `tmdb`
+/// (`nil` ⇒ no TMDb id at all). `tmdbForCall` overrides it per `getItem`
+/// call (1-based) — an identify between two loads.
+private func ownedSeriesAPI(
+    tmdb: String? = "1399", owned: [Int] = [1, 2, 3], tmdbForCall: (@Sendable (Int) -> String?)? = nil
+) -> MockAPIClient {
+    let api = MockAPIClient()
+    let calls = CallCounter()
+    api.getItemHandler = { id in
+        var series = makeSeries(id: id, played: false)
+        series.name = "Série du banc"
+        series.productionYear = 2011
+        let call = calls.next()
+        if let value = tmdbForCall?(call) ?? tmdb { series.providerIDs = ["Tmdb": value] }
+        return series
+    }
+    api.getSeasonsHandler = { _ in
+        owned.map { number in
+            var season = BaseItemDto()
+            season.id = "season-\(number)"
+            season.indexNumber = number
+            return season
+        }
+    }
+    api.getEpisodesHandler = { seasonId in
+        [makeEpisodeInSeason(id: "ep-\(seasonId)-1", name: "Épisode 1", seasonId: seasonId)]
+    }
+    return api
+}
+
+private func missingSeasons(_ tmdbId: Int, _ numbers: [Int], _ badge: SeerrBadge = .request) -> [SeerrMissingSeason] {
+    numbers.map { SeerrMissingSeason(seriesTmdbId: tmdbId, seasonNumber: $0, badge: badge) }
+}
+
+@MainActor
+@Suite("Detail — missing seasons")
+struct MediaDetailMissingSeasonsTests {
+    private let loc = LocalizationManager()
+
+    private func makeViewModel(_ session: SeerrSession, allowed: Bool = true) -> MediaDetailViewModel {
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        vm.seerr = session
+        vm.allowsSeerr = { allowed }
+        vm.seerrDeadline = neverExpires
+        return vm
+    }
+
+    @Test("the owned seasons are on screen before Seerr answers; the missing ones follow, ascending")
+    func missingSeasonsAfterOwned() async {
+        let gate = TestLatch()
+        let transport = DetailSeerrTransport(
+            series: [1399: seerrTVBody(1399, seasons: [3, 1, 6, 2, 5, 0, 4])], gates: [1399: gate])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await transport.tvArrived.wait()
+
+        // Seerr is held: the fiche is painted with what the library owns.
+        #expect(!vm.isLoading)
+        #expect(vm.seasons.compactMap(\.indexNumber) == [1, 2, 3])
+        #expect(!vm.episodes.isEmpty)
+        #expect(vm.seerrSeasons == .loading)
+
+        gate.open()
+        await vm.seerrSeasonsTask?.value
+        // Seerr's order is not the row's: ascending, specials left out.
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1399, [4, 5, 6])))
+        #expect(vm.seerrSeasons(for: session.snapshot()) == vm.seerrSeasons)
+        #expect(vm.seerrSeasons(for: SeerrSession.Snapshot(accountKey: "S1|B", generation: 99)) == .hidden)
+        #expect(vm.seerrSeriesTitle == SeerrTitle(kind: .tv, tmdbId: 1399, title: "Série du banc", year: 2011))
+    }
+
+    @Test("specials are offered only when Seerr enables them")
+    func specialsOnlyWhenEnabled() async {
+        let transport = DetailSeerrTransport(
+            series: [1399: seerrTVBody(1399, seasons: [0, 1, 2, 3, 4])], specials: true)
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1399, [0, 4])))
+    }
+
+    @Test("no TMDb id on the series: no Seerr call, nothing shown")
+    func noTmdbIdNoCall() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1, 2, 3, 4])])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(tmdb: nil), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .hidden)
+        #expect(transport.tvRequestCount == 0)
+        #expect(vm.seerrSeriesTitle == nil)
+    }
+
+    @Test("not allowed (Pro, cap, offline…): no Seerr call at all")
+    func notAllowedNoCall() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1, 2, 3, 4])])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session, allowed: false)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .hidden)
+        #expect(transport.tvRequestCount == 0)
+    }
+
+    @Test("an answer for a fiche the screen has moved past is dropped")
+    func staleSeasonsDropped() async {
+        // The first load matches TMDb 1399, held; an identify then reloads the
+        // fiche (tier-1), now matched to 1400, which answers at once.
+        let gate = TestLatch()
+        let transport = DetailSeerrTransport(
+            series: [1399: seerrTVBody(1399, seasons: [1, 2, 3, 4, 5, 6]), 1400: seerrTVBody(1400, seasons: [1, 2, 3, 4])],
+            gates: [1399: gate])
+        let api = ownedSeriesAPI(tmdbForCall: { $0 == 1 ? "1399" : "1400" })
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await transport.tvArrived.wait()
+        let first = vm.seerrSeasonsTask
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+        gate.open()
+        await first?.value
+
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1400, [4])))
+    }
+
+    @Test("a playback refresh while Seerr answers keeps the row")
+    func playbackRefreshKeepsTheRow() async {
+        let gate = TestLatch()
+        let transport = DetailSeerrTransport(
+            series: [1399: seerrTVBody(1399, seasons: [1, 2, 3, 4])], gates: [1399: gate])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await transport.tvArrived.wait()
+        // Bumps `loadGeneration` without reloading Seerr.
+        await vm.refreshAfterPlayback(using: app)
+        gate.open()
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1399, [4])))
+    }
+
+    @Test("a pass cancelled before it starts writes nothing — not even the skeleton")
+    func cancelledPassWritesNothing() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1, 2, 3, 4])])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        // Still enqueued: a newer pass (or the screen going away) cancels it
+        // before it ever runs.
+        vm.seerrSeasonsTask?.cancel()
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .hidden)
+        #expect(transport.tvRequestCount == 0)
+    }
+
+    @Test("a one-season series still gets its row")
+    func oneSeasonSeriesStillGetsRow() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1, 2, 3])])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(owned: [1]), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seasons.count == 1)
+        #expect(vm.seerrSeasons == .loaded(missingSeasons(1399, [2, 3])))
+    }
+
+    @Test("an unreachable Seerr hides the row and leaves the fiche alone")
+    func unreachableSeerrHidesTheRow() async {
+        // No `/tv` answer at all: the transport throws.
+        let transport = DetailSeerrTransport(series: [:])
+        let (app, session) = await seerrBench(api: ownedSeriesAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+
+        #expect(vm.seerrSeasons == .hidden)
+        #expect(vm.errorMessage == nil)
+        #expect(vm.seasons.count == 3)
+    }
+}
+
+@MainActor
+@Suite("Seerr season request entry point")
+struct SeerrSeasonRequestTests {
+    private let loc = LocalizationManager()
+    private let series = SeerrTitle(kind: .tv, tmdbId: 1399, title: "Série du banc", year: 2011)
+
+    @Test("a season card opens the picker over every requestable season, that one ticked")
+    func seasonCardPreselectsItsSeason() {
+        let presenter = SeerrRequestPresenter()
+        let missing = missingSeasons(1399, [4, 5, 6])
+
+        presenter.request(season: missing[1], among: missing, of: series, loc: loc, toasts: ToastCenter())
+
+        #expect(presenter.draft == .series(series, seasons: [4, 5, 6], preselected: [5]))
+    }
+
+    @Test("« Demander les N » ticks every requestable season")
+    func requestAllTicksThemAll() {
+        let presenter = SeerrRequestPresenter()
+        let missing = missingSeasons(1399, [6, 4, 5])
+
+        presenter.requestAll(missing, of: series, loc: loc, toasts: ToastCenter())
+
+        #expect(presenter.draft == .series(series, seasons: [4, 5, 6], preselected: [4, 5, 6]))
+    }
+
+    @Test("a season already asked for: « Déjà demandé », nothing opens, and the others' picker leaves it out")
+    func alreadyRequestedSeasonShowsInfo() {
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        let missing = [
+            SeerrMissingSeason(seriesTmdbId: 1399, seasonNumber: 4, badge: .pending),
+            SeerrMissingSeason(seriesTmdbId: 1399, seasonNumber: 5, badge: .declined),
+            SeerrMissingSeason(seriesTmdbId: 1399, seasonNumber: 6, badge: .processing),
+        ]
+
+        presenter.request(season: missing[0], among: missing, of: series, loc: loc, toasts: toasts)
+        #expect(presenter.draft == nil)
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.request.duplicate"))
+        #expect(toasts.current?.message == loc.localized("seerr.request.already.pending"))
+
+        presenter.request(season: missing[2], among: missing, of: series, loc: loc, toasts: toasts)
+        #expect(presenter.draft == nil)
+        #expect(toasts.current?.message == loc.localized("seerr.request.already.processing"))
+
+        // Declined may be asked again — alone: the two others are already out.
+        #expect(presenter.requestableSeasons(missing) == [5])
+        presenter.request(season: missing[1], among: missing, of: series, loc: loc, toasts: toasts)
+        #expect(presenter.draft == .series(series, seasons: [5], preselected: [5]))
+    }
+
+    @Test("a season just requested counts as requested, without reloading the row")
+    func justRequestedSeasonCounts() async {
+        let transport = DetailSeerrTransport(series: [:])
+        let (_, session) = await seerrBench(api: MockAPIClient(), transport: transport)
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        let missing = missingSeasons(1399, [4, 5])
+
+        await presenter.submit(
+            .series(series, seasons: [4, 5], preselected: [4]), selection: [4],
+            session: session, loc: loc, toasts: toasts)
+        #expect(presenter.badge(for: missing[0].id, default: .request) == .pending)
+        #expect(presenter.requestableSeasons(missing) == [5])
+
+        presenter.request(season: missing[0], among: missing, of: series, loc: loc, toasts: toasts)
+        #expect(presenter.draft == nil)
+        #expect(toasts.current?.message == loc.localized("seerr.request.already.pending"))
+    }
+}
+
+// MARK: - Seerr — the missing films of a saga
+
+/// `/collection/{id}` as Seerr answers it: `parts` without `mediaType`, in
+/// Seerr's (TMDb's) order — not the release order. `status` is Seerr's media
+/// status for that part (4/5/6 = it has it), `nil` = Seerr knows nothing.
+private func seerrCollectionBody(_ id: Int, name: String, parts: [(tmdb: Int, year: Int, status: Int?)]) -> String {
+    let list = parts.map { part -> String in
+        let info = part.status.map { #","mediaInfo":{"status":\#($0)}"# } ?? ""
+        return #"{"id":\#(part.tmdb),"title":"Film \#(part.tmdb)","releaseDate":"\#(part.year)-06-01"\#(info)}"#
+    }.joined(separator: ",")
+    return #"{"id":\#(id),"name":"\#(name)","parts":[\#(list)]}"#
+}
+
+/// TMDb collection 1241: 671 and 672 are the library's, 674 is available in
+/// Seerr only (Jellyfin can't prove it owns it), 675 is pending.
+private let sagaBody = seerrCollectionBody(1241, name: "Saga du banc", parts: [
+    (675, 2007, 2), (671, 2001, nil), (673, 2004, nil), (672, 2002, nil), (674, 2005, 5),
+])
+
+/// A film of the library, matched to TMDb `tmdb`.
+private func ownedFilm(_ tmdb: Int, year: Int) -> BaseItemDto {
+    var film = makeMovie(id: "movie-\(tmdb)", played: false)
+    film.name = "Film \(tmdb)"
+    film.productionYear = year
+    film.providerIDs = ["Tmdb": String(tmdb)]
+    return film
+}
+
+/// A movie fiche for film 671 of TMDb collection 1241. `boxSet` = the
+/// library's BoxSet holding it (`getCollections`), whose members are
+/// `members`; `nil` ⇒ in no BoxSet. `collectionsGate` holds the FIRST
+/// `getCollections` call; `collectionsArrived` opens when it arrives.
+private func sagaMovieAPI(
+    boxSet: Bool = true, members: [BaseItemDto] = [ownedFilm(671, year: 2001), ownedFilm(672, year: 2002)],
+    collectionsGate: TestLatch? = nil, collectionsArrived: TestLatch? = nil, boxSetOnCall: (@Sendable (Int) -> Bool)? = nil
+) -> MockAPIClient {
+    let api = MockAPIClient()
+    api.getItemHandler = { _ in
+        var film = ownedFilm(671, year: 2001)
+        film.providerIDs = ["Tmdb": "671", "TmdbCollection": "1241"]
+        return film
+    }
+    let calls = CallCounter()
+    api.getCollectionsHandler = { _, _ in
+        let call = calls.next()
+        if call == 1 {
+            collectionsArrived?.open()
+            await collectionsGate?.wait()
+        }
+        guard boxSetOnCall?(call) ?? boxSet else { return [] }
+        var collection = BaseItemDto()
+        collection.id = "boxset-1"
+        collection.name = "Saga du banc"
+        collection.type = .boxSet
+        return [collection]
+    }
+    api.stubbedItems = members
+    api.stubbedTotalCount = members.count
+    return api
+}
+
+/// A BoxSet fiche of TMDb collection 1241 (`providers`), holding `children`.
+private func sagaBoxSetAPI(
+    providers: [String: String] = ["TmdbCollection": "1241"],
+    children: [BaseItemDto] = [ownedFilm(671, year: 2001), ownedFilm(672, year: 2002)]
+) -> MockAPIClient {
+    let api = MockAPIClient()
+    api.getItemHandler = { id in
+        var collection = BaseItemDto()
+        collection.id = id
+        collection.name = "Saga du banc"
+        collection.type = .boxSet
+        collection.providerIDs = providers
+        return collection
+    }
+    api.stubbedItems = children
+    api.stubbedTotalCount = children.count
+    return api
+}
+
+/// `allowsSeerr`'s answer, flipped by a test mid-pass.
+@MainActor
+private final class VisibilityBox {
+    var isOn = false
+}
+
+/// The section's titles as `kind-tmdbId` + badge, `nil` unless loaded.
+private func sagaEntries(_ section: MissingSection<SeerrMissingTitle>) -> [String]? {
+    guard case .loaded(let missing) = section else { return nil }
+    return missing.map { "\($0.id) \($0.badge)" }
+}
+
+@MainActor
+@Suite("Detail — saga")
+struct MediaDetailSagaTests {
+    private let loc = LocalizationManager()
+
+    private func makeViewModel(
+        _ session: SeerrSession, itemId: String = "movie-671", type: BaseItemKind = .movie, allowed: Bool = true
+    ) -> MediaDetailViewModel {
+        let vm = MediaDetailViewModel(itemId: itemId, itemType: type)
+        vm.seerr = session
+        vm.allowsSeerr = { allowed }
+        vm.seerrDeadline = neverExpires
+        return vm
+    }
+
+    @Test("BoxSet fiche: the owned members unchanged, then only the films the library lacks, in release order")
+    func boxSetSectionListsOnlyMissing() async {
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: sagaBody])
+        let api = sagaBoxSetAPI()
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session, itemId: "boxset-1", type: .boxSet)
+
+        await vm.load(using: app, loc: loc)
+        await vm.collectionTask?.value
+
+        #expect(vm.collectionChildren.compactMap(\.id) == ["movie-671", "movie-672"])
+        // 671 / 672 owned by Jellyfin, 674 available in Seerr: never offered.
+        #expect(sagaEntries(vm.seerrSaga) == ["movie-673 request", "movie-675 pending"])
+        #expect(vm.seerrSaga(for: session.snapshot()) == vm.seerrSaga)
+        #expect(vm.seerrSaga(for: SeerrSession.Snapshot(accountKey: "S1|B", generation: 99)) == .hidden)
+        #expect(vm.sagaPlacement == .afterCollectionContents)
+        // The members carry their TMDb ids only while Seerr may show.
+        #expect(api.getItemsQueries.last?.fieldSet == .cardWithProviderIds)
+    }
+
+    @Test("BoxSet matched by Jellyfin's TMDb provider (`Tmdb`, no `TmdbCollection`): same section")
+    func boxSetTmdbProviderCounts() async {
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: sagaBody])
+        let (app, session) = await seerrBench(api: sagaBoxSetAPI(providers: ["Tmdb": "1241"]), transport: transport)
+        let vm = makeViewModel(session, itemId: "boxset-1", type: .boxSet)
+
+        await vm.load(using: app, loc: loc)
+        await vm.collectionTask?.value
+
+        #expect(sagaEntries(vm.seerrSaga) == ["movie-673 request", "movie-675 pending"])
+    }
+
+    @Test("movie in a « Fait partie de » row: the missing films come AFTER the owned cards, which keep their index")
+    func movieRowAppendsAtEnd() async {
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: sagaBody])
+        let api = sagaMovieAPI()
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.collectionTask?.value
+
+        #expect(vm.collectionItems.compactMap(\.id) == ["movie-672"])
+        #expect(sagaEntries(vm.seerrSaga) == ["movie-673 request", "movie-675 pending"])
+        #expect(vm.sagaPlacement == .appendedToPartOfRow)
+        #expect(api.getItemsQueries.last?.fieldSet == .cardWithProviderIds)
+        // The whole BoxSet, like a BoxSet fiche's members: the row is the
+        // owned set, and a 20-film cap would offer a film the library holds.
+        #expect(api.getItemsQueries.last?.limit == 100)
+
+        // The row: owned first, untouched; then the missing cards, or the
+        // skeletons while loading; the action card closes it.
+        let owned = vm.collectionItems
+        #expect(MediaDetailSimilarSection.rowItems(owned: owned, trailing: .hidden, showsRequestAll: false).map(\.id)
+            == ["owned-movie-672"])
+        #expect(MediaDetailSimilarSection.rowItems(owned: owned, trailing: .loading, showsRequestAll: false).map(\.id)
+            == ["owned-movie-672", "skeleton-0", "skeleton-1"])
+        #expect(MediaDetailSimilarSection.rowItems(owned: owned, trailing: vm.seerrSaga, showsRequestAll: true).map(\.id)
+            == ["owned-movie-672", "missing-movie-673", "missing-movie-675", "requestAll"])
+        #expect(MediaDetailSimilarSection.rowItems(owned: owned, trailing: .loaded([]), showsRequestAll: true).map(\.id)
+            == ["owned-movie-672"])
+    }
+
+    @Test("movie in no BoxSet but with a TMDb collection: a new row, named after the saga, at the end of the fiche")
+    func noRowMakesNewRowAtEnd() async {
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: sagaBody])
+        let (app, session) = await seerrBench(api: sagaMovieAPI(boxSet: false), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.collectionTask?.value
+
+        #expect(vm.collectionItems.isEmpty)
+        #expect(vm.sagaPlacement == .endOfFiche)
+        #expect(vm.sagaName == "Saga du banc")
+        // Nothing but the fiche's own film proves ownership here: 672 is
+        // offered, 674 is dropped on Seerr's word alone.
+        #expect(sagaEntries(vm.seerrSaga) == ["movie-672 request", "movie-673 request", "movie-675 pending"])
+    }
+
+    @Test("the fiche's own film is never listed, even when Seerr does not know it is available")
+    func currentMovieNeverListed() async {
+        let body = seerrCollectionBody(1241, name: "Saga du banc", parts: [(671, 2001, nil), (672, 2002, nil)])
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: body])
+        let (app, session) = await seerrBench(api: sagaMovieAPI(boxSet: false), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.collectionTask?.value
+
+        #expect(sagaEntries(vm.seerrSaga) == ["movie-672 request"])
+    }
+
+    @Test("a superseded pass writes neither the collection row nor the saga")
+    func collectionLoadersAreGenerationGuarded() async {
+        // Pass 1 finds the BoxSet, but late; an identify reloads the fiche
+        // (tier-1) and pass 2 finds no BoxSet at once.
+        let gate = TestLatch()
+        let arrived = TestLatch()
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: sagaBody])
+        let api = sagaMovieAPI(collectionsGate: gate, collectionsArrived: arrived, boxSetOnCall: { $0 == 1 })
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await arrived.wait()
+        let first = vm.collectionTask
+        await vm.load(using: app, loc: loc)
+        await vm.collectionTask?.value
+        gate.open()
+        await first?.value
+
+        #expect(vm.collectionItems.isEmpty)
+        #expect(vm.collectionName == nil)
+        #expect(sagaEntries(vm.seerrSaga) == ["movie-672 request", "movie-673 request", "movie-675 pending"])
+    }
+
+    @Test("a playback refresh while the collection loads keeps the row and the saga")
+    func playbackRefreshKeepsTheSaga() async {
+        let gate = TestLatch()
+        let arrived = TestLatch()
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: sagaBody])
+        let (app, session) = await seerrBench(
+            api: sagaMovieAPI(collectionsGate: gate, collectionsArrived: arrived), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await arrived.wait()
+        // Bumps `loadGeneration` without reloading the collection.
+        await vm.refreshAfterPlayback(using: app)
+        gate.open()
+        await vm.collectionTask?.value
+
+        #expect(vm.collectionItems.compactMap(\.id) == ["movie-672"])
+        #expect(sagaEntries(vm.seerrSaga) == ["movie-673 request", "movie-675 pending"])
+    }
+
+    @Test("not allowed (Pro, cap, offline…): the row as today — lean members, no Seerr call")
+    func notAllowedLeavesTheRowAlone() async {
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: sagaBody])
+        let api = sagaMovieAPI()
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session, allowed: false)
+
+        await vm.load(using: app, loc: loc)
+        await vm.collectionTask?.value
+
+        #expect(vm.collectionItems.compactMap(\.id) == ["movie-672"])
+        #expect(vm.seerrSaga == .hidden)
+        #expect(transport.collectionRequestCount == 0)
+        #expect(api.getItemsQueries.last?.fieldSet == .card)
+        #expect(api.getItemsQueries.last?.limit == 20)
+    }
+
+    @Test("one decision per pass: Seerr turning visible mid-pass asks nothing — members fetched without their TMDb ids prove nothing")
+    func sagaDecidedOncePerPass() async {
+        let gate = TestLatch()
+        let arrived = TestLatch()
+        let transport = DetailSeerrTransport(series: [:], collections: [1241: sagaBody])
+        let api = sagaMovieAPI(collectionsGate: gate, collectionsArrived: arrived)
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let visible = VisibilityBox()
+        let vm = makeViewModel(session)
+        vm.allowsSeerr = { visible.isOn }
+
+        await vm.load(using: app, loc: loc)
+        await arrived.wait()
+        // Back online / Pro granted while the BoxSet lookup is in flight.
+        visible.isOn = true
+        gate.open()
+        await vm.collectionTask?.value
+
+        #expect(vm.collectionItems.compactMap(\.id) == ["movie-672"])
+        #expect(api.getItemsQueries.last?.fieldSet == .card)
+        #expect(api.getItemsQueries.last?.limit == 20)
+        #expect(vm.seerrSaga == .hidden)
+        #expect(transport.collectionRequestCount == 0)
+    }
+
+    @Test("an unreachable Seerr hides the saga and leaves the collection row alone")
+    func unreachableSeerrHidesTheSaga() async {
+        let transport = DetailSeerrTransport(series: [:])
+        let (app, session) = await seerrBench(api: sagaMovieAPI(), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.collectionTask?.value
+
+        #expect(vm.seerrSaga == .hidden)
+        #expect(vm.errorMessage == nil)
+        #expect(vm.collectionItems.compactMap(\.id) == ["movie-672"])
+    }
+
+    @Test("« Demander les N »: every requestable film, all ticked; none left ⇒ « Déjà demandé »")
+    func requestAllFilms() {
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        func film(_ id: Int, _ badge: SeerrBadge) -> SeerrMissingTitle {
+            SeerrMissingTitle(title: SeerrTitle(kind: .movie, tmdbId: id, title: "Film \(id)", year: 2004), badge: badge)
+        }
+        let missing = [film(673, .request), film(675, .pending), film(676, .declined), film(677, .processing)]
+
+        #expect(presenter.requestableFilms(missing).map(\.id) == ["movie-673", "movie-676"])
+        presenter.requestAll(films: missing, loc: loc, toasts: toasts)
+        #expect(presenter.draft == .films([missing[0].title, missing[2].title]))
+
+        presenter.draft = nil
+        presenter.requestAll(films: [missing[1], missing[3]], loc: loc, toasts: toasts)
+        #expect(presenter.draft == nil)
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.request.duplicate"))
+    }
+}

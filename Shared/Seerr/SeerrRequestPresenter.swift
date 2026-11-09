@@ -52,6 +52,25 @@ final class SeerrRequestPresenter {
 
     func present(_ draft: SeerrRequestDraft) { self.draft = draft }
 
+    /// The draft as `host` should present it. While the deep-link modal is up
+    /// it is the one presenter (the root cannot present over it); otherwise
+    /// the root is.
+    func draft(for host: PresentationHost) -> SeerrRequestDraft? {
+        host == .modal || !modalIsUp ? draft : nil
+    }
+
+    /// Whether the deep-link modal fiche is up. ASSIGNED by `MainTabView` from
+    /// `deepLinkFallback`, its one source of truth — never counted from
+    /// appear / disappear events, which an unpaired one would leave stranded,
+    /// silencing the root until relaunch.
+    private(set) var modalIsUp = false
+    /// The modal came, went or was replaced: the open request belongs to the
+    /// context it was raised in, so it goes (the root never raises it afterwards).
+    func modalChanged(isUp: Bool) {
+        modalIsUp = isUp
+        draft = nil
+    }
+
     /// A missing title's card was tapped (search, fiches, saga, actor page).
     /// Already asked for — the EFFECTIVE badge (`badge(for:default:)`) is
     /// pending or in preparation — ⇒ an info toast, nothing opens; declined or
@@ -62,15 +81,8 @@ final class SeerrRequestPresenter {
     /// says so quietly, never naming Seerr; an account change on the way says
     /// nothing.
     func request(_ missing: SeerrMissingTitle, session: SeerrSession, loc: LocalizationManager, toasts: ToastCenter) async {
-        switch badge(for: missing.id, default: missing.badge) {
-        case .pending:
-            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.pending"))
+        guard !refusesAlreadyRequested(badge(for: missing.id, default: missing.badge), loc: loc, toasts: toasts) else {
             return
-        case .processing:
-            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.processing"))
-            return
-        case .request, .declined:
-            break
         }
         let title = missing.title
         guard title.kind == .tv else {
@@ -103,6 +115,88 @@ final class SeerrRequestPresenter {
         present(.series(title, seasons: seasons, preselected: Set(seasons)))
     }
 
+    /// A missing SEASON's card or pill was selected (series fiche). Same rule
+    /// as a title, on the season's effective badge: already asked for ⇒ the
+    /// info toast, nothing opens. Otherwise the season picker over every
+    /// season still requestable, ascending, with this one ticked — the fiche
+    /// already knows the seasons, so no lookup.
+    func request(
+        season: SeerrMissingSeason, among missing: [SeerrMissingSeason], of series: SeerrTitle,
+        loc: LocalizationManager, toasts: ToastCenter
+    ) {
+        guard !refusesAlreadyRequested(badge(for: season.id, default: season.badge), loc: loc, toasts: toasts) else {
+            return
+        }
+        let seasons = requestableSeasons(missing)
+        guard seasons.contains(season.seasonNumber) else { return }
+        present(.series(series, seasons: seasons, preselected: [season.seasonNumber]))
+    }
+
+    /// The row's « Demander les N »: every requestable season, all ticked.
+    func requestAll(
+        _ missing: [SeerrMissingSeason], of series: SeerrTitle, loc: LocalizationManager, toasts: ToastCenter
+    ) {
+        let seasons = requestableSeasons(missing)
+        guard !seasons.isEmpty else {
+            toasts.info(loc.localized("seerr.request.duplicate"))
+            return
+        }
+        present(.series(series, seasons: seasons, preselected: Set(seasons)))
+    }
+
+    /// The season numbers that may still be asked for — never asked, or
+    /// declined — by their EFFECTIVE badge, ascending.
+    func requestableSeasons(_ missing: [SeerrMissingSeason]) -> [Int] {
+        missing.filter { season in
+            switch badge(for: season.id, default: season.badge) {
+            case .request, .declined: true
+            case .pending, .processing: false
+            }
+        }
+        .map(\.seasonNumber).sorted()
+    }
+
+    /// A saga's « Demander les N » (BoxSet section, movie rows): every film
+    /// still requestable, all ticked (`.films`); none left ⇒ « Déjà demandé ».
+    func requestAll(films missing: [SeerrMissingTitle], loc: LocalizationManager, toasts: ToastCenter) {
+        let films = requestableFilms(missing)
+        guard !films.isEmpty else {
+            toasts.info(loc.localized("seerr.request.duplicate"))
+            return
+        }
+        present(.films(films.map(\.title)))
+    }
+
+    /// The films that may still be asked for — never asked, or declined — by
+    /// their EFFECTIVE badge, in the section's order.
+    func requestableFilms(_ missing: [SeerrMissingTitle]) -> [SeerrMissingTitle] {
+        missing.filter { film in
+            switch badge(for: film.id, default: film.badge) {
+            case .request, .declined: true
+            case .pending, .processing: false
+            }
+        }
+    }
+
+    /// Pending / in preparation ⇒ « Déjà demandé » and `true`: nothing opens.
+    private func refusesAlreadyRequested(_ badge: SeerrBadge, loc: LocalizationManager, toasts: ToastCenter) -> Bool {
+        switch badge {
+        case .pending:
+            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.pending"))
+            return true
+        case .processing:
+            toasts.info(loc.localized("seerr.request.duplicate"), message: loc.localized("seerr.request.already.processing"))
+            return true
+        case .request, .declined:
+            return false
+        }
+    }
+
+    /// « Saison 4 », or « Épisodes spéciaux » for season 0.
+    static func seasonName(_ number: Int, loc: LocalizationManager) -> String {
+        number == 0 ? loc.localized("seerr.season.specials") : loc.localized("seerr.request.seasonRow", number)
+    }
+
     /// The account changed: another profile's requests are not this one's.
     func reset() {
         overrides = [:]
@@ -129,11 +223,15 @@ final class SeerrRequestPresenter {
 
     /// « Demander la saison 4 », « Demander les saisons 4 à 6 » (consecutive),
     /// « Demander 2 saisons » otherwise. `seasons` ascending.
+    /// Season 0 is « les épisodes spéciaux », never « la saison 0 »: alone it
+    /// has its own label, and a run starting at it takes the count.
     static func seasonsActionTitle(_ seasons: [Int], loc: LocalizationManager) -> String {
         if seasons.count == 1, let only = seasons.first {
-            return loc.localized("seerr.request.action.season", only)
+            return only == 0
+                ? loc.localized("seerr.request.action.specials")
+                : loc.localized("seerr.request.action.season", only)
         }
-        if let first = seasons.first, let last = seasons.last, seasons.count > 1,
+        if let first = seasons.first, let last = seasons.last, seasons.count > 1, first != 0,
            last - first == seasons.count - 1 {
             return loc.localized("seerr.request.action.seasonRange", first, last)
         }
@@ -300,14 +398,17 @@ struct SeerrRequestPresentation: ViewModifier {
     let themeManager: ThemeManager
     let loc: LocalizationManager
     let toasts: ToastCenter
+    /// `.modal`: hosted inside the deep-link fiche (`MainTabView`), which
+    /// then presents instead of the root — see `PresentationHost`.
+    var host: PresentationHost = .root
 
     func body(content: Content) -> some View {
         #if os(tvOS)
         content.confirmationDialog(
             dialogTitle,
-            isPresented: Binding(get: { presenter.draft != nil }, set: { if !$0 { presenter.draft = nil } }),
+            isPresented: Binding(get: { presenter.draft(for: host) != nil }, set: { if !$0 { presenter.draft = nil } }),
             titleVisibility: .visible,
-            presenting: presenter.draft
+            presenting: presenter.draft(for: host)
         ) { draft in
             let partial = session.publicSettings?.partialRequestsEnabled ?? true
             let selection = SeerrRequestPresenter.effectiveSelection(
@@ -315,10 +416,18 @@ struct SeerrRequestPresentation: ViewModifier {
             Button(SeerrRequestPresenter.actionTitle(for: draft, selection: selection, loc: loc)) {
                 Task { await presenter.submit(draft, selection: selection, session: session, loc: loc, toasts: toasts) }
             }
+            // A season pill / card preselects its own season: with nothing to
+            // tick on tvOS, the others are one more button (« Demander les
+            // saisons 4 à 6 »).
+            if case .series(_, let seasons, _) = draft, selection != Set(seasons) {
+                Button(SeerrRequestPresenter.seasonsActionTitle(seasons, loc: loc)) {
+                    Task { await presenter.submit(draft, selection: Set(seasons), session: session, loc: loc, toasts: toasts) }
+                }
+            }
             Button(loc.localized("action.cancel"), role: .cancel) {}
         }
         #else
-        content.sheet(item: Binding(get: { presenter.draft }, set: { presenter.draft = $0 })) { draft in
+        content.sheet(item: Binding(get: { presenter.draft(for: host) }, set: { presenter.draft = $0 })) { draft in
             SeerrRequestSheet(draft: draft)
                 .environment(appState)
                 .environment(themeManager)
@@ -440,13 +549,14 @@ struct SeerrRequestSheet: View {
         return "\(kind) · \(String(year))"
     }
 
+    /// None without a poster path (a request raised from a series fiche,
+    /// whose own poster the user just left): no empty placeholder box.
     @ViewBuilder
     private func poster(for title: SeerrTitle) -> some View {
-        if let base = session.client?.baseURL {
-            CinemaLazyImage(
-                url: SeerrImages.posterURL(
-                    path: title.posterPath, seerrBase: base,
-                    cacheImages: session.publicSettings?.cacheImages ?? false))
+        if let base = session.client?.baseURL,
+           let url = SeerrImages.posterURL(
+               path: title.posterPath, seerrBase: base, cacheImages: session.publicSettings?.cacheImages ?? false) {
+            CinemaLazyImage(url: url)
                 .frame(width: 84, height: 126)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .accessibilityHidden(true)
@@ -462,7 +572,7 @@ struct SeerrRequestSheet: View {
             if session.publicSettings?.partialRequestsEnabled ?? true {
                 VStack(spacing: CinemaSpacing.spacing2) {
                     ForEach(seasons, id: \.self) { number in
-                        tickRow(number, label: loc.localized("seerr.request.seasonRow", number))
+                        tickRow(number, label: SeerrRequestPresenter.seasonName(number, loc: loc))
                     }
                 }
             }

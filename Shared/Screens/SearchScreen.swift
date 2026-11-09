@@ -927,7 +927,7 @@ private struct SearchResultsGrid: View, Equatable {
                         title: missingTitle, count: nil, section: seerrSection,
                         headerAction: nil, cardWidth: missingCardWidth
                     ) { missing in
-                        SearchMissingCard(missing: missing, onRequest: onRequest)
+                        MissingTitleButton(missing: missing, onRequest: onRequest)
                     }
                     .padding(.top, CinemaSpacing.spacing2)
                 }
@@ -935,43 +935,6 @@ private struct SearchResultsGrid: View, Equatable {
                 Spacer(minLength: 80)
             }
         }
-    }
-}
-
-/// A Seerr match the library lacks. Reads the request presenter itself, so
-/// its badge flips once a request is sent even though the grid around it is
-/// `.equatable()`.
-private struct SearchMissingCard: View {
-    let missing: SeerrMissingTitle
-    let onRequest: (SeerrMissingTitle) -> Void
-
-    @Environment(SeerrRequestPresenter.self) private var presenter
-    @Environment(SeerrSession.self) private var seerr
-    @Environment(LocalizationManager.self) private var loc
-
-    var body: some View {
-        Button {
-            onRequest(missing)
-        } label: {
-            MissingTitleCard(
-                title: missing.title.title,
-                subtitle: subtitle,
-                badge: presenter.badge(for: missing.id, default: missing.badge),
-                posterURL: seerr.posterURL(missing.title.posterPath)
-            )
-        }
-        #if os(tvOS)
-        .buttonStyle(CinemaTVCardButtonStyle())
-        #else
-        .buttonStyle(.plain)
-        #endif
-    }
-
-    /// « 2021 · Film », like the library cards above.
-    private var subtitle: String {
-        let kind = loc.localized(missing.title.kind == .movie ? "seerr.request.kind.movie" : "seerr.request.kind.series")
-        guard let year = missing.title.year else { return kind }
-        return "\(year) · \(kind)"
     }
 }
 
