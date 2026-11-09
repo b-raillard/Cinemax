@@ -90,6 +90,9 @@ struct AppNavigation: View {
     /// observes it (it publishes into `AppState` / `ToastCenter` instead), so a
     /// property wrapper would only add semantics without a purpose.
     private var remoteControl: RemoteControlListener { Self.sharedRemoteControl }
+    /// The route owner (LAN first). A process singleton read directly, not
+    /// `@State` and not injected: views read `ServerRouteController.shared`.
+    private let serverRoute = ServerRouteController.shared
     @State private var playlistPresenter = AddToPlaylistPresenter()
     @State private var seerrRequests = SeerrRequestPresenter()
     @State private var cardActions = CardActionPresenter(access: Self.sharedProAccess)
@@ -312,6 +315,16 @@ struct AppNavigation: View {
         // it; `onChange(of: loc.languageCode)` below keeps it current.
         appState.apiClient.setPreferredLanguage(loc.languageCode)
         seerr.setLanguage(loc.languageCode)
+        // The route owner (LAN first): wired BEFORE `restoreSession`, whose
+        // background task awaits `prepareRoute` ahead of its first request.
+        // Process singletons on both ends: captured strongly.
+        serverRoute.attach(appState: appState, reach: { [network] in network.reach })
+        network.onPathChange = { [serverRoute] in serverRoute.pathChanged() }
+        appState.prepareRoute = { [serverRoute] in await serverRoute.evaluate(.launch) }
+        appState.onClientRepointed = { [serverRoute] in
+            Task { await serverRoute.evaluate(.serverChange) }
+        }
+        appState.routeURL = { [serverRoute] entry in await serverRoute.dialURL(for: entry) }
         await appState.restoreSession()
         // An install that already knows a server is not a first run whatever
         // the flag says — it upgraded from a version without onboarding.
@@ -448,7 +461,9 @@ struct AppNavigation: View {
         // Decide once, in the background, whether this server needs the
         // loopback stream proxy (dual-stack host with a black-holed IPv6
         // that libVLC would stall on). Non-blocking; cached for the session.
-        StreamTransportPolicy.shared.configure(serverURL: appState.serverURL)
+        // Fed the route's dial URL (the LAN address while it is chosen).
+        StreamTransportPolicy.shared.configure(
+            serverURL: ServerRouteController.shared.transportURL(identity: appState.serverURL))
         // The diagnostics channel's ONLY injection point. The player holds a
         // narrowed API slice and cannot reach a server-wide route — see the
         // RULE on `DiagnosticsUploader.client`. One assignment is enough:
@@ -750,7 +765,9 @@ struct AppNavigation: View {
         }
         .onChange(of: appState.serverURL) { _, new in
             // Re-decide stream transport for the new server (or clear on logout).
-            StreamTransportPolicy.shared.configure(serverURL: new)
+            // The dial URL only while it belongs to this identity.
+            StreamTransportPolicy.shared.configure(
+                serverURL: ServerRouteController.shared.transportURL(identity: new))
             // The "Play on…" poll result is per-server (a different server has
             // different — possibly zero — controllable sessions). A stale
             // non-zero count from the server we just left would keep the entry
@@ -845,6 +862,8 @@ struct AppNavigation: View {
                 // Network conditions may have changed while backgrounded —
                 // re-evaluate whether the proxy is needed for this server.
                 StreamTransportPolicy.shared.refresh()
+                // And the route: home ⇄ away while backgrounded (LAN first).
+                Task { await ServerRouteController.shared.evaluate(.foreground) }
                 // A logout whose Keychain clear failed left the previous token
                 // with the widget / Top Shelf; retry it (no-op otherwise).
                 ExtensionSessionBridge.retryFailedClear()

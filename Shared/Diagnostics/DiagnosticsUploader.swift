@@ -108,6 +108,7 @@ enum DiagnosticsUploader {
             lastPlayback: PlaybackDiagnostics.last,
             reason: reason
         )
+        facts.serverRoute = ServerRouteController.shared.route.rawValue
         if VerboseDiagnostics.isEnabled {
             facts.buildEnvironment = VerboseDiagnostics.environmentLabel
             facts.network = VerboseDiagnostics.networkSummary ?? "unknown"

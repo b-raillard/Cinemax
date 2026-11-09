@@ -58,6 +58,19 @@ final class AppState {
             url: url, accessToken: token, deviceId: KeychainService.getOrCreateDeviceID()
         )
     }
+    /// Decides the active server's route (LAN first) before the restored
+    /// session's first request. Awaited FIRST inside `restoreSession`'s
+    /// background task, never on its awaited path. Wired by `AppNavigation`
+    /// to `ServerRouteController.evaluate(.launch)`.
+    var prepareRoute: @MainActor () async -> Void = {}
+    /// Called right after every `apiClient.reconnect` of `applyActiveServer`
+    /// (server AND same-server account switches): the rebuilt client dials
+    /// the identity, the route owner re-evaluates. Wired by `AppNavigation`.
+    var onClientRepointed: @MainActor () -> Void = {}
+    /// The URL to dial for a registered entry (its LAN address when it
+    /// answers as that server). Wired by `AppNavigation` to
+    /// `ServerRouteController.dialURL(for:)`.
+    var routeURL: @MainActor (ServerEntry) async -> URL = { $0.url }
     /// Revokes ONE token server-side (`ServerSessionRevoker`, `POST /Sessions/Logout`).
     /// A seam so the multi-account tests can see which tokens were revoked.
     var sessionRevoker: @Sendable (URL, String) async -> Void = { url, token in
@@ -213,6 +226,9 @@ final class AppState {
         // user authenticated with last-known values.
         Task { [weak self] in
             guard let self else { return }
+            // LAN first: the route is decided before the session's first
+            // request (bounded by the launch probe timeout, ~1 s).
+            await self.prepareRoute()
             if let info = try? await self.apiClient.fetchServerInfo() {
                 self.serverInfo = info
             }
@@ -561,6 +577,8 @@ final class AppState {
             defaults: settingsDefaults
         )
         apiClient.reconnect(url: used.url, accessToken: token)
+        // The rebuilt client dials the identity: the route owner re-decides.
+        onClientRepointed()
         apiClient.clearCache()
         let storedAge = settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
         apiClient.applyContentRatingLimit(maxAge: storedAge)

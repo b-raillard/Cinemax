@@ -228,6 +228,22 @@ struct DiagnosticsReportTests {
         ])
     }
 
+    @Test("the route class is the last header line, never an address")
+    func headerCarriesServerRoute() {
+        let withRoute = DiagnosticsFacts(
+            generatedAt: utcDate(2026, 9, 11, 10, 15, 0),
+            appVersion: "2.0.0", appBuild: "42",
+            deviceModel: "iPhone17,1", osDescription: "iOS Version 26.5 (Build 23F77)",
+            serverVersion: "12.0.0.0", engine: "vlc", lastPlayback: nil,
+            logWindowMinutes: 30, logEntryCount: 412, metricKit: nil,
+            network: "wifi", serverRoute: "local"
+        )
+        let header = DiagnosticsReport.header(withRoute)
+        #expect(header.last == "server_route: local")
+        #expect(header.dropLast().last == "network: wifi")
+        #expect(!DiagnosticsReport.header(facts()).contains { $0.hasPrefix("server_route:") })
+    }
+
     @Test("unknown server, no playback, no MetricKit read as such — never as blanks")
     func absentFacts() {
         let header = DiagnosticsReport.header(facts(server: nil, playback: nil, metricKit: nil))
