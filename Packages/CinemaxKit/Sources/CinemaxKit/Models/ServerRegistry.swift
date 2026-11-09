@@ -104,7 +104,7 @@ public enum ServerRegistry {
     /// name over a placeholder) is the caller's job — this stays a replace so
     /// its behavior is obvious at the call site.
     ///
-    /// **RULE — the two user-owned fields (`displayNameOverride`, `sortIndex`)
+    /// **RULE — the user-owned fields (`displayNameOverride`, `sortIndex`, `localURL`)
     /// are the exception: they are ALWAYS taken from the stored entry, never
     /// from `entry`.** Every caller of `upsert` is describing what it learned
     /// about the server — a login, a switch, a rollback — and none of them owns
@@ -112,7 +112,7 @@ public enum ServerRegistry {
     /// before the user acted (`pendingRollbackServer`, a switch target resolved
     /// before a rename): taking its fields would silently revert a rename the
     /// moment the user switched servers. Only `AppState.renameServer` /
-    /// `reorderServers` write them, in place. A NEW entry (no URL match) keeps
+    /// `reorderServers` / `setLocalURL` write them, in place. A NEW entry (no URL match) keeps
     /// whatever it carries, which is normally `nil`.
     public static func upsert(_ entry: ServerEntry, into entries: [ServerEntry]) -> [ServerEntry] {
         let key = ServerURLNormalizer.dedupKey(entry.url)
@@ -140,7 +140,8 @@ public enum ServerRegistry {
             // stored ACTIVE triple is folded in too: a sign-in as someone else
             // must not drop the account it replaces (free mode forgets it
             // explicitly, through `forgetting`).
-            savedAccounts: existing.userId == nil && existing.savedAccounts == nil ? nil : accounts(of: existing)
+            savedAccounts: existing.userId == nil && existing.savedAccounts == nil ? nil : accounts(of: existing),
+            localURL: existing.localURL                          // user-owned (RULE above)
         )
         merged.lastUsedAt = max(existing.lastUsedAt, entry.lastUsedAt)
         // …and the account that just signed in is (re)remembered with its fresh

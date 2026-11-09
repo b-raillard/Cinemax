@@ -631,6 +631,33 @@ final class AppState {
         return entry
     }
 
+    /// Sets (or clears, with `nil`) the optional LAN address of a registered
+    /// server. The only writer of `ServerEntry.localURL`; `url` is expected to
+    /// come from `ServerURLNormalizer.normalizeLocal`.
+    @discardableResult
+    func setLocalURL(id: String, to url: URL?) -> ServerEntry? {
+        guard let index = servers.firstIndex(where: { $0.id == id }) else { return nil }
+        var entry = servers[index]
+        entry.localURL = url
+        guard entry != servers[index] else { return entry }   // no spurious Observation cycle
+        servers[index] = entry
+        persistRegistry()
+        return entry
+    }
+
+    /// Records Jellyfin's server id on an entry that has none yet. Never
+    /// overwrites a known one — a different id means a different server.
+    @discardableResult
+    func adoptServerID(id: String, serverID: String) -> ServerEntry? {
+        guard !serverID.isEmpty, let index = servers.firstIndex(where: { $0.id == id }) else { return nil }
+        var entry = servers[index]
+        guard entry.serverID == nil || entry.serverID?.isEmpty == true else { return entry }
+        entry.serverID = serverID
+        servers[index] = entry
+        persistRegistry()
+        return entry
+    }
+
     /// Stores a manual order for the servers list — `orderedIds` is the
     /// COMPLETE list as displayed after the user's move (see
     /// `ServerRegistry.applyingOrder`). The other writer of the user-owned

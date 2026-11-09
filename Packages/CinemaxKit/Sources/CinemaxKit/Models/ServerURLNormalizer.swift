@@ -28,6 +28,33 @@ public enum ServerURLNormalizer {
         return normalize(url)
     }
 
+    /// Why a typed local address was refused.
+    public enum LocalAddressInputError: Error, Equatable, Sendable {
+        /// Not an http(s) URL with a host.
+        case malformed
+        /// A valid URL whose host is not on the local network
+        /// (`LocalNetworkAddress.isEligibleHost`).
+        case notLocal
+    }
+
+    /// Normalizes the optional LAN address of a server. Unlike `normalize(_:)`
+    /// a scheme-less input defaults to `http://` (a LAN box rarely has a
+    /// certificate), and the host must be a private / link-local literal or a
+    /// `.local` name.
+    public static func normalizeLocal(_ raw: String) -> Result<URL, LocalAddressInputError> {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .failure(.malformed) }
+        let candidate = trimmed.contains("://") ? trimmed : "http://\(trimmed)"
+        guard let parsed = URL(string: candidate), let url = normalize(parsed),
+              let host = URLComponents(url: url, resolvingAgainstBaseURL: false)?.host else {
+            return .failure(.malformed)
+        }
+        // `URLComponents.host` may or may not keep an IPv6 literal's brackets.
+        let bare = host.hasPrefix("[") && host.hasSuffix("]") ? String(host.dropFirst().dropLast()) : host
+        guard LocalNetworkAddress.isEligibleHost(bare) else { return .failure(.notLocal) }
+        return .success(url)
+    }
+
     public static func normalize(_ url: URL) -> URL? {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
         guard let scheme = components.scheme?.lowercased(),

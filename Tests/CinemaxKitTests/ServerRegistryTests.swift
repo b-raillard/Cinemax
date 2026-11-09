@@ -361,6 +361,39 @@ struct ServerRegistryTests {
     /// every upgraded install holds in its Keychain. If it failed to decode,
     /// `KeychainService.getServers()` would answer `[]` — every server gone.
     /// The payload is the exact key set the previous `ServerEntry` encoded.
+    @Test("Upsert keeps the stored local address over an incoming nil")
+    func upsertKeepsLocalURL() {
+        var existing = entry("NAS", "https://host/jellyfin", daysAgo: 5)
+        existing.localURL = URL(string: "http://192.168.1.128:8899")
+        let incoming = entry("NAS", "https://host/jellyfin")
+
+        let result = ServerRegistry.upsert(incoming, into: [existing])
+
+        #expect(result.count == 1)
+        #expect(result[0].localURL == URL(string: "http://192.168.1.128:8899"))
+    }
+
+    @Test("A registry stored before the local address still decodes")
+    func legacyRegistryDecodesWithoutLocalURL() throws {
+        let json = """
+        [{"id":"4F0C2B9E-1111-2222-3333-444455556666","name":"NAS","url":"https://host/jellyfin",
+          "serverID":"srv1","accessToken":"tok","userId":"user1","username":"Alice",
+          "serverVersion":"10.11.11","lastUsedAt":770000000}]
+        """
+        let entries = try JSONDecoder().decode([ServerEntry].self, from: Data(json.utf8))
+        #expect(entries.count == 1)
+        #expect(entries[0].localURL == nil)
+    }
+
+    @Test("The local address round-trips through JSON")
+    func localURLRoundTrips() throws {
+        var original = entry("A", "https://host/jellyfin")
+        original.localURL = URL(string: "http://nas.local:8096")
+        let decoded = try JSONDecoder().decode(ServerEntry.self, from: JSONEncoder().encode(original))
+        #expect(decoded.localURL == original.localURL)
+        #expect(decoded == original)
+    }
+
     @Test("A registry stored before rename/reorder still decodes")
     func legacyRegistryDecodes() throws {
         let json = """
@@ -765,6 +798,40 @@ struct MultiServerAppStateTests {
         #expect(stored?.displayName == "Salon")
         #expect(kc.savedServers.first?.displayNameOverride == "Salon")   // persisted
         #expect(app.activeServerNameOverride == "Salon")
+    }
+
+    @Test("setLocalURL persists to the keychain")
+    func setLocalURLPersists() {
+        let kc = MockKeychain()
+        let a = entry("NAS", "https://a.example.com")
+        let app = makeState(keychain: kc, servers: [a], activeId: a.id)
+        let local = URL(string: "http://192.168.1.128:8899")!
+
+        let result = app.setLocalURL(id: a.id, to: local)
+
+        #expect(result?.localURL == local)
+        #expect(app.servers.first?.localURL == local)
+        #expect(kc.getServers().first?.localURL == local)
+        app.setLocalURL(id: a.id, to: nil)
+        #expect(kc.getServers().first?.localURL == nil)
+        #expect(app.setLocalURL(id: "ghost", to: local) == nil)
+    }
+
+    @Test("adoptServerID fills a missing id and never overwrites one")
+    func adoptServerIDDoesNotOverwrite() {
+        let kc = MockKeychain()
+        var a = entry("A", "https://a.example.com")
+        a.serverID = "A"
+        var b = entry("B", "https://b.example.com")
+        b.serverID = nil
+        let app = makeState(keychain: kc, servers: [a, b], activeId: a.id)
+
+        app.adoptServerID(id: a.id, serverID: "B")
+        app.adoptServerID(id: b.id, serverID: "B")
+
+        #expect(app.servers.first { $0.id == a.id }?.serverID == "A")
+        #expect(app.servers.first { $0.id == b.id }?.serverID == "B")
+        #expect(kc.getServers().first { $0.id == b.id }?.serverID == "B")
     }
 
     /// The Settings server card read `serverInfo`, which a switch nils and
