@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import UIKit
 import CinemaxKit
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Diagnostics")
@@ -89,21 +90,69 @@ enum DiagnosticsUploader {
     /// a `Sendable` snapshot to a detached task — enumerating the log store
     /// blocks, and this is called from the player's 1 s heartbeat.
     static func send(reason: String, engine: String, now: Date = Date()) {
-        guard let client else { return }
+        _ = start(reason: reason, engine: engine, now: now)
+    }
+
+    /// `send`, returning the upload's task (`nil` when nothing was sent) so the
+    /// background path can hold the app awake until it lands.
+    private static func start(reason: String, engine: String, now: Date) -> Task<Void, Never>? {
+        guard let client else { return nil }
         guard shouldUpload(reason: reason, history: lastUploadAt, now: now) else {
             logger.debug("diagnostics upload skipped (throttled: \(reason, privacy: .public))")
-            return
+            return nil
         }
         lastUploadAt[reason] = now
-        let facts = DiagnosticsFacts.current(
+        var facts = DiagnosticsFacts.current(
             serverVersion: client.knownServerVersion()?.description,
             engine: engine,
             lastPlayback: PlaybackDiagnostics.last,
             reason: reason
         )
-        Task.detached(priority: .utility) {
+        if VerboseDiagnostics.isEnabled {
+            facts.buildEnvironment = VerboseDiagnostics.environmentLabel
+            facts.network = VerboseDiagnostics.networkSummary ?? "unknown"
+        }
+        return Task.detached(priority: .utility) {
             let document = buildDocument(facts: facts)
             _ = await client.uploadDiagnostics(document)
+        }
+    }
+
+    // MARK: - After a fault, on the way to the background (Debug / TestFlight)
+
+    /// The reason of the follow-up document.
+    nonisolated static let afterFaultReason = "background-after-fault"
+
+    /// **Debug and TestFlight builds only** (`VerboseDiagnostics`). A fault
+    /// document is written at the fault, so it stops there — and what follows
+    /// (did the relay feed? did the retries reach the server?) lived only in
+    /// this process's log, which the user takes with them by killing the app
+    /// after a few failed attempts (2026-11-09: two documents, and the seven
+    /// minutes between them lost). Leaving the app after a fault this launch
+    /// already reported therefore sends the window again, held awake by a
+    /// background task until it lands. The per-reason floor still applies.
+    static func noteEnteredBackground(now: Date = Date()) {
+        guard VerboseDiagnostics.isEnabled,
+              hadRecentFault(history: lastUploadAt, now: now,
+                             window: Double(logWindowMinutes) * 60) else { return }
+        let assertion = BackgroundAssertion()
+        guard let upload = start(reason: afterFaultReason,
+                                 engine: PlaybackDiagnostics.last?.engine ?? "none", now: now) else {
+            assertion.end()
+            return
+        }
+        Task {
+            await upload.value
+            assertion.end()
+        }
+    }
+
+    /// Pure. Whether a FAULT document (anything but the follow-up itself) went
+    /// out within `window`, i.e. whether the log being left behind describes
+    /// the aftermath of one.
+    nonisolated static func hadRecentFault(history: [String: Date], now: Date, window: TimeInterval) -> Bool {
+        history.contains { reason, date in
+            reason != afterFaultReason && now.timeIntervalSince(date) <= window
         }
     }
 
@@ -129,5 +178,25 @@ enum DiagnosticsUploader {
         complete.logWindowMinutes = logWindowMinutes
         complete.logEntryCount = lines.count
         return DiagnosticsReport.document(facts: complete, logLines: lines, logNote: note)
+    }
+}
+
+/// Keeps the app running in the background long enough for one diagnostic
+/// upload to land. Ends on the upload's completion, or when the system's
+/// allowance runs out — whichever comes first; `end()` is idempotent.
+@MainActor
+private final class BackgroundAssertion {
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+    init() {
+        identifier = UIApplication.shared.beginBackgroundTask(withName: "diagnostics-upload") { [weak self] in
+            self?.end()
+        }
+    }
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
     }
 }
