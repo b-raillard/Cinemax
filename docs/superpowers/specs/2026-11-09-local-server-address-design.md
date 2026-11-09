@@ -68,6 +68,7 @@ On a path change the app **falls back to public immediately**, then probes, then
 - Leaving home kills the local stream. The existing recovery (feed-stall guard → re-resolve) must then reopen it **on the current route**.
 - Today the error retry reuses the stored `PlaybackInfo` URL (`VLCStreamPresenter` ~`:5610`, `streamOpenURL(for: self.info…)`), so it would keep the dead host. A retry after a route change must re-resolve instead.
 - Arriving home mid-playback does not switch the running stream. The next open is local.
+- **The native engine (AVPlayer, opt-in) follows the same rule** (my call). Its opens already go through `getPlaybackInfo`, so they get the dial URL. But its failure path, `retryWithDirectURL` (`NativeVideoPresenter.swift:414`), reopens the same `info.url` and then shows the error alert. After a route change it must re-resolve on the current route before reopening, so that leaving home mid-playback is no worse than today on the public URL. This matters on iPhone and iPad only: an Apple TV never leaves home.
 
 ## Eligible addresses
 
@@ -124,10 +125,13 @@ So:
     - Today only a subscriber asking with a different URL rebuilds it.
     - `AppNavigation`'s `onChange(of: serverURL)` will not fire, since identity does not change.
   - **Playback transport**: `StreamTransportPolicy.configure` is fed the dial URL on every route change (`CinemaxStreamProxy.swift:49-62`), which also resets the sticky-proxy flag. An IPv4 literal never prefers the proxy, so a LAN stream goes direct.
+- **Switches reset the route.** A server or account switch, and every `reconnect(url:)`, sets the dial URL back to the identity URL, then re-evaluates for the new active entry. Otherwise the previous server's LAN address could receive the new server's token.
+- **The registry keeps the field.** `ServerRegistry.upsert` rebuilds every field by hand, so the new optional field (the local address) must be carried over from the stored entry, like `displayNameOverride` / `sortIndex`. No login, switch or reachability write may drop it.
+- **No `serverID`, no local address** (my call). The probe compares against `entry.serverID`, which is optional, and the « Mes serveurs » ping does not record it (`ServersScreen.swift:99`). If it is missing when the user saves a local address, learn it first from `/System/Info/Public` on the public URL. If that fails too, refuse with « Connectez-vous d'abord à ce serveur ».
 - **Route owner.** One `@MainActor` owner of the current route: the probe, the decision, and pushing the dial URL into the client / image loader / socket / transport policy.
   - It must get network path changes **without a new modifier on `AppNavigation.body`**, which sits at the type-checker limit (memory `project_appnavigation_body_typecheck_limit`).
   - `NetworkMonitor` only exposes `isOnline` (`NetworkMonitor.swift:14`), so a Wi-Fi⇄cellular change with both up is invisible to it today. Extend it, e.g. with the interface kinds, or a callback the owner subscribes to.
-  - The existing `onChange(of: network.isOnline)` sits under `#if !DEBUG`, so it must not be relied on in Debug.
+  - Of the two `onChange(of: network.isOnline)` handlers, only the early-adopter one (`AppNavigation.swift:775`) is under `#if !DEBUG`. The one at `:762` (`StreamTransportPolicy.refresh()`) always runs, but it does not see a Wi-Fi⇄cellular change either.
 
 ## Security
 
