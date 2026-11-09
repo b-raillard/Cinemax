@@ -20,6 +20,7 @@ Family members watch from outside, so the public URL stays. Tailscale was reject
 | « Local » vs « Internet » indication | **Derived from the IP address itself** (private ranges are standardised), never a stored flag or a user setting. |
 | Addresses per server | **Two at most**: the public URL and one optional local address. |
 | Written spec first | Yes (this file). |
+| How far the local route goes | **« Si tu détectes que je suis en local, on passe en local en priorité »**: everywhere the app talks to this server, the local address is tried first when the device may be at home, and the public URL is the fallback. The local address is a failover too: with the home internet or the tunnel down, the app keeps working at home (see *Where the route applies*). |
 
 ## What the user sees
 
@@ -61,7 +62,12 @@ A **route** is the base URL the app dials: the public URL (the entry's `url`, un
 
 On a path change the app **falls back to public immediately**, then probes, then switches back to local if the probe passes. That way, moving to another Wi-Fi (a friend's house, a hotel) never leaves the app dialling a dead LAN address during the probe timeout.
 
-**At launch** the client starts on the public URL and switches as soon as the probe passes (a few ms at home). One exception: **opening a playback waits for a probe already in flight**, bounded by its timeout, so that a playback started right at launch (Top Shelf, widget, Siri) still streams locally at home.
+**At launch**, local comes first.
+- On Wi-Fi or wired with a local address, the route is decided **before** the session is restored over the network: probe the local address first, then restore on whichever route won.
+- At home the probe answers in a few ms. On a foreign Wi-Fi it costs at most the launch timeout, **~1 s**, shorter than the runtime one, while the cached Home snapshot is already on screen.
+- On cellular the probe is skipped.
+
+**Opening a playback waits for a probe already in flight** (after a path change, for instance), bounded by its timeout, so that a playback never starts on a route about to be abandoned.
 
 **Mid-playback:**
 - A route change never restarts a playing stream by itself.
@@ -69,6 +75,22 @@ On a path change the app **falls back to public immediately**, then probes, then
 - Today the error retry reuses the stored `PlaybackInfo` URL (`VLCStreamPresenter` ~`:5610`, `streamOpenURL(for: self.info…)`), so it would keep the dead host. A retry after a route change must re-resolve instead.
 - Arriving home mid-playback does not switch the running stream. The next open is local.
 - **The native engine (AVPlayer, opt-in) follows the same rule** (my call). Its opens already go through `getPlaybackInfo`, so they get the dial URL. But its failure path, `retryWithDirectURL` (`NativeVideoPresenter.swift:414`), reopens the same `info.url` and then shows the error alert. After a route change it must re-resolve on the current route before reopening, so that leaving home mid-playback is no worse than today on the public URL. This matters on iPhone and iPad only: an Apple TV never leaves home.
+
+## Where the route applies (local first)
+
+Every path that talks to the active server, or to a registered one, tries the local address first under the decision above, and falls back to the public URL:
+
+- **Session restore at launch**, and every API call, image, stream and socket of the session (*Architecture*).
+- **Re-login of a known entry**: password and Quick Connect, from `LoginScreen` after `beginReLogin`. Adding a **new** server has no local address yet, so it uses the typed URL as today.
+- **Server and account switches**: the token check of `AppState.switchTo` (`sessionValidator(entry.url, token)`) validates against the target's route, decided for the target's own entry. The two-phase RULE is unchanged: the token is still checked off the shared client, and `.indeterminate` still never destroys it.
+- **« Mes serveurs » status** (`ServerReachability.ping`): local first, then public. A card counts as reachable when either answers. Each card can then print « Local » or « Internet » for the address that answered.
+- **Widget and Top Shelf**: local first, with the same `Id` check before any token is sent, then public.
+  - Their own code (no CinemaxKit — `Widgets/CLAUDE.md`), sharing the probe by **source** like `ExtensionServerTrust.swift`.
+  - `ExtensionSessionBridge` publishes the local address and `serverID` beside the public URL.
+  - Probe timeout ~1 s, so a timeline refresh away from home stays quick.
+- **App Intents** (`IntentSessionProvider`, in-app, headless): the same CinemaxKit route helper.
+
+So with the home internet or the tunnel down, a device at home still launches, browses, plays, signs in to a known server, switches, and feeds its widget / Top Shelf. Seerr has its own URL and is out of scope.
 
 ## Eligible addresses
 
@@ -105,10 +127,12 @@ So:
 - **Identity stays the public URL, everywhere it is today.** That covers:
   - `AppState.serverURL`, the registry entry's `url` and dedup;
   - the legacy Keychain mirror;
-  - `ExtensionSessionBridge`: widget and Top Shelf stay on the public URL, a small and always-reachable traffic;
-  - `IntentSessionProvider`;
+  - the URL `ExtensionSessionBridge` publishes as the server's URL (the local address travels beside it, never instead of it);
+  - the registry `url` that `IntentSessionProvider` reads;
   - certificate pins;
   - `reconnect(url:)` callers.
+
+  The dial URL is chosen per path (*Where the route applies*); the identity never changes.
 
   `serverVersion` therefore survives a route change, and no duplicate entry can appear.
 - **Only the transport dials the route.**
@@ -158,6 +182,7 @@ So:
 
 - At home, every request — API, images, streams, socket — goes to the LAN address. After a home playback, `docker logs cloudflared` shows no `/Videos/` request for it, and Jellyfin logs the client as `192.168.1.x`.
 - Away from home, nothing changes from today.
+- With the home internet or the Cloudflare tunnel down, a device at home keeps working: launch, browsing, playback, re-login, switches, widget, Top Shelf.
 - Moving between Wi-Fi and cellular is seamless outside playback, and a playback in progress recovers through the existing guard.
 
 ## Non-goals
@@ -165,7 +190,7 @@ So:
 - Auto-discovery of the local address (Docker reports an unusable one).
 - More than one local address, or a free-form list of addresses.
 - Syncing the local address across devices or Apple IDs: typed per device.
-- The local route in the widget, the Top Shelf, App Intents, or Seerr.
+- The local route for Seerr (its own URL).
 - Switching a running stream to the LAN when arriving home.
 - Pin approval for an https LAN certificate.
 
