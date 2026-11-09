@@ -721,7 +721,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   Expected: `** BUILD SUCCEEDED **` twice.
 - [ ] **Step 6: Device checks** (owner's iPhone + Apple TV, at home on `http://192.168.1.128:8899`). List each as passed or failed in the report:
   0. **Restart Jellyfin first** if not done (`docker compose up -d` in `/volume1/docker/jellyfin-server`, when nobody is playing): it activates HTTPS on 8920. Then `curl -k https://192.168.1.128:8920/System/Info/Public` answers the `Id`, and the tunnel and `http://192.168.1.128:8899` still answer.
-  1. Saving `192.168.1.128:8920` offers the certificate approval with fingerprint `A5:D9:DE:A9:…:6B:25:12`; once approved, API calls, images and a stream (VLC through the proxy; the native engine opt-in) work over https to the LAN IP.
+  1. Saving `192.168.1.128:8920` offers the certificate approval with fingerprint `B5:CD:58:51:…:EE:A7:D4:D3`; once approved, API calls, images and a stream (VLC through the proxy; the native engine opt-in) work over https to the LAN IP.
   2. The « Réseau local » prompt appears on the first save, and denying it gives the `denied` toast.
   3. After a home playback, `docker logs cloudflared` shows no `/Videos/` request, and Jellyfin logs the client as `192.168.1.x`.
   4. With the router's WAN unplugged: launch, browse, play, switch, widget and Top Shelf still work.
