@@ -76,6 +76,39 @@ struct JellyfinSocketHubTests {
         #expect(delivered == 0)
     }
 
+    // MARK: - Repoint (local server address)
+
+    @Test("Repoint moves a live socket onto the new endpoint and keeps the subscribers")
+    func repointRebuildsActiveSocket() async {
+        let hub = JellyfinSocketHub()
+        let a = await hub.subscribe(endpoint: url)
+        let before = await hub.activeSocketIdentity
+        await hub.repoint(endpoint: otherURL)
+        #expect(await hub.activeEndpoint?.isSameConnection(as: otherURL) == true)
+        #expect(await hub.activeSocketIdentity != before)
+        #expect(await hub.subscriberCount == 1)
+        await hub.unsubscribe(a.id)
+    }
+
+    @Test("Repoint with nothing subscribed builds no socket")
+    func repointWithoutSubscribersIsNoop() async {
+        let hub = JellyfinSocketHub()
+        await hub.repoint(endpoint: otherURL)
+        #expect(await hub.activeEndpoint == nil)
+        #expect(await hub.activeSocketIdentity == nil)
+    }
+
+    @Test("Repoint onto the endpoint already in use keeps the same socket")
+    func repointSameEndpointIsNoop() async {
+        let hub = JellyfinSocketHub()
+        let a = await hub.subscribe(endpoint: url)
+        let before = await hub.activeSocketIdentity
+        #expect(before != nil)
+        await hub.repoint(endpoint: url)
+        #expect(await hub.activeSocketIdentity == before)
+        await hub.unsubscribe(a.id)
+    }
+
     // MARK: - Identité et authentification (audit 2026-09-22, S7)
 
     @Test("Same socket URL and token = same connection; a new token or host is another")
