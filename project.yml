@@ -69,6 +69,10 @@ targets:
       # Shared by source with BOTH extensions (see the file): the app targets
       # carry it only so its trust decision can be unit-tested.
       - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
+      # The extensions' LAN probe, shared by source the same way: carried here
+      # only so the test bundle can test it (`LocalNetworkAddress` comes from
+      # CinemaxKit in the app, from its shared source file in the extensions).
+      - path: Widgets/CinemaxWidget/ExtensionServerRoute.swift
     # Archive guard (recette 2.4.0, P0): archived with the iOS 27.0 SDK, the app
     # compiles every `#if !NO_HINGE_API` block to nothing — no iPhone Duo
     # detection, no table mode — and builds without a word (2.4.0, 2026-10-08).
@@ -173,7 +177,7 @@ targets:
           UIColorName: LaunchBackground
         NSSpeechRecognitionUsageDescription: "Cinemax uses speech recognition for voice search to find movies and shows."
         NSMicrophoneUsageDescription: "Cinemax uses the microphone for voice search."
-        NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi."
+        NSLocalNetworkUsageDescription: "JellyGlass uses your local network to find Jellyfin servers on your Wi-Fi and connect to them directly at home."
         # Face ID / Touch ID is offered ONLY as a shortcut past the parental
         # lock's PIN — the PIN always stays a valid path, so a refusal here
         # costs a shortcut, never access. tvOS carries no counterpart: it has
@@ -234,13 +238,16 @@ targets:
       # Shared by source with the Top Shelf; carried here so the tvOS test
       # bundle can test its trust decision too.
       - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
+      # Same for the extensions' LAN probe.
+      - path: Widgets/CinemaxWidget/ExtensionServerRoute.swift
       # Same exclusion as the iOS target (per-area CLAUDE.md agent rules).
       - path: Shared
         excludes:
           - "**/CLAUDE.md"
       # AppShortcuts.strings carries the Siri phrases, and App Intents are
-      # iOS-only here (every file in Shared/Intents/ is #if os(iOS) — none of
-      # the surfaces they feed exist on tvOS). Bundling the phrases anyway is
+      # iOS-only here (the intents, their entity and query are #if os(iOS) —
+      # none of the surfaces they feed exist on tvOS; IntentSessionProvider
+      # and MediaEntityID compile on tvOS but feed no intent). Bundling the phrases anyway is
       # dead weight AND makes Xcode run ValidateAppShortcutStringsMetadata on
       # this target, which then can't find the Metadata.appintents/
       # extract.actionsdata this target never produces:
@@ -299,7 +306,7 @@ targets:
         # Standard HTTPS encryption only — exempt from US export compliance.
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
-        NSLocalNetworkUsageDescription: "Cinemax uses your local network to automatically discover Jellyfin servers on your Wi-Fi."
+        NSLocalNetworkUsageDescription: "JellyGlass uses your local network to find Jellyfin servers on your Wi-Fi and connect to them directly at home."
         # Alternate icons of Réglages → Apparence → « Icône de l'app » (Pro),
         # each a full parallax image stack (Front + Back) in the catalogue. On
         # tvOS the key is an ARRAY of names, written here by hand: actool's
@@ -346,6 +353,9 @@ targets:
       # The age-cap table, shared by SOURCE with CinemaxKit (the extension links
       # no package): one file, compiled into the package and both extensions.
       - path: Packages/CinemaxKit/Sources/CinemaxKit/Models/ContentRatingClassifier.swift
+      # The one definition of « local », shared by source the same way (read by
+      # ExtensionServerRoute.swift, the LAN probe).
+      - path: Packages/CinemaxKit/Sources/CinemaxKit/Models/LocalNetworkAddress.swift
     entitlements:
       path: Widgets/CinemaxWidget.entitlements
       properties:
@@ -375,6 +385,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.ios.widget
         PRODUCT_NAME: CinemaxWidget
         SWIFT_STRICT_CONCURRENCY: complete
+        # Marks the extensions for the files they share by source with the apps
+        # (ExtensionServerRoute.swift: no `import CinemaxKit` here). Never
+        # `canImport(CinemaxKit)`, which is true in an extension too.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) CINEMAX_EXTENSION
         SKIP_INSTALL: YES
 
   # Apple TV Top Shelf ("Continue Watching" row above the dock icon). Same
@@ -386,6 +400,10 @@ targets:
       - path: TopShelf/CinemaxTopShelf
       # The widget's copy, shared by source — see the file.
       - path: Widgets/CinemaxWidget/ExtensionServerTrust.swift
+      # The widget's LAN probe and the definition of « local » it reads, shared
+      # by source (see the widget).
+      - path: Widgets/CinemaxWidget/ExtensionServerRoute.swift
+      - path: Packages/CinemaxKit/Sources/CinemaxKit/Models/LocalNetworkAddress.swift
       # The age-cap table, shared by source with CinemaxKit (see the widget).
       - path: Packages/CinemaxKit/Sources/CinemaxKit/Models/ContentRatingClassifier.swift
     entitlements:
@@ -422,6 +440,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.cinemax.tvos.topshelf
         PRODUCT_NAME: CinemaxTopShelf
         SWIFT_STRICT_CONCURRENCY: complete
+        # Same marker as the widget's (see there).
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) CINEMAX_EXTENSION
         SKIP_INSTALL: YES
         # Entry-point override: the tv-app-extension product type links
         # `-e _TVExtensionMain`, but that symbol is an empty `ret` stub in the

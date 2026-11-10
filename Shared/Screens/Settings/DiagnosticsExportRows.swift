@@ -127,11 +127,12 @@ struct DiagnosticsExportRows: View {
     private func prepare() {
         guard phase != .preparing else { return }
         phase = .preparing
-        let facts = DiagnosticsFacts.current(
+        var facts = DiagnosticsFacts.current(
             serverVersion: appState.apiClient.knownServerVersion()?.description,
             engine: forceNativeAVPlayer ? "native" : "vlc",
             lastPlayback: PlaybackDiagnostics.last
         )
+        facts.serverRoute = ServerRouteController.shared.route.rawValue
         Task {
             do {
                 let result = try await DiagnosticsExporter.export(facts: facts)

@@ -43,7 +43,7 @@ final class NativeVideoPresenter {
     private var previousEpisode: EpisodeRef?
     private var nextEpisode: EpisodeRef?
     private let episodeNavigator: EpisodeNavigator?
-    private let apiClient: any PlaybackAPI & LibraryAPI
+    private let apiClient: any PlaybackAPI & LibraryAPI & ServerAPI
     private let userId: String
     private let maxBitrate: Int
     private let loc: LocalizationManager
@@ -103,7 +103,7 @@ final class NativeVideoPresenter {
         itemId: String, title: String, startTime: Double?,
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
         episodeNavigator: EpisodeNavigator?,
-        apiClient: any PlaybackAPI & LibraryAPI, userId: String,
+        apiClient: any PlaybackAPI & LibraryAPI & ServerAPI, userId: String,
         maxBitrate: Int, loc: LocalizationManager,
         autoPlayNextEpisode: Bool,
         imageBuilder: ImageURLBuilder,
@@ -411,19 +411,70 @@ final class NativeVideoPresenter {
     /// When `HLSManifestLoader` (custom-scheme `AVAssetResourceLoaderDelegate`) fails with
     /// errors like -12881, retry playback using the direct HLS URL without manifest interception.
     /// Subtitles may show raw ASS tags, but playback works.
+    ///
+    /// When the route changed since the negotiation (the NEGOTIATED URL is not
+    /// on the origin the client dials now, `apiClient.currentDialURL()`), the
+    /// stream is re-negotiated on the current route first — reopening the dead
+    /// host would fail again. Still bounded to ONE retry by `hasRetriedDirectURL`.
     private func retryWithDirectURL(player: AVPlayer, startTime: Double?) {
         guard let info = playbackInfo, !hasRetriedDirectURL else { return }
         hasRetriedDirectURL = true
-        logger.info("Retrying playback without HLSManifestLoader (direct URL fallback)")
+        // The NEGOTIATED url against the base dialled now: at home both are on
+        // the LAN origin (no re-negotiation); after leaving home the dial is
+        // the identity and the LAN-negotiated session is re-negotiated.
+        guard PlaybackRetryPolicy.routeChanged(negotiated: info.url, currentDial: apiClient.currentDialURL()) else {
+            playDirect(info, player: player, startTime: startTime)
+            return
+        }
+        logger.info("Native retry: route changed (now \(ServerRouteController.shared.route.rawValue, privacy: .public)), re-negotiating")
+        let gen = navGeneration
+        Task { [weak self] in
+            guard let self else { return }
+            let fresh: PlaybackInfo
+            do {
+                fresh = try await self.apiClient.getPlaybackInfo(
+                    itemId: self.itemId, userId: self.userId, maxBitrate: self.maxBitrate,
+                    engine: .native, mediaSourceId: info.mediaSourceId
+                )
+            } catch {
+                logger.error("Native retry: re-negotiation failed")
+                guard gen == self.navGeneration, self.playerVC?.player === player else { return }
+                self.showPlaybackErrorAlert(error: error)
+                return
+            }
+            // Dismissed or moved to another episode meanwhile: the session just
+            // negotiated is nobody's.
+            guard gen == self.navGeneration, self.playerVC?.player === player else {
+                PlayerPresentation.releaseServerSession(fresh, client: self.apiClient)
+                return
+            }
+            // No stop report will ever name the replaced negotiation.
+            if let replaced = self.playbackInfo {
+                PlayerPresentation.releaseServerSession(replaced, client: self.apiClient)
+            }
+            self.playbackInfo = fresh
+            self.audioTracks = fresh.audioTracks
+            self.subtitleTracks = fresh.subtitleTracks
+            self.currentAudioIndex = fresh.selectedAudioIndex
+            self.currentSubtitleIndex = fresh.selectedSubtitleIndex
+            self.recordPlaybackDiagnostics(fresh)
+            self.setupTrackMenus()
+            self.playDirect(fresh, player: player, startTime: startTime)
+        }
+    }
 
+    /// The direct-URL item (no `HLSManifestLoader` — the thing that failed).
+    private func playDirect(_ info: PlaybackInfo, player: AVPlayer, startTime: Double?) {
+        logger.info("Retrying playback without HLSManifestLoader (direct URL fallback)")
+        let url = playURL(for: info.url)
         let playerItem: AVPlayerItem
         if let token = info.authToken {
-            let asset = AVURLAsset(url: info.url, options: [
+            let asset = AVURLAsset(url: url, options: [
                 "AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "MediaBrowser Token=\(token)"]
             ])
             playerItem = AVPlayerItem(asset: asset)
         } else {
-            playerItem = AVPlayerItem(url: info.url)
+            playerItem = AVPlayerItem(url: url)
         }
         playerItem.preferredForwardBufferDuration = 30
         applyTitleMetadata(to: playerItem, title: title)
@@ -965,8 +1016,31 @@ final class NativeVideoPresenter {
 
     // MARK: - Helpers
 
+    /// The URL AVPlayer plays for a negotiated `url`: the IDENTITY (public)
+    /// URL when `url` is on the active server's LAN address (`nativePlayURL`)
+    /// — read from the registry entry, NOT the current dial, so a LAN url is
+    /// never played raw once the route has gone back to the identity.
+    private func playURL(for url: URL) -> URL {
+        let addresses = ServerRouteController.shared.activeAddresses
+        return Self.nativePlayURL(url, identity: addresses?.identity, local: addresses?.local)
+    }
+
+    /// AVPlayer cannot honour a `ServerTrustDelegate` pin (the LAN address is
+    /// https with a pinned self-signed certificate), and trust is never
+    /// disabled: a stream on the server's LAN address `local` plays from the
+    /// `identity` instead (`ServerRoutePolicy.rewrite`, both base paths
+    /// respected), whether or not the LAN is the route dialled now. Anything
+    /// else — no LAN address, one equal to the identity, a stream on another
+    /// origin — is played as negotiated. Pure (`NativeStreamRouteTests`).
+    nonisolated static func nativePlayURL(_ url: URL, identity: URL?, local: URL?) -> URL {
+        guard let identity, let local, !ServerRoutePolicy.isSameOrigin(local, identity),
+              ServerRoutePolicy.isSameOrigin(url, local) else { return url }
+        return ServerRoutePolicy.rewrite(url, identityBase: local, dialBase: identity) ?? url
+    }
+
     private func makePlayerItem(for info: PlaybackInfo) -> AVPlayerItem {
         let item: AVPlayerItem
+        let url = playURL(for: info.url)
 
         #if os(iOS)
         // Route transcoded HLS through HLSManifestLoader to strip CLOSED-CAPTIONS
@@ -975,7 +1049,7 @@ final class NativeVideoPresenter {
         // when used with AVPlayerViewController — subtitles play with raw ASS tags as a
         // known limitation (Jellyfin's imperfect ASS→WebVTT conversion).
         if info.playMethod == .transcode,
-           var components = URLComponents(url: info.url, resolvingAgainstBaseURL: false),
+           var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
            let originalScheme = components.scheme {
             components.scheme = HLSManifestLoader.schemePrefix + originalScheme
             if let customURL = components.url {
@@ -989,12 +1063,12 @@ final class NativeVideoPresenter {
         #endif
 
         if let token = info.authToken {
-            let asset = AVURLAsset(url: info.url, options: [
+            let asset = AVURLAsset(url: url, options: [
                 "AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "MediaBrowser Token=\(token)"]
             ])
             item = AVPlayerItem(asset: asset)
         } else {
-            item = AVPlayerItem(url: info.url)
+            item = AVPlayerItem(url: url)
         }
         item.preferredForwardBufferDuration = 30
         return item

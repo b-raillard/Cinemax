@@ -166,9 +166,12 @@ struct PosterRailProvider: TimelineProvider {
     }
 
     private static func loadEntry(kind: CinemaxRailKind, maxPosters: Int) async -> PosterRailEntry {
-        guard let session = JellyfinLite.readSession() else {
+        guard let stored = JellyfinLite.readSession() else {
             return PosterRailEntry(date: .now, kind: kind, posters: [], state: .notConnected)
         }
+        // « At home, the LAN first »: resolved once per timeline; every fetch
+        // below (posters included) derives from `session.serverURL`.
+        let session = await JellyfinLite.dialing(stored)
         let fetched: [JellyfinLite.ResumeItem]?
         switch kind {
         case .continueWatching:
@@ -187,7 +190,7 @@ struct PosterRailProvider: TimelineProvider {
         for item in items {
             let data = await JellyfinLite.fetchImage(
                 JellyfinLite.posterURL(session: session, itemId: item.posterItemId, maxWidth: 300),
-                token: session.accessToken
+                session: session
             )
             posters.append(.init(id: item.id, title: item.title, subtitle: item.subtitle, imageData: data))
         }

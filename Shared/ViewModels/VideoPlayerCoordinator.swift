@@ -75,6 +75,9 @@ final class VideoPlayerCoordinator {
                 return
             }
             do {
+                // Never negotiate on a route about to be abandoned: a LAN probe
+                // in flight (bounded by its own timeout) decides the base.
+                await ServerRouteController.shared.awaitPendingProbe()
                 let info = try await apiClient.getPlaybackInfo(
                     itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine,
                     mediaSourceId: CardPlayTargetResolver.sourceToOpen(

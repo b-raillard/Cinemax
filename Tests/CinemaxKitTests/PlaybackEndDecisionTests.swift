@@ -316,6 +316,46 @@ struct PlaybackRetryPolicyTests {
         #expect(PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: 1001) == 1.001)
         #expect(PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: 4_915_487) == 4915.487)
     }
+
+    @Test("a first failure after a route change rebuilds on the current route")
+    func routeChangeRebuilds() {
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: false,
+                                           routeChanged: true) == .rebuildOnCurrentRoute)
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: true,
+                                           routeChanged: true) == .rebuildOnCurrentRoute)
+    }
+
+    @Test("a route change after the spent retry gives up like any other failure")
+    func routeChangeAfterRetryGivesUp() {
+        #expect(PlaybackRetryPolicy.decide(didRetry: true, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: false,
+                                           routeChanged: true) == .giveUp(releaseStickyProxy: false))
+        #expect(PlaybackRetryPolicy.decide(didRetry: true, errorAlertShowing: true,
+                                           retryPending: false, usingProxy: false,
+                                           routeChanged: true) == .ignore)
+    }
+
+    @Test("the route changed when the negotiated stream is not on the base dialled now")
+    func routeChangedCompare() throws {
+        let lanStream = try #require(URL(string: "http://192.168.1.128:8899/Videos/1/stream"))
+        let publicBase = try #require(URL(string: "https://movies.nivadax.net"))
+        #expect(PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: publicBase))
+        let sameOrigin = try #require(URL(string: "http://192.168.1.128:8899"))
+        #expect(!PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: sameOrigin))
+        let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream?static=true"))
+        #expect(!PlaybackRetryPolicy.routeChanged(negotiated: publicStream, currentDial: publicBase))
+        // No dial known (a mock, no connection): never read as « the public route ».
+        #expect(!PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: nil))
+    }
+
+    @Test("a route rebuild reopens where playback dropped, else at the open's own resume point")
+    func rebuildPosition() {
+        #expect(PlaybackRetryPolicy.rebuildFromMs(lastKnownPositionMs: 4_915_487, startTime: 30) == 4_915_487)
+        #expect(PlaybackRetryPolicy.rebuildFromMs(lastKnownPositionMs: 0, startTime: 1834.5) == 1_834_500)
+        #expect(PlaybackRetryPolicy.rebuildFromMs(lastKnownPositionMs: 800, startTime: nil) == 0)
+    }
 }
 
 /// La position jugée à l'arrêt. Mesuré le 2026-09-27 (« Le Rouge et le Noir »

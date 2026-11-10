@@ -192,7 +192,10 @@ struct VideoPlayerView: View {
             itemId: itemId, explicitSourceId: mediaSourceId, startTime: startTime
         )
         return try await Task {
-            try await api.getPlaybackInfo(
+            // A LAN probe in flight decides the base the client dials (bounded
+            // by its own timeout): never negotiate on a route about to change.
+            await ServerRouteController.shared.awaitPendingProbe()
+            return try await api.getPlaybackInfo(
                 itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine,
                 mediaSourceId: mediaSourceId
             )

@@ -492,6 +492,10 @@ struct UserSwitchSheet: View {
         isAuthenticating = true
         authError = nil
         defer { isAuthenticating = false }
+        // Held: a route change must not rebuild the shared client under the
+        // exchange (it would fail with `CancellationError`).
+        appState.beginSignIn()
+        defer { appState.endSignIn() }
         do {
             let session = try await appState.apiClient.authenticate(
                 username: trimmed, password: password

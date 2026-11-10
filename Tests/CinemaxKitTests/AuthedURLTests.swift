@@ -124,6 +124,91 @@ struct StreamURLTests {
     }
 }
 
+/// R13 — libVLC has no per-connection trust hook: a stream on a PINNED
+/// (self-signed) host:port opens through the loopback proxy, whose URLSession
+/// honours `ServerTrustDelegate`, instead of failing direct first.
+@Suite("VLC pinned host → proxy")
+struct VLCPinnedHostProxyTests {
+    @Test("a stream on a pinned host:port goes through the proxy")
+    func pinnedHostRoutesThroughProxy() throws {
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream?static=true"))
+        var asked: [String] = []
+        let pinned = VLCStreamPresenter.targetIsPinned(lan) { key in
+            asked.append(key)
+            return key == "192.168.1.128:8920"
+        }
+        #expect(pinned)
+        #expect(asked == ["192.168.1.128:8920"])
+    }
+
+    @Test("an unpinned host, another port of a pinned host, or plain http stays direct")
+    func unpinnedStaysDirect() throws {
+        let isPinned: (String) -> Bool = { $0 == "192.168.1.128:8920" }
+        let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream"))
+        #expect(!VLCStreamPresenter.targetIsPinned(publicStream, isPinned: isPinned))
+        let otherPort = try #require(URL(string: "https://192.168.1.128/Videos/1/stream"))
+        #expect(!VLCStreamPresenter.targetIsPinned(otherPort, isPinned: isPinned))
+        let plain = try #require(URL(string: "http://192.168.1.128:8920/Videos/1/stream"))
+        #expect(!VLCStreamPresenter.targetIsPinned(plain) { _ in true })
+    }
+}
+
+/// R13 / R16 — AVPlayer cannot honour a pin: a stream on the server's LAN
+/// address plays from the IDENTITY (public) URL, never with trust disabled —
+/// whatever the route dialled now.
+@Suite("Native engine plays the identity")
+struct NativeStreamRouteTests {
+    private let identity = URL(string: "https://movies.nivadax.net")!
+    private let local = URL(string: "https://192.168.1.128:8920")!
+
+    @Test("a stream on the LAN address is rewritten to the identity, path and query kept")
+    func lanStreamPlaysIdentity() throws {
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/master.m3u8?PlaySessionId=abc&ApiKey=t"))
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: identity, local: local)
+                == URL(string: "https://movies.nivadax.net/Videos/1/master.m3u8?PlaySessionId=abc&ApiKey=t"))
+    }
+
+    @Test("identity and LAN base paths are both respected")
+    func basePaths() throws {
+        let subPathIdentity = try #require(URL(string: "https://example.org/jellyfin"))
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream?static=true"))
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: subPathIdentity, local: local)
+                == URL(string: "https://example.org/jellyfin/Videos/1/stream?static=true"))
+    }
+
+    @Test("no LAN address, a stream elsewhere, or a LAN address equal to the identity: played as negotiated")
+    func untouched() throws {
+        let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream"))
+        let otherLAN = try #require(URL(string: "https://192.168.1.50:8920/Videos/1/stream"))
+        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, local: local) == publicStream)
+        #expect(NativeVideoPresenter.nativePlayURL(otherLAN, identity: identity, local: local) == otherLAN)
+        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, local: nil) == publicStream)
+        #expect(NativeVideoPresenter.nativePlayURL(publicStream, identity: identity, local: identity) == publicStream)
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream"))
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: nil, local: local) == lan)
+    }
+
+    /// Leave home: negotiated on the LAN, the dial is back on the identity.
+    @Test("after leaving home the retry re-negotiates, and never plays the LAN url raw")
+    func leaveHomeRenegotiates() throws {
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream?static=true"))
+        #expect(PlaybackRetryPolicy.routeChanged(negotiated: lan, currentDial: identity))
+        // Even with no LAN dial active, the LAN url is played from the identity.
+        #expect(NativeVideoPresenter.nativePlayURL(lan, identity: identity, local: local)
+                == URL(string: "https://movies.nivadax.net/Videos/1/stream?static=true"))
+    }
+
+    /// At home: negotiated on the LAN, still dialling the LAN.
+    @Test("at home the retry plays direct, without re-negotiating")
+    func atHomeKeepsSession() throws {
+        let lan = try #require(URL(string: "https://192.168.1.128:8920/Videos/1/stream?static=true"))
+        #expect(!PlaybackRetryPolicy.routeChanged(negotiated: lan, currentDial: local))
+        // Arriving home: negotiated on the identity, now dialling the LAN.
+        let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream"))
+        #expect(PlaybackRetryPolicy.routeChanged(negotiated: publicStream, currentDial: local))
+    }
+}
+
 // MARK: - Device profiles (moved here: a new test file needs an xcodegen run)
 
 /// The device profiles are what the server reads to decide between DirectPlay,

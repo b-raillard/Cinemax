@@ -397,25 +397,7 @@ extension SettingsScreen {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
                 iOSSettingsSectionHeader(loc.localized("settings.infrastructure"))
 
-                HStack(spacing: CinemaSpacing.spacing3) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: CinemaRadius.medium)
-                            .fill(themeManager.accent.opacity(0.15))
-                            .frame(width: 40, height: 40)
-
-                        Image(systemName: "server.rack")
-                            .font(.system(size: CinemaScale.pt(20), weight: .semibold))
-                            .foregroundStyle(themeManager.accent)
-                    }
-
-                    IOSActiveServerLabel()
-
-                    Spacer()
-
-                    liveBadge
-                }
-                .padding(CinemaSpacing.spacing4)
-                .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+                IOSActiveServerCard { liveBadge }
             }
 
             // Servers (multi-server list)
@@ -787,13 +769,64 @@ extension SettingsScreen {
     }
 }
 
-// MARK: - iOS Home Genre Rows Picker
+/// The active-server card of Réglages → Serveur, with the « Mes serveurs »
+/// card context menu for that server: « Renommer » and « Adresse locale… », never
+/// « Supprimer » (the server the app is on cannot be removed). The flow is the
+/// shared `ServerEntryEditor` (`ServerEntryEditing.swift`), the very one the
+/// « Mes serveurs » cards use.
+///
+/// A standalone `View` owning its editor, NOT a part of the `iOSServerDetail`
+/// extension property: that page is a `navigationDestination(item:)`, where an
+/// extension property does not re-render on `@Observable` changes (root RULE),
+/// so the alerts hung off it would never open. The menu targets
+/// `appState.activeServerId` (never `currentActiveEntry`, `ServersScreen` RULE
+/// (a)) and carries only the id — the edits re-resolve the entry at action time.
+struct IOSActiveServerCard<Badge: View>: View {
+    @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
+    @ViewBuilder let badge: () -> Badge
 
-/// Native multi-select `List` for choosing which genres appear as rows on
-/// Home. Pushed from the Home page settings section. Standalone `View` so its
-/// `@State` (fetched genres) and `@AppStorage` selection drive re-renders even
-/// though it's reached through a `NavigationLink` inside the settings stack.
-/// Selection persists through `HomeGenrePreferences` (`home.selectedGenres`).
+    @State private var editor = ServerEntryEditor()
+
+    /// The server the app is ON, when it is in the registry.
+    private var activeId: String? {
+        guard let id = appState.activeServerId,
+              appState.servers.contains(where: { $0.id == id }) else { return nil }
+        return id
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: CinemaRadius.extraLarge)
+        HStack(spacing: CinemaSpacing.spacing3) {
+            ZStack {
+                RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                    .fill(themeManager.accent.opacity(0.15))
+                    .frame(width: 40, height: 40)
+
+                Image(systemName: "server.rack")
+                    .font(.system(size: CinemaScale.pt(20), weight: .semibold))
+                    .foregroundStyle(themeManager.accent)
+            }
+
+            IOSActiveServerLabel(badge: badge)
+        }
+        .padding(CinemaSpacing.spacing4)
+        .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        // The long press answers on the whole panel, padding included, and the
+        // lifted preview keeps the panel's corners.
+        .contentShape(.interaction, shape)
+        .contentShape(.contextMenuPreview, shape)
+        .contextMenu {
+            if let activeId {
+                editor.renameButton(for: activeId, appState: appState, loc: loc)
+                editor.localAddressButton(for: activeId, appState: appState, loc: loc)
+            }
+        }
+        .serverEntryEditing(editor)
+    }
+}
+
 /// Name + address of the active server on the Server page.
 ///
 /// A standalone `View` with its own `@Environment`, NOT a read of
@@ -802,25 +835,47 @@ extension SettingsScreen {
 /// re-render on `@Observable` changes (see the iOS `NavigationStack` RULE) —
 /// a switch made from « Mes serveurs », presented over this page, left the
 /// previous server's name on it.
-struct IOSActiveServerLabel: View {
+///
+/// The status badge (« EN LIGNE ») rides the NAME row, so the address and
+/// route lines under it span the card's full width: beside the badge they had
+/// ~135 pt on an iPhone, the public address was cut and « Local · host:port »
+/// never fit.
+struct IOSActiveServerLabel<Badge: View>: View {
     @Environment(AppState.self) private var appState
     @Environment(LocalizationManager.self) private var loc
+    @ViewBuilder let badge: () -> Badge
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(appState.activeServerDisplayName)
-                .font(CinemaFont.dynamicLabel(.large))
-                .foregroundStyle(CinemaColor.onSurface)
+            HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
+                Text(appState.activeServerDisplayName)
+                    .font(CinemaFont.dynamicLabel(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                badge()
+                    .fixedSize()
+            }
 
             Text(appState.activeServerAddress ?? loc.localized("settings.server.unknownAddress"))
                 .font(CinemaFont.dynamicLabel(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
                 .lineLimit(1)
                 .truncationMode(.middle)
+
+            // The road being dialled: « Local · 192.168.1.128:8920 » / « Internet ».
+            ServerRouteLine(font: CinemaFont.dynamicLabel(.medium))
         }
     }
 }
 
+// MARK: - iOS Home Genre Rows Picker
+
+/// Native multi-select `List` for choosing which genres appear as rows on
+/// Home. Pushed from the Home page settings section. Standalone `View` so its
+/// `@State` (fetched genres) and `@AppStorage` selection drive re-renders even
+/// though it's reached through a `NavigationLink` inside the settings stack.
+/// Selection persists through `HomeGenrePreferences` (`home.selectedGenres`).
 struct IOSHomeGenrePickerView: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager

@@ -1,5 +1,5 @@
 /* Permission d'accès au réseau local (découverte des serveurs Jellyfin) */
-"NSLocalNetworkUsageDescription" = "JellyGlass utilise votre réseau local pour découvrir automatiquement les serveurs Jellyfin de votre réseau Wi-Fi.";
+"NSLocalNetworkUsageDescription" = "JellyGlass utilise votre réseau local pour trouver les serveurs Jellyfin de votre Wi-Fi et s'y connecter directement à la maison.";
 
 /* Permission d'accès au microphone (recherche vocale) */
 "NSMicrophoneUsageDescription" = "JellyGlass utilise le microphone pour la recherche vocale.";

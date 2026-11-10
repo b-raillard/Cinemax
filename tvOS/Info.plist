@@ -65,7 +65,7 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Cinemax uses your local network to automatically discover Jellyfin servers on your Wi-Fi.</string>
+	<string>JellyGlass uses your local network to find Jellyfin servers on your Wi-Fi and connect to them directly at home.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fraunces-BlackItalic.ttf</string>

@@ -659,6 +659,8 @@ extension SettingsScreen {
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                        // The road being dialled: « Local · 192.168.1.128:8920 » / « Internet ».
+                        ServerRouteLine(font: .system(size: CinemaScale.pt(15), weight: .regular))
                     }
 
                     Spacer()

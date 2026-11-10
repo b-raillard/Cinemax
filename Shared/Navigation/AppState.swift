@@ -58,6 +58,40 @@ final class AppState {
             url: url, accessToken: token, deviceId: KeychainService.getOrCreateDeviceID()
         )
     }
+    /// Schedules the decision of the active server's route (LAN first) for
+    /// the restored session. Called SYNCHRONOUSLY by `restoreSession`, before
+    /// it returns, so the evaluation is already recorded when the UI's first
+    /// loads ask `ServerRouteController.awaitPendingProbe()`; its task is
+    /// awaited first inside the background task, never on the awaited path.
+    /// Wired by `AppNavigation` to `ServerRouteController.scheduleLaunchEvaluation()`.
+    var prepareRoute: @MainActor () -> Task<Void, Never>? = { nil }
+    /// Called right after every `apiClient.reconnect` of `applyActiveServer`
+    /// (server AND same-server account switches): the rebuilt client dials
+    /// the identity, the route owner re-evaluates. Wired by `AppNavigation`.
+    var onClientRepointed: @MainActor () -> Void = {}
+    /// The URL to dial for a registered entry (its LAN address when it
+    /// answers as that server). Wired by `AppNavigation` to
+    /// `ServerRouteController.dialURL(for:)`.
+    var routeURL: @MainActor (ServerEntry) async -> URL = { $0.url }
+    /// Called when `setLocalAddress` saved or removed the ACTIVE server's LAN
+    /// address: the route owner re-evaluates. Wired by `AppNavigation` to
+    /// `ServerRouteController.evaluate(.addressChanged)`.
+    var onLocalAddressChanged: @MainActor () -> Void = {}
+    /// Called by `logout` once the session is gone (both reasons): the route
+    /// owner drops its published route. Wired by `ServerRouteController.attach`.
+    @ObservationIgnored var onSessionEnded: @MainActor () -> Void = {}
+    /// The save probe of `setLocalAddress`: its own token-less session, never
+    /// the shared client. A seam for the tests.
+    var localProbe: @Sendable (URL, TimeInterval) async -> LocalProbeOutcome = { url, timeout in
+        await LocalRouteProbe.probe(url, timeout: timeout)
+    }
+    /// Learns a missing `serverID` from the public URL (`/System/Info/Public`).
+    var publicPing: @Sendable (URL) async -> PingResult = { await ServerReachability.ping(url: $0) }
+    /// Whether iOS's local-network permission refused a failed save probe.
+    var localNetworkDenied: @Sendable (URL) async -> Bool = { await LocalNetworkPermission.isDenied($0) }
+    /// The LAN certificate's standing after a failed save probe (pending
+    /// approval, pinned, or unknown) — read from `ServerTrustDelegate`.
+    var localCertificateState: @MainActor (URL) -> LocalCertificateState = { AppState.certificateState(ofLocalURL: $0) }
     /// Revokes ONE token server-side (`ServerSessionRevoker`, `POST /Sessions/Logout`).
     /// A seam so the multi-account tests can see which tokens were revoked.
     var sessionRevoker: @Sendable (URL, String) async -> Void = { url, token in
@@ -125,8 +159,19 @@ final class AppState {
     /// Bumped synchronously by every server-transition entry point. A transition
     /// that awaits the network re-checks it before writing, so a slow one can
     /// never overwrite the state a newer one already committed — same pattern as
-    /// `NowPlayingInfoController.generation`.
-    private var serverTransitionGeneration = 0
+    /// `NowPlayingInfoController.generation`. Readable outside: the route
+    /// owner drops a decision taken across a transition.
+    private(set) var serverTransitionGeneration = 0
+
+    /// Sign-ins in flight through the SHARED client (`beginSignIn` /
+    /// `endSignIn`, `withSignInHold`). While one is, the route owner applies
+    /// nothing: `setDialURL` rebuilds the client and the sign-in would fail
+    /// with `CancellationError` (or the credentials leave on the old route).
+    @ObservationIgnored private(set) var signInsInFlight = 0
+    /// Called when the last sign-in hold is released — the route owner runs
+    /// ONE evaluation then (which also routes a session that sign-in has just
+    /// established). Wired by `ServerRouteController.attach`.
+    @ObservationIgnored var onSignInHoldReleased: @MainActor () -> Void = {}
 
     let apiClient: any APIClientProtocol
     let keychain: any SecureStorageProtocol
@@ -146,6 +191,25 @@ final class AppState {
         apiClient.setOnUnauthorized {
             NotificationCenter.default.post(name: .cinemaxSessionExpired, object: nil)
         }
+    }
+
+    var isSignInInFlight: Bool { signInsInFlight > 0 }
+
+    /// Marks a sign-in through the shared client as in flight; pair with
+    /// `endSignIn()` on every exit.
+    func beginSignIn() { signInsInFlight += 1 }
+
+    func endSignIn() {
+        guard signInsInFlight > 0 else { return }
+        signInsInFlight -= 1
+        if signInsInFlight == 0 { onSignInHoldReleased() }
+    }
+
+    /// `body` with the sign-in hold set, released on every exit.
+    func withSignInHold<T>(_ body: () async throws -> T) async rethrows -> T {
+        beginSignIn()
+        defer { endSignIn() }
+        return try await body()
     }
 
     /// Image URLs for the current server. Derived from `serverURL` — reading it
@@ -206,6 +270,10 @@ final class AppState {
         // `reconnect` rebuilds the Jellyfin client and resets its in-memory state.
         let storedAge = UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
         apiClient.applyContentRatingLimit(maxAge: storedAge)
+        // LAN first: the launch evaluation is recorded NOW, before
+        // `isAuthenticated` reaches the UI's first loads (Home, the library
+        // views, the remote-control socket), which wait for it.
+        let launchRoute = prepareRoute()
 
         // Non-blocking: kick the server-info + admin-policy fetches behind the
         // launch transition. They populate `serverInfo` / `isAdministrator`
@@ -213,6 +281,9 @@ final class AppState {
         // user authenticated with last-known values.
         Task { [weak self] in
             guard let self else { return }
+            // LAN first: the route is decided before the session's first
+            // request (bounded by the launch probe timeout, ~1 s).
+            await launchRoute?.value
             if let info = try? await self.apiClient.fetchServerInfo() {
                 self.serverInfo = info
             }
@@ -235,15 +306,8 @@ final class AppState {
         // The parental cap travels with the session: it lives in app-private
         // `UserDefaults`, which the extensions cannot read, so without this the
         // widget and the Top Shelf display titles the app itself hides (#230).
-        ExtensionSessionBridge.publish(
-            serverURL: serverURL,
-            accessToken: accessToken,
-            userId: currentUserId,
-            maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
-            // A self-signed server's approved certificate: the pins live in
-            // the app-private Keychain group the extensions cannot read.
-            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
-        )
+        // One publish body for both paths: `republishExtensionSession()`.
+        republishExtensionSession()
         guard let id = currentUserId else {
             if currentUser != nil { currentUser = nil }
             if isAdministrator { isAdministrator = false }
@@ -561,6 +625,8 @@ final class AppState {
             defaults: settingsDefaults
         )
         apiClient.reconnect(url: used.url, accessToken: token)
+        // The rebuilt client dials the identity: the route owner re-decides.
+        onClientRepointed()
         apiClient.clearCache()
         let storedAge = settingsDefaults.integer(forKey: SettingsKey.privacyMaxContentAge)
         apiClient.applyContentRatingLimit(maxAge: storedAge)
@@ -631,6 +697,152 @@ final class AppState {
         return entry
     }
 
+    /// Sets (or clears, with `nil`) the optional LAN address of a registered
+    /// server. The only writer of `ServerEntry.localURL`; `url` is expected to
+    /// come from `ServerURLNormalizer.normalizeLocal`.
+    @discardableResult
+    func setLocalURL(id: String, to url: URL?) -> ServerEntry? {
+        guard let index = servers.firstIndex(where: { $0.id == id }) else { return nil }
+        var entry = servers[index]
+        entry.localURL = url
+        guard entry != servers[index] else { return entry }   // no spurious Observation cycle
+        servers[index] = entry
+        persistRegistry()
+        return entry
+    }
+
+    /// Records Jellyfin's server id on an entry that has none yet. Never
+    /// overwrites a known one — a different id means a different server.
+    @discardableResult
+    func adoptServerID(id: String, serverID: String) -> ServerEntry? {
+        guard !serverID.isEmpty, let index = servers.firstIndex(where: { $0.id == id }) else { return nil }
+        var entry = servers[index]
+        guard entry.serverID == nil || entry.serverID?.isEmpty == true else { return entry }
+        entry.serverID = serverID
+        servers[index] = entry
+        persistRegistry()
+        return entry
+    }
+
+    // MARK: - Local address
+
+    /// Saves the LAN address typed for a registered server — blank removes
+    /// it — after probing it, through the owner's decision table
+    /// (`LocalAddressSavePolicy`). https only; an unpinned or changed LAN
+    /// certificate saves nothing and asks for its approval
+    /// (`trustLocalCertificate`). Never touches the shared client: the probe
+    /// and the public ping run on their own token-less sessions.
+    func setLocalAddress(id: String, raw: String) async -> LocalAddressSaveOutcome {
+        if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            commitLocalAddress(id: id, to: nil, adopting: nil)
+            return .removed
+        }
+        let url: URL
+        switch ServerURLNormalizer.normalizeLocal(raw) {
+        case .success(let normalized): url = normalized
+        case .failure(.notHTTPS): return .refusedNotHTTPS
+        case .failure: return .refusedNotLocal
+        }
+        guard let entry = servers.first(where: { $0.id == id }) else { return .needsSignIn }
+        let known = entry.serverID.flatMap { $0.isEmpty ? nil : $0 }
+        var publicID: String?
+        if known == nil { publicID = await learnedServerID(of: entry.url) }
+        let decision = await localSaveDecision(for: url, knownServerID: known, publicServerID: publicID)
+        logger.notice("[Servers] adresse locale : \(String(describing: decision.outcome), privacy: .public)")
+        guard decision.saves else { return decision.outcome }
+        // The entry may have been removed while the probe ran.
+        guard servers.contains(where: { $0.id == id }) else { return .needsSignIn }
+        commitLocalAddress(id: id, to: url, adopting: decision.serverIDToAdopt)
+        return decision.outcome
+    }
+
+    /// Approves the LAN certificate the user was SHOWN (`fingerprint`, read
+    /// from `pendingLocalCertificate`) and saves again — pinned as
+    /// `ServerSetupViewModel.trustPendingCertificate` does, but only while the
+    /// pending summary for that host:port still carries exactly that
+    /// fingerprint; otherwise nothing is pinned and the save answers
+    /// `needsCertificateApproval` again with the new summary. A pin the save
+    /// then does not use (refused, other server…) is forgotten at once.
+    func trustLocalCertificate(id: String, raw: String, fingerprint: String) async -> LocalAddressSaveOutcome {
+        guard let pending = pendingLocalCertificate(raw: raw), pending.fingerprint == fingerprint,
+              case .success(let url) = ServerURLNormalizer.normalizeLocal(raw) else {
+            return await setLocalAddress(id: id, raw: raw)
+        }
+        ServerTrustDelegate.shared.trust(fingerprint: pending.fingerprint, forTrustKey: pending.trustKey)
+        let outcome = await setLocalAddress(id: id, raw: raw)
+        // Kept when the save stored the address (or any entry names the key).
+        forgetLocalPinIfUnused(url)
+        return outcome
+    }
+
+    /// The LAN certificate awaiting approval for a typed address, for the UI.
+    func pendingLocalCertificate(raw: String) -> ServerCertificateSummary? {
+        guard case .success(let url) = ServerURLNormalizer.normalizeLocal(raw),
+              let key = ServerCertificateTrust.trustKey(for: url) else { return nil }
+        return ServerTrustDelegate.shared.pendingApproval(forTrustKey: key)
+    }
+
+    static func certificateState(ofLocalURL url: URL) -> LocalCertificateState {
+        guard let key = ServerCertificateTrust.trustKey(for: url) else { return .unknown }
+        if ServerTrustDelegate.shared.pendingApproval(forTrustKey: key) != nil { return .pendingApproval }
+        return ServerTrustDelegate.shared.isPinned(trustKey: key) ? .trusted : .unknown
+    }
+
+    private func learnedServerID(of url: URL) async -> String? {
+        guard case .online(_, _, let serverID) = await publicPing(url) else { return nil }
+        return serverID
+    }
+
+    private func localSaveDecision(
+        for url: URL, knownServerID: String?, publicServerID: String?
+    ) async -> LocalAddressSaveDecision {
+        // A pending approval read after a failed probe must be THIS probe's
+        // challenge, never one left by an earlier attempt or a route probe.
+        if let key = ServerCertificateTrust.trustKey(for: url) {
+            ServerTrustDelegate.shared.clearPending(forTrustKey: key)
+        }
+        var probe = await localProbe(url, LocalRouteProbe.runtimeTimeout)
+        // A TLS pass is trust: the certificate only matters on a failure.
+        var certificate = LocalCertificateState.trusted
+        if case .failed(let deniedByProbe) = probe {
+            var denied = deniedByProbe
+            if !denied { denied = await localNetworkDenied(url) }
+            probe = .failed(localNetworkDenied: denied)
+            certificate = localCertificateState(url)
+        }
+        return LocalAddressSavePolicy.decide(
+            knownServerID: knownServerID, publicServerID: publicServerID,
+            probe: probe, certificate: certificate
+        )
+    }
+
+    /// Writes a saved (or removed) LAN address, forgets the previous one's pin
+    /// when nothing uses its host:port any more, and has the route owner
+    /// re-evaluate when the server is the active one — even for an unchanged
+    /// address, re-saved from home after its certificate was approved.
+    private func commitLocalAddress(id: String, to url: URL?, adopting serverID: String?) {
+        guard let before = servers.first(where: { $0.id == id }) else { return }
+        setLocalURL(id: id, to: url)
+        if let serverID { adoptServerID(id: id, serverID: serverID) }
+        if let old = before.localURL { forgetLocalPinIfUnused(old) }
+        if id == activeServerId, url != nil || before.localURL != nil { onLocalAddressChanged() }
+        // The extensions read the address, the id and the LAN pin from the
+        // shared blob, whose only other publishers run at sign-in and on
+        // foreground. Idempotent: an unchanged session costs nothing.
+        if id == activeServerId { republishExtensionSession() }
+    }
+
+    /// A LAN pin outliving its address would pre-approve whatever answers on
+    /// that host:port later — unless some entry's public or local URL (the
+    /// edited one's own public URL included) still names it.
+    private func forgetLocalPinIfUnused(_ oldURL: URL) {
+        guard let key = ServerCertificateTrust.trustKey(for: oldURL) else { return }
+        let inUse = servers.contains { entry in
+            [entry.url, entry.localURL].contains { $0.flatMap(ServerCertificateTrust.trustKey(for:)) == key }
+        }
+        if !inUse { ServerTrustDelegate.shared.forget(trustKey: key) }
+    }
+
     /// Stores a manual order for the servers list — `orderedIds` is the
     /// COMPLETE list as displayed after the user's move (see
     /// `ServerRegistry.applyingOrder`). The other writer of the user-owned
@@ -674,7 +886,9 @@ final class AppState {
         // Validated OFF the shared client: it stays on the working server until
         // the target is known good, so nothing on screen can reach the target
         // with the wrong user id, and a refusal has nothing to undo (B4/B10).
-        switch await sessionValidator(entry.url, token) {
+        // On the TARGET's route (its LAN address when it answers as that
+        // server), decided for its own entry — still off the shared client.
+        switch await sessionValidator(await routeURL(entry), token) {
         case .valid:
             await applyActiveServer(entry)       // the one repoint of a switch
             return .commit
@@ -702,7 +916,15 @@ final class AppState {
         }
         serverTransitionGeneration &+= 1
         let generation = serverTransitionGeneration
-        let info = try? await apiClient.connectToServer(url: entry.url)
+        // The session still reads as A's until the handshake lands: no route
+        // change may rebuild the client under it (its install would be refused
+        // and B's credentials would then go to A).
+        beginSignIn()
+        defer { endSignIn() }
+        // Handshake on the entry's route (its LAN address at home), the
+        // identity unchanged; a dial URL only when it is not the identity.
+        let route = await routeURL(entry)
+        let info = try? await apiClient.connectToServer(url: entry.url, dialURL: route == entry.url ? nil : route)
         // Race guard: a newer transition (another switch, an add, a logout)
         // started while this handshake was in flight — its state has already been
         // committed and must not be overwritten by this stale one.
@@ -793,14 +1015,19 @@ final class AppState {
     /// Re-publishes the extension session snapshot so the widget and the Top
     /// Shelf pick up a changed parental cap.
     ///
-    /// Needed because `refreshCurrentUser()` — the only publisher — runs on
-    /// session-establishing paths and on foreground, NOT when the user edits the
-    /// cap. Without this the extensions would keep the old ceiling until the next
+    /// Needed because `refreshCurrentUser()` — which publishes through this
+    /// method — runs on session-establishing paths and on foreground, NOT when
+    /// the user edits the cap (nor, for the LAN address, when it is saved). Without this the extensions would keep the old ceiling until the next
     /// login or app foreground, i.e. the setting would look applied and not be.
     /// `publish` is already idempotent (in-process memo + field-wise Keychain
     /// compare), and the cap is part of `Session`, so an unchanged cap costs
     /// nothing and a changed one is written and pokes both extensions.
+    ///
+    /// Also the body `refreshCurrentUser()` publishes through, and called when
+    /// the ACTIVE server's LAN address changes (`commitLocalAddress`).
     func republishExtensionSession() {
+        let entry = activeEntryIfAny
+        let localURL = entry?.localURL
         ExtensionSessionBridge.publish(
             serverURL: serverURL,
             accessToken: accessToken,
@@ -808,7 +1035,13 @@ final class AppState {
             maxContentAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge),
             // A self-signed server's approved certificate: the pins live in
             // the app-private Keychain group the extensions cannot read.
-            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
+            pinnedCertificateSHA256: serverURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:)),
+            // « At home, the LAN first » in the extensions too: the address,
+            // the id their probe must find there, and the LAN certificate's
+            // own pin (https only, keyed on the LAN host:port).
+            localServerURL: localURL,
+            serverID: entry?.serverID,
+            localPinnedCertificateSHA256: localURL.flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
         )
     }
 
@@ -821,6 +1054,9 @@ final class AppState {
         onServerForgotten(entry.id)
         servers.removeAll { $0.id == entry.id }
         persistRegistry()
+        // Its LAN pin too, unless another entry still names that host:port
+        // (read after the removal) — same reason as the public pin below.
+        if let old = entry.localURL { forgetLocalPinIfUnused(old) }
         // Its search history goes with it. Nothing could ever read it again —
         // a re-added server mints a fresh id — so keeping it would only leave
         // that library's queries on the device.
@@ -860,13 +1096,17 @@ final class AppState {
         }
 
         keychain.clearAll()     // legacy mirror only — the registry survives (RULE)
-        ExtensionSessionBridge.publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)
+        ExtensionSessionBridge.publish(
+            serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil,
+            localServerURL: nil, serverID: nil, localPinnedCertificateSHA256: nil
+        )
         serverTransitionGeneration &+= 1
         isAuthenticated = false
         currentUserId = nil
         accessToken = nil
         currentUser = nil
         isAdministrator = false
+        onSessionEnded()
         // A logout ends whatever add / re-login flow was pending: a stale
         // snapshot would otherwise drive the LoginScreen's "go back to the
         // server you came from" affordance toward a session that no longer exists.
@@ -1077,7 +1317,7 @@ final class AppState {
             pendingSignInKey = key
             return .needsLogin
         }
-        switch await sessionValidator(entry.url, token) {
+        switch await sessionValidator(await routeURL(entry), token) {
         case .valid:
             expiredAccountIds.remove(key)
             await applyActiveServer(target)

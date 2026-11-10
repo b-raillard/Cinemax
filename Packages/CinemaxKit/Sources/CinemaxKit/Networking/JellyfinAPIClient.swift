@@ -47,7 +47,15 @@ public final class JellyfinAPIClient: Sendable {
         /// `JellyfinClient` (jellyfin-sdk-swift) is not `Sendable`; it is only
         /// ever read or replaced inside `withState`.
         var client: JellyfinClient?
+        /// The server's IDENTITY: the URL the registry, the Keychain mirror,
+        /// the extensions and `isSameServer` know it by. Never the LAN address.
         var serverURL: URL?
+        /// The base the client DIALS when it is not the identity — the
+        /// server's local address while the route owner has chosen it.
+        /// `nil` = dial the identity. Reset by every `reconnect` and every
+        /// `connectToServer(url:)`, so a switch never hands the next server's
+        /// token to the previous server's LAN address.
+        var dialURL: URL?
         /// The token the current client was built with, kept so a language
         /// change can rebuild an authenticated client without a re-login.
         /// `nil` while the client is the pre-auth one from `connectToServer`.
@@ -71,21 +79,64 @@ public final class JellyfinAPIClient: Sendable {
         /// older generation — i.e. across an `await` — is dropped.
         var generation: UInt64 = 0
 
-        /// Installs `client` for `url` unless the connection moved on since
-        /// `expected` was read. Returns whether it was installed.
+        /// The base the client dials now: the dial URL, else the identity.
+        var effectiveDialURL: URL? { dialURL ?? serverURL }
+
+        /// The live connection in one value, `nil` before any client.
+        var connection: Connection? {
+            guard let client, let identity = serverURL else { return nil }
+            return Connection(
+                client: client,
+                identity: identity,
+                dial: dialURL ?? identity,
+                accessToken: accessToken,
+                generation: generation
+            )
+        }
+
+        /// Installs `client` — built on `dialURL ?? identity` — for the server
+        /// `identity`, unless the connection moved on since `expected` was
+        /// read. A dial equal to the identity is stored as `nil` (« dial the
+        /// identity »). Returns whether it was installed.
         mutating func install(
             _ client: JellyfinClient,
-            url: URL,
+            url identity: URL,
+            dialURL: URL?,
             accessToken: String?,
             ifGeneration expected: UInt64? = nil
         ) -> Bool {
             if let expected, expected != generation { return false }
             self.client = client
-            serverURL = url
+            serverURL = identity
+            self.dialURL = dialURL == identity ? nil : dialURL
             self.accessToken = accessToken
             generation &+= 1
             return true
         }
+
+        /// `fetchServerInfo`'s version write. Only onto the server it was asked
+        /// of: a switch that landed during the probe would otherwise get the
+        /// previous server's version. Compared on the server's IDENTITY, not
+        /// the generation — a language change, a re-login or a route change
+        /// (LAN ⇄ public) on the same server rebuilds the client too, and
+        /// dropping the version then would leave the whole session on
+        /// « unknown » (every 12.0 gate off).
+        mutating func recordVersion(_ version: ServerVersion?, probedOn identity: URL, atGeneration probed: UInt64) {
+            if generation == probed || JellyfinAPIClient.isSameServer(serverURL, as: identity) {
+                serverVersion = version
+            }
+        }
+    }
+
+    /// A snapshot of the live connection, read in one critical section: the
+    /// client, the server's IDENTITY, the URL it DIALS (`dialURL ?? identity`),
+    /// its token and the generation a write computed from it must still match.
+    struct Connection {
+        let client: JellyfinClient
+        let identity: URL
+        let dial: URL
+        let accessToken: String?
+        let generation: UInt64
     }
 
     private let lock = NSLock()
@@ -120,23 +171,72 @@ public final class JellyfinAPIClient: Sendable {
         withState { $0.client }
     }
 
+    /// The server's IDENTITY (never the LAN address). Nothing builds a URL
+    /// to dial from it — that is `getConnection()` / `getDialURL()`.
     internal func getServerURL() -> URL? {
         withState { $0.serverURL }
     }
 
-    /// Client and URL read together — never one from before a `reconnect` and
-    /// the other from after it.
+    /// The base the client dials now: the dial URL, else the identity.
+    internal func getDialURL() -> URL? {
+        withState { $0.effectiveDialURL }
+    }
+
+    /// Client and the URL it DIALS, read together — never one from before a
+    /// `reconnect` or a route change and the other from after it. Every caller
+    /// builds a request from it (the PlaybackInfo POST and stream URLs, the
+    /// realtime socket, the diagnostics upload), so it is the dial URL.
     internal func getConnection() -> (client: JellyfinClient, serverURL: URL)? {
         withState { state in
-            guard let client = state.client, let url = state.serverURL else { return nil }
-            return (client, url)
+            guard let client = state.client, let dial = state.effectiveDialURL else { return nil }
+            return (client, dial)
         }
     }
 
-    private func connectionWithGeneration() -> (client: JellyfinClient, serverURL: URL, generation: UInt64)? {
-        withState { state in
-            guard let client = state.client, let url = state.serverURL else { return nil }
-            return (client, url, state.generation)
+    /// Client, identity, dial and generation in one read, for a write computed
+    /// across an `await` (`fetchServerInfo`, the two logins).
+    internal func connectionWithGeneration() -> Connection? {
+        withState { $0.connection }
+    }
+
+    /// `ServerAPI` witness — the base the client dials now (the identity when
+    /// no dial URL is set), `nil` before any connection.
+    public func currentDialURL() -> URL? { getDialURL() }
+
+    /// Repoints the TRANSPORT at `dialURL` (`nil` = the identity), rebuilding
+    /// the client in place: same server, same token, same language, so the
+    /// learned `ServerVersion` stays. Same shape as `setPreferredLanguage`,
+    /// with the same generation check: a `reconnect` that landed while this
+    /// client was being built owns the connection, and its own (reset) dial
+    /// wins. No `cache.clear()`: `APICache` keys carry no URL, and the
+    /// responses are the same server's. A no-op when the dial is unchanged
+    /// and before any connection (every `reconnect` resets it anyway).
+    public func setDialURL(_ dialURL: URL?) {
+        installDial(dialURL, forIdentity: nil)
+    }
+
+    /// `ServerAPI` witness — `setDialURL` bound to the server it was decided
+    /// for: refused (no rebuild, no generation bump) unless the client's
+    /// identity is that same server (`ServerURLNormalizer.dedupKey`). A dial
+    /// decided for A can never land on a client a switch or a re-login has
+    /// already pointed at B — it would hand B's token or credentials to A.
+    public func setDialURL(_ dialURL: URL?, forIdentity identity: URL) {
+        installDial(dialURL, forIdentity: identity)
+    }
+
+    private func installDial(_ dialURL: URL?, forIdentity identity: URL?) {
+        let snapshot = withState { state -> Connection? in
+            guard let current = state.connection, (dialURL ?? current.identity) != current.dial else { return nil }
+            if let identity,
+               ServerURLNormalizer.dedupKey(identity) != ServerURLNormalizer.dedupKey(current.identity) {
+                return nil
+            }
+            return current
+        }
+        guard let snapshot else { return }
+        let client = makeClient(url: dialURL ?? snapshot.identity, accessToken: snapshot.accessToken)
+        _ = withState {
+            $0.install(client, url: snapshot.identity, dialURL: dialURL, accessToken: snapshot.accessToken, ifGeneration: snapshot.generation)
         }
     }
 
@@ -151,18 +251,20 @@ public final class JellyfinAPIClient: Sendable {
     /// carry no language, and a cached season list would otherwise keep
     /// serving the previous locale's stream titles for its TTL.
     public func setPreferredLanguage(_ languageCode: String?) {
-        let snapshot = withState { state -> (url: URL?, token: String?, hasClient: Bool, generation: UInt64) in
+        let snapshot = withState { state -> Connection? in
             state.preferredLanguage = languageCode
-            return (state.serverURL, state.accessToken, state.client != nil, state.generation)
+            return state.connection
         }
 
-        guard snapshot.hasClient, let url = snapshot.url else { return }
-        let token = snapshot.token
+        guard let snapshot else { return }
         cache.clear()
-        let client = makeClient(url: url, accessToken: token)
+        // Rebuilt on the route it dials now: a language change moves no route.
+        let client = makeClient(url: snapshot.dial, accessToken: snapshot.accessToken)
         // A reconnect that landed while this client was being built already
         // carries the new language (recorded first, above): keep it.
-        _ = withState { $0.install(client, url: url, accessToken: token, ifGeneration: snapshot.generation) }
+        _ = withState {
+            $0.install(client, url: snapshot.identity, dialURL: snapshot.dial, accessToken: snapshot.accessToken, ifGeneration: snapshot.generation)
+        }
     }
 
     /// `Accept-Language` value for an app language code, or `nil` for a blank
@@ -181,7 +283,8 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     /// The session configuration for the language currently recorded.
-    /// The ONLY place a `JellyfinClient` is built. Every one carries the
+    /// The ONLY place a `JellyfinClient` is built — always on the URL to DIAL
+    /// (`dialURL ?? identity`), never blindly on the identity. Every one carries the
     /// certificate delegate: #186 wired it into the two post-login clients
     /// only, so the client `reconnect` rebuilds at every launch — and the ones
     /// from `connectToServer` and a language change — refused a user-approved
@@ -304,8 +407,15 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     public func connectToServer(url: URL) async throws -> ServerInfo {
+        try await connectToServer(url: url, dialURL: nil)
+    }
+
+    /// Probes `/System/Info/Public` on `dialURL ?? url` and installs the
+    /// pre-auth client for the server `url` (its IDENTITY), dialling `dialURL`.
+    /// The returned `ServerInfo.url` is the identity, whatever was dialled.
+    public func connectToServer(url: URL, dialURL: URL?) async throws -> ServerInfo {
         let generation = withState { $0.generation }
-        let client = makeClient(url: url, accessToken: nil)
+        let client = makeClient(url: dialURL ?? url, accessToken: nil)
 
         let response = try await client.send(Paths.getPublicSystemInfo)
         let info = response.value
@@ -315,7 +425,7 @@ public final class JellyfinAPIClient: Sendable {
         // newer, and this pre-auth client must not point the app back.
         let version = info.version.flatMap(ServerVersion.init)
         let installed = withState { state in
-            guard state.install(client, url: url, accessToken: nil, ifGeneration: generation) else { return false }
+            guard state.install(client, url: url, dialURL: dialURL, accessToken: nil, ifGeneration: generation) else { return false }
             state.serverVersion = version
             return true
         }
@@ -342,42 +452,36 @@ public final class JellyfinAPIClient: Sendable {
             return cached
         }
 
-        guard let (client, url, generation) = connectionWithGeneration() else {
+        guard let connection = connectionWithGeneration() else {
             throw JellyfinError.notConnected
         }
+        let identity = connection.identity
 
-        let response = try await client.send(Paths.getPublicSystemInfo)
+        let response = try await connection.client.send(Paths.getPublicSystemInfo)
         let info = response.value
-        // Only onto the server it was asked of: a switch that landed during the
-        // probe would otherwise get the previous server's version. Compared on
-        // the SERVER, not the generation — a language change or a re-login on
-        // the same server rebuilds the client too, and dropping the version
-        // then would leave the whole session on « unknown » (every 12.0 gate off).
+        // See `ClientState.recordVersion`: compared on the IDENTITY, so a
+        // route change during the probe keeps the version, a switch drops it.
         let version = info.version.flatMap(ServerVersion.init)
-        withState { state in
-            if state.generation == generation || Self.isSameServer(state.serverURL, as: url) {
-                state.serverVersion = version
-            }
-        }
+        withState { $0.recordVersion(version, probedOn: identity, atGeneration: connection.generation) }
 
         let result = ServerInfo(
             name: info.serverName ?? "Jellyfin Server",
             serverID: info.id ?? "",
             version: info.version ?? "",
-            url: url
+            url: identity
         )
         cache.set(cacheKey, value: result, ttl: 600, stamp: cacheStamp)
         return result
     }
 
     public func authenticate(username: String, password: String) async throws -> UserSession {
-        guard let (client, url, generation) = connectionWithGeneration() else {
+        guard let connection = connectionWithGeneration() else {
             throw JellyfinError.notConnected
         }
 
         let body = AuthenticateUserByName(pw: password, username: username)
         let request = Paths.authenticateUserByName(body)
-        let response = try await client.send(request)
+        let response = try await connection.client.send(request)
         let result = response.value
 
         guard let accessToken = result.accessToken,
@@ -385,10 +489,13 @@ public final class JellyfinAPIClient: Sendable {
             throw JellyfinError.authenticationFailed
         }
 
-        // Onto the client the credentials were checked against: a switch that
-        // landed during the request owns the connection now.
-        let authedClient = makeClient(url: url, accessToken: accessToken)
-        guard withState({ $0.install(authedClient, url: url, accessToken: accessToken, ifGeneration: generation) }) else {
+        // Onto the client the credentials were checked against, on the route
+        // they were checked through: a switch that landed during the request
+        // owns the connection now.
+        let authedClient = makeClient(url: connection.dial, accessToken: accessToken)
+        guard withState({
+            $0.install(authedClient, url: connection.identity, dialURL: connection.dial, accessToken: accessToken, ifGeneration: connection.generation)
+        }) else {
             throw CancellationError()
         }
 
@@ -428,10 +535,10 @@ public final class JellyfinAPIClient: Sendable {
     }
 
     public func authenticateWithQuickConnect(secret: String) async throws -> UserSession {
-        guard let (client, url, generation) = connectionWithGeneration() else { throw JellyfinError.notConnected }
+        guard let connection = connectionWithGeneration() else { throw JellyfinError.notConnected }
 
         let body = QuickConnectDto(secret: secret)
-        let result = try await client.send(Paths.authenticateWithQuickConnect(body)).value
+        let result = try await connection.client.send(Paths.authenticateWithQuickConnect(body)).value
 
         guard let accessToken = result.accessToken,
               let userID = result.user?.id else {
@@ -440,10 +547,13 @@ public final class JellyfinAPIClient: Sendable {
 
         // Reconfigure client with the issued access token — identical to the
         // password path so every downstream call is authenticated.
-        // Onto the client the credentials were checked against: a switch that
-        // landed during the request owns the connection now.
-        let authedClient = makeClient(url: url, accessToken: accessToken)
-        guard withState({ $0.install(authedClient, url: url, accessToken: accessToken, ifGeneration: generation) }) else {
+        // Onto the client the credentials were checked against, on the route
+        // they were checked through: a switch that landed during the request
+        // owns the connection now.
+        let authedClient = makeClient(url: connection.dial, accessToken: accessToken)
+        guard withState({
+            $0.install(authedClient, url: connection.identity, dialURL: connection.dial, accessToken: accessToken, ifGeneration: connection.generation)
+        }) else {
             throw CancellationError()
         }
 
@@ -498,11 +608,16 @@ public final class JellyfinAPIClient: Sendable {
         // disappeared in silence on a 12.0 server after switching account. Same
         // server ⇒ same version, so it is kept. Equality is the registry's own
         // `dedupKey`, not raw `URL` equality, so a trailing slash or an
-        // uppercase host doesn't read as a different server.
+        // uppercase host doesn't read as a different server. The compare is on
+        // the IDENTITY (`serverURL`), never the dial URL.
+        //
+        // The dial URL is reset: `url` is an identity, and the previous
+        // server's LAN address must never receive this one's token. The route
+        // owner re-evaluates and calls `setDialURL` afterwards.
         let client = makeClient(url: url, accessToken: accessToken)
         withState { state in
             if !Self.isSameServer(state.serverURL, as: url) { state.serverVersion = nil }
-            _ = state.install(client, url: url, accessToken: accessToken)
+            _ = state.install(client, url: url, dialURL: nil, accessToken: accessToken)
         }
     }
 

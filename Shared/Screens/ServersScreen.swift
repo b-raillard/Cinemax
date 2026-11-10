@@ -1,8 +1,9 @@
 import SwiftUI
 import CinemaxKit
 
-private extension View {
-    /// The switch / delete confirmations. iOS: an alert — iOS 27 draws a
+extension View {
+    /// The switch / delete confirmations (and the shared LAN certificate
+    /// approval, `ServerEntryEditing.swift`). iOS: an alert — iOS 27 draws a
     /// `confirmationDialog` as a popover with no « Annuler » (recette
     /// 2026-10-26, SRV-DLG-01; the account switcher's Q-ANNULER decision).
     /// tvOS keeps the confirmation dialog: a SwiftUI `.alert` has focus bugs
@@ -39,6 +40,10 @@ final class ServersViewModel {
     }
 
     private(set) var statuses: [String: PingStatus] = [:]
+    /// The road each online entry answers on, derived from the HOST of the
+    /// URL that answered (its LAN address, else its public one) — a server
+    /// whose only URL is `http://192.168.x.y` reads « Local ».
+    private(set) var routes: [String: ServerRouteKind] = [:]
 
     /// Attempt flag. The tvOS Settings surface re-presents (and re-fires its
     /// `.task`) on **every** `MenuConfigStore` mutation, so an unguarded probe
@@ -46,11 +51,35 @@ final class ServersViewModel {
     /// as `SettingsScreen.serverUsersLoadAttempted`.
     private var hasPinged = false
 
+    /// One sweep's answers so far, per entry — the public ping and the LAN
+    /// probe land separately (`apply(_:using:)`).
+    private var progress: [String: Progress] = [:]
+
     func status(for id: String) -> PingStatus? { statuses[id] }
+
+    /// The road the last probe of this entry answered on; nil while unknown or
+    /// offline.
+    func route(for id: String) -> ServerRouteKind? { routes[id] }
 
     /// Drops a removed entry's status so a re-added server starts from a clean
     /// "probing" state instead of inheriting a stale dot.
-    func forget(id: String) { statuses[id] = nil }
+    func forget(id: String) {
+        statuses[id] = nil
+        routes[id] = nil
+        progress[id] = nil
+    }
+
+    /// Probes one entry again — after its local address was saved or removed,
+    /// so its card's « Local » / « Internet » follows without reopening.
+    func refresh(id: String, using appState: AppState) async {
+        guard let entry = appState.servers.first(where: { $0.id == id }) else { return }
+        let reach = ServerRouteController.shared.currentReach
+        progress[id] = Progress()
+        await withTaskGroup(of: Answer.self) { group in
+            Self.addProbes(for: entry, reach: reach, to: &group)
+            for await answer in group { apply(answer, using: appState) }
+        }
+    }
 
     func pingIfNeeded(using appState: AppState) async {
         guard !hasPinged else { return }
@@ -61,11 +90,14 @@ final class ServersViewModel {
     /// Fans every registered server out to the **unauthenticated** public probe
     /// (`ServerReachability` — see the RULE in its header: no auth header, own
     /// `URLSession`, so it can never feed the shared 401 machinery and a dead
-    /// secondary server can't sign the user out of the active one).
+    /// secondary server can't sign the user out of the active one), and to
+    /// its LAN address's probe when it has one.
     ///
-    /// Results are applied as they land, so a slow server never holds up the
-    /// others and never blocks first paint; a discovered name / version
-    /// self-heals the stored entry through `AppState.updateServerMetadata`.
+    /// Results are applied as they land — each answer of each server on its
+    /// own — so a slow server never holds up the others, the public answer
+    /// never waits for the LAN timeout away from home, and nothing blocks
+    /// first paint; a discovered name / version self-heals the stored entry
+    /// through `AppState.updateServerMetadata`.
     func ping(using appState: AppState) async {
         let entries = appState.servers
         guard !entries.isEmpty else { return }
@@ -73,15 +105,15 @@ final class ServersViewModel {
             statuses[entry.id] = .pinging
         }
 
-        await withTaskGroup(of: Probe.self) { group in
+        let reach = ServerRouteController.shared.currentReach
+        for entry in entries { progress[entry.id] = Progress() }
+        await withTaskGroup(of: Answer.self) { group in
             for entry in entries {
-                let id = entry.id
-                let url = entry.url
-                group.addTask { Probe(id: id, result: await ServerReachability.ping(url: url)) }
+                Self.addProbes(for: entry, reach: reach, to: &group)
             }
-            for await probe in group {
+            for await answer in group {
                 guard !Task.isCancelled else { break }
-                apply(probe, using: appState)
+                apply(answer, using: appState)
             }
         }
 
@@ -92,19 +124,153 @@ final class ServersViewModel {
         if Task.isCancelled { hasPinged = false }
     }
 
-    private func apply(_ probe: Probe, using appState: AppState) {
-        switch probe.result {
-        case .online(let name, let version):
-            statuses[probe.id] = .online
-            appState.updateServerMetadata(id: probe.id, name: name, version: version)
-        case .offline:
-            statuses[probe.id] = .offline
+    private func apply(_ answer: Answer, using appState: AppState) {
+        var state = progress[answer.id] ?? Progress()
+        switch answer.kind {
+        case .publicAnswer(let result):
+            state.publicResult = result
+            if case .online(let name, let version, let serverID) = result {
+                appState.updateServerMetadata(id: answer.id, name: name, version: version, serverID: serverID)
+            }
+        case .localAnswer(let dial):
+            state.localDone = true
+            state.localDial = dial
+        }
+        progress[answer.id] = state
+        guard let card = Self.cardState(publicResult: state.publicResult, localDone: state.localDone,
+                                        localDial: state.localDial, identity: answer.identity) else { return }
+        statuses[answer.id] = card.status
+        routes[answer.id] = card.route
+    }
+
+    /// What a card shows from the answers so far; `nil` = nothing decided yet
+    /// (the dot stays « probing »). Online as soon as EITHER answers — the
+    /// public ping no longer waits for the LAN timeout away from home —, the
+    /// road from the host of what answered (the LAN dial wins: « Internet »
+    /// first, then « Local » once the LAN probe proves it). Offline only once
+    /// both have failed. Pure (`ServersRouteIndicationTests`).
+    nonisolated static func cardState(
+        publicResult: PingResult?, localDone: Bool, localDial: URL?, identity: URL
+    ) -> (status: PingStatus, route: ServerRouteKind?)? {
+        if let localDial { return (.online, ServerRoutePolicy.kind(ofDialURL: localDial)) }
+        switch publicResult {
+        case .online?: return (.online, ServerRoutePolicy.kind(ofDialURL: identity))
+        case .offline?: return localDone ? (.offline, nil) : nil
+        case nil: return nil
         }
     }
 
-    private struct Probe: Sendable {
+    /// The public ping and the LAN address (decided as the route owner
+    /// decides: https, a local peer answering with the entry's own `Id`), as
+    /// two separate answers. Nothing here is logged: no address may reach a
+    /// log line.
+    nonisolated private static func addProbes(
+        for entry: ServerEntry, reach: NetworkReach, to group: inout TaskGroup<Answer>
+    ) {
+        let id = entry.id, identity = entry.url
+        group.addTask {
+            Answer(id: id, identity: identity, kind: .publicAnswer(await ServerReachability.ping(url: identity)))
+        }
+        group.addTask {
+            Answer(id: id, identity: identity, kind: .localAnswer(await localDial(for: entry, reach: reach)))
+        }
+    }
+
+    nonisolated private static func localDial(for entry: ServerEntry, reach: NetworkReach) async -> URL? {
+        guard ServerRoutePolicy.shouldProbe(localURL: entry.localURL, reach: reach), let local = entry.localURL,
+              let expected = entry.serverID, !expected.isEmpty else { return nil }
+        let outcome = await LocalRouteProbe.probe(local, timeout: LocalRouteProbe.runtimeTimeout)
+        return ServerRoutePolicy.decide(localURL: local, reach: reach, expectedServerID: expected, probe: outcome)
+    }
+
+    private struct Progress {
+        var publicResult: PingResult?
+        var localDone = false
+        var localDial: URL?
+    }
+
+    private struct Answer: Sendable {
+        enum Kind: Sendable {
+            case publicAnswer(PingResult)
+            case localAnswer(URL?)
+        }
         let id: String
-        let result: PingResult
+        let identity: URL
+        let kind: Kind
+    }
+}
+
+// MARK: - Local address feedback
+
+/// What saving a local address says, as a toast. Pure, so the mapping is tested.
+enum LocalAddressToast {
+    /// `nil` for `.needsCertificateApproval`: the screen asks for the
+    /// certificate's approval instead of toasting.
+    static func message(for outcome: LocalAddressSaveOutcome) -> (key: String, level: Toast.Level)? {
+        switch outcome {
+        case .removed:                 ("servers.localAddress.removed", .info)
+        case .reachable:               ("servers.localAddress.reachable", .success)
+        case .savedUnreachable:        ("servers.localAddress.savedUnreachable", .info)
+        case .savedLocalNetworkDenied: ("servers.localAddress.denied", .error)
+        case .refusedNotLocal:         ("servers.localAddress.notLocal", .error)
+        case .refusedOtherServer:      ("servers.localAddress.otherServer", .error)
+        case .needsSignIn:             ("servers.localAddress.signInFirst", .error)
+        case .refusedNotHTTPS:         ("servers.localAddress.notHTTPS", .error)
+        case .savedNeedsApproval:      ("servers.localAddress.savedNeedsApproval", .info)
+        case .needsCertificateApproval: nil
+        }
+    }
+}
+
+/// The route line under the active server's address in Réglages → Serveur:
+/// « Local · 192.168.1.128:8920 » or « Internet », from the host of the
+/// address in use (`ServerRouteController.activeDialURL`). Reads the route owner
+/// directly (no environment injection) — a standalone `View`, so it redraws
+/// on a route change even inside a pushed destination.
+struct ServerRouteLine: View {
+    @Environment(LocalizationManager.self) private var loc
+    let font: Font
+
+    var body: some View {
+        // The address in use, its class from its host (`ServerRouteController.route`):
+        // a LAN dial, or an identity that is itself a LAN address.
+        let dial = ServerRouteController.shared.activeDialURL
+        let local = dial.flatMap { ServerRoutePolicy.kind(ofDialURL: $0) == .local ? Self.hostAndPort($0) : nil }
+        // One line; else « Local » over the address; « Local » alone only as
+        // the last resort — never a cut address (memory
+        // `feedback_short_label_over_truncation`).
+        ViewThatFits(in: .horizontal) {
+            if let local {
+                line(loc.localized("settings.server.route.local", local), icon: "house.fill")
+                    .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 2) {
+                    line(loc.localized("servers.route.local"), icon: "house.fill")
+                    Text(local).lineLimit(1)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                line(loc.localized("servers.route.local"), icon: "house.fill")
+            } else {
+                line(loc.localized("servers.route.internet"), icon: "globe")
+            }
+        }
+        .font(font)
+        .foregroundStyle(CinemaColor.onSurfaceMuted)
+    }
+
+    /// Icon and text side by side at a set gap — a `Label` spreads them far
+    /// apart on tvOS.
+    private func line(_ text: String, icon: String) -> some View {
+        HStack(spacing: CinemaSpacing.spacing1) {
+            Image(systemName: icon)
+            Text(text).lineLimit(1)
+        }
+    }
+
+    /// `host[:port]`, an IPv6 literal in brackets.
+    static func hostAndPort(_ url: URL) -> String? {
+        guard let host = url.host(percentEncoded: false), !host.isEmpty else { return nil }
+        let shown = host.contains(":") ? "[\(host)]" : host
+        return url.port.map { "\(shown):\($0)" } ?? shown
     }
 }
 
@@ -175,11 +341,11 @@ struct ServersScreen: View {
     @State private var pendingSwitchId: String?
     @State private var pendingDeleteId: String?
     @State private var switchingId: String?
-    /// Id of the entry being renamed (same freshness RULE as the two above).
-    @State private var pendingRenameId: String?
     /// A switch refused with `.locked`: the server whose account needs a code.
     @State private var lockedSwitch: ServerEntry?
-    @State private var renameText = ""
+    /// Rename + local address + certificate approval, shared with Réglages →
+    /// Serveur (`ServerEntryEditing.swift`; same freshness RULE as the two above).
+    @State private var editor = ServerEntryEditor()
     #if !os(tvOS)
     @State private var editMode: EditMode = .inactive
     #endif
@@ -199,12 +365,15 @@ struct ServersScreen: View {
         appState.servers.first(where: { $0.id == id })?.displayName ?? ServerEntry.fallbackName
     }
 
-    /// The name the SERVER reports — what an empty rename falls back to.
-    private func serverOwnName(for id: String) -> String {
-        appState.servers.first(where: { $0.id == id })?.name ?? ServerEntry.fallbackName
+    var body: some View {
+        // The card's « Local » / « Internet » follows a saved local address
+        // (the active one through the route owner, which the save re-evaluates).
+        screen.serverEntryEditing(editor) { id in
+            await viewModel.refresh(id: id, using: appState)
+        }
     }
 
-    var body: some View {
+    private var screen: some View {
         NavigationStack {
             #if os(tvOS)
             tvOSChrome
@@ -247,22 +416,6 @@ struct ServersScreen: View {
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: { id in
             Text(loc.localized("servers.delete.confirm", name(for: id)))
-        }
-        .alert(
-            loc.localized("servers.rename.title"),
-            isPresented: Binding(
-                get: { pendingRenameId != nil },
-                set: { if !$0 { pendingRenameId = nil } }
-            ),
-            presenting: pendingRenameId
-        ) { id in
-            // The placeholder is the server's own name — exactly what an empty
-            // field falls back to.
-            TextField(serverOwnName(for: id), text: $renameText)
-            Button(loc.localized("action.save")) { commitRename(id: id) }
-            Button(loc.localized("action.cancel"), role: .cancel) {}
-        } message: { id in
-            Text(loc.localized("servers.rename.message", serverOwnName(for: id)))
         }
     }
 
@@ -327,24 +480,6 @@ struct ServersScreen: View {
         toasts.success(loc.localized("servers.deleted", entry.displayName))
     }
 
-    /// Opens the rename alert pre-filled with the name currently shown.
-    private func beginRename(id: String) {
-        renameText = appState.servers.first(where: { $0.id == id })?.displayName ?? ""
-        pendingRenameId = id
-    }
-
-    /// Toasts only on a real change — saving the field untouched says nothing.
-    private func commitRename(id: String) {
-        let before = appState.servers.first(where: { $0.id == id })?.displayNameOverride
-        guard let updated = appState.renameServer(id: id, to: renameText),
-              updated.displayNameOverride != before else { return }
-        if updated.displayNameOverride == nil {
-            toasts.success(loc.localized("servers.renameReset", updated.name))
-        } else {
-            toasts.success(loc.localized("servers.renamed", updated.displayName))
-        }
-    }
-
     /// Moves one card a step up (`-1`) or down (`+1`) — tvOS's « Monter » /
     /// « Descendre ». Always writes the COMPLETE displayed order, the only
     /// shape `ServerRegistry.applyingOrder` accepts.
@@ -371,14 +506,7 @@ struct ServersScreen: View {
             initialBadge(for: entry)
 
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: CinemaSpacing.spacing2) {
-                    Text(entry.displayName)
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurface)
-                        .lineLimit(1)
-
-                    if isActive(entry) { currentPill }
-                }
+                titleLine(entry)
 
                 Text(displayAddress(entry))
                     .font(CinemaFont.label(.medium))
@@ -391,8 +519,10 @@ struct ServersScreen: View {
                     .foregroundStyle(CinemaColor.onSurfaceVariant.opacity(0.8))
                     .lineLimit(1)
             }
-
-            Spacer(minLength: CinemaSpacing.spacing2)
+            // The column takes every point up to the status dot — no Spacer
+            // between them: its minimum length plus a second HStack gap
+            // left ~27 pt empty, enough to push « Local » down to its icon.
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if switchingId == entry.id {
                 ProgressView()
@@ -417,6 +547,77 @@ struct ServersScreen: View {
                 .foregroundStyle(themeManager.onAccentContainer)
         }
         .accessibilityHidden(true)
+    }
+
+    /// The name, then « Actuel », then the road (« Local » / « Internet »).
+    /// The pills never truncate the name: when the line runs out the road
+    /// pill shrinks to its icon first, and only a name too long for the card
+    /// on its own is cut (memory `feedback_short_label_over_truncation`).
+    private func titleLine(_ entry: ServerEntry) -> some View {
+        let route = displayedRoute(entry)
+        return ViewThatFits(in: .horizontal) {
+            titleRow(entry, route: route, compactRoute: false, nameFits: true)
+            titleRow(entry, route: route, compactRoute: true, nameFits: true)
+            titleRow(entry, route: route, compactRoute: true, nameFits: false)
+        }
+    }
+
+    private func titleRow(
+        _ entry: ServerEntry, route: ServerRouteKind?, compactRoute: Bool, nameFits: Bool
+    ) -> some View {
+        // `spacing1`, as the mockup's tight gap: at `spacing2` « Nivadax ·
+        // Actuel · 🏠 Local » missed the iPhone 17 Pro card by a few points.
+        HStack(spacing: CinemaSpacing.spacing1) {
+            Text(entry.displayName)
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(CinemaColor.onSurface)
+                .lineLimit(1)
+                .fixedSize(horizontal: nameFits, vertical: false)
+                .layoutPriority(1)
+
+            if isActive(entry) { currentPill.fixedSize() }
+            if let route { routePill(route, compact: compactRoute).fixedSize() }
+        }
+    }
+
+    /// The road this card's server answers on, shown only once the card's
+    /// own probe found it online (never « Internet » beside a red dot), always
+    /// derived from a HOST, never a dial-state flag. The server we are on
+    /// reads the URL actually dialled (`routeKind(for:)` — the identity once
+    /// signed out, the LAN dial reset at logout); every other card the URL its
+    /// own probe reached.
+    private func displayedRoute(_ entry: ServerEntry) -> ServerRouteKind? {
+        guard viewModel.status(for: entry.id) == .online else { return nil }
+        if isActive(entry) { return ServerRouteController.shared.routeKind(for: entry) }
+        return viewModel.route(for: entry.id)
+    }
+
+    /// « Local » (`house.fill`) / « Internet » (`globe`), or the icon alone as
+    /// the short form — which keeps the word for VoiceOver.
+    private func routePill(_ route: ServerRouteKind, compact: Bool) -> some View {
+        let label = loc.localized(route == .local ? "servers.route.local" : "servers.route.internet")
+        return HStack(spacing: CinemaSpacing.spacing1) {
+            Image(systemName: route == .local ? "house.fill" : "globe")
+            if !compact { Text(label) }
+        }
+        .font(CinemaFont.label(.small))
+        .foregroundStyle(CinemaColor.onSurfaceVariant)
+        .padding(.horizontal, CinemaSpacing.spacing2)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(routePillFill))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+    }
+
+    /// iOS: `surfaceContainerHigh` over the glass card. tvOS: one step up —
+    /// the tvOS card itself is `surfaceContainerHigh` (`tvSettingsFocusable`),
+    /// where the same fill would vanish.
+    private var routePillFill: Color {
+        #if os(tvOS)
+        CinemaColor.surfaceContainerHighest
+        #else
+        CinemaColor.surfaceContainerHigh
+        #endif
     }
 
     private var currentPill: some View {
@@ -612,11 +813,11 @@ struct ServersScreen: View {
     }
 
     private func renameAction(_ entry: ServerEntry) -> some View {
-        Button {
-            beginRename(id: entry.id)
-        } label: {
-            Label(loc.localized("servers.rename"), systemImage: "pencil")
-        }
+        editor.renameButton(for: entry.id, appState: appState, loc: loc)
+    }
+
+    private func localAddressAction(_ entry: ServerEntry) -> some View {
+        editor.localAddressButton(for: entry.id, appState: appState, loc: loc)
     }
 
     @ViewBuilder
@@ -641,6 +842,7 @@ struct ServersScreen: View {
         // stays reachable on the active card — the one most worth renaming.
         .contextMenu {
             renameAction(entry)
+            localAddressAction(entry)
             if !active {
                 Button(role: .destructive) {
                     pendingDeleteId = entry.id
@@ -652,6 +854,8 @@ struct ServersScreen: View {
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             renameAction(entry)
                 .tint(themeManager.accent)
+            localAddressAction(entry)
+                .tint(themeManager.accentDim)
         }
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
@@ -781,11 +985,8 @@ struct ServersScreen: View {
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .server(entry.id))
         .contextMenu {
-            Button {
-                beginRename(id: entry.id)
-            } label: {
-                Label(loc.localized("servers.rename"), systemImage: "pencil")
-            }
+            editor.renameButton(for: entry.id, appState: appState, loc: loc)
+            editor.localAddressButton(for: entry.id, appState: appState, loc: loc)
             if index > 0 {
                 Button {
                     move(id: entry.id, by: -1)
