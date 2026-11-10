@@ -93,7 +93,7 @@ final class SeerrRequestPresenter {
         defer { lookingUp.remove(missing.id) }
         let tmdbId = title.tmdbId
         let details: SeerrTVDetails
-        switch await session.loadSection(deadline: lookupDeadline, { client, credential in
+        switch await session.loadSection(isAutomatic: false, deadline: lookupDeadline, { client, credential in
             [try await client.tv(tmdbId: tmdbId, credential)]
         }) {
         case nil:

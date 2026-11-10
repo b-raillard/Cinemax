@@ -1,7 +1,7 @@
 import Foundation
 import CinemaxKit
 
-private enum SectionOutcome<T: Sendable>: Sendable { case answer([T]), failed, expired }
+private enum SectionOutcome<T: Sendable>: Sendable { case answer([T]), failed, unreachable, expired }
 
 /// Resumes one continuation, once, with the first outcome — whichever of the
 /// work, the timer or the caller's cancellation arrives first (also before
@@ -40,15 +40,21 @@ extension SeerrSession {
     ///
     /// - `nil`: no account, or the answer is stale (cancelled task, account
     ///   changed) — the caller writes NOTHING.
-    /// - `.hidden`: an error, or the deadline won.
+    /// - `.hidden`: an error, or the deadline won — or Seerr just failed to
+    ///   answer (`isDown`): nothing is asked, so no skeleton waits on it.
     /// - `.loaded(items)`: the answer (an empty one renders nothing).
     ///
     /// Never touches UI state itself.
+    ///
+    /// `isAutomatic: false` — a press (a series card's season lookup): asked
+    /// even while `isDown`, the user is waiting for an answer.
     func loadSection<T: Equatable & Sendable>(
+        isAutomatic: Bool = true,
         deadline: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(6)) },
         _ op: @escaping @Sendable (SeerrClient, SeerrCredential) async throws -> [T]
     ) async -> MissingSection<T>? {
         guard let snapshot = snapshot() else { return nil }
+        guard !(isAutomatic && isDown) else { return .hidden }
         // Two unstructured tasks, not a task group: a group awaits every child
         // after `cancelAll()`, and `perform`'s shared silent re-sign-in ignores
         // cancellation for tens of seconds, so the deadline would bound nothing.
@@ -58,7 +64,13 @@ extension SeerrSession {
         let race = SectionRace<T>()
         let work = Task { [self] in
             let outcome: SectionOutcome<T>
-            do { outcome = .answer(try await perform(op)) } catch { outcome = .failed }
+            do {
+                outcome = .answer(try await perform(op))
+            } catch SeerrError.unreachable {
+                outcome = .unreachable
+            } catch {
+                outcome = .failed
+            }
             race.finish(outcome)
         }
         let timer = Task {
@@ -78,8 +90,14 @@ extension SeerrSession {
         timer.cancel()
         guard !Task.isCancelled, isCurrent(snapshot) else { return nil }
         switch outcome {
-        case .answer(let items): return .loaded(items)
-        case .failed, .expired: return .hidden
+        case .answer(let items):
+            noteAnswered()
+            return .loaded(items)
+        case .unreachable, .expired:
+            noteUnreachable()
+            return .hidden
+        case .failed:
+            return .hidden
         }
     }
 }
