@@ -307,9 +307,12 @@ final class SeerrMyRequestsModel {
     // MARK: « Regarder » (pure + its one effect)
 
     /// The Jellyfin item an arrived request opens: only once the media is
-    /// available AND Seerr knows its Jellyfin id.
+    /// available AND Seerr knows its Jellyfin id — a well-formed one
+    /// (`AppState.isValidItemId`, like every other way into the deep-link
+    /// route: the id is Seerr's word, not ours).
     static func watchTarget(_ request: SeerrRequest) -> String? {
-        guard request.media.status == .available, let id = request.media.jellyfinMediaId, !id.isEmpty else {
+        guard request.media.status == .available, let id = request.media.jellyfinMediaId,
+              AppState.isValidItemId(id) else {
             return nil
         }
         return id

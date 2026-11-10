@@ -111,8 +111,11 @@ final class SeerrActivationModel {
 
     // MARK: Load
 
-    func load(appState: AppState, session: SeerrSession) async {
-        guard let snapshot = session.snapshot() else { return }
+    /// `false` = nothing was read (the users did not answer, or the account
+    /// or the trigger moved): the caller must not record the load as done.
+    @discardableResult
+    func load(appState: AppState, session: SeerrSession) async -> Bool {
+        guard let snapshot = session.snapshot() else { return false }
         // Another account's users are never shown for this one.
         if snapshot.accountKey != loadedAccount {
             lines = []
@@ -124,9 +127,9 @@ final class SeerrActivationModel {
             users = try await appState.apiClient.getUsers()
         } catch {
             logger.notice("Seerr ▸ users unreadable")
-            return
+            return false
         }
-        guard session.isCurrent(snapshot) else { return }
+        guard session.isCurrent(snapshot) else { return false }
 
         let api = appState.apiClient
         let hasCredential = session.credential() != nil
@@ -155,7 +158,7 @@ final class SeerrActivationModel {
         }
         // A load cancelled midway (its trigger moved) holds failed lookups:
         // it must not overwrite what the load replacing it writes.
-        guard session.isCurrent(snapshot), !Task.isCancelled else { return }
+        guard session.isCurrent(snapshot), !Task.isCancelled else { return false }
 
         let newPlexLogin = session.publicSettings?.newPlexLogin ?? false
         var built: [SeerrUserLine] = []
@@ -180,6 +183,7 @@ final class SeerrActivationModel {
             address = session.config?.url
         }
         lines = built
+        return true
     }
 
     nonisolated private static func lookupAuth(_ credential: SeerrCredential) -> SeerrLookupAuth {
