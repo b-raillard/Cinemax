@@ -114,11 +114,16 @@ extension SeerrClient {
     // MARK: Catalogue
 
     public func search(_ query: String, _ credential: SeerrCredential) async throws -> [SeerrTitle] {
-        let page: SeerrSearchPage = try await get(
+        try await searchPage(query, page: 1, credential).results
+    }
+
+    /// One page of matches (20, TMDb's paging) with `totalPages`: the search
+    /// asks for the second only when it owns everything on the first.
+    public func searchPage(_ query: String, page: Int, _ credential: SeerrCredential) async throws -> SeerrSearchPage {
+        try await get(
             "/search",
-            query: [URLQueryItem(name: "query", value: query), URLQueryItem(name: "page", value: "1")],
+            query: [URLQueryItem(name: "query", value: query), URLQueryItem(name: "page", value: String(page))],
             auth: .credential(credential), localized: true)
-        return page.results
     }
 
     public func movie(tmdbId: Int, _ credential: SeerrCredential) async throws -> SeerrTitle {

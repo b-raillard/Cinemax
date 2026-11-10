@@ -1578,6 +1578,7 @@
 "seerr.test.ok.role.manage" = "can approve requests";
 "seerr.test.ok.role.request" = "can request";
 "seerr.test.warning.cannotManage" = "Your Seerr account can't approve requests: give it the “Manage Requests” permission in Seerr.";
+"seerr.test.warning.httpKey" = "Seerr uses HTTP: the API key travels unencrypted over the network. Prefer an HTTPS address.";
 "seerr.test.warning.httpSeerr" = "Seerr uses HTTP while your Jellyfin server uses HTTPS: reconnecting will take a press on “Sign in to Seerr”.";
 "seerr.activation.refused.capped" = "%@ couldn't be enabled: their account has an age limit. Remove it in Jellyfin to open requests to them.";
 "seerr.activation.noAddress" = "Enter Seerr's address first.";

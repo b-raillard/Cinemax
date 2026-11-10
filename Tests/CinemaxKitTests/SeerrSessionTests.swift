@@ -1680,14 +1680,25 @@ struct SeerrConnectionTestTests {
         let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, userReply(admin)])
         let report = await run(session, app, key: "KEY")
         #expect(report.failure == nil)
-        #expect(report.warnings.isEmpty)
+        // The bench address is plain HTTP: the key's own warning, nothing else.
+        #expect(report.warnings == [loc.localized("seerr.test.warning.httpKey")])
         #expect(report.verified.count == 3)      // no Quick Connect line in key mode
+    }
+
+    @Test("key mode over HTTPS is not warned: the key does not travel in clear")
+    func keyModeOverHTTPSIsNotWarned() async {
+        let admin = #"{"id":1,"permissions":2,"jellyfinUserId":"A","displayName":"Alice"}"#
+        let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, userReply(admin)])
+        let report = await SeerrConnectionTest.run(
+            address: URL(string: "https://seerr.example.org")!, deviceKey: "KEY", session: session, appState: app, loc: loc)
+        #expect(report.failure == nil)
+        #expect(report.warnings.isEmpty)
     }
 
     /// Owner, 2026-11-07: from an HTTPS Jellyfin a plain-HTTP Seerr is never
     /// signed in to silently — the test says so, in account mode, where a
     /// session has to be renewed (key mode renews nothing).
-    @Test("an HTTPS Jellyfin with a plain-HTTP Seerr is warned in account mode, never in key mode")
+    @Test("an HTTPS Jellyfin with a plain-HTTP Seerr gets the session warning in account mode only")
     func schemeMixIsWarnedInAccountMode() async {
         let stub = StubSeerrTransport([settingsReply])
         let (app, api) = signedIn(jellyfin: httpsJellyfinURL)
@@ -1711,7 +1722,8 @@ struct SeerrConnectionTestTests {
         keyApp.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: httpsJellyfinURL)
         let keyReport = await run(makeSession(keyStub, following: keyApp), keyApp, key: "KEY")
         #expect(keyReport.failure == nil)
-        #expect(keyReport.warnings.isEmpty)
+        // Never the session warning; the key's own one, the address being HTTP.
+        #expect(keyReport.warnings == [loc.localized("seerr.test.warning.httpKey")])
     }
 
     @Test("a Quick Connect probe that does not get through is « unreachable »; only a refusal is « off »")
@@ -1946,6 +1958,35 @@ struct SeerrActivationTests {
         for id in ["ADMIN", "ANN", "BOB"] { #expect(world.stored(id) == SeerrUserConfig(isEnabled: true, url: seerrURL)) }
         #expect(summary == SeerrActivationModel.activationSummary(enabled: 3, refusedNames: ["Tom"], loc: world.loc))
         #expect(world.model.enabledCount == 3)
+    }
+
+    @Test("a switch flipped while the list reloads is not put back by that reload")
+    func reloadKeepsASwitchFlippedMeanwhile() async {
+        let world = await activationWorld(users: [adminUser, ann], extraRoutes: [
+            "/user/jellyfin/ADMIN": [userReply(adminJSON), userReply(adminJSON)],
+            "/user/jellyfin/ANN": [notFoundReply, notFoundReply],
+        ])
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.model.lines.first { $0.id == "ANN" }?.isEnabled == false)
+        // The second load has read Ann's configuration (off) and waits on Seerr.
+        let started = TestLatch()
+        let release = TestLatch()
+        world.transport.onRequest { path, index in
+            if path == "/user/jellyfin/ANN", index == 1 {
+                started.open()
+                await release.wait()
+            }
+        }
+        let reload = Task { await world.model.load(appState: world.app, session: world.session) }
+        await started.wait()
+
+        #expect(await world.model.setEnabled(true, userId: "ANN", appState: world.app, loc: world.loc) == nil)
+        release.open()
+        #expect(await reload.value)
+
+        #expect(world.model.lines.first { $0.id == "ANN" }?.isEnabled == true)
+        // The next load reads what the server holds: still on.
+        #expect(world.writes(for: "ANN").last.map { SeerrUserConfig.read($0).isEnabled } == true)
     }
 
     @Test("a write carries every other pref of the stored entity")
@@ -2409,6 +2450,29 @@ struct SeerrMyRequestsTests {
         #expect(!Model.canCancel(myRequest(status: .declined)))
         // Mine waits, but the title already arrived through someone else's.
         #expect(!Model.canCancel(myRequest(status: .pending, media: .available)))
+    }
+
+    @Test("a title looked up once is not asked again when the list is read again")
+    func titlesAreRemembered() async {
+        let page = requestPage([requestJSON(1, tmdbId: 11)], total: 1)
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [page, page],
+            "/movie/11": [movieReply(11, "Dune")],
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.rows.map(\.title) == ["Dune"])
+
+        await model.loadFirstPage(session: session)   // « Actualiser »
+
+        #expect(model.rows.map(\.title) == ["Dune"])
+        #expect(model.rows.allSatisfy { !$0.isTitlePending })
+        #expect(transport.requests.filter(isCall("/movie/11")).count == 1)
+        #expect(!transport.exhausted)
+
+        // Titles are in the app's language: another language asks again.
+        session.setLanguage("de")
+        #expect(session.rememberedTitle(kind: .movie, tmdbId: 11) == nil)
     }
 
     @Test("withdrawing a pending request sends DELETE, removes the row, says so")

@@ -223,10 +223,20 @@ let neverExpires: @Sendable () async throws -> Void = {
 /// Answers Seerr by path: the session's reload (`/settings/public`,
 /// `/auth/me`), then `/search` — held by `gate` when one is given — and
 /// `/tv/{id}`, held by `tvGate`.
+/// The terms the library was searched with, from a `@Sendable` handler.
+private final class SearchTerms: @unchecked Sendable {
+    private let lock = NSLock()
+    private var terms: [String] = []
+    var all: [String] { lock.withLock { terms } }
+    func add(_ term: String) { lock.withLock { terms.append(term) } }
+}
+
 private final class SearchSeerrTransport: SeerrTransport, @unchecked Sendable {
     private let lock = NSLock()
     private var sent: [URLRequest] = []
     private let searchReply: StubSeerrTransport.Reply
+    /// What `/search?page=2` answers; `nil` ⇒ the same as page 1.
+    private let secondPage: StubSeerrTransport.Reply?
     private let gate: TestLatch?
     private let tvReply: StubSeerrTransport.Reply?
     private let tvGate: TestLatch?
@@ -238,9 +248,11 @@ private final class SearchSeerrTransport: SeerrTransport, @unchecked Sendable {
 
     init(
         search: StubSeerrTransport.Reply = .response(status: 200, body: duneSearchBody), gate: TestLatch? = nil,
-        tv: StubSeerrTransport.Reply? = nil, tvGate: TestLatch? = nil, specials: Bool = false
+        tv: StubSeerrTransport.Reply? = nil, tvGate: TestLatch? = nil, specials: Bool = false,
+        secondPage: StubSeerrTransport.Reply? = nil
     ) {
         self.searchReply = search
+        self.secondPage = secondPage
         self.gate = gate
         self.tvReply = tv
         self.tvGate = tvGate
@@ -263,7 +275,8 @@ private final class SearchSeerrTransport: SeerrTransport, @unchecked Sendable {
         case "/search":
             searchArrived.open()
             if let gate { await gate.wait() }
-            reply = searchReply
+            let isSecond = request.url?.query?.contains("page=2") == true
+            reply = isSecond ? (secondPage ?? searchReply) : searchReply
         case "/request":
             reply = .response(status: 201, body: """
             {"id":1,"status":1,"type":"movie","createdAt":"2026-11-01T10:00:00Z","updatedAt":"2026-11-01T10:00:00Z",
@@ -367,6 +380,8 @@ struct SearchSeerrSectionTests {
 
         vm.search(using: app)
         await transport.searchArrived.wait()
+        // Seerr is asked alongside the library: wait for the library's write.
+        #expect(await eventually { vm.seerrSection == .loading })
 
         // Seerr is held: the library is already written, the spinner gone,
         // and the section is a skeleton.
@@ -387,6 +402,115 @@ struct SearchSeerrSectionTests {
         }
         #expect(missing.map(\.id) == ["movie-841", "tv-90228"])
         #expect(vm.seerrSection(for: session.snapshot()) == vm.seerrSection)
+    }
+
+    @Test("Seerr is asked while the library is still answering, and its section waits for the library")
+    func seerrIsAskedAlongsideTheLibrary() async {
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody))
+        let api = MockAPIClient()
+        let library = TestLatch()
+        let owned = libraryItem(id: "lib-dune", name: "Dune", type: .movie, tmdb: "438631")
+        api.searchItemsHandler = { _ in
+            await library.wait()
+            return [owned]
+        }
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        // The library has not answered, and Seerr's request already left.
+        await transport.searchArrived.wait()
+        #expect(vm.results.isEmpty)
+        #expect(vm.seerrSection == .hidden)   // nothing is drawn above the library
+
+        library.open()
+        await vm.searchTask?.value
+
+        #expect(vm.results.map(\.id) == ["lib-dune"])
+        guard case .loaded(let missing) = vm.seerrSection else {
+            Issue.record("expected a loaded section, got \(vm.seerrSection)")
+            return
+        }
+        // The owned title is still subtracted.
+        #expect(!missing.map(\.id).contains("movie-438631"))
+        #expect(!missing.isEmpty)
+    }
+
+    @Test("when the library owns the whole first page, the second is asked — once")
+    func secondPageWhenTheFirstIsAllOwned() async {
+        let first = """
+        {"page":1,"totalPages":3,"totalResults":50,"results":[
+        {"mediaType":"movie","id":438631,"title":"Dune","releaseDate":"2021-09-15"}]}
+        """
+        let second = """
+        {"page":2,"totalPages":3,"totalResults":50,"results":[
+        {"mediaType":"movie","id":438631,"title":"Dune","releaseDate":"2021-09-15"},
+        {"mediaType":"movie","id":841,"title":"Dune","releaseDate":"1984-12-14"}]}
+        """
+        let transport = SearchSeerrTransport(
+            search: .response(status: 200, body: first), secondPage: .response(status: 200, body: second))
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [libraryItem(id: "lib-dune", name: "Dune", type: .movie, tmdb: "438631")]
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        await vm.searchTask?.value
+
+        #expect(vm.seerrSection == .loaded([
+            SeerrMissingTitle(title: SeerrTitle(kind: .movie, tmdbId: 841, title: "Dune", year: 1984), badge: .request),
+        ]))
+        let pages = transport.requests.compactMap { $0.url }.filter { $0.path.hasSuffix("/search") }.map { $0.query ?? "" }
+        #expect(pages.count == 2)
+        #expect(pages.last?.contains("page=2") == true)
+    }
+
+    @Test("a first page with something to propose never asks for a second")
+    func noSecondPageWhenTheFirstProposes() async {
+        let body = duneSearchBody.replacingOccurrences(of: #""totalPages":1"#, with: #""totalPages":4"#)
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: body))
+        let api = MockAPIClient()
+        api.stubbedSearchResults = [libraryItem(id: "lib-dune", name: "Dune", type: .movie, tmdb: "438631")]
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        await vm.searchTask?.value
+
+        guard case .loaded(let missing) = vm.seerrSection else {
+            Issue.record("expected a loaded section, got \(vm.seerrSection)")
+            return
+        }
+        #expect(!missing.isEmpty)
+        #expect(transport.requests.filter { $0.url?.path.hasSuffix("/search") == true }.count == 1)
+    }
+
+    @Test("a text change the screen never reported is still the query that runs")
+    func missedTextChangeIsCaughtAfterTheDebounce() async {
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody))
+        let api = MockAPIClient()
+        let terms = SearchTerms()
+        api.searchItemsHandler = { term in
+            terms.add(term)
+            return []
+        }
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dun"
+        vm.search(using: app)
+        // The last letter lands, and `onChange` never fires for it.
+        vm.searchText = "dune"
+
+        #expect(await eventually { terms.all.contains("dune") })
+        await vm.searchTask?.value
+
+        #expect(!terms.all.contains("dun"))
+        let asked = transport.requests.compactMap { $0.url }.filter { $0.path.hasSuffix("/search") }
+        #expect(asked.count == 1)
+        #expect(asked.first?.query?.contains("query=dune&") == true)
     }
 
     @Test("a title the library owns is not listed again; ownership is per kind")
@@ -461,7 +585,8 @@ struct SearchSeerrSectionTests {
 
         vm.search(using: app)
         await transport.searchArrived.wait()
-        #expect(vm.seerrSection == .loading)
+        // Seerr is asked alongside the library: the skeleton follows the library's write.
+        #expect(await eventually { vm.seerrSection == .loading })
 
         // Another profile of the same server takes over, its reload runs.
         app.currentUserId = "B"

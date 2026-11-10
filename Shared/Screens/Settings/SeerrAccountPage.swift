@@ -9,7 +9,7 @@ import CinemaxKit
 /// A standalone view with its own environment (root RULE: a pushed
 /// destination built by an extension method never redraws). Everything it
 /// shows comes from `activation`, an `@Observable` shared with the list.
-struct SeerrAccountPage: View {
+struct SeerrAccountPage: View, SeerrSettingsChrome {
     let activation: SeerrActivationModel
     let userId: String
 
@@ -184,61 +184,6 @@ struct SeerrAccountPage: View {
                                  colorScheme: themeManager.darkModeEnabled ? .dark : .light)
         #else
         iOSSettingsRow { content() }
-        #endif
-    }
-
-    @ViewBuilder
-    private func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        #if os(tvOS)
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) { content() }
-        #else
-        VStack(spacing: 0) { content() }
-            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-        #endif
-    }
-
-    @ViewBuilder
-    private var divider: some View {
-        #if os(iOS)
-        iOSSettingsDivider
-        #endif
-    }
-
-    @ViewBuilder
-    private func sectionHeader(_ title: String) -> some View {
-        #if os(tvOS)
-        Text(title.uppercased())
-            .font(.system(size: CinemaScale.pt(17), weight: .bold))
-            .foregroundStyle(CinemaColor.onSurfaceVariant)
-            .tracking(1.5)
-            .accessibilityLabel(title)
-            .accessibilityAddTraits(.isHeader)
-        #else
-        iOSSettingsSectionHeader(title)
-        #endif
-    }
-
-    private func noteText(_ text: String) -> some View {
-        Text(text)
-            .font(rowDetailFont)
-            .foregroundStyle(CinemaColor.onSurfaceVariant)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, CinemaSpacing.spacing2)
-    }
-
-    private var rowLabelFont: Font {
-        #if os(tvOS)
-        .system(size: CinemaScale.pt(20), weight: .medium)
-        #else
-        CinemaFont.dynamicLabel(.large)
-        #endif
-    }
-
-    private var rowDetailFont: Font {
-        #if os(tvOS)
-        .system(size: CinemaScale.pt(16), weight: .regular)
-        #else
-        CinemaFont.dynamicLabel(.medium)
         #endif
     }
 

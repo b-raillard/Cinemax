@@ -150,6 +150,21 @@ final class SeerrSession {
         return now() < downUntil
     }
 
+    /// Titles and posters already looked up for a request row, by
+    /// `SeerrMissingTitle.id`: they are in the app's language, so a language
+    /// change forgets them, as does an account change. Small, and capped.
+    @ObservationIgnored private var titleMemo: [String: SeerrRequestTitles.Lookup] = [:]
+    static let titleMemoCap = 500
+
+    func rememberedTitle(kind: SeerrMediaKind, tmdbId: Int) -> SeerrRequestTitles.Lookup? {
+        titleMemo[SeerrMissingTitle.id(kind: kind, tmdbId: tmdbId)]
+    }
+
+    func rememberTitle(_ title: SeerrRequestTitles.Lookup, kind: SeerrMediaKind, tmdbId: Int) {
+        if titleMemo.count >= Self.titleMemoCap { titleMemo.removeAll() }
+        titleMemo[SeerrMissingTitle.id(kind: kind, tmdbId: tmdbId)] = title
+    }
+
     func noteUnreachable() { downUntil = now().addingTimeInterval(Self.downCooldown) }
     func noteAnswered() { if downUntil != nil { downUntil = nil } }
 
@@ -194,6 +209,7 @@ final class SeerrSession {
         pendingCount = nil
         downUntil = nil
         unconfiguredReadAt = nil
+        titleMemo.removeAll()
     }
 
     /// The account changed (`onChange(of: activeAccountKey)`, and the head of
@@ -208,6 +224,7 @@ final class SeerrSession {
     func setLanguage(_ code: String?) {
         guard code != languageCode else { return }
         languageCode = code
+        titleMemo.removeAll()
         if let client {
             self.client = SeerrClient(baseURL: client.baseURL, languageCode: code, transport: transport)
         }
