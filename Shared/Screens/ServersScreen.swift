@@ -1,8 +1,9 @@
 import SwiftUI
 import CinemaxKit
 
-private extension View {
-    /// The switch / delete confirmations. iOS: an alert — iOS 27 draws a
+extension View {
+    /// The switch / delete confirmations (and the shared LAN certificate
+    /// approval, `ServerEntryEditing.swift`). iOS: an alert — iOS 27 draws a
     /// `confirmationDialog` as a popover with no « Annuler » (recette
     /// 2026-10-26, SRV-DLG-01; the account switcher's Q-ANNULER decision).
     /// tvOS keeps the confirmation dialog: a SwiftUI `.alert` has focus bugs
@@ -221,18 +222,6 @@ enum LocalAddressToast {
     }
 }
 
-/// A LAN certificate waiting for the user's approval: the entry id (re-resolved
-/// at action time, like every pending action here), the text typed, and the
-/// summary SHOWN — its exact fingerprint is what gets pinned (R15).
-struct LocalCertificateApproval: Identifiable {
-    let entryId: String
-    let raw: String
-    let summary: ServerCertificateSummary
-    /// The host already carried a pin: the certificate CHANGED since.
-    let isRotation: Bool
-    var id: String { summary.fingerprint }
-}
-
 /// The route line under the active server's address in Réglages → Serveur:
 /// « Local · 192.168.1.128:8920 » or « Internet », from the host of the
 /// address in use (`ServerRouteController.activeDialURL`). Reads the route owner
@@ -352,16 +341,11 @@ struct ServersScreen: View {
     @State private var pendingSwitchId: String?
     @State private var pendingDeleteId: String?
     @State private var switchingId: String?
-    /// Id of the entry being renamed (same freshness RULE as the two above).
-    @State private var pendingRenameId: String?
     /// A switch refused with `.locked`: the server whose account needs a code.
     @State private var lockedSwitch: ServerEntry?
-    @State private var renameText = ""
-    /// Id of the entry whose local address is being edited (same freshness RULE).
-    @State private var pendingLocalAddressId: String?
-    @State private var localAddressText = ""
-    /// The LAN certificate the last save asked to approve.
-    @State private var pendingApproval: LocalCertificateApproval?
+    /// Rename + local address + certificate approval, shared with Réglages →
+    /// Serveur (`ServerEntryEditing.swift`; same freshness RULE as the two above).
+    @State private var editor = ServerEntryEditor()
     #if !os(tvOS)
     @State private var editMode: EditMode = .inactive
     #endif
@@ -381,13 +365,12 @@ struct ServersScreen: View {
         appState.servers.first(where: { $0.id == id })?.displayName ?? ServerEntry.fallbackName
     }
 
-    /// The name the SERVER reports — what an empty rename falls back to.
-    private func serverOwnName(for id: String) -> String {
-        appState.servers.first(where: { $0.id == id })?.name ?? ServerEntry.fallbackName
-    }
-
     var body: some View {
-        localAddressPresentations(screen)
+        // The card's « Local » / « Internet » follows a saved local address
+        // (the active one through the route owner, which the save re-evaluates).
+        screen.serverEntryEditing(editor) { id in
+            await viewModel.refresh(id: id, using: appState)
+        }
     }
 
     private var screen: some View {
@@ -434,65 +417,6 @@ struct ServersScreen: View {
         } message: { id in
             Text(loc.localized("servers.delete.confirm", name(for: id)))
         }
-        .alert(
-            loc.localized("servers.rename.title"),
-            isPresented: Binding(
-                get: { pendingRenameId != nil },
-                set: { if !$0 { pendingRenameId = nil } }
-            ),
-            presenting: pendingRenameId
-        ) { id in
-            // The placeholder is the server's own name — exactly what an empty
-            // field falls back to.
-            TextField(serverOwnName(for: id), text: $renameText)
-            Button(loc.localized("action.save")) { commitRename(id: id) }
-            Button(loc.localized("action.cancel"), role: .cancel) {}
-        } message: { id in
-            Text(loc.localized("servers.rename.message", serverOwnName(for: id)))
-        }
-    }
-
-    /// The local-address entry alert and the LAN certificate approval, kept
-    /// out of `screen`'s chain. The entry is an `.alert` with a `TextField` on
-    /// both platforms (tvOS: the system text entry, as the rename alert). The
-    /// approval is `serverConfirmation`: an alert on iOS, a confirmation
-    /// dialog on tvOS (a SwiftUI alert has focus bugs there), whose first
-    /// button « Faire confiance à ce certificat » takes the focus.
-    @ViewBuilder
-    private func localAddressPresentations(_ content: some View) -> some View {
-        content
-            .alert(
-                loc.localized("servers.localAddress.title"),
-                isPresented: Binding(
-                    get: { pendingLocalAddressId != nil },
-                    set: { if !$0 { pendingLocalAddressId = nil } }
-                ),
-                presenting: pendingLocalAddressId
-            ) { id in
-                TextField(loc.localized("servers.localAddress.placeholder"), text: $localAddressText)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .keyboardType(.URL)
-                    #endif
-                Button(loc.localized("action.save")) { commitLocalAddress(id: id) }
-                Button(loc.localized("action.cancel"), role: .cancel) {}
-            } message: { _ in
-                Text(loc.localized("servers.localAddress.message"))
-            }
-            .serverConfirmation(
-                loc.localized("server.certificate.title"),
-                isPresented: Binding(
-                    get: { pendingApproval != nil },
-                    set: { if !$0 { pendingApproval = nil } }
-                ),
-                presenting: pendingApproval
-            ) { approval in
-                Button(loc.localized("server.certificate.trust")) { trust(approval) }
-                Button(loc.localized("action.cancel"), role: .cancel) {}
-            } message: { approval in
-                Text(approvalMessage(approval))
-            }
     }
 
     // MARK: - Actions
@@ -554,97 +478,6 @@ struct ServersScreen: View {
         await appState.removeServer(entry)
         viewModel.forget(id: id)
         toasts.success(loc.localized("servers.deleted", entry.displayName))
-    }
-
-    /// Opens the rename alert pre-filled with the name currently shown.
-    private func beginRename(id: String) {
-        renameText = appState.servers.first(where: { $0.id == id })?.displayName ?? ""
-        pendingRenameId = id
-    }
-
-    /// Toasts only on a real change — saving the field untouched says nothing.
-    private func commitRename(id: String) {
-        let before = appState.servers.first(where: { $0.id == id })?.displayNameOverride
-        guard let updated = appState.renameServer(id: id, to: renameText),
-              updated.displayNameOverride != before else { return }
-        if updated.displayNameOverride == nil {
-            toasts.success(loc.localized("servers.renameReset", updated.name))
-        } else {
-            toasts.success(loc.localized("servers.renamed", updated.displayName))
-        }
-    }
-
-    /// Opens the local-address alert pre-filled with the stored address.
-    private func beginLocalAddress(id: String) {
-        localAddressText = appState.servers.first(where: { $0.id == id })?.localURL?.absoluteString ?? ""
-        pendingLocalAddressId = id
-    }
-
-    private func commitLocalAddress(id: String) {
-        let raw = localAddressText
-        Task { await handleLocalAddress(await appState.setLocalAddress(id: id, raw: raw), id: id, raw: raw) }
-    }
-
-    /// Pins exactly the fingerprint the user was shown (R15): `AppState` pins
-    /// it only while the pending certificate still carries it, and otherwise
-    /// answers `.needsCertificateApproval` again with the new one.
-    private func trust(_ approval: LocalCertificateApproval) {
-        Task {
-            let outcome = await appState.trustLocalCertificate(
-                id: approval.entryId, raw: approval.raw, fingerprint: approval.summary.fingerprint
-            )
-            await handleLocalAddress(outcome, id: approval.entryId, raw: approval.raw)
-        }
-    }
-
-    /// Every save's outcome lands here: a toast, or the certificate approval.
-    private func handleLocalAddress(_ outcome: LocalAddressSaveOutcome, id: String, raw: String) async {
-        if outcome == .needsCertificateApproval {
-            guard appState.servers.contains(where: { $0.id == id }),
-                  let summary = appState.pendingLocalCertificate(raw: raw) else {
-                // The pending certificate is gone (the entry was removed, or
-                // another probe replaced it): nothing to show, nothing saved.
-                toasts.error(loc.localized("server.connectFailed"))
-                return
-            }
-            pendingApproval = LocalCertificateApproval(
-                entryId: id,
-                raw: raw,
-                summary: summary,
-                isRotation: ServerTrustDelegate.shared.isPinned(trustKey: summary.trustKey)
-            )
-            return
-        }
-        if let message = LocalAddressToast.message(for: outcome) {
-            let text = loc.localized(message.key)
-            switch message.level {
-            case .success: toasts.success(text)
-            case .error:   toasts.error(text)
-            case .info:    toasts.info(text)
-            }
-        }
-        // The card's « Local » / « Internet » follows the new address (the
-        // active one through the route owner, which the save re-evaluates).
-        await viewModel.refresh(id: id, using: appState)
-    }
-
-    /// What the approval shows, in the server-setup panel's order: why, what
-    /// to check, then the host, the subject and the SHA-256 fingerprint in its
-    /// grouped form — the thing that gets pinned.
-    private func approvalMessage(_ approval: LocalCertificateApproval) -> String {
-        let summary = approval.summary
-        var lines = [
-            loc.localized(approval.isRotation ? "server.certificate.changed" : "server.certificate.untrusted"),
-            loc.localized("server.certificate.explain"),
-            "",
-            loc.localized("server.certificate.host").uppercased(),
-            summary.host
-        ]
-        if let subject = summary.subject, !subject.isEmpty {
-            lines += ["", loc.localized("server.certificate.subject").uppercased(), subject]
-        }
-        lines += ["", loc.localized("server.certificate.fingerprint").uppercased(), summary.formattedFingerprint]
-        return lines.joined(separator: "\n")
     }
 
     /// Moves one card a step up (`-1`) or down (`+1`) — tvOS's « Monter » /
@@ -980,19 +813,11 @@ struct ServersScreen: View {
     }
 
     private func renameAction(_ entry: ServerEntry) -> some View {
-        Button {
-            beginRename(id: entry.id)
-        } label: {
-            Label(loc.localized("servers.rename"), systemImage: "pencil")
-        }
+        editor.renameButton(for: entry.id, appState: appState, loc: loc)
     }
 
     private func localAddressAction(_ entry: ServerEntry) -> some View {
-        Button {
-            beginLocalAddress(id: entry.id)
-        } label: {
-            Label(loc.localized("servers.localAddress"), systemImage: "house")
-        }
+        editor.localAddressButton(for: entry.id, appState: appState, loc: loc)
     }
 
     @ViewBuilder
@@ -1160,16 +985,8 @@ struct ServersScreen: View {
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .server(entry.id))
         .contextMenu {
-            Button {
-                beginRename(id: entry.id)
-            } label: {
-                Label(loc.localized("servers.rename"), systemImage: "pencil")
-            }
-            Button {
-                beginLocalAddress(id: entry.id)
-            } label: {
-                Label(loc.localized("servers.localAddress"), systemImage: "house")
-            }
+            editor.renameButton(for: entry.id, appState: appState, loc: loc)
+            editor.localAddressButton(for: entry.id, appState: appState, loc: loc)
             if index > 0 {
                 Button {
                     move(id: entry.id, by: -1)

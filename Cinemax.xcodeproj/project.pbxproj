@@ -340,6 +340,7 @@
 		60F611538FAF3F8D3787C786 /* ExtensionServerRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90AE2E16EF76909D68C221A7 /* ExtensionServerRoute.swift */; };
 		615404387A1AE6CADC2CCC5C /* AdminLoadStateContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FCF5A94AA4897A4644B777A /* AdminLoadStateContainer.swift */; };
 		61997EEBB3CB4ED65DC0A037 /* ServerRouteControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF9E460D071984F8E70D96C7 /* ServerRouteControllerTests.swift */; };
+		61C7BBF02E8DBC65C220B0FC /* ServerEntryEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076A4CE6F139CF6F4AB73749 /* ServerEntryEditing.swift */; };
 		622D6AC34C377048FFE8750A /* TrickplayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFAC463F8054600F3BCEB911 /* TrickplayController.swift */; };
 		629034F00C9B9A91F1DFDFAF /* ContentRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAFD25D98FA0E18A0F441F5 /* ContentRow.swift */; };
 		62F7E3C1CAB9A895D8A5D456 /* SettingsNavCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D8C4660090ABCAD7FF2FA16 /* SettingsNavCoordinator.swift */; };
@@ -448,6 +449,7 @@
 		862238164FF50E4939A88F8D /* SeasonalThemePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D8436C1CFF104C77B3237D /* SeasonalThemePolicyTests.swift */; };
 		86280CCCB1F5B8F2F64E0DF2 /* ExtensionSessionContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150CEE71B06EA3843288DA0E /* ExtensionSessionContractTests.swift */; };
 		86526F1D7EA8C308D75CD1FE /* WatchedHistoryScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CE70722EFBCE65782C560AB /* WatchedHistoryScreen.swift */; };
+		866086350FB5DFBF5244722D /* ServerEntryEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076A4CE6F139CF6F4AB73749 /* ServerEntryEditing.swift */; };
 		86AC24861A35CA8EDFE28605 /* AdminPluginsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3762983CA570B7EB3C9E1F65 /* AdminPluginsScreen.swift */; };
 		870ED1B70E8234C2FDBEAD6E /* SeasonalThemePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 756663BDEA8390301E8117E8 /* SeasonalThemePolicy.swift */; };
 		8770BADC697109FB04AD0221 /* AccountLockStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9104FBBF825F55A5F637BAB /* AccountLockStore.swift */; };
@@ -902,6 +904,7 @@
 		0648D5BED06D4322AA84F852 /* EntitlementStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementStore.swift; sourceTree = "<group>"; };
 		06DF659E53C9DB219FB06A7F /* FavoritesScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesScreen.swift; sourceTree = "<group>"; };
 		0714291BF47E5932F22F29C4 /* LocalNetworkAddress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNetworkAddress.swift; sourceTree = "<group>"; };
+		076A4CE6F139CF6F4AB73749 /* ServerEntryEditing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerEntryEditing.swift; sourceTree = "<group>"; };
 		0798A7868A025E73D1891D8B /* AdminSectionGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminSectionGroup.swift; sourceTree = "<group>"; };
 		07BE0FC86294412983D44667 /* SessionResilienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionResilienceTests.swift; sourceTree = "<group>"; };
 		07DADA68F15CA8D646FB10CD /* DiagnosticsUploadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsUploadTests.swift; sourceTree = "<group>"; };
@@ -1819,6 +1822,7 @@
 				C144D0A57021E0A0A783977B /* SearchScreen.swift */,
 				692D31E154F105194FC5219D /* SeasonCollectionScreen.swift */,
 				5392E5D6360E4430456477E9 /* ServerDiscoverySheet.swift */,
+				076A4CE6F139CF6F4AB73749 /* ServerEntryEditing.swift */,
 				C23376A2C6A25FD3A7A74DBE /* ServerHelpSheet.swift */,
 				171E69387E1D6BAAB538ECA0 /* ServerSetupScreen.swift */,
 				A4ECC0C8AFCB39635F28D82B /* ServersScreen.swift */,
@@ -2812,6 +2816,7 @@
 				DF2BB98A8A3BDD7D85F5300B /* SeerrSession+Sections.swift in Sources */,
 				73B71FECA44B9116E94F386F /* SeerrSession.swift in Sources */,
 				95D94E036EDA6AE3326386D4 /* ServerDiscoverySheet.swift in Sources */,
+				61C7BBF02E8DBC65C220B0FC /* ServerEntryEditing.swift in Sources */,
 				4B66D96B583EDB78690FD695 /* ServerHelpSheet.swift in Sources */,
 				1F14E13F6D4CBFD34F182991 /* ServerRouteController.swift in Sources */,
 				97AF9B841BA015AD94A9B390 /* ServerSetupScreen.swift in Sources */,
@@ -3236,6 +3241,7 @@
 				3B87D62659E7EB29A4E15D6B /* SeerrSession+Sections.swift in Sources */,
 				5EDCD7A1259F24135D153BB3 /* SeerrSession.swift in Sources */,
 				60C9BC65C7DCC678C8D21DA4 /* ServerDiscoverySheet.swift in Sources */,
+				866086350FB5DFBF5244722D /* ServerEntryEditing.swift in Sources */,
 				4979E3EF3554A8E4DF2E07EF /* ServerHelpSheet.swift in Sources */,
 				1DF4E5899D53C70491875188 /* ServerRouteController.swift in Sources */,
 				91ED326A57E034CF33FCA565 /* ServerSetupScreen.swift in Sources */,
