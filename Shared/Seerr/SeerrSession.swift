@@ -483,6 +483,9 @@ final class SeerrSession {
         if let cookie, cookie.value != deadCookie, cookie.isBound(to: client.baseURL) {
             return .renewed(cookie.value)   // a concurrent caller already renewed it
         }
+        // « Se déconnecter » landed meanwhile: a session the user gave up is
+        // never signed in again behind their back.
+        guard cookie?.value == deadCookie else { return .failed }
         if let pending = pendingReSignIn, pending.ticket.generation == generation {
             return await pending.task.value
         }
@@ -520,6 +523,9 @@ final class SeerrSession {
         guard !usesDeviceKey, SeerrAddress.sameOrigin(ticket.origin, client?.baseURL) else { return .stale }
         switch outcome {
         case .success(let signedIn):
+            // The dead cookie is gone (« Se déconnecter », or a fresher
+            // sign-in): this renewal is nobody's.
+            guard cookie?.value == ticket.deadCookie else { return .stale }
             storeCookie(SeerrBoundSecret(value: signedIn.cookie, origin: ticket.origin), for: ticket.accountKey)
             setConnection(.connected(signedIn.user))
             return .renewed(signedIn.cookie)
@@ -614,6 +620,11 @@ final class SeerrSession {
     func signOut() async {
         guard servesActiveAccount, let key = accountKey else { return }
         let signedOut = cookie ?? storage.seerrSessions()[key]
+        // A reload or a silent sign-in still in flight read the session being
+        // given up: neither may bring it back.
+        reloadPass &+= 1
+        pendingReSignIn?.task.cancel()
+        pendingReSignIn = nil
         dropCookie(nil, for: key)
         if !usesDeviceKey, client != nil { setConnection(.notConnected) }
         if let signedOut, let client, signedOut.isBound(to: client.baseURL), !isAgeCapped, proAllowsProvider() {

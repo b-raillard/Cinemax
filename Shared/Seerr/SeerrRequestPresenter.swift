@@ -207,6 +207,16 @@ final class SeerrRequestPresenter {
         overrides[id] ?? fallback
     }
 
+    /// A request was withdrawn (« Annuler la demande »): its title and
+    /// seasons read what their section says again — kept, the override left
+    /// the card « En attente » and refused a new request until relaunch.
+    func forget(_ request: SeerrRequest) {
+        overrides[SeerrMissingTitle.id(kind: request.kind, tmdbId: request.media.tmdbId)] = nil
+        for season in request.seasons {
+            overrides[SeerrMissingSeason.id(seriesTmdbId: request.media.tmdbId, seasonNumber: season)] = nil
+        }
+    }
+
     /// « Le téléchargement démarre tout de suite » or « l'admin doit valider ».
     static func nextStepKey(permissions: SeerrPermissions, kind: SeerrMediaKind) -> String {
         permissions.autoApproves(kind) ? "seerr.request.next.auto" : "seerr.request.next.approval"
@@ -355,8 +365,10 @@ final class SeerrRequestPresenter {
     }
 
     private func mark(_ job: Job, as badge: SeerrBadge) {
-        overrides["\(job.kind.rawValue)-\(job.tmdbId)"] = badge
-        for season in job.seasons { overrides["tv-\(job.tmdbId)-s\(season)"] = badge }
+        overrides[SeerrMissingTitle.id(kind: job.kind, tmdbId: job.tmdbId)] = badge
+        for season in job.seasons {
+            overrides[SeerrMissingSeason.id(seriesTmdbId: job.tmdbId, seasonNumber: season)] = badge
+        }
     }
 
     private func report(_ outcomes: [Result], loc: LocalizationManager, toasts: ToastCenter) {

@@ -1171,6 +1171,109 @@ struct SeerrSessionTests {
         #expect(logout.value(forHTTPHeaderField: "Cookie")?.contains("connect.sid=abc") == true)
     }
 
+    @Test("a reload in flight never brings back the session « Se déconnecter » gave up")
+    func signOutBeatsAReloadInFlight() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/auth/logout": [.response(status: 200, body: #"{"status":"ok"}"#)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, index in
+            if path == "/settings/public", index == 1 {
+                started.open()
+                await release.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let reload = Task { await session.reload(appState: app) }
+        await started.wait()
+        await session.signOut()
+        release.open()
+        await reload.value
+
+        #expect(session.connection == .notConnected)
+        #expect(storage.seerrSessions().isEmpty)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(!transport.requests.contains { $0.url?.path.contains("quickconnect") == true })
+    }
+
+    @Test("a call that outlives « Se déconnecter » never signs in again")
+    func signOutBeatsACallInFlight() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/auth/logout": [.response(status: 200, body: #"{"status":"ok"}"#)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            if path == "/search" {
+                started.open()
+                await release.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await started.wait()
+        await session.signOut()
+        release.open()
+        await #expect(throws: SeerrError.forbidden) { try await call.value }
+
+        #expect(session.connection == .notConnected)
+        #expect(storage.seerrSessions().isEmpty)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(!transport.requests.contains { $0.url?.path.contains("quickconnect") == true })
+    }
+
+    @Test("a silent sign-in in flight is dropped by « Se déconnecter »")
+    func signOutBeatsASilentSignInInFlight() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/auth/jellyfin/quickconnect/initiate": [initiatedReply],
+            "/auth/jellyfin/quickconnect/check": [approvedReply],
+            "/auth/jellyfin/quickconnect/authenticate": [authenticatedReply(cookie: "renewed")],
+            "/auth/logout": [.response(status: 200, body: #"{"status":"ok"}"#)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            if path == "/auth/jellyfin/quickconnect/initiate" {
+                started.open()
+                await release.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await started.wait()
+        await session.signOut()
+        release.open()
+        _ = try? await call.value
+
+        #expect(session.connection == .notConnected)
+        #expect(session.credential() == nil)
+        #expect(storage.seerrSessions().isEmpty)
+    }
+
     @Test("the device key is an admin's, stored per server with its address, and switches the mode")
     func deviceKeyIsPerServer() async {
         let stub = StubSeerrTransport([settingsReply])
@@ -1909,6 +2012,18 @@ struct SeerrActivationTests {
         #expect(world.api.updateDisplayPreferencesCalls.count == 2)
     }
 
+    @Test("a load whose users did not answer says so, and the next one fills the lines")
+    func failedLoadIsNotALoad() async {
+        let world = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply])
+        world.api.getUsersError = URLError(.timedOut)
+        #expect(await world.model.load(appState: world.app, session: world.session) == false)
+        #expect(world.model.lines.isEmpty)
+
+        world.api.getUsersError = nil
+        #expect(await world.model.load(appState: world.app, session: world.session))
+        #expect(world.model.lines.count == 2)
+    }
+
     @Test("a failed Seerr lookup is « unknown »; with no credential nothing is looked up")
     func lookupFailureIsUnknown() async {
         let failing = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": .failure(URLError(.timedOut))])
@@ -2471,16 +2586,19 @@ struct SeerrMyRequestsTests {
     @Test("« Regarder » opens the Jellyfin item, and only once the title has arrived")
     func watchUsesJellyfinId() {
         typealias Model = SeerrMyRequestsModel
-        #expect(Model.watchTarget(myRequest(status: .approved, media: .available, jellyfinId: "jf1")) == "jf1")
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .available, jellyfinId: jellyfinDune)) == jellyfinDune)
         #expect(Model.watchTarget(myRequest(status: .approved, media: .available)) == nil)
-        #expect(Model.watchTarget(myRequest(status: .approved, media: .processing, jellyfinId: "jf1")) == nil)
-        #expect(Model.watchTarget(myRequest(status: .completed, media: .partiallyAvailable, jellyfinId: "jf1")) == nil)
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .processing, jellyfinId: jellyfinDune)) == nil)
+        #expect(Model.watchTarget(myRequest(status: .completed, media: .partiallyAvailable, jellyfinId: jellyfinDune)) == nil)
+        // Seerr's word is checked like any other way into the deep-link route.
+        #expect(Model.watchTarget(myRequest(media: .available, jellyfinId: "not-an-id")) == nil)
+        #expect(Model.watchTarget(myRequest(media: .available, jellyfinId: String(repeating: "0", count: 32))) == nil)
 
         let (app, _) = signedIn()
-        #expect(Model.watch(myRequest(media: .available, jellyfinId: "jf1"), appState: app))
-        #expect(app.pendingDeepLinkItemId == "jf1")
+        #expect(Model.watch(myRequest(media: .available, jellyfinId: jellyfinDune), appState: app))
+        #expect(app.pendingDeepLinkItemId == jellyfinDune)
         app.pendingDeepLinkItemId = nil
-        #expect(!Model.watch(myRequest(media: .processing, jellyfinId: "jf1"), appState: app))
+        #expect(!Model.watch(myRequest(media: .processing, jellyfinId: jellyfinDune), appState: app))
         #expect(app.pendingDeepLinkItemId == nil)
     }
 }

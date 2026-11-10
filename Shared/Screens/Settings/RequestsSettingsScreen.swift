@@ -33,6 +33,7 @@ struct RequestsSettingsScreen: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
     @Environment(SeerrSession.self) private var seerr
+    @Environment(SeerrRequestPresenter.self) private var seerrRequests: SeerrRequestPresenter?
     @Environment(\.motionEffectsEnabled) private var motionEffects
     /// Never read: declaring it makes the screen redraw when the text size
     /// changes. Its fonts (`CinemaFont.dynamic*`) are point sizes computed
@@ -704,7 +705,11 @@ struct RequestsSettingsScreen: View {
         Task {
             await myRequests.cancel(row.id, session: seerr, toasts: toasts, loc: loc)
             // Withdrawn: a manager's own request leaves « À valider » too.
-            if !myRequests.rows.contains(where: { $0.id == row.id }) { pending.forget(row.id, session: seerr) }
+            if !myRequests.rows.contains(where: { $0.id == row.id }) {
+                pending.forget(row.id, session: seerr)
+                // Its card may be asked for again.
+                seerrRequests?.forget(row.request)
+            }
             #if os(tvOS)
             // Confirmed in an alert opened from this row: focus is the
             // alert's until it closes, so it never reads as « still here ».
@@ -1352,11 +1357,12 @@ struct RequestsSettingsScreen: View {
         let current = trigger
         guard current.isAdmin, current.url != nil, current != loadedTrigger else { return }
         isLoadingLines = true
-        await activation.load(appState: appState, session: seerr)
+        let didLoad = await activation.load(appState: appState, session: seerr)
         // A cancelled load is replaced by the next trigger's: leave it its state.
         guard !Task.isCancelled else { return }
         isLoadingLines = false
-        loadedTrigger = current
+        // A failed load records nothing: the next re-presentation tries again.
+        if didLoad { loadedTrigger = current }
     }
 
     /// « Mes demandes » is (re)loaded each time who is asking, as whom or
