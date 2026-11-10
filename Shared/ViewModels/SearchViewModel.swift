@@ -484,7 +484,7 @@ final class SearchViewModel {
             // SUBTRACTION needs the library's answer — so its section lands
             // at max(library, Seerr), not library + Seerr. Still drawn only
             // once the results are written (`showSeerrSection`).
-            async let candidates: MissingSection<SeerrTitle>? = Self.seerrCandidates(
+            async let candidates: MissingSection<SeerrSearchPage>? = Self.seerrCandidates(
                 query: query, seerr: seerrSnapshot == nil ? nil : seerr, deadline: deadline)
 
             let outcome = await titles
@@ -516,18 +516,20 @@ final class SearchViewModel {
             let answer = await candidates
             // A newer search owns the section now.
             guard !Task.isCancelled else { return }
-            self.showSeerrSection(
-                answer, owned: SeerrMissing.ownedTmdbIds(outcome.items), kinds: seerrKinds, snapshot: seerrSnapshot)
+            await self.showSeerrSection(
+                answer, query: query, owned: SeerrMissing.ownedTmdbIds(outcome.items), kinds: seerrKinds,
+                snapshot: seerrSnapshot)
         }
     }
 
-    /// Seerr's matches for `query`, unfiltered. `nil` session ⇒ nothing asked.
+    /// Seerr's first page of matches for `query`, unfiltered (one element:
+    /// `loadSection` hands back a list). `nil` session ⇒ nothing asked.
     private static func seerrCandidates(
         query: String, seerr: SeerrSession?, deadline: @escaping @Sendable () async throws -> Void
-    ) async -> MissingSection<SeerrTitle>? {
+    ) async -> MissingSection<SeerrSearchPage>? {
         guard let seerr else { return nil }
         return await seerr.loadSection(deadline: deadline) { client, credential in
-            try await client.search(query, credential)
+            [try await client.searchPage(query, page: 1, credential)]
         }
     }
 
@@ -536,15 +538,33 @@ final class SearchViewModel {
     /// (only Settings names Seerr). `nil` = the account moved: nothing of the
     /// answer is written, and the skeleton goes rather than wait for the next
     /// profile.
+    ///
+    /// Seerr pages by 20: when the library owns EVERYTHING the first page
+    /// offers and there is a second, that one is asked too — once, never
+    /// further — so a well-stocked library still gets a proposal (owner,
+    /// 2026-11-10). The skeleton stays meanwhile.
     private func showSeerrSection(
-        _ answer: MissingSection<SeerrTitle>?, owned: Set<SeerrOwnedKey>, kinds: Set<SeerrMediaKind>,
-        snapshot: SeerrSession.Snapshot
-    ) {
-        guard case .loaded(let found) = answer else {
+        _ answer: MissingSection<SeerrSearchPage>?, query: String, owned: Set<SeerrOwnedKey>,
+        kinds: Set<SeerrMediaKind>, snapshot: SeerrSession.Snapshot
+    ) async {
+        guard case .loaded(let pages) = answer, let first = pages.first else {
             setSeerrSection(.hidden, snapshot: answer == nil ? nil : snapshot)
             return
         }
-        let missing = SeerrMissing.titles(found.filter { kinds.contains($0.kind) }, owned: owned)
+        var missing = SeerrMissing.titles(first.results.filter { kinds.contains($0.kind) }, owned: owned)
+        if missing.isEmpty, first.totalPages > 1, let seerr {
+            let more: MissingSection<SeerrTitle>? = await seerr.loadSection(deadline: seerrDeadline) { client, credential in
+                try await client.searchPage(query, page: 2, credential).results
+            }
+            guard !Task.isCancelled else { return }
+            guard let more else {
+                setSeerrSection(.hidden, snapshot: nil)
+                return
+            }
+            if case .loaded(let found) = more {
+                missing = SeerrMissing.titles(found.filter { kinds.contains($0.kind) }, owned: owned)
+            }
+        }
         setSeerrSection(.loaded(missing), snapshot: snapshot)
     }
 
