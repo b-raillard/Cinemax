@@ -1680,14 +1680,25 @@ struct SeerrConnectionTestTests {
         let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, userReply(admin)])
         let report = await run(session, app, key: "KEY")
         #expect(report.failure == nil)
-        #expect(report.warnings.isEmpty)
+        // The bench address is plain HTTP: the key's own warning, nothing else.
+        #expect(report.warnings == [loc.localized("seerr.test.warning.httpKey")])
         #expect(report.verified.count == 3)      // no Quick Connect line in key mode
+    }
+
+    @Test("key mode over HTTPS is not warned: the key does not travel in clear")
+    func keyModeOverHTTPSIsNotWarned() async {
+        let admin = #"{"id":1,"permissions":2,"jellyfinUserId":"A","displayName":"Alice"}"#
+        let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, userReply(admin)])
+        let report = await SeerrConnectionTest.run(
+            address: URL(string: "https://seerr.example.org")!, deviceKey: "KEY", session: session, appState: app, loc: loc)
+        #expect(report.failure == nil)
+        #expect(report.warnings.isEmpty)
     }
 
     /// Owner, 2026-11-07: from an HTTPS Jellyfin a plain-HTTP Seerr is never
     /// signed in to silently — the test says so, in account mode, where a
     /// session has to be renewed (key mode renews nothing).
-    @Test("an HTTPS Jellyfin with a plain-HTTP Seerr is warned in account mode, never in key mode")
+    @Test("an HTTPS Jellyfin with a plain-HTTP Seerr gets the session warning in account mode only")
     func schemeMixIsWarnedInAccountMode() async {
         let stub = StubSeerrTransport([settingsReply])
         let (app, api) = signedIn(jellyfin: httpsJellyfinURL)
@@ -1711,7 +1722,8 @@ struct SeerrConnectionTestTests {
         keyApp.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: httpsJellyfinURL)
         let keyReport = await run(makeSession(keyStub, following: keyApp), keyApp, key: "KEY")
         #expect(keyReport.failure == nil)
-        #expect(keyReport.warnings.isEmpty)
+        // Never the session warning; the key's own one, the address being HTTP.
+        #expect(keyReport.warnings == [loc.localized("seerr.test.warning.httpKey")])
     }
 
     @Test("a Quick Connect probe that does not get through is « unreachable »; only a refusal is « off »")
