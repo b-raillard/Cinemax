@@ -17,7 +17,9 @@ struct SeerrOwnedKey: Hashable, Sendable {
 struct SeerrMissingTitle: Identifiable, Equatable, Sendable {
     let title: SeerrTitle
     let badge: SeerrBadge
-    var id: String { "\(title.kind.rawValue)-\(title.tmdbId)" }
+    var id: String { Self.id(kind: title.kind, tmdbId: title.tmdbId) }
+    /// The ONE spelling of a title's key (the badge overrides are keyed by it).
+    static func id(kind: SeerrMediaKind, tmdbId: Int) -> String { "\(kind.rawValue)-\(tmdbId)" }
 }
 
 struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
@@ -26,7 +28,8 @@ struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
     let badge: SeerrBadge
     /// The season's own poster (Seerr's `/tv/{id}`); nil ⇒ the bare outline.
     var posterPath: String?
-    var id: String { "tv-\(seriesTmdbId)-s\(seasonNumber)" }
+    var id: String { Self.id(seriesTmdbId: seriesTmdbId, seasonNumber: seasonNumber) }
+    static func id(seriesTmdbId: Int, seasonNumber: Int) -> String { "tv-\(seriesTmdbId)-s\(seasonNumber)" }
 }
 
 /// A Seerr section of a browse surface. `loaded([])` renders NOTHING, like

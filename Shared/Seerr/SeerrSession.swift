@@ -129,6 +129,45 @@ final class SeerrSession {
     @ObservationIgnored private var pendingReSignIn: PendingReSignIn?
     @ObservationIgnored private var reSignInCount = 0
 
+    // MARK: What the last answers taught (not observed)
+
+    /// The clock both memos below read; a test moves it.
+    @ObservationIgnored var now: @MainActor () -> Date = { Date() }
+    /// Seerr did not answer (the reload's probe, or a section past its
+    /// deadline): until then nothing AUTOMATIC is asked — sections, the
+    /// bubble's count, the arrival check. An explicit action (Réglages,
+    /// « Réessayer », a request) still goes through `perform`.
+    @ObservationIgnored private var downUntil: Date?
+    static let downCooldown: TimeInterval = 60
+    /// When this account's configuration was last read WITHOUT a Seerr
+    /// address: a routine reload does not read it again that soon.
+    @ObservationIgnored private var unconfiguredReadAt: Date?
+    static let unconfiguredTTL: TimeInterval = 600
+
+    /// Seerr just failed to answer: automatic calls wait (`downCooldown`).
+    var isDown: Bool {
+        guard let downUntil else { return false }
+        return now() < downUntil
+    }
+
+    /// Titles and posters already looked up for a request row, by
+    /// `SeerrMissingTitle.id`: they are in the app's language, so a language
+    /// change forgets them, as does an account change. Small, and capped.
+    @ObservationIgnored private var titleMemo: [String: SeerrRequestTitles.Lookup] = [:]
+    static let titleMemoCap = 500
+
+    func rememberedTitle(kind: SeerrMediaKind, tmdbId: Int) -> SeerrRequestTitles.Lookup? {
+        titleMemo[SeerrMissingTitle.id(kind: kind, tmdbId: tmdbId)]
+    }
+
+    func rememberTitle(_ title: SeerrRequestTitles.Lookup, kind: SeerrMediaKind, tmdbId: Int) {
+        if titleMemo.count >= Self.titleMemoCap { titleMemo.removeAll() }
+        titleMemo[SeerrMissingTitle.id(kind: kind, tmdbId: tmdbId)] = title
+    }
+
+    func noteUnreachable() { downUntil = now().addingTimeInterval(Self.downCooldown) }
+    func noteAnswered() { if downUntil != nil { downUntil = nil } }
+
     @ObservationIgnored private let storage: any SeerrSecretStorage
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let transport: any SeerrTransport
@@ -168,6 +207,9 @@ final class SeerrSession {
         usesDeviceKey = false
         policyCapped = true
         pendingCount = nil
+        downUntil = nil
+        unconfiguredReadAt = nil
+        titleMemo.removeAll()
     }
 
     /// The account changed (`onChange(of: activeAccountKey)`, and the head of
@@ -182,6 +224,7 @@ final class SeerrSession {
     func setLanguage(_ code: String?) {
         guard code != languageCode else { return }
         languageCode = code
+        titleMemo.removeAll()
         if let client {
             self.client = SeerrClient(baseURL: client.baseURL, languageCode: code, transport: transport)
         }
@@ -192,10 +235,19 @@ final class SeerrSession {
     /// `UserUpdated`), when the network comes back and when the active
     /// account's age cap changes. The SAME account keeps its generation and
     /// its state until a new answer replaces it — no flicker on every return.
-    func reload(appState: AppState) async {
+    ///
+    /// `isRoutine` — the `refreshCurrentUser` hook (launch, every foreground,
+    /// `UserUpdated`): an account read WITHOUT a Seerr address less than
+    /// `unconfiguredTTL` ago is not read again, so the many users with no
+    /// Seerr pay one Jellyfin request per ten minutes, not one per return.
+    /// Every other caller (Réglages, a tier / cap / network change) reads.
+    func reload(appState: AppState, isRoutine: Bool = false) async {
         let key = appState.activeAccountKey
         accountDidChange(to: key)
         guard let key, let userId = appState.currentUserId, let serverId = appState.activeServerId else { return }
+        if isRoutine, let readAt = unconfiguredReadAt, now().timeIntervalSince(readAt) < Self.unconfiguredTTL {
+            return
+        }
         accountKey = key
         jellyfinUserId = userId
         jellyfinURL = appState.serverURL
@@ -228,6 +280,7 @@ final class SeerrSession {
         guard isLive(pass) else { return }
         let fresh = SeerrUserConfig.read(prefs)
         if config != fresh { config = fresh }
+        unconfiguredReadAt = fresh.url == nil ? now() : nil
         guard let url = fresh.url, Self.resolvesIdentity(fresh, isAdmin: isAdmin), proAllowsProvider() else {
             forgetIdentity(keepingConfig: true)
             return
@@ -240,6 +293,7 @@ final class SeerrSession {
             if publicSettings != nil { publicSettings = nil }
             // Another Seerr's queue: its count is not this one's.
             if pendingCount != nil { pendingCount = nil }
+            downUntil = nil
         }
         guard let client else { return }
         // A key entered for another address is not this Seerr's: the device is
@@ -257,9 +311,13 @@ final class SeerrSession {
         do {
             settings = try await client.publicSettings()
         } catch {
+            // The last known state stands — and nothing automatic is asked of
+            // a Seerr that just failed to answer (`isDown`).
+            if isLive(pass), !(error is CancellationError) { noteUnreachable() }
             return
         }
         guard isLive(pass) else { return }
+        noteAnswered()
         if publicSettings != settings { publicSettings = settings }
 
         if let usableKey {
@@ -334,7 +392,7 @@ final class SeerrSession {
     /// a withdrawal. A failure keeps the last number; a user who may not
     /// manage requests asks nothing.
     func refreshPendingCount() async {
-        guard SeerrPendingModel.isShown(for: connection), let snap = snapshot() else { return }
+        guard SeerrPendingModel.isShown(for: connection), !isDown, let snap = snapshot() else { return }
         let asked = pendingCountWrites
         let page: SeerrRequestPage
         do {
@@ -412,6 +470,8 @@ final class SeerrSession {
                 answer = try await op(client, renewed)
             }
             guard isCurrent(snapshot) else { throw CancellationError() }
+            // Proof of life: whatever was holding off (`isDown`) may ask again.
+            noteAnswered()
             return answer
         } catch {
             // An answer — or a failure — of an account the app has left is
@@ -483,6 +543,9 @@ final class SeerrSession {
         if let cookie, cookie.value != deadCookie, cookie.isBound(to: client.baseURL) {
             return .renewed(cookie.value)   // a concurrent caller already renewed it
         }
+        // « Se déconnecter » landed meanwhile: a session the user gave up is
+        // never signed in again behind their back.
+        guard cookie?.value == deadCookie else { return .failed }
         if let pending = pendingReSignIn, pending.ticket.generation == generation {
             return await pending.task.value
         }
@@ -520,6 +583,9 @@ final class SeerrSession {
         guard !usesDeviceKey, SeerrAddress.sameOrigin(ticket.origin, client?.baseURL) else { return .stale }
         switch outcome {
         case .success(let signedIn):
+            // The dead cookie is gone (« Se déconnecter », or a fresher
+            // sign-in): this renewal is nobody's.
+            guard cookie?.value == ticket.deadCookie else { return .stale }
             storeCookie(SeerrBoundSecret(value: signedIn.cookie, origin: ticket.origin), for: ticket.accountKey)
             setConnection(.connected(signedIn.user))
             return .renewed(signedIn.cookie)
@@ -614,6 +680,11 @@ final class SeerrSession {
     func signOut() async {
         guard servesActiveAccount, let key = accountKey else { return }
         let signedOut = cookie ?? storage.seerrSessions()[key]
+        // A reload or a silent sign-in still in flight read the session being
+        // given up: neither may bring it back.
+        reloadPass &+= 1
+        pendingReSignIn?.task.cancel()
+        pendingReSignIn = nil
         dropCookie(nil, for: key)
         if !usesDeviceKey, client != nil { setConnection(.notConnected) }
         if let signedOut, let client, signedOut.isBound(to: client.baseURL), !isAgeCapped, proAllowsProvider() {

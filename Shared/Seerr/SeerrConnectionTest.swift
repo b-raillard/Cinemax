@@ -85,6 +85,11 @@ enum SeerrConnectionTest {
                 return stop(at: error, in: report)
             }
             report.verified.append(loc.localized("seerr.test.ok.server", appState.activeServerDisplayName))
+            // The admin key rides every request of every profile: over plain
+            // HTTP anyone on the network can read it (owner, 2026-11-10).
+            if address.scheme?.lowercased() == "http" {
+                report.warnings.append(loc.localized("seerr.test.warning.httpKey"))
+            }
         } else {
             // 4b. Account mode: the one-gesture sign-in works end to end.
             // Without Quick Connect, Jellyfin's refusal would read as a device
@@ -117,7 +122,7 @@ enum SeerrConnectionTest {
             report.verified.append(loc.localized("seerr.test.ok.quickConnect"))
             // From an HTTPS Jellyfin, this session will only ever be renewed
             // by the visible sign-in (`SeerrAccess.downgradesFromHTTPS`). Key
-            // mode renews nothing: no warning there.
+            // mode renews nothing: it has its own warning above.
             if SeerrAccess.downgradesFromHTTPS(jellyfin: appState.serverURL, seerr: address) {
                 report.warnings.append(loc.localized("seerr.test.warning.httpSeerr"))
             }

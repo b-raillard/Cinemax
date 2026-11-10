@@ -290,12 +290,15 @@ struct AppNavigation: View {
         // (`arrivalGate`, released below).
         appState.onCurrentUserRefreshed = { [seerr, appState, toasts, loc, settingsNav] in
             Task {
-                await seerr.reload(appState: appState)
-                // The Réglages bubble: re-read at launch and on every return.
-                await seerr.refreshPendingCount()
-                guard Self.arrivalGate.admit() else { return }
-                await Self.checkArrivals(
-                    seerr: seerr, appState: appState, toasts: toasts, loc: loc, settingsNav: settingsNav)
+                await seerr.reload(appState: appState, isRoutine: true)
+                // The Réglages bubble: re-read at launch and on every return,
+                // side by side with the arrival check (two independent reads).
+                async let bubble: Void = seerr.refreshPendingCount()
+                if Self.arrivalGate.admit() {
+                    await Self.checkArrivals(
+                        seerr: seerr, appState: appState, toasts: toasts, loc: loc, settingsNav: settingsNav)
+                }
+                await bubble
             }
         }
         // Lifting the active account's age cap brings Seerr back at once.

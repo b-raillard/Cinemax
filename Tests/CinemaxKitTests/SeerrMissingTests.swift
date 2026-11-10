@@ -524,6 +524,29 @@ struct SeerrRequestFlowTests {
         #expect(autoPresenter.badge(for: "tv-90228-s3", default: .request) == .pending)
     }
 
+    @Test("a withdrawn request gives its card and seasons back to what the section says")
+    func withdrawnRequestForgetsItsBadges() async {
+        let bench = await requestBench(permissions: 32)
+        bench.stub.enqueue(created("tv", status: 1))
+        let presenter = SeerrRequestPresenter()
+        await presenter.submit(
+            .series(series, seasons: [2, 3], preselected: []), selection: [2, 3],
+            session: bench.session, loc: loc, toasts: ToastCenter())
+        #expect(presenter.badge(for: "tv-90228-s2", default: .request) == .pending)
+
+        let asker = SeerrUser(id: SeerrUserID(rawValue: 7), permissions: .request, jellyfinUserId: "A", displayName: "Alice")
+        presenter.forget(SeerrRequest(
+            id: 1, status: .pending, kind: .tv, seasons: [2, 3], createdAt: .distantPast, updatedAt: .distantPast,
+            requestedBy: asker, media: SeerrRequestMedia(tmdbId: 90228, status: .pending)))
+
+        #expect(presenter.badge(for: "tv-90228", default: .request) == .request)
+        #expect(presenter.badge(for: "tv-90228-s2", default: .request) == .request)
+        #expect(presenter.badge(for: "tv-90228-s3", default: .declined) == .declined)
+        #expect(presenter.requestableSeasons([
+            SeerrMissingSeason(seriesTmdbId: 90228, seasonNumber: 2, badge: .request),
+        ]) == [2])
+    }
+
     @Test("a 202 is a failure: nothing was available to request")
     func noSeasonsIsAFailure() async {
         let bench = await requestBench()

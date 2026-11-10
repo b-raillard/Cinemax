@@ -27,12 +27,13 @@ import CinemaxKit
 ///
 /// Nothing here reads `isPro`: the category row is the Pro gate
 /// (`SettingsCategory.proFeature`), and `SeerrSession` makes no call without it.
-struct RequestsSettingsScreen: View {
+struct RequestsSettingsScreen: View, SeerrSettingsChrome {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
     @Environment(SeerrSession.self) private var seerr
+    @Environment(SeerrRequestPresenter.self) private var seerrRequests: SeerrRequestPresenter?
     @Environment(\.motionEffectsEnabled) private var motionEffects
     /// Never read: declaring it makes the screen redraw when the text size
     /// changes. Its fonts (`CinemaFont.dynamic*`) are point sizes computed
@@ -704,7 +705,11 @@ struct RequestsSettingsScreen: View {
         Task {
             await myRequests.cancel(row.id, session: seerr, toasts: toasts, loc: loc)
             // Withdrawn: a manager's own request leaves « À valider » too.
-            if !myRequests.rows.contains(where: { $0.id == row.id }) { pending.forget(row.id, session: seerr) }
+            if !myRequests.rows.contains(where: { $0.id == row.id }) {
+                pending.forget(row.id, session: seerr)
+                // Its card may be asked for again.
+                seerrRequests?.forget(row.request)
+            }
             #if os(tvOS)
             // Confirmed in an alert opened from this row: focus is the
             // alert's until it closes, so it never reads as « still here ».
@@ -812,10 +817,10 @@ struct RequestsSettingsScreen: View {
     }
 
     private func statusTint(_ request: SeerrRequest) -> Color {
-        switch SeerrMyRequestsModel.statusKey(request) {
-        case "seerr.myRequests.status.available": CinemaColor.success
-        case "seerr.myRequests.status.declined": CinemaColor.error
-        default: CinemaColor.onSurfaceVariant
+        switch SeerrMyRequestsModel.status(request) {
+        case .available: CinemaColor.success
+        case .declined: CinemaColor.error
+        case .pending, .approved: CinemaColor.onSurfaceVariant
         }
     }
 
@@ -1352,11 +1357,12 @@ struct RequestsSettingsScreen: View {
         let current = trigger
         guard current.isAdmin, current.url != nil, current != loadedTrigger else { return }
         isLoadingLines = true
-        await activation.load(appState: appState, session: seerr)
+        let didLoad = await activation.load(appState: appState, session: seerr)
         // A cancelled load is replaced by the next trigger's: leave it its state.
         guard !Task.isCancelled else { return }
         isLoadingLines = false
-        loadedTrigger = current
+        // A failed load records nothing: the next re-presentation tries again.
+        if didLoad { loadedTrigger = current }
     }
 
     /// « Mes demandes » is (re)loaded each time who is asking, as whom or
@@ -1532,63 +1538,6 @@ struct RequestsSettingsScreen: View {
         #else
         inFlight
         #endif
-    }
-
-    private var rowLabelFont: Font {
-        #if os(tvOS)
-        .system(size: CinemaScale.pt(20), weight: .medium)
-        #else
-        CinemaFont.dynamicLabel(.large)
-        #endif
-    }
-
-    private var rowDetailFont: Font {
-        #if os(tvOS)
-        .system(size: CinemaScale.pt(16), weight: .regular)
-        #else
-        CinemaFont.dynamicLabel(.medium)
-        #endif
-    }
-
-    @ViewBuilder
-    private func sectionHeader(_ title: String) -> some View {
-        #if os(tvOS)
-        Text(title.uppercased())
-            .font(.system(size: CinemaScale.pt(17), weight: .bold))
-            .foregroundStyle(CinemaColor.onSurfaceVariant)
-            .tracking(1.5)
-            .accessibilityLabel(title)
-            .accessibilityAddTraits(.isHeader)
-        #else
-        iOSSettingsSectionHeader(title)
-        #endif
-    }
-
-    /// iOS: one glass panel, rows split by dividers. tvOS: separate focusable
-    /// rows, each with its own opaque background (`tvSettingsFocusable`).
-    @ViewBuilder
-    private func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        #if os(tvOS)
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) { content() }
-        #else
-        VStack(spacing: 0) { content() }
-            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
-        #endif
-    }
-
-    @ViewBuilder
-    private var divider: some View {
-        #if os(iOS)
-        iOSSettingsDivider
-        #endif
-    }
-
-    private func noteText(_ text: String) -> some View {
-        Text(text)
-            .font(rowDetailFont)
-            .foregroundStyle(CinemaColor.onSurfaceVariant)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, CinemaSpacing.spacing2)
     }
 
     /// A non-interactive row's padding and frame, per platform.

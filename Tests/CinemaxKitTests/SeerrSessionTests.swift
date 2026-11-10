@@ -1171,6 +1171,109 @@ struct SeerrSessionTests {
         #expect(logout.value(forHTTPHeaderField: "Cookie")?.contains("connect.sid=abc") == true)
     }
 
+    @Test("a reload in flight never brings back the session « Se déconnecter » gave up")
+    func signOutBeatsAReloadInFlight() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/auth/logout": [.response(status: 200, body: #"{"status":"ok"}"#)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, index in
+            if path == "/settings/public", index == 1 {
+                started.open()
+                await release.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let reload = Task { await session.reload(appState: app) }
+        await started.wait()
+        await session.signOut()
+        release.open()
+        await reload.value
+
+        #expect(session.connection == .notConnected)
+        #expect(storage.seerrSessions().isEmpty)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(!transport.requests.contains { $0.url?.path.contains("quickconnect") == true })
+    }
+
+    @Test("a call that outlives « Se déconnecter » never signs in again")
+    func signOutBeatsACallInFlight() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/auth/logout": [.response(status: 200, body: #"{"status":"ok"}"#)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            if path == "/search" {
+                started.open()
+                await release.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await started.wait()
+        await session.signOut()
+        release.open()
+        await #expect(throws: SeerrError.forbidden) { try await call.value }
+
+        #expect(session.connection == .notConnected)
+        #expect(storage.seerrSessions().isEmpty)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(!transport.requests.contains { $0.url?.path.contains("quickconnect") == true })
+    }
+
+    @Test("a silent sign-in in flight is dropped by « Se déconnecter »")
+    func signOutBeatsASilentSignInInFlight() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/auth/jellyfin/quickconnect/initiate": [initiatedReply],
+            "/auth/jellyfin/quickconnect/check": [approvedReply],
+            "/auth/jellyfin/quickconnect/authenticate": [authenticatedReply(cookie: "renewed")],
+            "/auth/logout": [.response(status: 200, body: #"{"status":"ok"}"#)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            if path == "/auth/jellyfin/quickconnect/initiate" {
+                started.open()
+                await release.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await started.wait()
+        await session.signOut()
+        release.open()
+        _ = try? await call.value
+
+        #expect(session.connection == .notConnected)
+        #expect(session.credential() == nil)
+        #expect(storage.seerrSessions().isEmpty)
+    }
+
     @Test("the device key is an admin's, stored per server with its address, and switches the mode")
     func deviceKeyIsPerServer() async {
         let stub = StubSeerrTransport([settingsReply])
@@ -1577,14 +1680,25 @@ struct SeerrConnectionTestTests {
         let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, userReply(admin)])
         let report = await run(session, app, key: "KEY")
         #expect(report.failure == nil)
-        #expect(report.warnings.isEmpty)
+        // The bench address is plain HTTP: the key's own warning, nothing else.
+        #expect(report.warnings == [loc.localized("seerr.test.warning.httpKey")])
         #expect(report.verified.count == 3)      // no Quick Connect line in key mode
+    }
+
+    @Test("key mode over HTTPS is not warned: the key does not travel in clear")
+    func keyModeOverHTTPSIsNotWarned() async {
+        let admin = #"{"id":1,"permissions":2,"jellyfinUserId":"A","displayName":"Alice"}"#
+        let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, userReply(admin)])
+        let report = await SeerrConnectionTest.run(
+            address: URL(string: "https://seerr.example.org")!, deviceKey: "KEY", session: session, appState: app, loc: loc)
+        #expect(report.failure == nil)
+        #expect(report.warnings.isEmpty)
     }
 
     /// Owner, 2026-11-07: from an HTTPS Jellyfin a plain-HTTP Seerr is never
     /// signed in to silently — the test says so, in account mode, where a
     /// session has to be renewed (key mode renews nothing).
-    @Test("an HTTPS Jellyfin with a plain-HTTP Seerr is warned in account mode, never in key mode")
+    @Test("an HTTPS Jellyfin with a plain-HTTP Seerr gets the session warning in account mode only")
     func schemeMixIsWarnedInAccountMode() async {
         let stub = StubSeerrTransport([settingsReply])
         let (app, api) = signedIn(jellyfin: httpsJellyfinURL)
@@ -1608,7 +1722,8 @@ struct SeerrConnectionTestTests {
         keyApp.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: httpsJellyfinURL)
         let keyReport = await run(makeSession(keyStub, following: keyApp), keyApp, key: "KEY")
         #expect(keyReport.failure == nil)
-        #expect(keyReport.warnings.isEmpty)
+        // Never the session warning; the key's own one, the address being HTTP.
+        #expect(keyReport.warnings == [loc.localized("seerr.test.warning.httpKey")])
     }
 
     @Test("a Quick Connect probe that does not get through is « unreachable »; only a refusal is « off »")
@@ -1845,6 +1960,35 @@ struct SeerrActivationTests {
         #expect(world.model.enabledCount == 3)
     }
 
+    @Test("a switch flipped while the list reloads is not put back by that reload")
+    func reloadKeepsASwitchFlippedMeanwhile() async {
+        let world = await activationWorld(users: [adminUser, ann], extraRoutes: [
+            "/user/jellyfin/ADMIN": [userReply(adminJSON), userReply(adminJSON)],
+            "/user/jellyfin/ANN": [notFoundReply, notFoundReply],
+        ])
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.model.lines.first { $0.id == "ANN" }?.isEnabled == false)
+        // The second load has read Ann's configuration (off) and waits on Seerr.
+        let started = TestLatch()
+        let release = TestLatch()
+        world.transport.onRequest { path, index in
+            if path == "/user/jellyfin/ANN", index == 1 {
+                started.open()
+                await release.wait()
+            }
+        }
+        let reload = Task { await world.model.load(appState: world.app, session: world.session) }
+        await started.wait()
+
+        #expect(await world.model.setEnabled(true, userId: "ANN", appState: world.app, loc: world.loc) == nil)
+        release.open()
+        #expect(await reload.value)
+
+        #expect(world.model.lines.first { $0.id == "ANN" }?.isEnabled == true)
+        // The next load reads what the server holds: still on.
+        #expect(world.writes(for: "ANN").last.map { SeerrUserConfig.read($0).isEnabled } == true)
+    }
+
     @Test("a write carries every other pref of the stored entity")
     func writePreservesOtherPrefs() async {
         let world = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply])
@@ -1907,6 +2051,18 @@ struct SeerrActivationTests {
         #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: true, url: otherSeerrURL))
         #expect(world.writes(for: "BOB").isEmpty)
         #expect(world.api.updateDisplayPreferencesCalls.count == 2)
+    }
+
+    @Test("a load whose users did not answer says so, and the next one fills the lines")
+    func failedLoadIsNotALoad() async {
+        let world = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply])
+        world.api.getUsersError = URLError(.timedOut)
+        #expect(await world.model.load(appState: world.app, session: world.session) == false)
+        #expect(world.model.lines.isEmpty)
+
+        world.api.getUsersError = nil
+        #expect(await world.model.load(appState: world.app, session: world.session))
+        #expect(world.model.lines.count == 2)
     }
 
     @Test("a failed Seerr lookup is « unknown »; with no credential nothing is looked up")
@@ -2296,6 +2452,29 @@ struct SeerrMyRequestsTests {
         #expect(!Model.canCancel(myRequest(status: .pending, media: .available)))
     }
 
+    @Test("a title looked up once is not asked again when the list is read again")
+    func titlesAreRemembered() async {
+        let page = requestPage([requestJSON(1, tmdbId: 11)], total: 1)
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [page, page],
+            "/movie/11": [movieReply(11, "Dune")],
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.rows.map(\.title) == ["Dune"])
+
+        await model.loadFirstPage(session: session)   // « Actualiser »
+
+        #expect(model.rows.map(\.title) == ["Dune"])
+        #expect(model.rows.allSatisfy { !$0.isTitlePending })
+        #expect(transport.requests.filter(isCall("/movie/11")).count == 1)
+        #expect(!transport.exhausted)
+
+        // Titles are in the app's language: another language asks again.
+        session.setLanguage("de")
+        #expect(session.rememberedTitle(kind: .movie, tmdbId: 11) == nil)
+    }
+
     @Test("withdrawing a pending request sends DELETE, removes the row, says so")
     func cancelRemovesRow() async {
         let loc = LocalizationManager()
@@ -2471,16 +2650,19 @@ struct SeerrMyRequestsTests {
     @Test("« Regarder » opens the Jellyfin item, and only once the title has arrived")
     func watchUsesJellyfinId() {
         typealias Model = SeerrMyRequestsModel
-        #expect(Model.watchTarget(myRequest(status: .approved, media: .available, jellyfinId: "jf1")) == "jf1")
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .available, jellyfinId: jellyfinDune)) == jellyfinDune)
         #expect(Model.watchTarget(myRequest(status: .approved, media: .available)) == nil)
-        #expect(Model.watchTarget(myRequest(status: .approved, media: .processing, jellyfinId: "jf1")) == nil)
-        #expect(Model.watchTarget(myRequest(status: .completed, media: .partiallyAvailable, jellyfinId: "jf1")) == nil)
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .processing, jellyfinId: jellyfinDune)) == nil)
+        #expect(Model.watchTarget(myRequest(status: .completed, media: .partiallyAvailable, jellyfinId: jellyfinDune)) == nil)
+        // Seerr's word is checked like any other way into the deep-link route.
+        #expect(Model.watchTarget(myRequest(media: .available, jellyfinId: "not-an-id")) == nil)
+        #expect(Model.watchTarget(myRequest(media: .available, jellyfinId: String(repeating: "0", count: 32))) == nil)
 
         let (app, _) = signedIn()
-        #expect(Model.watch(myRequest(media: .available, jellyfinId: "jf1"), appState: app))
-        #expect(app.pendingDeepLinkItemId == "jf1")
+        #expect(Model.watch(myRequest(media: .available, jellyfinId: jellyfinDune), appState: app))
+        #expect(app.pendingDeepLinkItemId == jellyfinDune)
         app.pendingDeepLinkItemId = nil
-        #expect(!Model.watch(myRequest(media: .processing, jellyfinId: "jf1"), appState: app))
+        #expect(!Model.watch(myRequest(media: .processing, jellyfinId: jellyfinDune), appState: app))
         #expect(app.pendingDeepLinkItemId == nil)
     }
 }
@@ -3253,5 +3435,147 @@ struct SeerrArrivalTests {
         for key in ["seerr.arrival.title", "seerr.arrival.view"] {
             #expect(loc.localized(key) != key, "\(key) is missing")
         }
+    }
+}
+
+// MARK: - Performance (what a foreground and a fiche cost)
+
+private final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.withLock { value } }
+    func add() { lock.withLock { value += 1 } }
+}
+
+@MainActor
+@Suite("Seerr — performance")
+struct SeerrPerformanceTests {
+    private func search(_ session: SeerrSession, isAutomatic: Bool = true) async -> MissingSection<SeerrTitle>? {
+        await session.loadSection(isAutomatic: isAutomatic) { client, credential in
+            try await client.search("dune", credential)
+        }
+    }
+
+    @Test("a Seerr that stopped answering is asked nothing automatic for a minute, then again")
+    func downSeerrIsLeftAlone() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        // A request manager, so the bubble's count would be asked too. Every
+        // route answers once: after the first reload, Seerr no longer answers.
+        let (session, app, _, transport) = await arrivalWorld(permissions: 2, defaults: defaults, routes: [:])
+        var clock = Date(timeIntervalSince1970: 1_000)
+        session.now = { clock }
+        let connected = transport.requests.count
+
+        await session.reload(appState: app)
+        #expect(transport.requests.count == connected + 1)   // the probe
+        #expect(session.isDown)
+        #expect(session.connection == .connected(SeerrUser(
+            id: SeerrUserID(rawValue: 7), permissions: SeerrPermissions(rawValue: 2), jellyfinUserId: "A", displayName: "Alice")))
+
+        await session.refreshPendingCount()
+        _ = await SeerrArrivalWatcher.check(
+            session: session, appState: app, defaults: defaults, loc: LocalizationManager(), openRequests: {})
+        for _ in 0..<3 { #expect(await search(session) == .hidden) }
+        #expect(transport.requests.count == connected + 1)
+        print("PERF down: probe=1 automatic+sections(3)=\(transport.requests.count - connected - 1)")
+
+        // A press is still asked.
+        #expect(await search(session, isAutomatic: false) == .hidden)
+        #expect(transport.requests.count == connected + 2)
+
+        // A minute later the next section tries once — and holds off again.
+        clock += SeerrSession.downCooldown + 1
+        #expect(!session.isDown)
+        #expect(await search(session) == .hidden)
+        #expect(transport.requests.count == connected + 3)
+        #expect(session.isDown)
+    }
+
+    @Test("an answer ends the wait at once")
+    func anAnswerClearsDown() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, .failure(URLError(.timedOut)), settingsReply],
+            "/auth/me": [userReply(), userReply()],
+            "/search": [searchReply],
+        ])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+        await session.reload(appState: app)
+        #expect(session.isDown)
+
+        await session.reload(appState: app)   // « Réessayer », or the next foreground
+
+        #expect(!session.isDown)
+        #expect(await search(session) == .loaded([]))
+    }
+
+    @Test("an explicit call that is answered ends the wait too")
+    func anAnsweredCallClearsDown() async throws {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, .failure(URLError(.timedOut))],
+            "/auth/me": [userReply()],
+            "/search": [searchReply],
+        ])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+        await session.reload(appState: app)
+        #expect(session.isDown)
+
+        _ = try await session.perform { client, credential in try await client.search("dune", credential) }
+
+        #expect(!session.isDown)
+    }
+
+    @Test("an account with no Seerr address is read once per ten minutes by the routine reload, always by the others")
+    func unconfiguredAccountIsNotReReadOnEveryForeground() async {
+        let counter = CallCounter()
+        let (app, api) = signedIn(config: nil)
+        api.onGetDisplayPreferences = { counter.add() }
+        let stub = StubSeerrTransport([])
+        let session = makeSession(stub, following: app)
+        var clock = Date(timeIntervalSince1970: 1_000)
+        session.now = { clock }
+
+        for _ in 0..<5 { await session.reload(appState: app, isRoutine: true) }
+        #expect(counter.count == 1)
+        print("PERF unconfigured: jellyfinReads(5 foregrounds)=\(counter.count) seerrCalls=\(stub.requests.count)")
+
+        // Réglages, a tier / cap / network change: always read.
+        await session.reload(appState: app)
+        #expect(counter.count == 2)
+
+        clock += SeerrSession.unconfiguredTTL + 1
+        await session.reload(appState: app, isRoutine: true)
+        #expect(counter.count == 3)
+        #expect(stub.requests.isEmpty)
+    }
+
+    @Test("a configured account is read on every routine reload; an account change forgets the memo")
+    func configuredAccountIsAlwaysRead() async {
+        let counter = CallCounter()
+        let (app, api) = signedIn()
+        api.onGetDisplayPreferences = { counter.add() }
+        let stub = StubSeerrTransport([settingsReply, settingsReply])
+        let session = makeSession(stub, following: app)
+        await session.reload(appState: app, isRoutine: true)
+        await session.reload(appState: app, isRoutine: true)
+        #expect(counter.count == 2)
+
+        let other = CallCounter()
+        let (unconfigured, otherAPI) = signedIn(userId: "B", config: nil)
+        otherAPI.onGetDisplayPreferences = { other.add() }
+        session.follow(unconfigured)
+        await session.reload(appState: unconfigured, isRoutine: true)
+        session.follow(app)
+        await session.reload(appState: app, isRoutine: true)
+        session.follow(unconfigured)
+        await session.reload(appState: unconfigured, isRoutine: true)
+        #expect(other.count == 2)
     }
 }
