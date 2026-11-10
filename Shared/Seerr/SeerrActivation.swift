@@ -96,6 +96,11 @@ final class SeerrActivationModel {
     /// The admin's own address — what `setEnabled(true)` writes for a user.
     @ObservationIgnored private var address: URL?
     @ObservationIgnored private var loadedAccount: String?
+    /// Counts the switches recorded, and remembers when each user's was: a
+    /// load that began BEFORE a switch was flipped read the old value, and
+    /// must not put it back on screen.
+    @ObservationIgnored private var recordCount = 0
+    @ObservationIgnored private var recordedAt: [String: Int] = [:]
 
     private enum Lookup: Sendable {
         case skipped
@@ -121,7 +126,9 @@ final class SeerrActivationModel {
             lines = []
             address = nil
             loadedAccount = snapshot.accountKey
+            recordedAt = [:]
         }
+        let startedAt = recordCount
         let users: [UserDto]
         do {
             users = try await appState.apiClient.getUsers()
@@ -182,6 +189,12 @@ final class SeerrActivationModel {
         } else {
             address = session.config?.url
         }
+        // A switch flipped while this load ran: what is on screen is fresher.
+        for index in built.indices {
+            guard let at = recordedAt[built[index].id], at > startedAt,
+                  let shown = lines.first(where: { $0.id == built[index].id }) else { continue }
+            built[index].isEnabled = shown.isEnabled && built[index].kind != .ageCapped
+        }
         lines = built
         return true
     }
@@ -234,6 +247,8 @@ final class SeerrActivationModel {
     private func record(_ userId: String, enabled: Bool) {
         guard let index = lines.firstIndex(where: { $0.id == userId }) else { return }
         lines[index].isEnabled = enabled
+        recordCount &+= 1
+        recordedAt[userId] = recordCount
     }
 
     /// `nil` on success, else the sentence to show the admin.

@@ -367,6 +367,8 @@ struct SearchSeerrSectionTests {
 
         vm.search(using: app)
         await transport.searchArrived.wait()
+        // Seerr is asked alongside the library: wait for the library's write.
+        #expect(await eventually { vm.seerrSection == .loading })
 
         // Seerr is held: the library is already written, the spinner gone,
         // and the section is a skeleton.
@@ -387,6 +389,39 @@ struct SearchSeerrSectionTests {
         }
         #expect(missing.map(\.id) == ["movie-841", "tv-90228"])
         #expect(vm.seerrSection(for: session.snapshot()) == vm.seerrSection)
+    }
+
+    @Test("Seerr is asked while the library is still answering, and its section waits for the library")
+    func seerrIsAskedAlongsideTheLibrary() async {
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody))
+        let api = MockAPIClient()
+        let library = TestLatch()
+        let owned = libraryItem(id: "lib-dune", name: "Dune", type: .movie, tmdb: "438631")
+        api.searchItemsHandler = { _ in
+            await library.wait()
+            return [owned]
+        }
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dune"
+
+        vm.search(using: app)
+        // The library has not answered, and Seerr's request already left.
+        await transport.searchArrived.wait()
+        #expect(vm.results.isEmpty)
+        #expect(vm.seerrSection == .hidden)   // nothing is drawn above the library
+
+        library.open()
+        await vm.searchTask?.value
+
+        #expect(vm.results.map(\.id) == ["lib-dune"])
+        guard case .loaded(let missing) = vm.seerrSection else {
+            Issue.record("expected a loaded section, got \(vm.seerrSection)")
+            return
+        }
+        // The owned title is still subtracted.
+        #expect(!missing.map(\.id).contains("movie-438631"))
+        #expect(!missing.isEmpty)
     }
 
     @Test("a title the library owns is not listed again; ownership is per kind")
@@ -461,7 +496,8 @@ struct SearchSeerrSectionTests {
 
         vm.search(using: app)
         await transport.searchArrived.wait()
-        #expect(vm.seerrSection == .loading)
+        // Seerr is asked alongside the library: the skeleton follows the library's write.
+        #expect(await eventually { vm.seerrSection == .loading })
 
         // Another profile of the same server takes over, its reload runs.
         app.currentUserId = "B"

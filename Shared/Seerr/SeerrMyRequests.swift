@@ -78,22 +78,35 @@ enum SeerrRequestTitles {
     /// a failure costs that row its title, never the list. A lookup cancelled
     /// (the page was left, a newer load) is not reported: it is not a failure.
     static func load(_ requests: [SeerrRequest], session: SeerrSession, apply: (Int, Lookup?) -> Void) async {
-        guard !requests.isEmpty else { return }
-        await withTaskGroup(of: (Int, Lookup?).self) { group in
-            for request in requests {
-                let id = request.id
+        // A title already looked up is not asked again (`SeerrSession`'s
+        // memo): « Actualiser » re-reads the lists, not forty titles.
+        var unknown: [SeerrRequest] = []
+        for request in requests {
+            if let known = session.rememberedTitle(kind: request.kind, tmdbId: request.media.tmdbId) {
+                apply(request.id, known)
+            } else {
+                unknown.append(request)
+            }
+        }
+        guard !unknown.isEmpty else { return }
+        let snapshot = session.snapshot()
+        await withTaskGroup(of: (SeerrRequest, Lookup?).self) { group in
+            for request in unknown {
                 let kind = request.kind
                 let tmdbId = request.media.tmdbId
                 group.addTask {
                     let found = try? await session.perform { client, credential in
                         try await Self.lookUp(kind: kind, tmdbId: tmdbId, client: client, credential: credential)
                     }
-                    return (id, found)
+                    return (request, found)
                 }
             }
-            for await (id, found) in group {
+            for await (request, found) in group {
                 if found == nil, Task.isCancelled { continue }
-                apply(id, found)
+                if let found, let snapshot, session.isCurrent(snapshot) {
+                    session.rememberTitle(found, kind: request.kind, tmdbId: request.media.tmdbId)
+                }
+                apply(request.id, found)
             }
         }
     }
@@ -115,6 +128,22 @@ enum SeerrRequestTitles {
         }
         guard !title.isEmpty else { return nil }
         return Lookup(title: title, posterPath: posterPath)
+    }
+}
+
+/// What a request's status line says — decided once (`SeerrMyRequestsModel
+/// .status`), then read as a value: the text, the colour and « can it be
+/// withdrawn » never compare localization keys.
+enum SeerrRequestDisplayStatus: Equatable, Sendable {
+    case available, declined, pending, approved
+
+    var key: String {
+        switch self {
+        case .available: "seerr.myRequests.status.available"
+        case .declined: "seerr.myRequests.status.declined"
+        case .pending: "seerr.myRequests.status.pending"
+        case .approved: "seerr.myRequests.status.approved"
+        }
     }
 }
 
@@ -220,16 +249,16 @@ final class SeerrMyRequestsModel {
     /// approved and on its way — including a request whose hand-off to the
     /// downloader FAILED: it was approved, the admin retries it in Seerr, and
     /// « Refusée » would be false.
-    static func statusKey(_ request: SeerrRequest) -> String {
-        if request.media.status == .available || request.status == .completed {
-            return "seerr.myRequests.status.available"
-        }
+    static func status(_ request: SeerrRequest) -> SeerrRequestDisplayStatus {
+        if request.media.status == .available || request.status == .completed { return .available }
         switch request.status {
-        case .declined: return "seerr.myRequests.status.declined"
-        case .pending: return "seerr.myRequests.status.pending"
-        case .approved, .failed, .completed: return "seerr.myRequests.status.approved"
+        case .declined: return .declined
+        case .pending: return .pending
+        case .approved, .failed, .completed: return .approved
         }
     }
+
+    static func statusKey(_ request: SeerrRequest) -> String { status(request).key }
 
     /// « 4, 5 » — a series' requested seasons, ascending, each once; `nil`
     /// for a film or a request naming none.
@@ -252,7 +281,7 @@ final class SeerrMyRequestsModel {
     /// Only a request still waiting for an admin: Seerr refuses its asker
     /// anything else (401).
     static func canCancel(_ request: SeerrRequest) -> Bool {
-        statusKey(request) == "seerr.myRequests.status.pending"
+        status(request) == .pending
     }
 
     private enum CancelOutcome { case done, notPending, failed, cancelled }

@@ -263,3 +263,69 @@ func iOSToggleRowsJoined(_ rows: [SettingsToggleRow], accent: Color, animated: B
 }
 
 #endif
+
+// MARK: - Réglages → Demandes chrome
+
+/// The row furniture `RequestsSettingsScreen` and `SeerrAccountPage` share —
+/// one definition, so the two pages cannot drift apart.
+@MainActor
+protocol SeerrSettingsChrome {}
+
+extension SeerrSettingsChrome {
+    var rowLabelFont: Font {
+        #if os(tvOS)
+        .system(size: CinemaScale.pt(20), weight: .medium)
+        #else
+        CinemaFont.dynamicLabel(.large)
+        #endif
+    }
+
+    var rowDetailFont: Font {
+        #if os(tvOS)
+        .system(size: CinemaScale.pt(16), weight: .regular)
+        #else
+        CinemaFont.dynamicLabel(.medium)
+        #endif
+    }
+
+    @ViewBuilder
+    func sectionHeader(_ title: String) -> some View {
+        #if os(tvOS)
+        Text(title.uppercased())
+            .font(.system(size: CinemaScale.pt(17), weight: .bold))
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+            .tracking(1.5)
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(.isHeader)
+        #else
+        iOSSettingsSectionHeader(title)
+        #endif
+    }
+
+    /// iOS: one glass panel, rows split by dividers. tvOS: separate focusable
+    /// rows, each with its own opaque background (`tvSettingsFocusable`).
+    @ViewBuilder
+    func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        #if os(tvOS)
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) { content() }
+        #else
+        VStack(spacing: 0) { content() }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        #endif
+    }
+
+    @ViewBuilder
+    var divider: some View {
+        #if os(iOS)
+        iOSSettingsDivider
+        #endif
+    }
+
+    func noteText(_ text: String) -> some View {
+        Text(text)
+            .font(rowDetailFont)
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, CinemaSpacing.spacing2)
+    }
+}

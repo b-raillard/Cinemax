@@ -1960,6 +1960,35 @@ struct SeerrActivationTests {
         #expect(world.model.enabledCount == 3)
     }
 
+    @Test("a switch flipped while the list reloads is not put back by that reload")
+    func reloadKeepsASwitchFlippedMeanwhile() async {
+        let world = await activationWorld(users: [adminUser, ann], extraRoutes: [
+            "/user/jellyfin/ADMIN": [userReply(adminJSON), userReply(adminJSON)],
+            "/user/jellyfin/ANN": [notFoundReply, notFoundReply],
+        ])
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.model.lines.first { $0.id == "ANN" }?.isEnabled == false)
+        // The second load has read Ann's configuration (off) and waits on Seerr.
+        let started = TestLatch()
+        let release = TestLatch()
+        world.transport.onRequest { path, index in
+            if path == "/user/jellyfin/ANN", index == 1 {
+                started.open()
+                await release.wait()
+            }
+        }
+        let reload = Task { await world.model.load(appState: world.app, session: world.session) }
+        await started.wait()
+
+        #expect(await world.model.setEnabled(true, userId: "ANN", appState: world.app, loc: world.loc) == nil)
+        release.open()
+        #expect(await reload.value)
+
+        #expect(world.model.lines.first { $0.id == "ANN" }?.isEnabled == true)
+        // The next load reads what the server holds: still on.
+        #expect(world.writes(for: "ANN").last.map { SeerrUserConfig.read($0).isEnabled } == true)
+    }
+
     @Test("a write carries every other pref of the stored entity")
     func writePreservesOtherPrefs() async {
         let world = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply])
@@ -2421,6 +2450,29 @@ struct SeerrMyRequestsTests {
         #expect(!Model.canCancel(myRequest(status: .declined)))
         // Mine waits, but the title already arrived through someone else's.
         #expect(!Model.canCancel(myRequest(status: .pending, media: .available)))
+    }
+
+    @Test("a title looked up once is not asked again when the list is read again")
+    func titlesAreRemembered() async {
+        let page = requestPage([requestJSON(1, tmdbId: 11)], total: 1)
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [page, page],
+            "/movie/11": [movieReply(11, "Dune")],
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.rows.map(\.title) == ["Dune"])
+
+        await model.loadFirstPage(session: session)   // « Actualiser »
+
+        #expect(model.rows.map(\.title) == ["Dune"])
+        #expect(model.rows.allSatisfy { !$0.isTitlePending })
+        #expect(transport.requests.filter(isCall("/movie/11")).count == 1)
+        #expect(!transport.exhausted)
+
+        // Titles are in the app's language: another language asks again.
+        session.setLanguage("de")
+        #expect(session.rememberedTitle(kind: .movie, tmdbId: 11) == nil)
     }
 
     @Test("withdrawing a pending request sends DELETE, removes the row, says so")
