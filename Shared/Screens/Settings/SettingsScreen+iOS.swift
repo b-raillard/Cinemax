@@ -769,13 +769,6 @@ extension SettingsScreen {
     }
 }
 
-// MARK: - iOS Home Genre Rows Picker
-
-/// Native multi-select `List` for choosing which genres appear as rows on
-/// Home. Pushed from the Home page settings section. Standalone `View` so its
-/// `@State` (fetched genres) and `@AppStorage` selection drive re-renders even
-/// though it's reached through a `NavigationLink` inside the settings stack.
-/// Selection persists through `HomeGenrePreferences` (`home.selectedGenres`).
 /// The active-server card of Réglages → Serveur, with the « Mes serveurs »
 /// card context menu for that server: « Renommer » and « Adresse locale… », never
 /// « Supprimer » (the server the app is on cannot be removed). The flow is the
@@ -876,6 +869,13 @@ struct IOSActiveServerLabel<Badge: View>: View {
     }
 }
 
+// MARK: - iOS Home Genre Rows Picker
+
+/// Native multi-select `List` for choosing which genres appear as rows on
+/// Home. Pushed from the Home page settings section. Standalone `View` so its
+/// `@State` (fetched genres) and `@AppStorage` selection drive re-renders even
+/// though it's reached through a `NavigationLink` inside the settings stack.
+/// Selection persists through `HomeGenrePreferences` (`home.selectedGenres`).
 struct IOSHomeGenrePickerView: View {
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
