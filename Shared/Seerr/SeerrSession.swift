@@ -129,6 +129,30 @@ final class SeerrSession {
     @ObservationIgnored private var pendingReSignIn: PendingReSignIn?
     @ObservationIgnored private var reSignInCount = 0
 
+    // MARK: What the last answers taught (not observed)
+
+    /// The clock both memos below read; a test moves it.
+    @ObservationIgnored var now: @MainActor () -> Date = { Date() }
+    /// Seerr did not answer (the reload's probe, or a section past its
+    /// deadline): until then nothing AUTOMATIC is asked — sections, the
+    /// bubble's count, the arrival check. An explicit action (Réglages,
+    /// « Réessayer », a request) still goes through `perform`.
+    @ObservationIgnored private var downUntil: Date?
+    static let downCooldown: TimeInterval = 60
+    /// When this account's configuration was last read WITHOUT a Seerr
+    /// address: a routine reload does not read it again that soon.
+    @ObservationIgnored private var unconfiguredReadAt: Date?
+    static let unconfiguredTTL: TimeInterval = 600
+
+    /// Seerr just failed to answer: automatic calls wait (`downCooldown`).
+    var isDown: Bool {
+        guard let downUntil else { return false }
+        return now() < downUntil
+    }
+
+    func noteUnreachable() { downUntil = now().addingTimeInterval(Self.downCooldown) }
+    func noteAnswered() { if downUntil != nil { downUntil = nil } }
+
     @ObservationIgnored private let storage: any SeerrSecretStorage
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let transport: any SeerrTransport
@@ -168,6 +192,8 @@ final class SeerrSession {
         usesDeviceKey = false
         policyCapped = true
         pendingCount = nil
+        downUntil = nil
+        unconfiguredReadAt = nil
     }
 
     /// The account changed (`onChange(of: activeAccountKey)`, and the head of
@@ -192,10 +218,19 @@ final class SeerrSession {
     /// `UserUpdated`), when the network comes back and when the active
     /// account's age cap changes. The SAME account keeps its generation and
     /// its state until a new answer replaces it — no flicker on every return.
-    func reload(appState: AppState) async {
+    ///
+    /// `isRoutine` — the `refreshCurrentUser` hook (launch, every foreground,
+    /// `UserUpdated`): an account read WITHOUT a Seerr address less than
+    /// `unconfiguredTTL` ago is not read again, so the many users with no
+    /// Seerr pay one Jellyfin request per ten minutes, not one per return.
+    /// Every other caller (Réglages, a tier / cap / network change) reads.
+    func reload(appState: AppState, isRoutine: Bool = false) async {
         let key = appState.activeAccountKey
         accountDidChange(to: key)
         guard let key, let userId = appState.currentUserId, let serverId = appState.activeServerId else { return }
+        if isRoutine, let readAt = unconfiguredReadAt, now().timeIntervalSince(readAt) < Self.unconfiguredTTL {
+            return
+        }
         accountKey = key
         jellyfinUserId = userId
         jellyfinURL = appState.serverURL
@@ -228,6 +263,7 @@ final class SeerrSession {
         guard isLive(pass) else { return }
         let fresh = SeerrUserConfig.read(prefs)
         if config != fresh { config = fresh }
+        unconfiguredReadAt = fresh.url == nil ? now() : nil
         guard let url = fresh.url, Self.resolvesIdentity(fresh, isAdmin: isAdmin), proAllowsProvider() else {
             forgetIdentity(keepingConfig: true)
             return
@@ -240,6 +276,7 @@ final class SeerrSession {
             if publicSettings != nil { publicSettings = nil }
             // Another Seerr's queue: its count is not this one's.
             if pendingCount != nil { pendingCount = nil }
+            downUntil = nil
         }
         guard let client else { return }
         // A key entered for another address is not this Seerr's: the device is
@@ -257,9 +294,13 @@ final class SeerrSession {
         do {
             settings = try await client.publicSettings()
         } catch {
+            // The last known state stands — and nothing automatic is asked of
+            // a Seerr that just failed to answer (`isDown`).
+            if isLive(pass), !(error is CancellationError) { noteUnreachable() }
             return
         }
         guard isLive(pass) else { return }
+        noteAnswered()
         if publicSettings != settings { publicSettings = settings }
 
         if let usableKey {
@@ -334,7 +375,7 @@ final class SeerrSession {
     /// a withdrawal. A failure keeps the last number; a user who may not
     /// manage requests asks nothing.
     func refreshPendingCount() async {
-        guard SeerrPendingModel.isShown(for: connection), let snap = snapshot() else { return }
+        guard SeerrPendingModel.isShown(for: connection), !isDown, let snap = snapshot() else { return }
         let asked = pendingCountWrites
         let page: SeerrRequestPage
         do {
@@ -412,6 +453,8 @@ final class SeerrSession {
                 answer = try await op(client, renewed)
             }
             guard isCurrent(snapshot) else { throw CancellationError() }
+            // Proof of life: whatever was holding off (`isDown`) may ask again.
+            noteAnswered()
             return answer
         } catch {
             // An answer — or a failure — of an account the app has left is

@@ -3373,3 +3373,145 @@ struct SeerrArrivalTests {
         }
     }
 }
+
+// MARK: - Performance (what a foreground and a fiche cost)
+
+private final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.withLock { value } }
+    func add() { lock.withLock { value += 1 } }
+}
+
+@MainActor
+@Suite("Seerr — performance")
+struct SeerrPerformanceTests {
+    private func search(_ session: SeerrSession, isAutomatic: Bool = true) async -> MissingSection<SeerrTitle>? {
+        await session.loadSection(isAutomatic: isAutomatic) { client, credential in
+            try await client.search("dune", credential)
+        }
+    }
+
+    @Test("a Seerr that stopped answering is asked nothing automatic for a minute, then again")
+    func downSeerrIsLeftAlone() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        // A request manager, so the bubble's count would be asked too. Every
+        // route answers once: after the first reload, Seerr no longer answers.
+        let (session, app, _, transport) = await arrivalWorld(permissions: 2, defaults: defaults, routes: [:])
+        var clock = Date(timeIntervalSince1970: 1_000)
+        session.now = { clock }
+        let connected = transport.requests.count
+
+        await session.reload(appState: app)
+        #expect(transport.requests.count == connected + 1)   // the probe
+        #expect(session.isDown)
+        #expect(session.connection == .connected(SeerrUser(
+            id: SeerrUserID(rawValue: 7), permissions: SeerrPermissions(rawValue: 2), jellyfinUserId: "A", displayName: "Alice")))
+
+        await session.refreshPendingCount()
+        _ = await SeerrArrivalWatcher.check(
+            session: session, appState: app, defaults: defaults, loc: LocalizationManager(), openRequests: {})
+        for _ in 0..<3 { #expect(await search(session) == .hidden) }
+        #expect(transport.requests.count == connected + 1)
+        print("PERF down: probe=1 automatic+sections(3)=\(transport.requests.count - connected - 1)")
+
+        // A press is still asked.
+        #expect(await search(session, isAutomatic: false) == .hidden)
+        #expect(transport.requests.count == connected + 2)
+
+        // A minute later the next section tries once — and holds off again.
+        clock += SeerrSession.downCooldown + 1
+        #expect(!session.isDown)
+        #expect(await search(session) == .hidden)
+        #expect(transport.requests.count == connected + 3)
+        #expect(session.isDown)
+    }
+
+    @Test("an answer ends the wait at once")
+    func anAnswerClearsDown() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, .failure(URLError(.timedOut)), settingsReply],
+            "/auth/me": [userReply(), userReply()],
+            "/search": [searchReply],
+        ])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+        await session.reload(appState: app)
+        #expect(session.isDown)
+
+        await session.reload(appState: app)   // « Réessayer », or the next foreground
+
+        #expect(!session.isDown)
+        #expect(await search(session) == .loaded([]))
+    }
+
+    @Test("an explicit call that is answered ends the wait too")
+    func anAnsweredCallClearsDown() async throws {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, .failure(URLError(.timedOut))],
+            "/auth/me": [userReply()],
+            "/search": [searchReply],
+        ])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+        await session.reload(appState: app)
+        #expect(session.isDown)
+
+        _ = try await session.perform { client, credential in try await client.search("dune", credential) }
+
+        #expect(!session.isDown)
+    }
+
+    @Test("an account with no Seerr address is read once per ten minutes by the routine reload, always by the others")
+    func unconfiguredAccountIsNotReReadOnEveryForeground() async {
+        let counter = CallCounter()
+        let (app, api) = signedIn(config: nil)
+        api.onGetDisplayPreferences = { counter.add() }
+        let stub = StubSeerrTransport([])
+        let session = makeSession(stub, following: app)
+        var clock = Date(timeIntervalSince1970: 1_000)
+        session.now = { clock }
+
+        for _ in 0..<5 { await session.reload(appState: app, isRoutine: true) }
+        #expect(counter.count == 1)
+        print("PERF unconfigured: jellyfinReads(5 foregrounds)=\(counter.count) seerrCalls=\(stub.requests.count)")
+
+        // Réglages, a tier / cap / network change: always read.
+        await session.reload(appState: app)
+        #expect(counter.count == 2)
+
+        clock += SeerrSession.unconfiguredTTL + 1
+        await session.reload(appState: app, isRoutine: true)
+        #expect(counter.count == 3)
+        #expect(stub.requests.isEmpty)
+    }
+
+    @Test("a configured account is read on every routine reload; an account change forgets the memo")
+    func configuredAccountIsAlwaysRead() async {
+        let counter = CallCounter()
+        let (app, api) = signedIn()
+        api.onGetDisplayPreferences = { counter.add() }
+        let stub = StubSeerrTransport([settingsReply, settingsReply])
+        let session = makeSession(stub, following: app)
+        await session.reload(appState: app, isRoutine: true)
+        await session.reload(appState: app, isRoutine: true)
+        #expect(counter.count == 2)
+
+        let other = CallCounter()
+        let (unconfigured, otherAPI) = signedIn(userId: "B", config: nil)
+        otherAPI.onGetDisplayPreferences = { other.add() }
+        session.follow(unconfigured)
+        await session.reload(appState: unconfigured, isRoutine: true)
+        session.follow(app)
+        await session.reload(appState: app, isRoutine: true)
+        session.follow(unconfigured)
+        await session.reload(appState: unconfigured, isRoutine: true)
+        #expect(other.count == 2)
+    }
+}

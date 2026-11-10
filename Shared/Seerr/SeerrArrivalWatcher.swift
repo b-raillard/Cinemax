@@ -63,7 +63,7 @@ enum SeerrArrivalWatcher {
         loc: LocalizationManager, openRequests: @escaping @MainActor () -> Void
     ) async -> Toast? {
         guard session.isVisible(proAllows: session.proAllowsProvider(), isOnline: appState.isOnlineProvider()),
-              case .connected(let user) = session.connection,
+              case .connected(let user) = session.connection, !session.isDown,
               let snapshot = session.snapshot() else { return nil }
         let page: SeerrRequestPage
         do {
