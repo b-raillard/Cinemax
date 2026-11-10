@@ -461,6 +461,15 @@ final class SearchViewModel {
             guard !Task.isCancelled else { return }
 
             guard let userId = appState.currentUserId, let self else { return }
+            // The field moved on without telling us: SwiftUI's `onChange` can
+            // skip a value when several land in one burst (tvOS, four letters
+            // in 25 ms: `search()` saw « dun », the field read « dune », and
+            // the screen kept « dun »'s answer — recette 2026-11-10). The
+            // debounce is over, so what the field holds NOW is the query.
+            guard LibrarySearchRanker.sanitize(self.searchText) == query else {
+                self.search(using: appState)
+                return
+            }
             // The TMDb ids cost bytes on every keystroke: asked for only when
             // the Seerr section is going to load.
             let withProviderIds = self.allowsSeerr()

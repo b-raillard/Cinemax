@@ -223,6 +223,14 @@ let neverExpires: @Sendable () async throws -> Void = {
 /// Answers Seerr by path: the session's reload (`/settings/public`,
 /// `/auth/me`), then `/search` — held by `gate` when one is given — and
 /// `/tv/{id}`, held by `tvGate`.
+/// The terms the library was searched with, from a `@Sendable` handler.
+private final class SearchTerms: @unchecked Sendable {
+    private let lock = NSLock()
+    private var terms: [String] = []
+    var all: [String] { lock.withLock { terms } }
+    func add(_ term: String) { lock.withLock { terms.append(term) } }
+}
+
 private final class SearchSeerrTransport: SeerrTransport, @unchecked Sendable {
     private let lock = NSLock()
     private var sent: [URLRequest] = []
@@ -478,6 +486,31 @@ struct SearchSeerrSectionTests {
         }
         #expect(!missing.isEmpty)
         #expect(transport.requests.filter { $0.url?.path.hasSuffix("/search") == true }.count == 1)
+    }
+
+    @Test("a text change the screen never reported is still the query that runs")
+    func missedTextChangeIsCaughtAfterTheDebounce() async {
+        let transport = SearchSeerrTransport(search: .response(status: 200, body: duneSearchBody))
+        let api = MockAPIClient()
+        let terms = SearchTerms()
+        api.searchItemsHandler = { term in
+            terms.add(term)
+            return []
+        }
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+        vm.searchText = "dun"
+        vm.search(using: app)
+        // The last letter lands, and `onChange` never fires for it.
+        vm.searchText = "dune"
+
+        #expect(await eventually { terms.all.contains("dune") })
+        await vm.searchTask?.value
+
+        #expect(!terms.all.contains("dun"))
+        let asked = transport.requests.compactMap { $0.url }.filter { $0.path.hasSuffix("/search") }
+        #expect(asked.count == 1)
+        #expect(asked.first?.query?.contains("query=dune&") == true)
     }
 
     @Test("a title the library owns is not listed again; ownership is per kind")
