@@ -102,7 +102,14 @@ struct SearchScreen: View {
             // Spotlight, and keyboard. Voice search is exposed as a leading
             // toolbar button. The body renders results / empty / listening states.
             VStack(spacing: 0) {
-                filterChips
+                // Above the results only where nothing scrolls: in the grid
+                // they ride INSIDE its ScrollView (`SearchResultsGrid.chips`).
+                // A row pinned above a scroll view stayed put while the large
+                // title and the search field followed the scroll, and the two
+                // overlapped (owner's iPhone, 2026-11-11).
+                if !showsResultsGrid {
+                    filterChips
+                }
                 resultContent
             }
             #endif
@@ -354,6 +361,21 @@ struct SearchScreen: View {
 
     // MARK: - Results
 
+    /// Whether `resultContent` draws the scrolling results grid — the branch
+    /// order below, read once.
+    private var showsResultsGrid: Bool {
+        !(viewModel.isSearching
+          || (viewModel.searchFailed && viewModel.hasSearched)
+          || (hasNoMatches && viewModel.hasSearched && !seerrFollowsResults)
+          || (hasNoMatches && !viewModel.hasSearched))
+    }
+
+    /// What the chips show, for the grid's `==`: the selected scope and the
+    /// count beside them.
+    private var chipsKey: String {
+        "\(viewModel.scope)-\(viewModel.results.count)-\(viewModel.hasSearched)"
+    }
+
     @ViewBuilder
     private var resultContent: some View {
         if viewModel.isSearching {
@@ -421,7 +443,9 @@ struct SearchScreen: View {
                     Task { await seerrRequests.request(missing, session: seerr, loc: loc, toasts: toasts) }
                 },
                 onSeerrSignIn: { Task { await signInToSeerr() } },
-                onSeerrLater: dismissSeerrPrompt
+                onSeerrLater: dismissSeerrPrompt,
+                chipsKey: chipsKey,
+                chips: chipsInGrid
             )
             // Without this the `Equatable` conformance is inert — SwiftUI only
             // consults a custom `==` when the view is wrapped in `.equatable()`.
@@ -430,6 +454,16 @@ struct SearchScreen: View {
             // one surface is enough here.
             .cardZoomScope(zoomNamespace, surface: "search.results")
         }
+    }
+
+    /// iOS: the chips inside the grid's ScrollView. tvOS keeps them in its own
+    /// page ScrollView, above `resultContent`.
+    private var chipsInGrid: AnyView {
+        #if os(iOS)
+        AnyView(filterChips)
+        #else
+        AnyView(EmptyView())
+        #endif
     }
 
     /// Nothing typed yet: the invitation, past queries, the « surprise » pills.
@@ -822,6 +856,7 @@ private struct SearchResultsGrid: View, Equatable {
                   lhs.showsSeerrPrompt == rhs.showsSeerrPrompt,
                   lhs.isSigningInToSeerr == rhs.isSigningInToSeerr,
                   lhs.results.count == rhs.results.count,
+                  lhs.chipsKey == rhs.chipsKey,
                   lhs.people.count == rhs.people.count else { return false }
             // Must be at least as fine-grained as `SearchResultCard.==`. The grid
             // is the OUTER `.equatable()`: if it compares equal its body is
@@ -869,6 +904,10 @@ private struct SearchResultsGrid: View, Equatable {
     let onRequest: (SeerrMissingTitle) -> Void
     let onSeerrSignIn: () -> Void
     let onSeerrLater: () -> Void
+    /// The scope chips, first in the ScrollView so they scroll with the large
+    /// title (iOS); `chipsKey` is what `==` compares for them.
+    let chipsKey: String
+    let chips: AnyView
 
     var body: some View {
         ScrollView {
@@ -876,6 +915,7 @@ private struct SearchResultsGrid: View, Equatable {
             // around the lazy grid and rows is what blanked a tab for good
             // (root CLAUDE.md, lazy-container RULE).
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+                chips
                 if let noResultsTitle {
                     EmptyStateView(
                         systemImage: "magnifyingglass",
