@@ -65,11 +65,15 @@ enum MissingEpisodeLook {
     }
 
     /// « 8 mai 2011 », in the app's language; nil when the date is unreadable.
+    /// Read AND written in GMT: a calendar day, not an instant — shown in the
+    /// device's zone, « 8 mai » read « 7 mai » west of UTC.
     nonisolated static func airDate(_ raw: String?, locale: Locale) -> String? {
         guard let raw, let date = try? Date(raw, strategy: Date.ISO8601FormatStyle().year().month().day()) else {
             return nil
         }
-        return date.formatted(.dateTime.month(.abbreviated).day().year().locale(locale))
+        var style = Date.FormatStyle.dateTime.month(.abbreviated).day().year().locale(locale)
+        style.timeZone = .gmt
+        return date.formatted(style)
     }
 }
 

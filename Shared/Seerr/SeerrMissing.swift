@@ -249,8 +249,13 @@ enum SeerrMissing {
         return Double(ticks.reduce(0, +)) / Double(ticks.count) / 600_000_000
     }
 
-    /// `today` for `episodes`, in the device's calendar day.
-    static func today(_ date: Date = Date(), calendar: Calendar = .current) -> String {
+    /// `today` for `episodes`: the device's day, in the GREGORIAN calendar
+    /// whatever the device's own — TMDb's air dates are Gregorian, and a
+    /// Buddhist year (« 2569-… ») counted next year's episodes as missing, a
+    /// Japanese one (« 0008-… ») never counted any.
+    static func today(_ date: Date = Date(), timeZone: TimeZone = .current) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
     }

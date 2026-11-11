@@ -135,6 +135,11 @@ struct MediaDetailScreen: View {
     /// The first cast card: entering the section under the action row lands
     /// on it (`defaultFocus`), not on whichever card tvOS finds nearest.
     @FocusState private var belowActionsFocused: Bool
+    /// « Lecture »: where the fiche opens (`defaultFocus` on the whole column).
+    @FocusState private var lectureFocused: Bool
+    private var lectureFocusBinding: FocusState<Bool>.Binding? { $lectureFocused }
+    #else
+    private var lectureFocusBinding: FocusState<Bool>.Binding? { nil }
     #endif
 
     /// Mirrors the ceiling the players hand `getPlaybackInfo`, so the version
@@ -483,6 +488,14 @@ struct MediaDetailScreen: View {
             Spacer(minLength: 80)
         }
         .padding(.top, CinemaSpacing.spacing4)
+        #if os(tvOS)
+        // Entering the fiche lands on « Lecture ». Opened right after a press
+        // (Réglages → Seerr → Signalements → « Voir la fiche »), the engine
+        // treats the first pick as user-initiated, and the section's own
+        // default above won it: the fiche opened scrolled to the cast
+        // (recette 2026-11-11). This outer default answers first.
+        .defaultFocus($lectureFocused, true, priority: .userInitiated)
+        #endif
     }
 
     /// Metadata sections: action buttons, admin menu (iOS), quality badges,
@@ -1403,7 +1416,8 @@ struct MediaDetailScreen: View {
             buttonFontSize: buttonFontSize,
             buttonVerticalPadding: buttonVerticalPadding,
             playButtonWidth: playButtonWidth,
-            contentPadding: 0
+            contentPadding: 0,
+            lectureFocus: lectureFocusBinding
         )
         .equatable()
 
@@ -1826,6 +1840,11 @@ struct MediaDetailScreen: View {
                     }
                 }
             }
+            // Rebuilt when « Masquer » / « Afficher » drops or brings back the
+            // missing rows: shrunk in place (10 rows → 3), the lazy stack left
+            // the owned rows undrawn and unfocusable — a black gap until
+            // « Afficher » (recette 2026-11-11).
+            .id(viewModel.missingEpisodesHidden)
             .padding(.horizontal, contentPadding)
             missingEpisodesBlock
             // One owned season: no pill row to append to, so the missing
@@ -2320,6 +2339,9 @@ private struct PlayActionButtonsSection: View, Equatable {
     let buttonVerticalPadding: CGFloat
     let playButtonWidth: CGFloat
     let contentPadding: CGFloat
+    /// tvOS: the screen's « Lecture » focus, where the fiche opens. Not
+    /// compared — the binding is the same for the life of the screen.
+    var lectureFocus: FocusState<Bool>.Binding?
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -2407,6 +2429,7 @@ private struct PlayActionButtonsSection: View, Equatable {
                 // fixed width is what produced the ellipsis.
                 HStack(spacing: CinemaSpacing.spacing3) {
                     lectureButton
+                        .modifier(FirstCardFocus(binding: lectureFocus))
                         .frame(width: playButtonWidth, height: CinemaTVLayout.actionRowHeight)
                         // Exposes this row's center to the parent HStack so the
                         // heart / watched accessories center on the Play button

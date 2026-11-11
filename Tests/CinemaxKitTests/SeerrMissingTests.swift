@@ -1053,6 +1053,8 @@ struct SeerrMissingEpisodesTests {
     func airDateText() {
         let fr = MissingEpisodeLook.airDate("2011-05-08", locale: Locale(identifier: "fr_FR"))
         #expect(fr?.contains("2011") == true && fr?.contains("mai") == true)
+        // A calendar day: the same day west of UTC (« 8 », never « 7 »).
+        #expect(fr?.contains("8") == true && fr?.contains("7") == false)
         #expect(MissingEpisodeLook.airDate("pas une date", locale: Locale(identifier: "fr_FR")) == nil)
         #expect(MissingEpisodeLook.airDate(nil, locale: Locale(identifier: "fr_FR")) == nil)
     }
@@ -1093,11 +1095,12 @@ struct SeerrMissingEpisodesTests {
         #expect(SeerrMissing.meanMinutes([BaseItemDto()]) == nil)
     }
 
-    @Test("today is the device's calendar day, zero-padded")
+    @Test("today is the device's day in the Gregorian calendar, zero-padded")
     func todayIsZeroPadded() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC")!
-        #expect(SeerrMissing.today(Date(timeIntervalSince1970: 0), calendar: calendar) == "1970-01-01")
+        let utc = TimeZone(identifier: "UTC")!
+        #expect(SeerrMissing.today(Date(timeIntervalSince1970: 0), timeZone: utc) == "1970-01-01")
+        // The device's zone decides the day, west of UTC as well.
+        #expect(SeerrMissing.today(Date(timeIntervalSince1970: 0), timeZone: TimeZone(identifier: "America/Los_Angeles")!) == "1969-12-31")
     }
 
     @Test("reporting needs CREATE_ISSUES or MANAGE_ISSUES; an admin passes")
