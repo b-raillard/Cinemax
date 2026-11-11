@@ -1180,6 +1180,48 @@ struct MultiServerAppStateTests {
         #expect(app.servers.first { $0.id == server.id }?.localURL == lan)
     }
 
+    @Test("Approving a changed certificate that the save then refuses puts the genuine pin back")
+    func refusedChangedCertificateRestoresTheGenuinePin() async {
+        let key = "10.0.0.7:8920"
+        let snapshot = PinSnapshot(key)
+        defer { snapshot.restore() }
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        server.localURL = URL(string: "https://10.0.0.7:8920")   // already saved, and pinned
+        let app = localState(server)
+        ServerTrustDelegate.shared.trust(fingerprint: "aa", forTrustKey: key)
+        // Away from home, another machine answers on that address with its own leaf.
+        app.localProbe = { _, _ in .answered(serverID: "OTHER", connectedAddressIsLocal: true) }
+        ServerTrustDelegate.shared.recordPending(Self.summary(key, fingerprint: "bb"))
+
+        let outcome = await app.trustLocalCertificate(id: server.id, raw: "10.0.0.7:8920", fingerprint: "bb")
+
+        #expect(outcome == .refusedOtherServer)
+        #expect(ServerTrustDelegate.shared.pinnedFingerprint(for: URL(string: "https://10.0.0.7:8920")!) == "aa")
+        #expect(app.servers.first { $0.id == server.id }?.localURL == URL(string: "https://10.0.0.7:8920"))
+    }
+
+    @Test("An approval the server never confirmed is not kept: the address is saved, awaiting approval")
+    func unconfirmedApprovalIsNotKept() async {
+        let key = "10.0.0.8:8920"
+        let snapshot = PinSnapshot(key)
+        defer { snapshot.restore() }
+        ServerTrustDelegate.shared.forget(trustKey: key)
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        app.localCertificateState = { AppState.certificateState(ofLocalURL: $0) }
+        // The re-run's probe does not answer (the network went away).
+        app.localProbe = { _, _ in .failed(localNetworkDenied: false) }
+        ServerTrustDelegate.shared.recordPending(Self.summary(key, fingerprint: "ab"))
+
+        let outcome = await app.trustLocalCertificate(id: server.id, raw: "10.0.0.8:8920", fingerprint: "ab")
+
+        #expect(outcome == .savedNeedsApproval)
+        #expect(!ServerTrustDelegate.shared.isPinned(trustKey: key))
+        #expect(app.servers.first { $0.id == server.id }?.localURL == URL(string: "https://10.0.0.8:8920"))
+    }
+
     @Test("A fingerprint other than the pending one pins nothing and asks again")
     func mismatchingFingerprintPinsNothing() async {
         let key = "10.0.0.5:8920"

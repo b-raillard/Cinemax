@@ -436,6 +436,16 @@ struct PlaybackStopPositionTests {
 @Suite("Reconstruction en cours — défaillances du moteur")
 struct ReResolveGateTests {
 
+    @Test("Une négociation ratée est redemandée une fois si la route a changé pendant qu'elle courait")
+    func failedNegotiationIsAskedAgainOnlyOnAnotherRoute() {
+        let lan = URL(string: "https://192.168.1.128:8920")
+        let identity = URL(string: "https://movies.example.net")
+        #expect(ReResolveGate.renegotiatesAfterFailure(dialAtStart: lan, dialNow: identity))
+        #expect(ReResolveGate.renegotiatesAfterFailure(dialAtStart: identity, dialNow: lan))
+        #expect(!ReResolveGate.renegotiatesAfterFailure(dialAtStart: identity, dialNow: identity))
+        #expect(!ReResolveGate.renegotiatesAfterFailure(dialAtStart: nil, dialNow: nil))
+    }
+
     @Test("Hors reconstruction, une défaillance du moteur va au chemin d'erreur")
     func idleGateAdmitsFailures() {
         let gate = ReResolveGate()

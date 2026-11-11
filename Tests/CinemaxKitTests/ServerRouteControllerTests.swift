@@ -557,6 +557,41 @@ struct ServerRouteControllerTests {
         #expect(controller.route == .local)
     }
 
+    /// The login screen that follows a session's end dials the public URL.
+    @Test func sessionEndPutsTheClientBackOnTheIdentity() async {
+        let api = MockAPIClient()
+        let app = makeApp(api: api, entries: [entry()])
+        let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))
+        let controller = makeController(stub, app: app)
+        await controller.evaluate(.launch)
+        #expect(api.currentDialURL() == lan)
+
+        app.isAuthenticated = false
+        controller.sessionEnded()
+
+        #expect(api.currentDialURL() == nil)
+        #expect(controller.route == .internet)
+    }
+
+    /// Signed out with a re-login's LAN dial installed: leaving the network
+    /// drops it — but never while a sign-in holds the client.
+    @Test func pathChangeWhileSignedOutDropsTheDial() {
+        let api = MockAPIClient()
+        let app = makeApp(api: api, entries: [entry()])
+        let controller = makeController(ProbeStub(.failed(localNetworkDenied: false)), app: app)
+        app.isAuthenticated = false
+        api.setDialURL(lan)
+
+        app.beginSignIn()
+        controller.pathChanged()
+        #expect(api.currentDialURL() == lan, "held by a sign-in: untouched")
+        app.endSignIn()
+
+        api.setDialURL(lan)
+        controller.pathChanged()
+        #expect(api.currentDialURL() == nil)
+    }
+
     /// A launch refresh owed by a session that ended is not paid by the next.
     @Test func sessionEndDropsAnOwedLaunchRefresh() async {
         let api = MockAPIClient()
