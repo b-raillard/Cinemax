@@ -5900,10 +5900,28 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // Routes through `notifyIfUnauthorized`: a genuinely revoked token
             // triggers the confirm-before-logout cycle in AppState. A transient
             // failure just returns nil → leave the watchdog / error path to it.
-            guard let fresh = try? await self.apiClient.getPlaybackInfo(
+            let dialAtStart = self.apiClient.currentDialURL()
+            var negotiated = try? await self.apiClient.getPlaybackInfo(
                 itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate,
                 engine: .vlc, mediaSourceId: keptSourceId
-            ) else {
+            )
+            if negotiated == nil, !self.isTearingDown, gen == self.navGeneration {
+                // The route moved UNDER the negotiation (leaving home on a
+                // fading Wi-Fi: the request left for the LAN address, then the
+                // path flipped): ask once more, on the route now dialled,
+                // rather than give up without ever trying the public one.
+                await ServerRouteController.shared.awaitPendingProbe()
+                if ReResolveGate.renegotiatesAfterFailure(
+                    dialAtStart: dialAtStart, dialNow: self.apiClient.currentDialURL()
+                ) {
+                    logger.notice("VLC re-resolve: route changed during the negotiation, asking again")
+                    negotiated = try? await self.apiClient.getPlaybackInfo(
+                        itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate,
+                        engine: .vlc, mediaSourceId: keptSourceId
+                    )
+                }
+            }
+            guard let fresh = negotiated else {
                 logger.error("VLC re-resolve negotiation failed after \(Self.secondsSince(negotiationStart), privacy: .public)")
                 // …and make sure there IS one: this re-resolve may have superseded
                 // an error retry (its token was cleared above), which had already

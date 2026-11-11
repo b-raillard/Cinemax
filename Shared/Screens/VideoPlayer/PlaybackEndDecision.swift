@@ -258,6 +258,13 @@ struct ReResolveGate {
     ///   - surfacingFailure: a stranded seek's rebuild.
     ///   - engineStopped: the old engine is stopped, stopping, idle or in
     ///     error — including an error this gate kept from the error path.
+    /// A negotiation that FAILED is asked once more when the base the client
+    /// dials is no longer the one it started on: the request went to a route
+    /// that was being abandoned. Same route ⇒ the failure is the answer.
+    static func renegotiatesAfterFailure(dialAtStart: URL?, dialNow: URL?) -> Bool {
+        dialAtStart != dialNow
+    }
+
     static func onNegotiationFailed(
         supersededRetry: Bool,
         surfacingFailure: Bool,

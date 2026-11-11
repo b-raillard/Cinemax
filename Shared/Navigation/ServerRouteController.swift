@@ -130,10 +130,22 @@ final class ServerRouteController {
         let hadDial = dialURL != nil
         if hadDial { dialURL = nil }
         if dialIdentity != nil { dialIdentity = nil }
+        // The client too: the login screen that follows dials it, and no
+        // route decision reaches a signed-out session (the gate is closed).
+        dropSignedOutDial()
         guard hadDial else { return }
         transports.setImageRoute(nil, nil)
         transports.configureStream(appState?.serverURL)
         logger.notice("route → internet (reason: sessionEnded)")
+    }
+
+    /// Puts a signed-out client back on its identity (the public URL). Never
+    /// during a sign-in (`.held`): nothing may rebuild the client under it.
+    private func dropSignedOutDial() {
+        guard let appState, !appState.isSignInInFlight else { return }
+        let client = appState.apiClient
+        guard let dial = client.currentDialURL(), dial != appState.serverURL else { return }
+        client.setDialURL(nil)
     }
 
     // MARK: - Deciding
@@ -184,7 +196,12 @@ final class ServerRouteController {
         // Held by a sign-in: the client is not touched now; the release
         // evaluates. No `await` between this gate and `apply`, so no transition
         // can slip in between.
-        guard case .open(let session) = gate() else { return }
+        guard case .open(let session) = gate() else {
+            // Signed out with the login screen up: a re-login may have put the
+            // client on the LAN address of a network that is now gone.
+            if case .closed = gate() { dropSignedOutDial() }
+            return
+        }
         apply(dial: nil, entry: session.entry, reason: .pathChange, settled: false)
         pendingEvaluation = Task { [self] in await evaluate(.pathChange) }
     }

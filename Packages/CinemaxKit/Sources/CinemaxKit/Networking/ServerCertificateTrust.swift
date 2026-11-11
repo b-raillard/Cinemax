@@ -348,7 +348,10 @@ public final class ServerTrustDelegate: NSObject, URLSessionTaskDelegate, @unche
     ) {
         let followed = AuthenticatedRedirect.followed(request, redirectedFrom: response.url)
         if followed == nil {
-            trustLog.notice("ServerTrust ▸ redirection authentifiée vers \(request.url?.host ?? "?", privacy: .public) NON suivie (autre origine)")
+            // Never a LAN address in a log (it reaches the diagnostics export).
+            let host = request.url?.host ?? "?"
+            let shown = LocalNetworkAddress.isEligibleHost(host) ? "local" : host
+            trustLog.notice("ServerTrust ▸ redirection authentifiée vers \(shown, privacy: .public) NON suivie (autre origine)")
         }
         completionHandler(followed)
     }

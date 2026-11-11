@@ -108,7 +108,9 @@ final class StreamTransportPolicy {
             let prefer = await Self.shouldPreferProxy(host: host, port: port, useTLS: useTLS)
             guard !Task.isCancelled else { return }
             self?.preferProxy = prefer
-            proxyLog.log("StreamTransport ▸ host=\(host, privacy: .public) preferProxy=\(prefer)")
+            // Never a LAN address in a log (it reaches the diagnostics export).
+            let shown = LocalNetworkAddress.isEligibleHost(host) ? "local" : host
+            proxyLog.log("StreamTransport ▸ host=\(shown, privacy: .public) preferProxy=\(prefer)")
         }
     }
 

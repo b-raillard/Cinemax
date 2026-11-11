@@ -761,18 +761,30 @@ final class AppState {
     /// `ServerSetupViewModel.trustPendingCertificate` does, but only while the
     /// pending summary for that host:port still carries exactly that
     /// fingerprint; otherwise nothing is pinned and the save answers
-    /// `needsCertificateApproval` again with the new summary. A pin the save
-    /// then does not use (refused, other server…) is forgotten at once.
+    /// `needsCertificateApproval` again with the new summary.
+    ///
+    /// The approval STANDS only once the server proved itself over that
+    /// certificate (`.reachable`: its `Id`, on a local peer). Anything else —
+    /// refused, another server, or a probe that did not answer — puts the pin
+    /// that host:port had before back (or none): approving a « certificat a
+    /// CHANGÉ » away from home must never replace the genuine pin with the
+    /// leaf of whatever answered there (review 2026-11-11).
     func trustLocalCertificate(id: String, raw: String, fingerprint: String) async -> LocalAddressSaveOutcome {
         guard let pending = pendingLocalCertificate(raw: raw), pending.fingerprint == fingerprint,
               case .success(let url) = ServerURLNormalizer.normalizeLocal(raw) else {
             return await setLocalAddress(id: id, raw: raw)
         }
+        let previous = ServerTrustDelegate.shared.pinnedFingerprint(for: url)
         ServerTrustDelegate.shared.trust(fingerprint: pending.fingerprint, forTrustKey: pending.trustKey)
         let outcome = await setLocalAddress(id: id, raw: raw)
-        // Kept when the save stored the address (or any entry names the key).
-        forgetLocalPinIfUnused(url)
-        return outcome
+        guard outcome != .reachable else { return outcome }
+        if let previous {
+            ServerTrustDelegate.shared.trust(fingerprint: previous, forTrustKey: pending.trustKey)
+            return outcome
+        }
+        ServerTrustDelegate.shared.forget(trustKey: pending.trustKey)
+        // Saved, but its certificate is not pinned after all: say so.
+        return outcome == .savedUnreachable ? .savedNeedsApproval : outcome
     }
 
     /// The LAN certificate awaiting approval for a typed address, for the UI.
