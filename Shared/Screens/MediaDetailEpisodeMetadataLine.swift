@@ -11,6 +11,7 @@ import JellyfinAPI
 struct MediaDetailEpisodeMetadataLine: View {
     let episode: BaseItemDto
     @Environment(LocalizationManager.self) private var loc
+    @AppStorage(SettingsKey.detailShowQualityBadges) private var showQualityBadges: Bool = SettingsKey.Default.detailShowQualityBadges
 
     var body: some View {
         let runtimeText: String? = {
@@ -38,6 +39,15 @@ struct MediaDetailEpisodeMetadataLine: View {
             Text(parts.joined(separator: " • "))
                 .font(CinemaFont.label(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
+        }
+
+        // The episode's picture (« 4K · Dolby Vision »), on its own line: a
+        // season often mixes qualities, and the row under Play only describes
+        // the next episode. Same setting as the badges it complements.
+        if showQualityBadges, let quality = MediaQualityBadges.episodeVideoSummary(for: episode) {
+            Text(quality)
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurface)
         }
     }
 }

@@ -20,6 +20,22 @@ struct MediaQualityBadgesTests {
         return dto
     }
 
+    @Test("An episode's line carries the picture only: resolution and HDR")
+    func episodeVideoSummary() {
+        let video = MediaStream(codec: "hevc", height: 2160, index: 0, type: .video, videoRangeType: .dovi)
+        let audio = MediaStream(channels: 6, codec: "eac3", index: 1, type: .audio)
+        #expect(MediaQualityBadges.episodeVideoSummary(for: item(streams: [video, audio])) == "4K · Dolby Vision")
+        let sdr = MediaStream(height: 1080, index: 0, type: .video)
+        #expect(MediaQualityBadges.episodeVideoSummary(for: item(streams: [sdr])) == "1080p")
+    }
+
+    @Test("An episode with no source, or no video stream, prints no quality line")
+    func episodeVideoSummaryEmpty() {
+        #expect(MediaQualityBadges.episodeVideoSummary(for: BaseItemDto()) == nil)
+        let audioOnly = MediaStream(codec: "aac", index: 0, type: .audio)
+        #expect(MediaQualityBadges.episodeVideoSummary(for: item(streams: [audioOnly])) == nil)
+    }
+
     @Test("No media source yields no badges")
     func empty() {
         #expect(MediaQualityBadges.badgeLabels(for: BaseItemDto()) == [])
