@@ -1642,6 +1642,11 @@
 "seerr.user.autoApprove.notAllowed" = "Dein Seerr-Konto kann andere Konten nicht ändern. Frag den Seerr-Administrator.";
 "seerr.user.autoApprove.ownAccount" = "Seerr erlaubt niemandem, die eigenen Berechtigungen zu ändern.";
 "seerr.user.autoApprove.failed" = "Automatische Genehmigung für %@ konnte nicht geändert werden: Seerr hat abgelehnt oder nicht geantwortet.";
+"seerr.user.report" = "Meldungen";
+"seerr.user.report.episodes" = "Kann fehlende Folgen melden";
+"seerr.user.report.note" = "Bei einer unvollständigen Serie kann dieses Konto dem Admin die fehlenden Folgen melden.";
+"seerr.user.report.always" = "Die Rolle in Seerr erlaubt das Melden bereits.";
+"seerr.user.report.failed" = "Das Melden für %@ konnte nicht geändert werden: Seerr hat abgelehnt oder nicht geantwortet.";
 "seerr.settings.line.willBeCreated" = "Noch kein Seerr-Konto: es wird bei der ersten Anmeldung angelegt";
 "seerr.settings.line.mustBeAdded" = "Kein Seerr-Konto, und Seerr legt keines selbst an: füge es unter Seerr → Benutzer hinzu";
 "seerr.settings.line.unknown" = "Status in Seerr noch unbekannt";
