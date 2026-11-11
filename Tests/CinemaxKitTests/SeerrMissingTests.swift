@@ -305,14 +305,17 @@ struct SeerrMissingTests {
         #expect(result.first?.id == "tv-9-s1")
     }
 
-    @Test("a missing season carries its own poster, nil when TMDb has none")
+    @Test("a missing season carries its own poster, else the series' one, nil when neither exists")
     func seasonPoster() {
-        let tv = SeerrTVDetails(tmdbId: 9, name: "S", seasons: [
+        let seasons = [
             SeerrSeason(seasonNumber: 1, episodeCount: 8, posterPath: "/s1.jpg"),
             SeerrSeason(seasonNumber: 2, episodeCount: 8),
-        ], mediaInfo: nil)
-        let result = SeerrMissing.seasons(tv, ownedSeasonNumbers: [], includeSpecials: false)
-        #expect(result.map(\.posterPath) == ["/s1.jpg", nil])
+        ]
+        let withSeries = SeerrTVDetails(tmdbId: 9, name: "S", seasons: seasons, mediaInfo: nil, posterPath: "/show.jpg")
+        #expect(SeerrMissing.seasons(withSeries, ownedSeasonNumbers: [], includeSpecials: false)
+            .map(\.posterPath) == ["/s1.jpg", "/show.jpg"])
+        let bare = SeerrTVDetails(tmdbId: 9, name: "S", seasons: seasons, mediaInfo: nil)
+        #expect(SeerrMissing.seasons(bare, ownedSeasonNumbers: [], includeSpecials: false).map(\.posterPath) == ["/s1.jpg", nil])
     }
 
     @Test("specials only when enabled")

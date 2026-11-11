@@ -26,7 +26,9 @@ struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
     let seriesTmdbId: Int
     let seasonNumber: Int
     let badge: SeerrBadge
-    /// The season's own poster (Seerr's `/tv/{id}`); nil ⇒ the bare outline.
+    /// The season's own poster (Seerr's `/tv/{id}`), else the SERIES' poster —
+    /// TMDb has none for a season not aired yet, and a bare outline beside
+    /// dimmed posters read as broken (owner 2026-11-11); nil ⇒ neither exists.
     var posterPath: String?
     var id: String { Self.id(seriesTmdbId: seriesTmdbId, seasonNumber: seasonNumber) }
     static func id(seriesTmdbId: Int, seasonNumber: Int) -> String { "tv-\(seriesTmdbId)-s\(seasonNumber)" }
@@ -232,7 +234,7 @@ enum SeerrMissing {
             let badge = info.flatMap { seasonBadge(for: $0.requests.filter { $0.seasons.contains(number) }) }
                 ?? (seerrStatus == .processing ? .processing : .request)
             result.append(SeerrMissingSeason(
-                seriesTmdbId: tv.tmdbId, seasonNumber: number, badge: badge, posterPath: season.posterPath))
+                seriesTmdbId: tv.tmdbId, seasonNumber: number, badge: badge, posterPath: season.posterPath ?? tv.posterPath))
         }
         return result
     }
