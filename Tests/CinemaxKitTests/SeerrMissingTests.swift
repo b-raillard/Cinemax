@@ -984,3 +984,59 @@ struct ModalPresentationHostTests {
         #expect(presenter.request(for: .root)?.itemId == "item")
     }
 }
+
+@Suite("Seerr — missing episodes (pure)")
+struct SeerrMissingEpisodesTests {
+    private func episode(_ number: Int, aired: String?) -> SeerrEpisode {
+        SeerrEpisode(episodeNumber: number, name: "E\(number)", airDate: aired)
+    }
+
+    @Test("a file covering several episodes owns them all")
+    func multiEpisodeFilesOwnTheirRange() {
+        var double = BaseItemDto()
+        double.indexNumber = 1
+        double.indexNumberEnd = 2
+        var single = BaseItemDto()
+        single.indexNumber = 4
+        #expect(SeerrMissing.ownedEpisodeNumbers([double, single, BaseItemDto()]) == [1, 2, 4])
+    }
+
+    @Test("missing = aired and not owned; no date, a later date, episode 0 and repeats are left out")
+    func onlyAiredUnownedEpisodes() {
+        let all = [
+            episode(3, aired: "2021-01-15"), episode(1, aired: "2021-01-01"), episode(2, aired: "2021-01-08"),
+            episode(2, aired: "2021-01-08"), episode(0, aired: "2020-12-25"),
+            episode(4, aired: "2026-11-11"), episode(5, aired: "2026-11-12"), episode(6, aired: nil), episode(7, aired: ""),
+        ]
+        let missing = SeerrMissing.episodes(all, seriesTmdbId: 9, seasonNumber: 2, owned: [1], today: "2026-11-11")
+        #expect(missing.map(\.episodeNumber) == [2, 3, 4])
+        #expect(missing.first?.id == "tv-9-s2-e2")
+    }
+
+    @Test("today is the device's calendar day, zero-padded")
+    func todayIsZeroPadded() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        #expect(SeerrMissing.today(Date(timeIntervalSince1970: 0), calendar: calendar) == "1970-01-01")
+    }
+
+    @Test("reporting needs CREATE_ISSUES or MANAGE_ISSUES; an admin passes")
+    func reportPermission() {
+        #expect(!SeerrPermissions.request.canReportIssues)
+        #expect(SeerrPermissions.createIssues.canReportIssues)
+        #expect(SeerrPermissions.manageIssues.canReportIssues)
+        #expect(SeerrPermissions.admin.canReportIssues)
+    }
+
+    @Test("a season's episodes decode lossily, and the media info carries Seerr's own id")
+    func decoding() throws {
+        let body = #"{"episodes":[{"episodeNumber":1,"name":"Un","airDate":"2021-01-01"},{"name":"sans numéro"},{"episodeNumber":3}]}"#
+        let season = try JSONDecoder().decode(SeerrSeasonEpisodes.self, from: Data(body.utf8))
+        #expect(season.episodes == [
+            SeerrEpisode(episodeNumber: 1, name: "Un", airDate: "2021-01-01"),
+            SeerrEpisode(episodeNumber: 3, name: "", airDate: nil),
+        ])
+        let info = try JSONDecoder().decode(SeerrMediaInfo.self, from: Data(#"{"id":77,"status":4}"#.utf8))
+        #expect(info.id == 77)
+    }
+}

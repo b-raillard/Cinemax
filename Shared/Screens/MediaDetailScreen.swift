@@ -41,6 +41,7 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
+    @State private var episodeReport: SeerrEpisodeReportDraft?
     /// Drives the "mark whole season watched" confirmation dialog (F10).
     @State private var showMarkSeasonWatchedConfirm = false
     @Environment(NetworkMonitor.self) private var network
@@ -1809,6 +1810,7 @@ struct MediaDetailScreen: View {
                 }
             }
             .padding(.horizontal, contentPadding)
+            missingEpisodesBlock
             // One owned season: no pill row to append to, so the missing
             // seasons take the iPhone's row, after the episodes.
             if !showSeasonPicker {
@@ -1876,6 +1878,7 @@ struct MediaDetailScreen: View {
             .scrollTargetBehavior(.viewAligned)
             // AFTER the episodes, never above: the season Menu lists the owned
             // seasons only, and nothing on screen moves when Seerr answers.
+            missingEpisodesBlock
             missingSeasonsRow
             #endif
         }
@@ -1897,6 +1900,58 @@ struct MediaDetailScreen: View {
             Button(loc.localized("action.cancel"), role: .cancel) {}
         } message: {
             Text(loc.localized("detail.season.markWatched.message"))
+        }
+    }
+
+    // MARK: - Missing episodes of the season on screen (Seerr)
+
+    /// The aired episodes the selected season lacks, re-read at render like
+    /// `missingSeasons` (Pro, age cap, network, the Seerr account).
+    private var missingEpisodes: [SeerrMissingEpisode] {
+        guard let seerr else { return viewModel.seerrEpisodes(for: nil) }
+        let visible = seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+        return viewModel.seerrEpisodes(for: visible ? seerr.snapshot() : nil)
+    }
+
+    /// Only an account that may report a problem gets the button
+    /// (CREATE_ISSUES / MANAGE_ISSUES); the others see the lines alone.
+    private var canReportEpisodes: Bool {
+        guard let seerr, case .connected(let user) = seerr.connection else { return false }
+        return user.permissions.canReportIssues
+    }
+
+    @ViewBuilder
+    private var missingEpisodesBlock: some View {
+        let missing = missingEpisodes
+        if let first = missing.first {
+            MediaDetailMissingEpisodesBlock(
+                episodes: missing,
+                canReport: canReportEpisodes,
+                isReported: viewModel.reportedEpisodeSeasons.contains(
+                    SeerrMissingSeason.id(seriesTmdbId: first.seriesTmdbId, seasonNumber: first.seasonNumber)),
+                onReport: { episodeReport = SeerrEpisodeReportDraft(episodes: missing) }
+            )
+            .equatable()
+            .padding(.horizontal, contentPadding)
+            .padding(.top, CinemaSpacing.spacing2)
+            .modifier(episodeReportPresentation)
+        }
+    }
+
+    /// iOS: the sheet (tick, a word, send). tvOS: a confirmation — nothing to
+    /// tick or type with a remote, the whole list is reported.
+    private var episodeReportPresentation: some ViewModifier {
+        SeerrEpisodeReportPresentation(draft: $episodeReport, loc: loc) { episodes, note in
+            await sendEpisodeReport(episodes, note: note)
+        }
+    }
+
+    private func sendEpisodeReport(_ episodes: [SeerrMissingEpisode], note: String) async {
+        let message = SeerrEpisodeReportDraft.message(numbers: episodes.map(\.episodeNumber), note: note, loc: loc)
+        if await viewModel.reportMissingEpisodes(episodes, message: message) {
+            toast.success(loc.localized("seerr.episodes.report.sent"))
+        } else {
+            toast.error(loc.localized("seerr.episodes.report.failed"))
         }
     }
 

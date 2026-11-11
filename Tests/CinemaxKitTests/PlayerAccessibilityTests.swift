@@ -282,6 +282,8 @@ struct PluralRuleTests {
                     "seerr.activation.summary.addressFailed",
                     // Seerr missing seasons (series fiche), missing films (saga).
                     "seerr.missing.requestAll", "seerr.saga.requestAll",
+                    // Seerr — the missing episodes of an owned season.
+                    "seerr.episodes.missing", "seerr.episodes.report", "seerr.episodes.report.confirm",
                     // Seerr — Mes demandes, À valider (Settings → Demandes).
                     "seerr.myRequests.seasons", "seerr.settings.section.pendingCount", "seerr.settings.pendingBubble",
                     // Seerr — the admin's summary rows.

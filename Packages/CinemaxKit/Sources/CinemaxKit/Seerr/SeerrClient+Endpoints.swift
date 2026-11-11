@@ -149,6 +149,35 @@ extension SeerrClient {
             "/person/\(personId)/combined_credits", query: [], auth: .credential(credential), localized: true)
     }
 
+    /// The episodes TMDb lists for one season (their numbers, names, air dates).
+    public func seasonEpisodes(
+        tmdbId: Int, seasonNumber: Int, _ credential: SeerrCredential
+    ) async throws -> [SeerrEpisode] {
+        let season: SeerrSeasonEpisodes = try await get(
+            "/tv/\(tmdbId)/season/\(seasonNumber)", query: [], auth: .credential(credential), localized: true)
+        return season.episodes
+    }
+
+    /// Reports a problem on a media Seerr knows (`mediaId` = `SeerrMediaInfo.id`,
+    /// Seerr's own id, never the TMDb one) — type « other », the whole season
+    /// (`problemEpisode: 0`), the detail in `message`. Seerr asks for
+    /// CREATE_ISSUES or MANAGE_ISSUES (403 otherwise).
+    public func reportIssue(
+        mediaId: Int, seasonNumber: Int, message: String, _ credential: SeerrCredential
+    ) async throws {
+        struct Body: Encodable {
+            let issueType: Int
+            let message: String
+            let mediaId: Int
+            let problemSeason: Int
+            let problemEpisode: Int
+        }
+        struct Created: Decodable { let id: Int }
+        let body = Body(issueType: 4, message: message, mediaId: mediaId, problemSeason: seasonNumber, problemEpisode: 0)
+        let (_, status): (Created?, Int) = try await mutate("POST", "/issue", body: body, auth: .credential(credential))
+        guard (200..<300).contains(status) else { throw SeerrError.http(status) }
+    }
+
     // MARK: Requests
 
     public func createRequest(_ request: SeerrNewRequest, _ credential: SeerrCredential) async throws -> SeerrRequest {
