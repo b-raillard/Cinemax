@@ -40,6 +40,10 @@ struct SeerrMissingEpisode: Identifiable, Equatable, Sendable {
     let seasonNumber: Int
     let episodeNumber: Int
     let name: String
+    /// `yyyy-MM-dd`, already aired (`SeerrMissing.episodes` keeps no other).
+    var airDate: String?
+    /// TMDb's still, a path for `SeerrSession.posterURL`.
+    var stillPath: String?
     var id: String { "tv-\(seriesTmdbId)-s\(seasonNumber)-e\(episodeNumber)" }
 }
 
@@ -201,7 +205,8 @@ enum SeerrMissing {
             .map {
                 SeerrMissingEpisode(
                     seriesTmdbId: seriesTmdbId, seasonNumber: seasonNumber,
-                    episodeNumber: $0.episodeNumber, name: $0.name)
+                    episodeNumber: $0.episodeNumber, name: $0.name,
+                    airDate: $0.airDate, stillPath: $0.stillPath)
             }
     }
 

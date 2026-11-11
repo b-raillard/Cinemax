@@ -1013,6 +1013,47 @@ struct SeerrMissingEpisodesTests {
         #expect(missing.first?.id == "tv-9-s2-e2")
     }
 
+    @Test("a still is kept as a path, whether Seerr sends a path or a whole TMDb URL")
+    func stillPaths() throws {
+        #expect(SeerrEpisode.imagePath("https://image.tmdb.org/t/p/original//Ai2.jpg") == "/Ai2.jpg")
+        #expect(SeerrEpisode.imagePath("/abc.jpg") == "/abc.jpg")
+        #expect(SeerrEpisode.imagePath("abc.jpg") == "/abc.jpg")
+        #expect(SeerrEpisode.imagePath("") == nil)
+        #expect(SeerrEpisode.imagePath(nil) == nil)
+        let body = #"{"episodes":[{"episodeNumber":4,"name":"Quatre","airDate":"2011-05-08","stillPath":"https://image.tmdb.org/t/p/original//q.jpg"}]}"#
+        let season = try JSONDecoder().decode(SeerrSeasonEpisodes.self, from: Data(body.utf8))
+        let missing = SeerrMissing.episodes(season.episodes, seriesTmdbId: 1, seasonNumber: 1, owned: [1], today: "2026-11-11")
+        #expect(missing.first?.stillPath == "/q.jpg")
+        #expect(missing.first?.airDate == "2011-05-08")
+    }
+
+    @Test("missing episodes take their place among the owned ones")
+    @MainActor
+    func interleave() {
+        func owned(_ number: Int?, _ id: String) -> BaseItemDto {
+            var dto = BaseItemDto()
+            dto.id = id
+            dto.indexNumber = number
+            return dto
+        }
+        func missing(_ number: Int) -> SeerrMissingEpisode {
+            SeerrMissingEpisode(seriesTmdbId: 1, seasonNumber: 1, episodeNumber: number, name: "E\(number)")
+        }
+        let slots = MediaDetailEpisodeSlot.interleave(
+            owned: [owned(1, "a"), owned(3, "c"), owned(nil, "x"), owned(6, "f")],
+            missing: [missing(7), missing(2), missing(4), missing(5)])
+        #expect(slots.map(\.id) == ["owned-a", "tv-1-s1-e2", "owned-c", "owned-x", "tv-1-s1-e4", "tv-1-s1-e5", "owned-f", "tv-1-s1-e7"])
+        #expect(MediaDetailEpisodeSlot.interleave(owned: [owned(1, "a")], missing: []).map(\.id) == ["owned-a"])
+    }
+
+    @Test("a missing episode's air date reads in the app's language")
+    func airDateText() {
+        let fr = MissingEpisodeLook.airDate("2011-05-08", locale: Locale(identifier: "fr_FR"))
+        #expect(fr?.contains("2011") == true && fr?.contains("mai") == true)
+        #expect(MissingEpisodeLook.airDate("pas une date", locale: Locale(identifier: "fr_FR")) == nil)
+        #expect(MissingEpisodeLook.airDate(nil, locale: Locale(identifier: "fr_FR")) == nil)
+    }
+
     @Test("today is the device's calendar day, zero-padded")
     func todayIsZeroPadded() {
         var calendar = Calendar(identifier: .gregorian)
