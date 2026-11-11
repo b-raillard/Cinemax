@@ -125,6 +125,11 @@ enum SettingsKey {
     /// checked here: the first check seeds it without a toast. Read and
     /// written by `SeerrArrivalWatcher` only.
     static let seerrArrivalsSeenPrefix = "seerr.arrivals.seen."
+    /// `[Int]` — the TMDb ids of the series whose missing EPISODES the user
+    /// hid on this device (« Masquer pour cette série »: a numbering the
+    /// automatic check cannot see through). Read and written by
+    /// `MediaDetailViewModel` only.
+    static let seerrHiddenMissingEpisodes = "seerr.missingEpisodes.hidden"
     static func seerrArrivalsSeen(accountKey: String) -> String {
         seerrArrivalsSeenPrefix + accountKey
     }

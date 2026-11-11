@@ -486,6 +486,33 @@ extension JellyfinAPIClient {
     /// contiguous — a hole punched in the middle of a season by a rating cap
     /// would make "next" skip an episode rather than refuse to show it.
     /// `getPlaybackInfo` remains the authority on what may actually be played.
+    /// The whole series' numbering in ONE light request (`/Shows/{id}/Episodes`
+    /// without a season, no fields, no userData, no images) — what the
+    /// missing-episodes check needs to tell a library that follows TMDb's
+    /// numbering from one that does not. Same cache discipline as
+    /// `getEpisodeRefs`: no userData, so outside the userData sweep, 300 s.
+    public func getEpisodeNumbering(seriesId: String, userId: String) async throws -> [EpisodeNumbering] {
+        let cacheKey = "episodenumbering-\(seriesId)-\(userId)"
+        let cacheStamp = cache.stamp()
+        if let cached: [EpisodeNumbering] = cache.get(cacheKey) { return cached }
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        var params = Paths.GetEpisodesParameters(userID: userId, fields: [], enableUserData: false)
+        params.enableImages = false
+        do {
+            let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
+            let numbering = (response.value.items ?? []).compactMap { item -> EpisodeNumbering? in
+                guard item.locationType != .virtual,
+                      let season = item.parentIndexNumber, let first = item.indexNumber else { return nil }
+                return EpisodeNumbering(season: season, first: first, last: item.indexNumberEnd)
+            }
+            cache.set(cacheKey, value: numbering, ttl: 300, stamp: cacheStamp)
+            return numbering
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     public func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference] {
         let cacheKey = "episoderefs-\(seasonId)-\(userId)"
         let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
