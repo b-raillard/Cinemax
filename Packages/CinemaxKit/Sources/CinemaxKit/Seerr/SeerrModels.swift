@@ -111,6 +111,8 @@ public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decoda
     public static let requestView = Self(rawValue: 16384)
     public static let requestMovie = Self(rawValue: 262144)
     public static let requestTV = Self(rawValue: 524288)
+    public static let manageIssues = Self(rawValue: 1048576)
+    public static let createIssues = Self(rawValue: 4194304)
 
     /// Admins pass every check, as on the Seerr server.
     public func allows(_ p: Self) -> Bool {
@@ -118,6 +120,9 @@ public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decoda
     }
 
     public var canManageRequests: Bool { allows(.manageRequests) }
+    /// May report a problem on a title (`POST /issue` asks for one of the two,
+    /// read in Seerr 3.5.1's issue route).
+    public var canReportIssues: Bool { allows(.createIssues) || contains(.manageIssues) }
     /// May change another user's permissions (`POST /user/{id}/settings/permissions`).
     public var canManageUsers: Bool { allows(.manageUsers) }
 
@@ -262,18 +267,21 @@ public struct SeerrMediaInfo: Sendable, Equatable, Decodable {
     public let seasons: [SeerrSeasonInfo]
     public let requests: [SeerrRequestSummary]
     public let jellyfinMediaId: String?
+    /// Seerr's own id of the media — what an issue (`POST /issue`) names.
+    public let id: Int?
 
     public init(
         status: SeerrMediaStatus, seasons: [SeerrSeasonInfo] = [],
-        requests: [SeerrRequestSummary] = [], jellyfinMediaId: String? = nil
+        requests: [SeerrRequestSummary] = [], jellyfinMediaId: String? = nil, id: Int? = nil
     ) {
         self.status = status
         self.seasons = seasons
         self.requests = requests
         self.jellyfinMediaId = jellyfinMediaId
+        self.id = id
     }
 
-    private enum CodingKeys: String, CodingKey { case status, seasons, requests, jellyfinMediaId }
+    private enum CodingKeys: String, CodingKey { case status, seasons, requests, jellyfinMediaId, id }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -281,6 +289,47 @@ public struct SeerrMediaInfo: Sendable, Equatable, Decodable {
         seasons = try c.decodeIfPresent([SeerrSeasonInfo].self, forKey: .seasons) ?? []
         requests = try c.decodeIfPresent([SeerrRequestSummary].self, forKey: .requests) ?? []
         jellyfinMediaId = try c.decodeIfPresent(String.self, forKey: .jellyfinMediaId)
+        id = try c.decodeIfPresent(Int.self, forKey: .id)
+    }
+}
+
+/// One episode of a season as Seerr (TMDb) lists it — `GET /tv/{id}/season/{n}`.
+public struct SeerrEpisode: Sendable, Equatable, Decodable {
+    public let episodeNumber: Int
+    public let name: String
+    /// `yyyy-MM-dd`, or nil / empty while TMDb has no date: not aired, as far
+    /// as anyone knows.
+    public let airDate: String?
+
+    public init(episodeNumber: Int, name: String, airDate: String?) {
+        self.episodeNumber = episodeNumber
+        self.name = name
+        self.airDate = airDate
+    }
+
+    private enum CodingKeys: String, CodingKey { case episodeNumber, name, airDate }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        episodeNumber = try c.decode(Int.self, forKey: .episodeNumber)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        airDate = try c.decodeIfPresent(String.self, forKey: .airDate)
+    }
+}
+
+/// A season's episodes; an episode that does not decode is skipped.
+public struct SeerrSeasonEpisodes: Sendable, Equatable, Decodable {
+    public let episodes: [SeerrEpisode]
+
+    private enum CodingKeys: String, CodingKey { case episodes }
+    private struct Lossy: Decodable {
+        let episode: SeerrEpisode?
+        init(from decoder: Decoder) throws { episode = try? SeerrEpisode(from: decoder) }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        episodes = try c.decodeIfPresent([Lossy].self, forKey: .episodes)?.compactMap(\.episode) ?? []
     }
 }
 

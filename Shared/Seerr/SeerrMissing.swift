@@ -32,6 +32,17 @@ struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
     static func id(seriesTmdbId: Int, seasonNumber: Int) -> String { "tv-\(seriesTmdbId)-s\(seasonNumber)" }
 }
 
+/// An episode of an OWNED season that has aired and that the library lacks.
+/// Seerr cannot request it (a partly available season is refused, and it has
+/// no per-episode request): it can only be SHOWN, and reported to the admin.
+struct SeerrMissingEpisode: Identifiable, Equatable, Sendable {
+    let seriesTmdbId: Int
+    let seasonNumber: Int
+    let episodeNumber: Int
+    let name: String
+    var id: String { "tv-\(seriesTmdbId)-s\(seasonNumber)-e\(episodeNumber)" }
+}
+
 /// A Seerr section of a browse surface. `loaded([])` renders NOTHING, like
 /// `hidden`; `loading` is the skeleton, bounded by `loadSection`'s deadline.
 enum MissingSection<Element: Equatable & Sendable>: Equatable {
@@ -160,6 +171,46 @@ enum SeerrMissing {
 
     /// Seasons the series lacks, each with its own badge. Season 0 only when
     /// `includeSpecials`. A season Seerr has available or partially is dropped.
+    /// Every episode number the library holds for a season — a file covering
+    /// several (`indexNumber` 1, `indexNumberEnd` 2) owns them all.
+    static func ownedEpisodeNumbers(_ episodes: [BaseItemDto]) -> Set<Int> {
+        var owned = Set<Int>()
+        for episode in episodes {
+            guard let first = episode.indexNumber else { continue }
+            let last = max(first, episode.indexNumberEnd ?? first)
+            owned.formUnion(first...last)
+        }
+        return owned
+    }
+
+    /// The episodes of an owned season the library lacks: AIRED only (an air
+    /// date on or before `today`, `yyyy-MM-dd` — an episode with no date, or a
+    /// later one, is not « missing », it does not exist yet), ascending, each
+    /// number once. Episode 0 and below are never listed.
+    static func episodes(
+        _ all: [SeerrEpisode], seriesTmdbId: Int, seasonNumber: Int, owned: Set<Int>, today: String
+    ) -> [SeerrMissingEpisode] {
+        var seen = Set<Int>()
+        return all
+            .filter { episode in
+                guard episode.episodeNumber > 0, !owned.contains(episode.episodeNumber),
+                      let aired = episode.airDate, !aired.isEmpty, aired <= today else { return false }
+                return seen.insert(episode.episodeNumber).inserted
+            }
+            .sorted { $0.episodeNumber < $1.episodeNumber }
+            .map {
+                SeerrMissingEpisode(
+                    seriesTmdbId: seriesTmdbId, seasonNumber: seasonNumber,
+                    episodeNumber: $0.episodeNumber, name: $0.name)
+            }
+    }
+
+    /// `today` for `episodes`, in the device's calendar day.
+    static func today(_ date: Date = Date(), calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+
     static func seasons(
         _ tv: SeerrTVDetails, ownedSeasonNumbers: Set<Int>, includeSpecials: Bool
     ) -> [SeerrMissingSeason] {

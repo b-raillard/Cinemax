@@ -770,6 +770,16 @@ private final class DetailSeerrTransport: SeerrTransport, @unchecked Sendable {
     private let collections: [Int: String]
     /// Opens when the first `/tv/{id}` request reaches the transport.
     let tvArrived = TestLatch()
+    /// `/tv/{id}/season/{n}` bodies by that path; none ⇒ the call fails.
+    private var seasonBodies: [String: String] = [:]
+    /// The bodies of the `POST /issue` calls received.
+    private var issueBodies: [String] = []
+
+    func setSeason(_ path: String, _ body: String) { lock.withLock { seasonBodies[path] = body } }
+    var issues: [String] { lock.withLock { issueBodies } }
+    var seasonRequestCount: Int {
+        lock.withLock { sent }.filter { $0.url?.path.contains("/season/") == true }.count
+    }
 
     init(series: [Int: String], gates: [Int: TestLatch] = [:], specials: Bool = false, collections: [Int: String] = [:]) {
         self.series = series
@@ -808,6 +818,14 @@ private final class DetailSeerrTransport: SeerrTransport, @unchecked Sendable {
             guard let id = Int(saga.dropFirst("/collection/".count)), let reply = collections[id] else {
                 throw StubSeerrTransport.Exhausted()
             }
+            status = 200
+            body = reply
+        case "/issue":
+            lock.withLock { issueBodies.append(String(data: request.httpBody ?? Data(), encoding: .utf8) ?? "") }
+            status = 200
+            body = #"{"id":5}"#
+        case let season where season.contains("/season/"):
+            guard let reply = lock.withLock({ seasonBodies[season] }) else { throw StubSeerrTransport.Exhausted() }
             status = 200
             body = reply
         case let tv where tv.hasPrefix("/tv/"):
@@ -859,6 +877,128 @@ private func ownedSeriesAPI(
 
 private func missingSeasons(_ tmdbId: Int, _ numbers: [Int], _ badge: SeerrBadge = .request) -> [SeerrMissingSeason] {
     numbers.map { SeerrMissingSeason(seriesTmdbId: tmdbId, seasonNumber: $0, badge: badge) }
+}
+
+/// A series with one owned season whose library episodes are `numbers`.
+private func partialSeasonAPI(_ numbers: [Int]) -> MockAPIClient {
+    let api = ownedSeriesAPI(owned: [1])
+    api.getEpisodesHandler = { seasonId in
+        numbers.map { number in
+            var episode = makeEpisodeInSeason(id: "ep-\(number)", name: "Épisode \(number)", seasonId: seasonId)
+            episode.indexNumber = number
+            return episode
+        }
+    }
+    return api
+}
+
+private let seasonOneBody = """
+{"episodes":[
+{"episodeNumber":1,"name":"Un","airDate":"2021-01-01"},
+{"episodeNumber":2,"name":"Deux","airDate":"2021-01-08"},
+{"episodeNumber":3,"name":"Trois","airDate":"2021-01-15"},
+{"episodeNumber":4,"name":"Quatre","airDate":"2021-01-22"},
+{"episodeNumber":5,"name":"Pas encore diffusé","airDate":"2099-01-01"},
+{"episodeNumber":6,"name":"Sans date","airDate":null}]}
+"""
+
+@MainActor
+@Suite("Detail — missing episodes")
+struct MediaDetailMissingEpisodesTests {
+    private let loc = LocalizationManager()
+
+    private func makeViewModel(_ session: SeerrSession, allowed: Bool = true) -> MediaDetailViewModel {
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        vm.seerr = session
+        vm.allowsSeerr = { allowed }
+        vm.seerrDeadline = neverExpires
+        vm.seerrToday = { "2026-11-11" }
+        return vm
+    }
+
+    @Test("the aired episodes an owned season lacks are listed, ascending; the others are not")
+    func missingEpisodesOfTheSeasonOnScreen() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])])
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        let (app, session) = await seerrBench(api: partialSeasonAPI([1, 3]), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+
+        let missing = vm.seerrEpisodes(for: session.snapshot())
+        #expect(missing.map(\.episodeNumber) == [2, 4])
+        #expect(missing.map(\.name) == ["Deux", "Quatre"])
+        // Another profile never sees this account's answer.
+        #expect(vm.seerrEpisodes(for: SeerrSession.Snapshot(accountKey: "S1|B", generation: 99)).isEmpty)
+    }
+
+    @Test("without Seerr for this account nothing is asked")
+    func nothingAskedWhenSeerrDoesNotApply() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])])
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        let (app, session) = await seerrBench(api: partialSeasonAPI([1, 3]), transport: transport)
+        let vm = makeViewModel(session, allowed: false)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+
+        #expect(transport.seasonRequestCount == 0)
+        #expect(vm.seerrEpisodes(for: session.snapshot()).isEmpty)
+    }
+
+    @Test("a failed lookup shows nothing")
+    func failedLookupShowsNothing() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])])
+        let (app, session) = await seerrBench(api: partialSeasonAPI([1, 3]), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+
+        #expect(transport.seasonRequestCount == 1)
+        #expect(vm.seerrEpisodes(for: session.snapshot()).isEmpty)
+    }
+
+    @Test("a report sends ONE issue naming Seerr's media id, the season and the episodes")
+    func reportSendsOneIssue() async {
+        let tv = #"{"id":1399,"name":"Série du banc","seasons":[{"seasonNumber":1,"episodeCount":6}],"mediaInfo":{"id":77,"status":4}}"#
+        let transport = DetailSeerrTransport(series: [1399: tv])
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        let (app, session) = await seerrBench(api: partialSeasonAPI([1, 3]), transport: transport)
+        let vm = makeViewModel(session)
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+        let missing = vm.seerrEpisodes(for: session.snapshot())
+
+        let message = SeerrEpisodeReportDraft.message(numbers: missing.map(\.episodeNumber), note: " merci ", loc: loc)
+        #expect(await vm.reportMissingEpisodes(missing, message: message))
+
+        #expect(transport.issues.count == 1)
+        let sent = transport.issues.first ?? ""
+        #expect(sent.contains(#""mediaId":77"#))
+        #expect(sent.contains(#""problemSeason":1"#))
+        #expect(sent.contains(#""problemEpisode":0"#))
+        #expect(sent.contains(#""issueType":4"#))
+        #expect(sent.contains("2, 4"))
+        #expect(sent.contains("merci"))
+        #expect(vm.reportedEpisodeSeasons == ["tv-1399-s1"])
+    }
+
+    @Test("a title Seerr does not know cannot be reported")
+    func unknownMediaIsNotReported() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])])
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        let (app, session) = await seerrBench(api: partialSeasonAPI([1, 3]), transport: transport)
+        let vm = makeViewModel(session)
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+        let missing = vm.seerrEpisodes(for: session.snapshot())
+
+        #expect(await vm.reportMissingEpisodes(missing, message: "x") == false)
+        #expect(transport.issues.isEmpty)
+        #expect(vm.reportedEpisodeSeasons.isEmpty)
+    }
 }
 
 @MainActor
