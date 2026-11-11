@@ -1029,7 +1029,9 @@ struct MediaDetailMissingEpisodesTests {
         await vm.seerrEpisodesTask?.value
         #expect(!vm.seerrEpisodes(for: session.snapshot()).isEmpty)
 
+        #expect(!vm.missingEpisodesHidden)
         vm.hideMissingEpisodes()
+        #expect(vm.missingEpisodesHidden)
         #expect(vm.seerrEpisodes(for: session.snapshot()).isEmpty)
         #expect(defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] == [1399])
 
@@ -1040,11 +1042,13 @@ struct MediaDetailMissingEpisodesTests {
         await again.load(using: app, loc: loc)
         await again.seerrEpisodesTask?.value
         #expect(again.seerrEpisodes(for: session.snapshot()).isEmpty)
+        #expect(again.missingEpisodesHidden)
         #expect(transport.seasonRequestCount == asked)
 
         again.unhideMissingEpisodes(using: app)
         await again.seerrEpisodesTask?.value
         #expect(again.seerrEpisodes(for: session.snapshot()).map(\.episodeNumber) == [2, 4])
+        #expect(!again.missingEpisodesHidden)
         #expect(defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] == [])
     }
 

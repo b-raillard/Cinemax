@@ -193,6 +193,42 @@ struct MediaDetailMissingEpisodeRow: View {
 }
 #endif
 
+/// In place of the missing episodes once the user hid them for this series
+/// (owner 2026-11-11, option A): one quiet line, « Afficher » brings them back.
+struct MediaDetailHiddenMissingEpisodesLine: View {
+    let onShow: () -> Void
+
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(LocalizationManager.self) private var loc
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing2) {
+            Text(loc.localized("seerr.episodes.hiddenLine"))
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+            Text("·")
+                .font(CinemaFont.label(.medium))
+                .foregroundStyle(CinemaColor.onSurfaceMuted)
+                .accessibilityHidden(true)
+            Button(action: onShow) {
+                Text(loc.localized("seerr.episodes.show"))
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(themeManager.accent)
+                    .frame(minHeight: 44)
+                    #if os(tvOS)
+                    .padding(.horizontal, CinemaSpacing.spacing3)
+                    #endif
+            }
+            #if os(tvOS)
+            .buttonStyle(TVEpisodeZoneButtonStyle(accent: themeManager.accent))
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .fixedSize()
+        }
+    }
+}
+
 /// Under the season's episodes, whose missing ones are drawn in place:
 /// « Signaler » for an account that may report a problem (« Signalé à ton
 /// admin » once sent), then « Masquer pour cette série » for a numbering the
@@ -215,6 +251,22 @@ struct MediaDetailMissingEpisodesBlock: View, Equatable {
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            // Mockup C (owner 2026-11-11): the count says what « Masquer »
+            // hides, the action sits at its right in the accent — the same
+            // language as « Demander les 5 » under the missing seasons.
+            // Side by side when it fits; at large text sizes the action goes
+            // under the count rather than squeezing it onto three lines.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing3) {
+                    countTitle.fixedSize()
+                    Spacer(minLength: CinemaSpacing.spacing2)
+                    hideButton
+                }
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                    countTitle
+                    hideButton
+                }
+            }
             if isReported {
                 Label(loc.localized("seerr.episodes.reported"), systemImage: "checkmark.circle.fill")
                     .font(CinemaFont.label(.medium))
@@ -225,19 +277,33 @@ struct MediaDetailMissingEpisodesBlock: View, Equatable {
                     style: .ghost, icon: "flag", wrapsTitle: true, action: onReport
                 )
             }
-            Button(action: onHide) {
-                Text(loc.localized("seerr.episodes.hide"))
-                    .font(CinemaFont.label(.medium))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .padding(.vertical, CinemaSpacing.spacing2)
-                    .frame(minHeight: 44)
-            }
-            #if os(tvOS)
-            .buttonStyle(TVEpisodeZoneButtonStyle(accent: themeManager.accent))
-            #else
-            .buttonStyle(.plain)
-            #endif
         }
+    }
+
+    private var countTitle: some View {
+        Text(loc.counted("seerr.episodes.missing", episodes.count))
+            .font(CinemaFont.label(.large))
+            .foregroundStyle(CinemaColor.onSurface)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var hideButton: some View {
+        Button(action: onHide) {
+            Text(loc.localized("seerr.episodes.hide.short"))
+                .font(CinemaFont.label(.large))
+                .foregroundStyle(themeManager.accent)
+                .frame(minHeight: 44)
+                #if os(tvOS)
+                .padding(.horizontal, CinemaSpacing.spacing3)
+                #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(TVEpisodeZoneButtonStyle(accent: themeManager.accent))
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .accessibilityLabel(loc.localized("seerr.episodes.hide"))
+        .fixedSize()
     }
 
     /// « 8. Les Disparus », or « 8 » while TMDb has no name.

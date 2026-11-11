@@ -201,6 +201,10 @@ final class MediaDetailViewModel {
     /// Where « Masquer pour cette série » is kept — injectable for the tests.
     @ObservationIgnored var defaults: UserDefaults = .standard
 
+    /// This series' missing episodes are hidden on this device: the fiche
+    /// shows « Épisodes manquants masqués · Afficher » instead of them.
+    private(set) var missingEpisodesHidden = false
+
     /// Whether the user hid this series' missing episodes on this device.
     func hidesMissingEpisodes(tmdbId: Int) -> Bool {
         (defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] ?? []).contains(tmdbId)
@@ -212,6 +216,7 @@ final class MediaDetailViewModel {
         var hidden = defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] ?? []
         if !hidden.contains(tmdbId) { hidden.append(tmdbId) }
         defaults.set(hidden, forKey: SettingsKey.seerrHiddenMissingEpisodes)
+        missingEpisodesHidden = true
         seerrEpisodesTask?.cancel()
         setSeerrEpisodes(.hidden, snapshot: nil)
     }
@@ -242,6 +247,9 @@ final class MediaDetailViewModel {
     private func reloadSeerrEpisodes(using appState: AppState) {
         seerrEpisodesTask?.cancel()
         setSeerrEpisodes(.hidden, snapshot: nil)
+        let tmdbId = item.flatMap { SeerrMissing.tmdbId(of: $0) }
+        let hidden = resolvedType == .series && tmdbId.map(hidesMissingEpisodes(tmdbId:)) == true
+        if missingEpisodesHidden != hidden { missingEpisodesHidden = hidden }
         guard resolvedType == .series, errorMessage == nil, let series = item, let seasonId = selectedSeasonId,
               let seriesId = series.id, let userId = appState.currentUserId else { return }
         let apiClient = appState.apiClient

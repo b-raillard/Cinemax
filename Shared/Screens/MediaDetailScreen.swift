@@ -1949,19 +1949,26 @@ struct MediaDetailScreen: View {
         return user.permissions.canReportIssues
     }
 
+    /// Whether the missing episodes could show at all for this account right
+    /// now — Seerr visible and a request-capable account — so the « masqués »
+    /// line never appears where the block itself never would.
+    private var missingEpisodesApply: Bool {
+        guard let seerr, seerrRequests != nil else { return false }
+        return seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+    }
+
     /// The season's episodes with its missing ones in place (mockup A).
     private var episodeSlots: [MediaDetailEpisodeSlot] {
         MediaDetailEpisodeSlot.interleave(owned: viewModel.episodes, missing: missingEpisodes)
     }
 
-    /// « Masquer pour cette série », with « Annuler » in the toast.
+    /// « Masquer pour cette série ». No « Annuler » in the toast: the block
+    /// is replaced in place by « Épisodes manquants masqués · Afficher »,
+    /// which undoes it at any time (owner 2026-11-11 — the toast with an
+    /// action wrapped onto three loose rows).
     private func hideMissingEpisodes() {
         viewModel.hideMissingEpisodes()
-        toast.info(
-            loc.localized("seerr.episodes.hidden"),
-            action: ToastAction(title: loc.localized("action.cancel")) {
-                viewModel.unhideMissingEpisodes(using: appState)
-            })
+        toast.info(loc.localized("seerr.episodes.hiddenLine"))
     }
 
     private func openEpisodeReport() {
@@ -1973,7 +1980,13 @@ struct MediaDetailScreen: View {
     @ViewBuilder
     private var missingEpisodesBlock: some View {
         let missing = missingEpisodes
-        if let first = missing.first {
+        if viewModel.missingEpisodesHidden, missingEpisodesApply {
+            MediaDetailHiddenMissingEpisodesLine {
+                viewModel.unhideMissingEpisodes(using: appState)
+            }
+            .padding(.horizontal, contentPadding)
+            .padding(.top, CinemaSpacing.spacing2)
+        } else if let first = missing.first {
             MediaDetailMissingEpisodesBlock(
                 episodes: missing,
                 canReport: canReportEpisodes,
