@@ -3070,6 +3070,432 @@ struct SeerrPendingTests {
     }
 }
 
+// MARK: - Signalements (Settings → Seerr)
+
+/// One open report as `GET /issue` lists it (Seerr 3.5.1, measured on the
+/// bench): `media` with Seerr's own id, the comments WITHOUT their author.
+/// `message` is already JSON-escaped (`\n` written `\\n`).
+private func issueJSON(
+    _ id: Int, type: Int = 4, season: Int = 2, episode: Int = 0, tmdbId: Int = 1399, mediaType: String = "tv",
+    jellyfinId: String? = nil, message: String? = "Épisodes manquants : 4, 5", by reporter: String? = leaJSON
+) -> String {
+    let jellyfin = jellyfinId.map { #","jellyfinMediaId":"\#($0)""# } ?? #","jellyfinMediaId":null"#
+    let comments = message.map { #"[{"id":\#(id * 10),"message":"\#($0)","createdAt":"2026-11-11T19:38:38.000Z"}]"# } ?? "[]"
+    let author = reporter.map { #""createdBy":\#($0),"# } ?? ""
+    return #"{"id":\#(id),"issueType":\#(type),"status":1,"problemSeason":\#(season),"problemEpisode":\#(episode),"#
+        + #""createdAt":"2026-11-11T19:38:38.000Z","updatedAt":"2026-11-11T19:38:38.000Z",\#(author)"#
+        + #""media":{"id":8,"tmdbId":\#(tmdbId),"mediaType":"\#(mediaType)","status":4\#(jellyfin)},"#
+        + #""comments":\#(comments)}"#
+}
+
+private func issuePage(_ items: [String], total: Int) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"pageInfo":{"pages":1,"pageSize":20,"results":\#(total),"page":1},"#
+        + #""results":[\#(items.joined(separator: ","))]}"#)
+}
+
+/// Léa's open reports 1…`count` (all on TMDb 1399), and a title for each.
+private func issueRoutes(
+    _ count: Int, total: Int, extra: [String: [StubSeerrTransport.Reply]] = [:]
+) -> [String: [StubSeerrTransport.Reply]] {
+    var routes = extra
+    routes["/issue", default: []].insert(issuePage((1...count).map { issueJSON($0) }, total: total), at: 0)
+    routes["/tv/1399"] = Array(repeating: tvReply(1399, "Game of Thrones"), count: count + 5)
+    return routes
+}
+
+private func isIssueList(_ request: URLRequest) -> Bool {
+    request.url?.path.hasSuffix("/issue") == true
+}
+
+/// MANAGE_ISSUES (1048576) alone, and with MANAGE_REQUESTS (16).
+private let manageIssues = 1_048_576
+private let manageBoth = 1_048_576 | 16
+
+private func issue(
+    kind: SeerrIssueKind = .other, season: Int = 2, episode: Int = 0, mediaKind: SeerrMediaKind = .tv,
+    message: String? = "Épisodes manquants : 4, 5", jellyfinId: String? = nil, by user: SeerrUser? = nil
+) -> SeerrIssue {
+    // Two hours ago: two fixtures built a few microseconds apart format alike.
+    SeerrIssue(id: 1, kind: kind, problemSeason: season, problemEpisode: episode,
+               createdAt: .now.addingTimeInterval(-7_200), createdBy: user,
+               media: SeerrIssueMedia(id: 8, tmdbId: 1399, kind: mediaKind, jellyfinMediaId: jellyfinId),
+               message: message)
+}
+
+@MainActor
+@Suite("Seerr — Signalements")
+struct SeerrIssuesTests {
+    private let loc = LocalizationManager()
+
+    @Test("an issue decodes as Seerr 3.5.1 lists it; its text is its OLDEST comment; an odd row is skipped but counted")
+    func decoding() throws {
+        let body = #"{"pageInfo":{"pages":1,"pageSize":20,"results":3,"page":1},"results":["#
+            + #"{"id":3,"issueType":1,"status":1,"problemSeason":0,"problemEpisode":0,"#
+            + #""createdAt":"2026-11-11T19:38:38.000Z","createdBy":\#(leaJSON),"#
+            + #""media":{"id":12,"tmdbId":13597,"mediaType":"movie","jellyfinMediaId":"b2e4dd44b2af3357366b144be4bfa75b"},"#
+            + #""comments":[{"id":9,"message":"later reply"},{"id":4,"message":"Pas d'image"}]},"#
+            + #"{"id":4,"issueType":9,"createdAt":"2026-11-11T19:38:38.000Z","media":{"id":8,"tmdbId":1399,"mediaType":"tv"}},"#
+            + #"{"id":5,"issueType":4,"createdAt":"2026-11-11T19:38:38.000Z"}]}"#
+        let page = try SeerrJSON.decoder().decode(SeerrIssuePage.self, from: Data(body.utf8))
+        #expect(page.total == 3)
+        // The third (no media) is skipped — and still counted for the next skip.
+        #expect(page.served == 3)
+        #expect(page.results.map(\.id) == [3, 4])
+        let first = page.results[0]
+        #expect(first.kind == .video)
+        #expect(first.status == .open)
+        #expect(first.media == SeerrIssueMedia(id: 12, tmdbId: 13597, kind: .movie,
+                                               jellyfinMediaId: "b2e4dd44b2af3357366b144be4bfa75b"))
+        #expect(first.createdBy?.displayName == "Léa")
+        #expect(first.message == "Pas d'image")
+        // An unknown type reads as « other »; no author, no comment, no season: defaults.
+        let second = page.results[1]
+        #expect(second.kind == .other)
+        #expect(second.createdBy == nil)
+        #expect(second.message == nil)
+        #expect(second.problemSeason == 0 && second.problemEpisode == 0)
+    }
+
+    @Test("the list is the household's OPEN reports, newest first (sort=added), 20 at a time — never /issue/count")
+    func loadsTheOpenReports() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(20, total: 23))
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        let sent = try #require(transport.requests.first(where: isIssueList))
+        #expect(queryValue("filter", in: sent) == "open")
+        // Seerr 3.5.1 answers 400 to `sort=created`: only `added` / `modified`.
+        #expect(queryValue("sort", in: sent) == "added")
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(model.phase == .loaded)
+        #expect(model.count == 23)
+        #expect(model.rows.count == 20)
+        #expect(model.canLoadMore)
+        #expect(model.rows.allSatisfy { $0.title == "Game of Thrones" && !$0.isTitlePending })
+        #expect(!transport.requests.contains(where: isCall("/issue/count")))
+        // The listing writes the bubble's half.
+        #expect(session.issueBadgeCount == 23)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("resolving removes the row, drops the count and the bubble, says so — and the next page starts one earlier")
+    func resolveRemovesRow() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(20, total: 21, extra: [
+            "/issue": [issuePage([issueJSON(21)], total: 20)],
+            "/issue/2/resolved": [.response(status: 200, body: issueJSON(2))],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(!model.rows.contains { $0.id == 2 })
+        #expect(model.count == 20)
+        #expect(model.resolving.isEmpty)
+        #expect(session.issueBadgeCount == 20)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.issues.resolved"))
+        #expect(transport.requests.first(where: isCall("/issue/2/resolved"))?.httpMethod == "POST")
+
+        // 20 served, 1 resolved: the listing is one shorter, so skip is 19.
+        await model.loadNextPage(session: session)
+        #expect(queryValue("skip", in: transport.requests.filter(isIssueList).last) == "19")
+        #expect(model.rows.map(\.id) == [1] + Array(3...21))
+        #expect(!model.canLoadMore)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a report gone meanwhile — 404, or Seerr 3.5.1's 500 « Issue not found. » — leaves quietly with an info toast")
+    func goneIsQuiet() async {
+        let (session, _, _) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(3, total: 3, extra: [
+            "/issue/2/resolved": [notFoundReply],
+            "/issue/3/resolved": [.response(status: 500, body: #"{"message":"Issue not found."}"#)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.issues.alreadyHandled"))
+
+        await model.resolve(3, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1])
+        #expect(model.count == 1)
+        #expect(session.issueBadgeCount == 1)
+        #expect(toasts.current?.level == .info)
+    }
+
+    @Test("any other failure keeps the row for another try, with an error toast")
+    func otherFailureKeepsRow() async {
+        let (session, _, _) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(3, total: 3, extra: [
+            "/issue/2/resolved": [.response(status: 500, body: #"{"message":"boom"}"#),
+                                  .response(status: 200, body: issueJSON(2))],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.count == 3)
+        #expect(model.resolving.isEmpty)
+        #expect(toasts.current?.level == .error)
+        #expect(toasts.current?.title == loc.localized("seerr.issues.resolveFailed"))
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(toasts.current?.level == .success)
+    }
+
+    @Test("while a report is being resolved, a second press sends nothing")
+    func secondPressIgnored() async {
+        let asked = TestLatch()
+        let held = TestLatch()
+        let (session, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(3, total: 3, extra: [
+            "/issue/2/resolved": [.response(status: 200, body: issueJSON(2))],
+        ]))
+        transport.onRequest { path, _ in
+            guard path == "/issue/2/resolved" else { return }
+            asked.open()
+            await held.wait()
+        }
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        let first = Task { await model.resolve(2, session: session, toasts: toasts, loc: loc) }
+        await asked.wait()
+        #expect(model.resolving == [2])
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        held.open()
+        await first.value
+
+        #expect(transport.requests.filter(isCall("/issue/2/resolved")).count == 1)
+        #expect(model.rows.map(\.id) == [1, 3])
+    }
+
+    @Test("an account change during the call writes and shows nothing")
+    func accountChangeMidCall() async {
+        let (session, app, transport) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(3, total: 3, extra: [
+            "/issue/2/resolved": [.response(status: 200, body: issueJSON(2))],
+        ]))
+        transport.onRequest { path, _ in
+            if path == "/issue/2/resolved" { await MainActor.run { app.currentUserId = "B" } }
+        }
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(toasts.current == nil)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+    }
+
+    @Test("without Seerr's permission to manage reports: no page, no call — reporting is not managing")
+    func hiddenWithoutManage() async {
+        // CREATE_ISSUES + MANAGE_REQUESTS: may report and validate, not manage reports.
+        let (session, _, transport) = await myRequestsWorld(permissions: 4_194_304 | 16, routes: [
+            "/request": [requestPage([], total: 0)],
+        ])
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+        await session.refreshBadgeCounts()
+        #expect(model.phase == .idle)
+        #expect(!transport.requests.contains(where: isIssueList))
+        #expect(session.issueBadgeCount == nil)
+        #expect(!transport.exhausted)
+
+        func connected(_ permissions: SeerrPermissions) -> SeerrSession.Connection {
+            .connected(SeerrUser(id: SeerrUserID(rawValue: 1), permissions: permissions))
+        }
+        #expect(SeerrIssuesModel.isShown(for: connected(.manageIssues)))
+        #expect(SeerrIssuesModel.isShown(for: connected(.admin)))
+        #expect(!SeerrIssuesModel.isShown(for: connected(.createIssues)))
+        #expect(!SeerrIssuesModel.isShown(for: connected(.manageRequests)))
+        #expect(!SeerrIssuesModel.isShown(for: .notConnected))
+        #expect(!SeerrIssuesModel.isShown(for: .unavailable))
+    }
+
+    @Test("a list Seerr does not serve ends in a failure, and can be read again")
+    func failedThenRetried() async {
+        let (session, _, _) = await myRequestsWorld(permissions: manageIssues, routes: [
+            "/issue": [.response(status: 500, body: #"{"message":"boom"}"#), issuePage([], total: 0)],
+        ])
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+        #expect(model.phase == .failed)
+        await model.load(session: session)
+        #expect(model.phase == .loaded)
+        #expect(model.rows.isEmpty)
+        #expect(!model.canLoadMore)
+    }
+
+    // MARK: The bubble
+
+    @Test("the bubble is requests waiting PLUS reports open, each read with one row asked")
+    func bubbleSumsBothHalves() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: manageBoth, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 3)],
+            "/issue": [issuePage([issueJSON(1)], total: 2)],
+        ])
+        await session.refreshBadgeCounts()
+
+        let sent = try #require(transport.requests.first(where: isIssueList))
+        #expect(queryValue("filter", in: sent) == "open")
+        #expect(queryValue("take", in: sent) == "1")
+        #expect(session.pendingBadgeCount == 3)
+        #expect(session.issueBadgeCount == 2)
+        #expect(session.settingsBadgeCount == 5)
+        #expect(session.badgeEligibility == [true, true])
+        // VoiceOver says what the 5 is made of.
+        #expect(SettingsScreen.badgeValue(pending: 3, issues: 2, loc: loc)
+                == loc.counted("seerr.settings.pendingBubble", 3) + ", " + loc.counted("seerr.settings.issuesBubble", 2))
+        #expect(SettingsScreen.badgeValue(pending: 0, issues: 2, loc: loc) == loc.counted("seerr.settings.issuesBubble", 2))
+        #expect(SettingsScreen.badgeValue(pending: 4, issues: nil, loc: loc) == loc.counted("seerr.settings.pendingBubble", 4))
+        // A new account forgets both.
+        session.reset()
+        #expect(session.settingsBadgeCount == nil)
+    }
+
+    @Test("a manager of reports alone: the bubble is the reports, /request is never asked; a requester gets none")
+    func bubbleForOneHalf() async {
+        let (issuesOnly, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: [
+            "/issue": [issuePage([issueJSON(1)], total: 4)],
+        ])
+        await issuesOnly.refreshBadgeCounts()
+        #expect(issuesOnly.settingsBadgeCount == 4)
+        #expect(issuesOnly.pendingBadgeCount == nil)
+        #expect(issuesOnly.badgeEligibility == [false, true])
+        #expect(!transport.requests.contains(where: isRequestList))
+
+        let (requester, _, quiet) = await myRequestsWorld(permissions: 32, routes: [:])
+        await requester.refreshBadgeCounts()
+        #expect(requester.settingsBadgeCount == nil)
+        #expect(requester.badgeEligibility == [false, false])
+        #expect(!quiet.requests.contains(where: isIssueList))
+        #expect(!quiet.requests.contains(where: isRequestList))
+    }
+
+    @Test("a count read that started before a resolution never writes its older number over it")
+    func olderReadLosesToAFresherNumber() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: [
+            "/issue": [issuePage([issueJSON(1)], total: 5)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            guard path == "/issue" else { return }
+            started.open()
+            await release.wait()
+        }
+        let read = Task { await session.refreshIssueCount() }
+        await started.wait()
+        session.noteIssueCount(3, for: try #require(session.snapshot()))
+        release.open()
+        await read.value
+        #expect(session.issueBadgeCount == 3)
+    }
+
+    @Test("an identity forgotten (Pro gone) forgets the reports' count too")
+    func forgottenIdentityForgetsTheCount() async {
+        let (session, app, _) = await myRequestsWorld(permissions: manageIssues, routes: [
+            "/issue": [issuePage([issueJSON(1)], total: 4)],
+        ])
+        await session.refreshIssueCount()
+        #expect(session.issueBadgeCount == 4)
+        session.proAllowsProvider = { false }
+        await session.reload(appState: app)
+        session.proAllowsProvider = { true }
+        #expect(session.issueCount == nil)
+        #expect(!session.showsIssueBadge)
+    }
+
+    // MARK: What a row says
+
+    @Test("our report's episodes are read in ANY language: the numbers after the first line's colon, then the word")
+    func episodeListAcrossLanguages() {
+        for message in ["Épisodes manquants : 4, 5", "Missing episodes: 5, 4", "Fehlende Folgen: 4,5,4"] {
+            let text = SeerrIssueText.parse(message, kind: .other, mediaKind: .tv)
+            #expect(text.missingEpisodes == [4, 5], "\(message)")
+            #expect(text.note == nil)
+        }
+        let withWord = SeerrIssueText.parse("Missing episodes: 7\n  Il manque la fin  ", kind: .other, mediaKind: .tv)
+        #expect(withWord.missingEpisodes == [7])
+        #expect(withWord.note == "Il manque la fin")
+        // A report written in Seerr's own page: the whole text is the word.
+        let free = SeerrIssueText.parse("Le son: décalé de 2 s", kind: .other, mediaKind: .tv)
+        #expect(free.missingEpisodes.isEmpty)
+        #expect(free.note == "Le son: décalé de 2 s")
+        // Only a series report of type « other » is ours.
+        #expect(SeerrIssueText.parse("Missing episodes: 4", kind: .video, mediaKind: .tv).missingEpisodes.isEmpty)
+        #expect(SeerrIssueText.parse("Missing episodes: 4", kind: .other, mediaKind: .movie).missingEpisodes.isEmpty)
+        #expect(SeerrIssueText.parse("   ", kind: .other, mediaKind: .tv) == SeerrIssueText(missingEpisodes: [], note: nil))
+        #expect(SeerrIssueText.parse("Missing episodes: 0", kind: .other, mediaKind: .tv).missingEpisodes.isEmpty)
+    }
+
+    @Test("the problem line: « Saison 2 · épisodes 4, 5 manquants », « Saison 2 », or the kind")
+    func problemLine() {
+        let season = loc.localized("seerr.issues.season", 2)
+        #expect(SeerrIssuesModel.problemLine(issue(), loc: loc)
+                == season + " · " + loc.localized(loc.pluralKey("seerr.issues.missingEpisodes", 2), "4, 5"))
+        #expect(SeerrIssuesModel.problemLine(issue(message: "Missing episodes: 6"), loc: loc)
+                == season + " · " + loc.localized(loc.pluralKey("seerr.issues.missingEpisodes", 1), "6"))
+        // Another « other » report on a season: the season alone (its word says the rest).
+        #expect(SeerrIssuesModel.problemLine(issue(message: "Mauvaise saison"), loc: loc) == season)
+        // Any other kind: the kind, after the season and episode it names.
+        #expect(SeerrIssuesModel.problemLine(issue(kind: .audio, episode: 3, message: nil), loc: loc)
+                == season + " · " + loc.localized("seerr.issues.episode", 3) + " · " + loc.localized("seerr.issues.type.audio"))
+        #expect(SeerrIssuesModel.problemLine(issue(kind: .video, season: 0, mediaKind: .movie), loc: loc)
+                == loc.localized("seerr.issues.type.video"))
+        #expect(SeerrIssuesModel.problemLine(issue(kind: .other, season: 0, mediaKind: .movie, message: nil), loc: loc)
+                == loc.localized("seerr.issues.type.other"))
+        // No season named: the line still opens with a capital.
+        let noSeason = SeerrIssuesModel.problemLine(issue(season: 0), loc: loc)
+        #expect(noSeason.first?.isUppercase == true)
+        for key in ["seerr.issues.type.video", "seerr.issues.type.audio", "seerr.issues.type.subtitles",
+                    "seerr.issues.type.other", "seerr.issues.resolve", "seerr.issues.resolving", "seerr.issues.open",
+                    "seerr.issues.resolved", "seerr.issues.alreadyHandled", "seerr.issues.resolveFailed",
+                    "seerr.issues.empty", "seerr.settings.section.issues", "seerr.hub.issues.none"] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
+    }
+
+    @Test("who and when: « Signalé par Léa · il y a 2 h », in the app's language; the word apart")
+    func reportedLineAndNote() {
+        let lea = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: .request, displayName: "Léa")
+        let reported = issue(message: "Épisodes manquants : 4\nMerci !", by: lea)
+        let when = reported.createdAt.formatted(SeerrPendingModel.relativeStyle(loc: loc))
+        #expect(SeerrIssuesModel.reportedLine(reported, loc: loc) == loc.localized("seerr.issues.reportedBy", "Léa", when))
+        #expect(SeerrIssuesModel.reportedLine(issue(), loc: loc) == loc.localized("seerr.issues.reportedAt", when))
+        #expect(SeerrIssuesModel.note(reported) == "Merci !")
+        #expect(SeerrIssuesModel.note(issue()) == nil)
+    }
+
+    @Test("« Voir la fiche » opens Seerr's Jellyfin id whatever the title's availability; nothing without one")
+    func openTarget() {
+        let id = "b2e4dd44b2af3357366b144be4bfa75b"
+        #expect(SeerrIssuesModel.openTarget(issue(jellyfinId: id)) == id)
+        #expect(SeerrIssuesModel.openTarget(issue()) == nil)
+        #expect(SeerrIssuesModel.openTarget(issue(jellyfinId: "../Users")) == nil)
+        let (app, _) = signedIn()
+        #expect(SeerrIssuesModel.open(issue(jellyfinId: id), appState: app))
+        #expect(app.pendingDeepLinkItemId == id)
+        #expect(!SeerrIssuesModel.open(issue(), appState: app))
+    }
+
+    @Test("the resolve button says when it runs, on screen and to VoiceOver")
+    func resolveTitle() {
+        #expect(SeerrIssuesModel.resolveTitleKey(isResolving: false) == "seerr.issues.resolve")
+        #expect(SeerrIssuesModel.resolveTitleKey(isResolving: true) == "seerr.issues.resolving")
+        #expect(SeerrPermissions(rawValue: manageIssues).canManageIssues)
+        #expect(SeerrPermissions.admin.canManageIssues)
+        #expect(!SeerrPermissions.createIssues.canManageIssues)
+    }
+}
+
 @Suite("Seerr settings — connection report")
 struct SeerrConnectionReportTests {
     @Test("the report stays while the field names the tested address, and goes as soon as it names another")

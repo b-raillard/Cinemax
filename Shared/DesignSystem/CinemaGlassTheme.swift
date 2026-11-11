@@ -75,6 +75,11 @@ enum CinemaColor {
     // Success
     static let success = Color.dynamic(light: 0x1F9D45, dark: 0x34C759)
 
+    // Warning — amber TEXT for something to look into (a report's problem
+    // line, Réglages → Seerr → Signalements). Clears 4.5:1 on `surface` and
+    // `surfaceContainerHigh` in both modes (light 5.8 / 4.8, dark 10.7 / 9.0).
+    static let warning = Color.dynamic(light: 0x8F5300, dark: 0xF5B54A)
+
     // Founder « gold » — the founder tier's material (Settings logo ring and
     // medal, membership card, « Votre niveau » chip). A foil, so the card
     // keeps its stops in both modes; only the INK used on the page surface

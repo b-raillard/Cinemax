@@ -421,6 +421,10 @@ public final class SeerrClient: Sendable {
             return .notFound
         case 409:
             return .duplicate
+        case 500 where (try? JSONDecoder().decode(ErrorBody.self, from: body))?.message == "Issue not found.":
+            // Seerr 3.5.1's issue routes answer an unknown id with a 500
+            // (`findOneOrFail` caught), measured on the bench: a missing issue.
+            return .notFound
         default:
             return .http(status)
         }

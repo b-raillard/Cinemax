@@ -2,9 +2,19 @@ import Foundation
 import Observation
 import CinemaxKit
 
-/// One line of « Mes demandes » or « À valider ». Its title and poster come
-/// from `SeerrRequestTitles`, after the list is already on screen.
-struct SeerrRequestRow: Identifiable, Equatable, Sendable {
+/// A listed row whose title and poster come from `SeerrRequestTitles`, after
+/// the list is already on screen: a request (« Mes demandes », « À valider »)
+/// or a problem report (« Signalements »).
+protocol SeerrTitledRow: Identifiable, Equatable, Sendable where ID == Int {
+    associatedtype Item: Identifiable & Sendable where Item.ID == Int
+    init(item: Item)
+    var title: String? { get set }
+    var posterPath: String? { get set }
+    var isTitlePending: Bool { get set }
+}
+
+/// One line of « Mes demandes » or « À valider ».
+struct SeerrRequestRow: SeerrTitledRow {
     let request: SeerrRequest
     var title: String?
     var posterPath: String?
@@ -13,12 +23,23 @@ struct SeerrRequestRow: Identifiable, Equatable, Sendable {
     var isTitlePending = true
 
     var id: Int { request.id }
+
+    init(item: SeerrRequest) { request = item }
 }
 
-/// One `GET /request` listing as the server pages it — shared by « Mes
-/// demandes » and « À valider ».
-struct SeerrRequestPages {
-    private(set) var rows: [SeerrRequestRow] = []
+/// « Mes demandes » and « À valider » page `GET /request`.
+typealias SeerrRequestPages = SeerrListPages<SeerrRequestRow>
+
+extension SeerrListPages where Row == SeerrRequestRow {
+    mutating func append(_ page: SeerrRequestPage) -> [SeerrRequest] {
+        append(page.results, total: page.total, served: page.served)
+    }
+}
+
+/// One Seerr listing as the server pages it — `GET /request` (« Mes
+/// demandes », « À valider ») or `GET /issue` (« Signalements »).
+struct SeerrListPages<Row: SeerrTitledRow> {
+    private(set) var rows: [Row] = []
     /// What the server has sent so far — the next page's `skip`. Not
     /// `rows.count`: a request modified between two pages comes back twice
     /// (`sort=modified`) and is listed once (the `PaginatedLoader` RULE).
@@ -31,16 +52,16 @@ struct SeerrRequestPages {
 
     var canLoadMore: Bool { !reachedEnd && loadedCount < total }
 
-    /// Adds the page's requests not listed yet; returns them. `skip` and the
+    /// Adds the page's items not listed yet; returns them. `skip` and the
     /// end of paging follow what the server SENT (`served`): a row that did
     /// not decode still took its place in the listing.
-    mutating func append(_ page: SeerrRequestPage) -> [SeerrRequest] {
-        loadedCount += page.served
-        total = page.total
-        if page.served == 0 { reachedEnd = true }
+    mutating func append(_ results: [Row.Item], total: Int, served: Int) -> [Row.Item] {
+        loadedCount += served
+        self.total = total
+        if served == 0 { reachedEnd = true }
         var known = Set(rows.map(\.id))
-        let fresh = page.results.filter { known.insert($0.id).inserted }
-        rows.append(contentsOf: fresh.map { SeerrRequestRow(request: $0) })
+        let fresh = results.filter { known.insert($0.id).inserted }
+        rows.append(contentsOf: fresh.map { Row(item: $0) })
         return fresh
     }
 
@@ -52,7 +73,7 @@ struct SeerrRequestPages {
         rows[index].isTitlePending = false
     }
 
-    /// A request that LEFT the server's listing (approved, declined): the
+    /// An item that LEFT the server's listing (approved, declined, resolved): the
     /// listing is one shorter, so the next page starts one earlier — keeping
     /// `skip` would pass over a request nobody has seen.
     mutating func remove(_ id: Int) {
@@ -78,35 +99,45 @@ enum SeerrRequestTitles {
     /// a failure costs that row its title, never the list. A lookup cancelled
     /// (the page was left, a newer load) is not reported: it is not a failure.
     static func load(_ requests: [SeerrRequest], session: SeerrSession, apply: (Int, Lookup?) -> Void) async {
+        await load(requests.map { Target(rowId: $0.id, kind: $0.kind, tmdbId: $0.media.tmdbId) },
+                   session: session, apply: apply)
+    }
+
+    /// The title a row shows: the row's id, and the title's kind and TMDb id.
+    struct Target: Sendable {
+        let rowId: Int
+        let kind: SeerrMediaKind
+        let tmdbId: Int
+    }
+
+    static func load(_ targets: [Target], session: SeerrSession, apply: (Int, Lookup?) -> Void) async {
         // A title already looked up is not asked again (`SeerrSession`'s
         // memo): « Actualiser » re-reads the lists, not forty titles.
-        var unknown: [SeerrRequest] = []
-        for request in requests {
-            if let known = session.rememberedTitle(kind: request.kind, tmdbId: request.media.tmdbId) {
-                apply(request.id, known)
+        var unknown: [Target] = []
+        for target in targets {
+            if let known = session.rememberedTitle(kind: target.kind, tmdbId: target.tmdbId) {
+                apply(target.rowId, known)
             } else {
-                unknown.append(request)
+                unknown.append(target)
             }
         }
         guard !unknown.isEmpty else { return }
         let snapshot = session.snapshot()
-        await withTaskGroup(of: (SeerrRequest, Lookup?).self) { group in
-            for request in unknown {
-                let kind = request.kind
-                let tmdbId = request.media.tmdbId
+        await withTaskGroup(of: (Target, Lookup?).self) { group in
+            for target in unknown {
                 group.addTask {
                     let found = try? await session.perform { client, credential in
-                        try await Self.lookUp(kind: kind, tmdbId: tmdbId, client: client, credential: credential)
+                        try await Self.lookUp(kind: target.kind, tmdbId: target.tmdbId, client: client, credential: credential)
                     }
-                    return (request, found)
+                    return (target, found)
                 }
             }
-            for await (request, found) in group {
+            for await (target, found) in group {
                 if found == nil, Task.isCancelled { continue }
                 if let found, let snapshot, session.isCurrent(snapshot) {
-                    session.rememberTitle(found, kind: request.kind, tmdbId: request.media.tmdbId)
+                    session.rememberTitle(found, kind: target.kind, tmdbId: target.tmdbId)
                 }
-                apply(request.id, found)
+                apply(target.rowId, found)
             }
         }
     }

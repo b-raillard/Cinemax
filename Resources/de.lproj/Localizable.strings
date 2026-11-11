@@ -1557,7 +1557,7 @@
 
 // MARK: - Seerr
 
-"settings.requests" = "Anfragen";
+"settings.requests" = "Seerr";
 "pro.feature.requests.title" = "Film- und Serienanfragen";
 "pro.feature.requests.detail" = "Fehlt ein Titel? Fordere ihn aus der Suche, einer Detailseite oder einer Sammlung an, ohne JellyGlass zu verlassen. Mit Seerr auf deinem Server.";
 "pro.feature.requests.row" = "Fehlende Titel anfragen, mit Seerr";
@@ -1784,6 +1784,32 @@
 "seerr.pending.alreadyHandled" = "Bereits bearbeitet";
 "seerr.pending.approveFailed" = "Anfrage konnte nicht genehmigt werden";
 "seerr.pending.declineFailed" = "Anfrage konnte nicht abgelehnt werden";
+"seerr.settings.section.issues" = "Meldungen";
+"seerr.settings.section.issuesCount" = "Meldungen (%d)";
+"seerr.settings.section.issuesCount.one" = "Meldungen (%d)";
+"seerr.hub.issues.none" = "Keine offenen Meldungen";
+"seerr.hub.issues.count" = "%d offene Meldungen";
+"seerr.hub.issues.count.one" = "%d offene Meldung";
+"seerr.settings.issuesBubble" = "%d Meldungen zu bearbeiten";
+"seerr.settings.issuesBubble.one" = "%d Meldung zu bearbeiten";
+"seerr.issues.empty" = "Derzeit keine offenen Meldungen";
+"seerr.issues.reportedBy" = "Gemeldet von %1$@ · %2$@";
+"seerr.issues.reportedAt" = "Gemeldet %@";
+"seerr.issues.season" = "Staffel %d";
+"seerr.issues.episode" = "Folge %d";
+"seerr.issues.missingEpisodes" = "Folgen %@ fehlen";
+"seerr.issues.missingEpisodes.one" = "Folge %@ fehlt";
+"seerr.issues.type.video" = "Videoproblem";
+"seerr.issues.type.audio" = "Audioproblem";
+"seerr.issues.type.subtitles" = "Untertitelproblem";
+"seerr.issues.type.other" = "Anderes Problem";
+"seerr.issues.note" = "„%@“";
+"seerr.issues.resolve" = "Als gelöst markieren";
+"seerr.issues.resolving" = "Wird gelöst…";
+"seerr.issues.open" = "Titel ansehen";
+"seerr.issues.resolved" = "Meldung gelöst";
+"seerr.issues.alreadyHandled" = "Bereits bearbeitet";
+"seerr.issues.resolveFailed" = "Meldung konnte nicht gelöst werden";
 "seerr.arrival.title" = "%@ ist verfügbar";
 "seerr.arrival.several" = "%d Anfragen sind verfügbar";
 "seerr.arrival.several.one" = "%d Anfrage ist verfügbar";

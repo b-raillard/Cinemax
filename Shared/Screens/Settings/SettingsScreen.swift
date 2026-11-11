@@ -277,16 +277,25 @@ struct SettingsScreen: View {
                                           config: seerr.config)
     }
 
-    /// The « Demandes » entry's bubble: « 3 », « 99+ », or nothing
-    /// (`SeerrSession.pendingBadgeCount` — Seerr managers only).
+    /// The « Seerr » entry's bubble: « 3 », « 99+ », or nothing
+    /// (`SeerrSession.settingsBadgeCount` — requests waiting for a manager of
+    /// requests, plus reports open for a manager of reports).
     var pendingBadgeLabel: String? {
-        SeerrPendingModel.badgeLabel(seerr.pendingBadgeCount)
+        SeerrPendingModel.badgeLabel(seerr.settingsBadgeCount)
     }
 
-    /// What VoiceOver reads after « Demandes »: « 3 demandes à valider ».
+    /// What VoiceOver reads after « Seerr »: « 3 demandes à valider »,
+    /// « 2 signalements à traiter », or both, each half only when not 0.
     var pendingBadgeValue: String {
-        guard pendingBadgeLabel != nil, let count = seerr.pendingBadgeCount else { return "" }
-        return loc.counted("seerr.settings.pendingBubble", count)
+        guard pendingBadgeLabel != nil else { return "" }
+        return Self.badgeValue(pending: seerr.pendingBadgeCount, issues: seerr.issueBadgeCount, loc: loc)
+    }
+
+    static func badgeValue(pending: Int?, issues: Int?, loc: LocalizationManager) -> String {
+        var parts: [String] = []
+        if let pending, pending > 0 { parts.append(loc.counted("seerr.settings.pendingBubble", pending)) }
+        if let issues, issues > 0 { parts.append(loc.counted("seerr.settings.issuesBubble", issues)) }
+        return parts.joined(separator: ", ")
     }
 
     var headerTierLook: ProTierLook? {

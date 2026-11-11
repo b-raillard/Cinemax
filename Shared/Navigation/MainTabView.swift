@@ -135,8 +135,10 @@ struct MainTabView: View {
         // The bubble's identity came back (online again, signed in, Pro or
         // the age cap lifted): its count was forgotten with it — read it now,
         // not at the next return to the foreground.
-        .task(id: seerr.showsPendingBadge) {
-            if seerr.showsPendingBadge { await seerr.refreshPendingCount() }
+        // Either half: a manager of reports who manages no request has a
+        // bubble too.
+        .task(id: seerr.badgeEligibility) {
+            if seerr.badgeEligibility.contains(true) { await seerr.refreshBadgeCounts() }
         }
         // **RULE — an item deep link has ONE route, and it is this modal.**
         // Widget poster, Top Shelf selection, App Intent, inbound « Lire sur… »,
@@ -441,11 +443,11 @@ struct MainTabView: View {
     }
     #endif
 
-    // MARK: - Requests waiting (Seerr managers)
+    // MARK: - Requests waiting + reports open (Seerr managers)
 
     /// « 3 », « 99+ », or nothing — the Réglages tab's bubble.
     private var settingsBadge: String? {
-        SeerrPendingModel.badgeLabel(seerr.pendingBadgeCount)
+        SeerrPendingModel.badgeLabel(seerr.settingsBadgeCount)
     }
 
     private func badge(for tab: ResolvedTab) -> Text? {

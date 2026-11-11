@@ -1557,7 +1557,7 @@
 
 // MARK: - Seerr
 
-"settings.requests" = "Requests";
+"settings.requests" = "Seerr";
 "pro.feature.requests.title" = "Movie and series requests";
 "pro.feature.requests.detail" = "Something missing? Request it from search, a title page or a collection, without leaving JellyGlass. With Seerr on your server.";
 "pro.feature.requests.row" = "Request a missing title, with Seerr";
@@ -1784,6 +1784,32 @@
 "seerr.pending.alreadyHandled" = "Already handled";
 "seerr.pending.approveFailed" = "Couldn't approve the request";
 "seerr.pending.declineFailed" = "Couldn't decline the request";
+"seerr.settings.section.issues" = "Reports";
+"seerr.settings.section.issuesCount" = "Reports (%d)";
+"seerr.settings.section.issuesCount.one" = "Reports (%d)";
+"seerr.hub.issues.none" = "No open reports";
+"seerr.hub.issues.count" = "%d open reports";
+"seerr.hub.issues.count.one" = "%d open report";
+"seerr.settings.issuesBubble" = "%d reports to handle";
+"seerr.settings.issuesBubble.one" = "%d report to handle";
+"seerr.issues.empty" = "No open reports right now";
+"seerr.issues.reportedBy" = "Reported by %1$@ · %2$@";
+"seerr.issues.reportedAt" = "Reported %@";
+"seerr.issues.season" = "Season %d";
+"seerr.issues.episode" = "episode %d";
+"seerr.issues.missingEpisodes" = "episodes %@ missing";
+"seerr.issues.missingEpisodes.one" = "episode %@ missing";
+"seerr.issues.type.video" = "Video problem";
+"seerr.issues.type.audio" = "Audio problem";
+"seerr.issues.type.subtitles" = "Subtitle problem";
+"seerr.issues.type.other" = "Other problem";
+"seerr.issues.note" = "“%@”";
+"seerr.issues.resolve" = "Mark as resolved";
+"seerr.issues.resolving" = "Resolving…";
+"seerr.issues.open" = "View title";
+"seerr.issues.resolved" = "Report resolved";
+"seerr.issues.alreadyHandled" = "Already handled";
+"seerr.issues.resolveFailed" = "Couldn't resolve the report";
 "seerr.arrival.title" = "%@ is available";
 "seerr.arrival.several" = "%d requests are available";
 "seerr.arrival.several.one" = "%d request is available";

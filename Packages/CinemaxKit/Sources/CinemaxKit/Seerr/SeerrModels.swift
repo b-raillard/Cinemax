@@ -123,6 +123,10 @@ public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decoda
     /// May report a problem on a title (`POST /issue` asks for one of the two,
     /// read in Seerr 3.5.1's issue route).
     public var canReportIssues: Bool { allows(.createIssues) || contains(.manageIssues) }
+    /// May read the household's problem reports and resolve them (`GET /issue`
+    /// lists only one's own reports without it, `POST /issue/{id}/resolved`
+    /// answers 401 — read in Seerr 3.5.1's issue route).
+    public var canManageIssues: Bool { allows(.manageIssues) }
     /// May change another user's permissions (`POST /user/{id}/settings/permissions`).
     public var canManageUsers: Bool { allows(.manageUsers) }
 
@@ -536,7 +540,7 @@ public struct SeerrRequestMedia: Sendable, Equatable, Decodable {
     }
 }
 
-public struct SeerrRequest: Sendable, Equatable, Decodable {
+public struct SeerrRequest: Sendable, Equatable, Decodable, Identifiable {
     public let id: Int
     public let status: SeerrRequestStatus
     public let kind: SeerrMediaKind
@@ -606,6 +610,147 @@ public struct SeerrRequestPage: Sendable, Equatable, Decodable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let rows = try c.decode([LossyRequest].self, forKey: .results)
         results = rows.compactMap(\.request)
+        served = rows.count
+        total = try c.decode(PageInfo.self, forKey: .pageInfo).results
+    }
+}
+
+// MARK: - Issues (problem reports)
+
+/// What a report is about — Seerr's `issueType`. An unknown value reads as
+/// « other ».
+public enum SeerrIssueKind: Int, Sendable, Equatable, Hashable, Decodable {
+    case video = 1, audio, subtitles, other
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(Int.self)
+        self = Self(rawValue: raw) ?? .other
+    }
+}
+
+public enum SeerrIssueStatus: Int, Sendable, Equatable, Hashable, Decodable {
+    case open = 1, resolved
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(Int.self)
+        self = Self(rawValue: raw) ?? .open
+    }
+}
+
+public enum SeerrIssueFilter: String, Sendable {
+    case open, resolved, all
+}
+
+/// The title a report is about. `id` is SEERR's media id; `jellyfinMediaId`
+/// is set once Seerr has matched the title to the Jellyfin library.
+public struct SeerrIssueMedia: Sendable, Equatable, Decodable {
+    public let id: Int
+    public let tmdbId: Int
+    public let kind: SeerrMediaKind
+    public let jellyfinMediaId: String?
+
+    public init(id: Int, tmdbId: Int, kind: SeerrMediaKind, jellyfinMediaId: String? = nil) {
+        self.id = id
+        self.tmdbId = tmdbId
+        self.kind = kind
+        self.jellyfinMediaId = jellyfinMediaId
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, tmdbId, mediaType, jellyfinMediaId }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        tmdbId = try c.decode(Int.self, forKey: .tmdbId)
+        kind = try c.decode(SeerrMediaKind.self, forKey: .mediaType)
+        jellyfinMediaId = try c.decodeIfPresent(String.self, forKey: .jellyfinMediaId)
+    }
+}
+
+/// One problem report (`GET /issue`). `message` is the report's own text —
+/// its FIRST comment; later comments are a conversation this app does not show.
+public struct SeerrIssue: Sendable, Equatable, Decodable, Identifiable {
+    public let id: Int
+    public let kind: SeerrIssueKind
+    public let status: SeerrIssueStatus
+    /// 0 = no season named (a film, or the whole series).
+    public let problemSeason: Int
+    /// 0 = the whole season.
+    public let problemEpisode: Int
+    public let createdAt: Date
+    /// `nil` when Seerr names nobody (a deleted account): the row says « Signalé »
+    /// alone rather than dropping the report.
+    public let createdBy: SeerrUser?
+    public let media: SeerrIssueMedia
+    public let message: String?
+
+    public init(
+        id: Int, kind: SeerrIssueKind, status: SeerrIssueStatus = .open, problemSeason: Int = 0,
+        problemEpisode: Int = 0, createdAt: Date, createdBy: SeerrUser?, media: SeerrIssueMedia,
+        message: String? = nil
+    ) {
+        self.id = id
+        self.kind = kind
+        self.status = status
+        self.problemSeason = problemSeason
+        self.problemEpisode = problemEpisode
+        self.createdAt = createdAt
+        self.createdBy = createdBy
+        self.media = media
+        self.message = message
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, issueType, status, problemSeason, problemEpisode, createdAt, createdBy, media, comments
+    }
+    private struct Comment: Decodable {
+        let id: Int?
+        let message: String?
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        kind = try c.decodeIfPresent(SeerrIssueKind.self, forKey: .issueType) ?? .other
+        status = try c.decodeIfPresent(SeerrIssueStatus.self, forKey: .status) ?? .open
+        problemSeason = try c.decodeIfPresent(Int.self, forKey: .problemSeason) ?? 0
+        problemEpisode = try c.decodeIfPresent(Int.self, forKey: .problemEpisode) ?? 0
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        createdBy = try? c.decodeIfPresent(SeerrUser.self, forKey: .createdBy)
+        media = try c.decode(SeerrIssueMedia.self, forKey: .media)
+        // The report's text is the comment it was created with: the oldest.
+        let comments = (try? c.decodeIfPresent([Comment].self, forKey: .comments)) ?? []
+        let first = comments.min { ($0.id ?? .max) < ($1.id ?? .max) }
+        message = first?.message
+    }
+}
+
+/// One `GET /issue` page, decoded lossily like `SeerrRequestPage`.
+public struct SeerrIssuePage: Sendable, Equatable, Decodable {
+    public let results: [SeerrIssue]
+    public let total: Int
+    /// How many rows the server SENT, skipped ones included (the next `skip`).
+    public let served: Int
+
+    public init(results: [SeerrIssue], total: Int, served: Int? = nil) {
+        self.results = results
+        self.total = total
+        self.served = served ?? results.count
+    }
+
+    private enum CodingKeys: String, CodingKey { case results, pageInfo }
+    private struct PageInfo: Decodable { let results: Int }
+    private struct LossyIssue: Decodable {
+        let issue: SeerrIssue?
+        init(from decoder: Decoder) throws {
+            issue = try? SeerrIssue(from: decoder)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let rows = try c.decode([LossyIssue].self, forKey: .results)
+        results = rows.compactMap(\.issue)
         served = rows.count
         total = try c.decode(PageInfo.self, forKey: .pageInfo).results
     }
