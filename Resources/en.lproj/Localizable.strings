@@ -1708,6 +1708,8 @@
 "seerr.episodes.report" = "Report the %d missing episodes";
 "seerr.episodes.report.one" = "Report the missing episode";
 "seerr.episodes.reported" = "Reported to your admin";
+"seerr.episodes.hide" = "Hide for this series";
+"seerr.episodes.hidden" = "Missing episodes hidden for this series";
 "seerr.episodes.report.title" = "Missing episodes";
 "seerr.episodes.report.word" = "A word for the admin";
 "seerr.episodes.report.placeholder" = "Optional";

@@ -194,8 +194,9 @@ struct MediaDetailMissingEpisodeRow: View {
 #endif
 
 /// Under the season's episodes, whose missing ones are drawn in place:
-/// « Signaler » for an account that may report a problem, « Signalé à ton
-/// admin » once sent, nothing otherwise. Seerr cannot REQUEST them (a partly
+/// « Signaler » for an account that may report a problem (« Signalé à ton
+/// admin » once sent), then « Masquer pour cette série » for a numbering the
+/// automatic check cannot see through. Seerr cannot REQUEST them (a partly
 /// available season is refused, and it has no per-episode request), so
 /// nothing here is a request.
 struct MediaDetailMissingEpisodesBlock: View, Equatable {
@@ -203,6 +204,7 @@ struct MediaDetailMissingEpisodesBlock: View, Equatable {
     let canReport: Bool
     let isReported: Bool
     let onReport: () -> Void
+    let onHide: () -> Void
 
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
@@ -212,15 +214,29 @@ struct MediaDetailMissingEpisodesBlock: View, Equatable {
     }
 
     var body: some View {
-        if isReported {
-            Label(loc.localized("seerr.episodes.reported"), systemImage: "checkmark.circle.fill")
-                .font(CinemaFont.label(.medium))
-                .foregroundStyle(themeManager.accent)
-        } else if canReport {
-            CinemaButton(
-                title: loc.counted("seerr.episodes.report", episodes.count),
-                style: .ghost, icon: "flag", wrapsTitle: true, action: onReport
-            )
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            if isReported {
+                Label(loc.localized("seerr.episodes.reported"), systemImage: "checkmark.circle.fill")
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(themeManager.accent)
+            } else if canReport {
+                CinemaButton(
+                    title: loc.counted("seerr.episodes.report", episodes.count),
+                    style: .ghost, icon: "flag", wrapsTitle: true, action: onReport
+                )
+            }
+            Button(action: onHide) {
+                Text(loc.localized("seerr.episodes.hide"))
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .padding(.vertical, CinemaSpacing.spacing2)
+                    .frame(minHeight: 44)
+            }
+            #if os(tvOS)
+            .buttonStyle(TVEpisodeZoneButtonStyle(accent: themeManager.accent))
+            #else
+            .buttonStyle(.plain)
+            #endif
         }
     }
 

@@ -1710,6 +1710,8 @@
 "seerr.episodes.report" = "Signaler les %d épisodes manquants";
 "seerr.episodes.report.one" = "Signaler l’épisode manquant";
 "seerr.episodes.reported" = "Signalé à ton admin";
+"seerr.episodes.hide" = "Masquer pour cette série";
+"seerr.episodes.hidden" = "Épisodes manquants masqués pour cette série";
 "seerr.episodes.report.title" = "Épisodes manquants";
 "seerr.episodes.report.word" = "Un mot pour l’admin";
 "seerr.episodes.report.placeholder" = "Facultatif";

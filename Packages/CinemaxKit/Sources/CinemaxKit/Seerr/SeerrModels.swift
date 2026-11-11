@@ -460,19 +460,22 @@ public struct SeerrTVDetails: Sendable, Equatable, Decodable {
     public let mediaInfo: SeerrMediaInfo?
     /// The TMDb poster path (Mes demandes' rows).
     public let posterPath: String?
+    /// TMDb's episode lengths in minutes (often several, often none).
+    public let episodeRunTime: [Int]
 
     public init(
         tmdbId: Int, name: String, seasons: [SeerrSeason], mediaInfo: SeerrMediaInfo? = nil,
-        posterPath: String? = nil
+        posterPath: String? = nil, episodeRunTime: [Int] = []
     ) {
         self.tmdbId = tmdbId
         self.name = name
         self.seasons = seasons
         self.mediaInfo = mediaInfo
         self.posterPath = posterPath
+        self.episodeRunTime = episodeRunTime
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, seasons, mediaInfo, posterPath }
+    private enum CodingKeys: String, CodingKey { case id, name, seasons, mediaInfo, posterPath, episodeRunTime }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -481,6 +484,7 @@ public struct SeerrTVDetails: Sendable, Equatable, Decodable {
         seasons = try c.decodeIfPresent([SeerrSeason].self, forKey: .seasons) ?? []
         mediaInfo = try c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
         posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
+        episodeRunTime = (try? c.decodeIfPresent([Int].self, forKey: .episodeRunTime)) ?? []
     }
 }
 

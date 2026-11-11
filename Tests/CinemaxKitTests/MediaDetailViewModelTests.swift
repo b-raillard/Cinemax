@@ -985,6 +985,69 @@ struct MediaDetailMissingEpisodesTests {
         #expect(vm.reportedEpisodeSeasons == ["tv-1399-s1"])
     }
 
+    @Test("a complete season asks neither the series nor the library's numbering")
+    func completeSeasonCostsNothingMore() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])])
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        let api = partialSeasonAPI([1, 2, 3, 4])
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+
+        #expect(vm.seerrEpisodes(for: session.snapshot()).isEmpty)
+        #expect(api.getEpisodeNumberingCallCount == 0)
+    }
+
+    @Test("a library numbered otherwise than TMDb shows no missing episode")
+    func otherNumberingShowsNothing() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])])
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        let api = partialSeasonAPI([1, 3])
+        // « 501 » for S01E01: past TMDb's 8 episodes.
+        api.stubbedEpisodeNumbering = [EpisodeNumbering(season: 1, first: 101), EpisodeNumbering(season: 1, first: 103)]
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+
+        #expect(api.getEpisodeNumberingCallCount == 1)
+        #expect(vm.seerrEpisodes(for: session.snapshot()).isEmpty)
+    }
+
+    @Test("« Masquer pour cette série » hides at once, keeps it on this device, and « Annuler » brings them back")
+    func hideForThisSeries() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])])
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        let (app, session) = await seerrBench(api: partialSeasonAPI([1, 3]), transport: transport)
+        let defaults = UserDefaults.isolatedForTesting()
+        let vm = makeViewModel(session)
+        vm.defaults = defaults
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+        #expect(!vm.seerrEpisodes(for: session.snapshot()).isEmpty)
+
+        vm.hideMissingEpisodes()
+        #expect(vm.seerrEpisodes(for: session.snapshot()).isEmpty)
+        #expect(defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] == [1399])
+
+        // Reopened: nothing is even asked.
+        let again = makeViewModel(session)
+        again.defaults = defaults
+        let asked = transport.seasonRequestCount
+        await again.load(using: app, loc: loc)
+        await again.seerrEpisodesTask?.value
+        #expect(again.seerrEpisodes(for: session.snapshot()).isEmpty)
+        #expect(transport.seasonRequestCount == asked)
+
+        again.unhideMissingEpisodes(using: app)
+        await again.seerrEpisodesTask?.value
+        #expect(again.seerrEpisodes(for: session.snapshot()).map(\.episodeNumber) == [2, 4])
+        #expect(defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] == [])
+    }
+
     @Test("a title Seerr does not know cannot be reported")
     func unknownMediaIsNotReported() async {
         let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])])

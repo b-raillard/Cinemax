@@ -1954,6 +1954,16 @@ struct MediaDetailScreen: View {
         MediaDetailEpisodeSlot.interleave(owned: viewModel.episodes, missing: missingEpisodes)
     }
 
+    /// « Masquer pour cette série », with « Annuler » in the toast.
+    private func hideMissingEpisodes() {
+        viewModel.hideMissingEpisodes()
+        toast.info(
+            loc.localized("seerr.episodes.hidden"),
+            action: ToastAction(title: loc.localized("action.cancel")) {
+                viewModel.unhideMissingEpisodes(using: appState)
+            })
+    }
+
     private func openEpisodeReport() {
         let missing = missingEpisodes
         guard !missing.isEmpty else { return }
@@ -1969,7 +1979,8 @@ struct MediaDetailScreen: View {
                 canReport: canReportEpisodes,
                 isReported: viewModel.reportedEpisodeSeasons.contains(
                     SeerrMissingSeason.id(seriesTmdbId: first.seriesTmdbId, seasonNumber: first.seasonNumber)),
-                onReport: { openEpisodeReport() }
+                onReport: { openEpisodeReport() },
+                onHide: { hideMissingEpisodes() }
             )
             .equatable()
             .padding(.horizontal, contentPadding)

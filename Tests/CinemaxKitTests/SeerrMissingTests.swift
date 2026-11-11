@@ -1057,6 +1057,42 @@ struct SeerrMissingEpisodesTests {
         #expect(MissingEpisodeLook.airDate(nil, locale: Locale(identifier: "fr_FR")) == nil)
     }
 
+    @Test("missing episodes show only when the library numbers the series as TMDb does")
+    func followsTMDbNumbering() {
+        func files(_ season: Int, _ numbers: ClosedRange<Int>) -> [EpisodeNumbering] {
+            numbers.map { EpisodeNumbering(season: season, first: $0) }
+        }
+        let counts = [1: 13, 2: 22, 5: 13]
+        let trust = { (n: [EpisodeNumbering], minutes: Double?, runTimes: [Int]) in
+            SeerrMissing.followsTMDbNumbering(n, tmdbEpisodeCounts: counts, fileMinutes: minutes, tmdbRunTimes: runTimes)
+        }
+        // A real gap, numbered as TMDb: shown.
+        #expect(trust(files(1, 1...3) + files(2, 1...22), 45, [45]))
+        // Season 0 is never compared.
+        #expect(trust(files(0, 1...40) + files(1, 1...13), nil, []))
+        // A number past TMDb's count (« L'Agence tous risques » S1: 13 files up to 14).
+        #expect(!trust(files(1, 2...14), nil, []))
+        // More files than TMDb counts.
+        #expect(!trust(files(2, 1...23), nil, []))
+        // « 501 » for S05E01 (« Sons of Anarchy »), and a season TMDb does not have (« S20 »).
+        #expect(!trust(files(5, 501...513), nil, []))
+        #expect(!trust(files(1, 1...13) + [EpisodeNumbering(season: 20, first: 1)], nil, []))
+        // A two-episode file counts both.
+        #expect(!trust([EpisodeNumbering(season: 1, first: 1, last: 14)], nil, []))
+        // Compilations: files 3× TMDb's longest episode (« Un gars, une fille »: 33 min vs 6).
+        #expect(!trust(files(1, 1...3), 33, [6]))
+        #expect(trust(files(1, 1...3), 33, [40, 52, 4, 7]))
+        #expect(trust(files(1, 1...3), 33, []))
+    }
+
+    @Test("the mean length of episodes, in minutes")
+    func meanMinutes() {
+        var a = BaseItemDto(); a.runTimeTicks = 600_000_000 * 20
+        var b = BaseItemDto(); b.runTimeTicks = 600_000_000 * 40
+        #expect(SeerrMissing.meanMinutes([a, b, BaseItemDto()]) == 30)
+        #expect(SeerrMissing.meanMinutes([BaseItemDto()]) == nil)
+    }
+
     @Test("today is the device's calendar day, zero-padded")
     func todayIsZeroPadded() {
         var calendar = Calendar(identifier: .gregorian)

@@ -1708,6 +1708,8 @@
 "seerr.episodes.report" = "Die %d fehlenden Folgen melden";
 "seerr.episodes.report.one" = "Die fehlende Folge melden";
 "seerr.episodes.reported" = "Deinem Admin gemeldet";
+"seerr.episodes.hide" = "Für diese Serie ausblenden";
+"seerr.episodes.hidden" = "Fehlende Folgen für diese Serie ausgeblendet";
 "seerr.episodes.report.title" = "Fehlende Folgen";
 "seerr.episodes.report.word" = "Eine Nachricht an den Admin";
 "seerr.episodes.report.placeholder" = "Optional";

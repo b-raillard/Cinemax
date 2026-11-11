@@ -212,6 +212,43 @@ enum SeerrMissing {
             }
     }
 
+    /// Whether the library numbers this series as TMDb does — the condition for
+    /// showing ANY missing episode (owner 2026-11-11, measured on the owner's
+    /// library: 171 series, 13 with « missing » episodes, most of them false).
+    /// Pure. `false` when:
+    /// - a season holds a number past TMDb's count for it, or more files than
+    ///   that count, or does not exist at TMDb (« S20 ») — the files follow
+    ///   another order (absolute, DVD, split pilots, a « 501 » for S05E01), so
+    ///   a gap means nothing. Season 0 is never compared;
+    /// - the season's files last at least 3× TMDb's longest episode length:
+    ///   each file is a compilation (« Un gars, une fille » — 33 min a file,
+    ///   6 at TMDb).
+    /// Prudent on purpose: in a series it distrusts, a real gap is hidden too.
+    static func followsTMDbNumbering(
+        _ numbering: [EpisodeNumbering], tmdbEpisodeCounts: [Int: Int],
+        fileMinutes: Double?, tmdbRunTimes: [Int]
+    ) -> Bool {
+        var seasons: [Int: (count: Int, highest: Int)] = [:]
+        for file in numbering where file.season > 0 {
+            let current = seasons[file.season] ?? (0, 0)
+            seasons[file.season] = (current.count + file.last - file.first + 1, max(current.highest, file.last))
+        }
+        for (season, owned) in seasons {
+            guard let count = tmdbEpisodeCounts[season], owned.highest <= count, owned.count <= count else { return false }
+        }
+        if let fileMinutes, let longest = tmdbRunTimes.max(), longest > 0, fileMinutes >= 3 * Double(longest) {
+            return false
+        }
+        return true
+    }
+
+    /// The mean length of `episodes` in minutes, nil when none reports one.
+    static func meanMinutes(_ episodes: [BaseItemDto]) -> Double? {
+        let ticks = episodes.compactMap(\.runTimeTicks).filter { $0 > 0 }
+        guard !ticks.isEmpty else { return nil }
+        return Double(ticks.reduce(0, +)) / Double(ticks.count) / 600_000_000
+    }
+
     /// `today` for `episodes`, in the device's calendar day.
     static func today(_ date: Date = Date(), calendar: Calendar = .current) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
