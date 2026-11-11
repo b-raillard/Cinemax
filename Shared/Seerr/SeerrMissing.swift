@@ -26,7 +26,9 @@ struct SeerrMissingSeason: Identifiable, Equatable, Sendable {
     let seriesTmdbId: Int
     let seasonNumber: Int
     let badge: SeerrBadge
-    /// The season's own poster (Seerr's `/tv/{id}`); nil ⇒ the bare outline.
+    /// The season's own poster (Seerr's `/tv/{id}`), else the SERIES' poster —
+    /// TMDb has none for a season not aired yet, and a bare outline beside
+    /// dimmed posters read as broken (owner 2026-11-11); nil ⇒ neither exists.
     var posterPath: String?
     var id: String { Self.id(seriesTmdbId: seriesTmdbId, seasonNumber: seasonNumber) }
     static func id(seriesTmdbId: Int, seasonNumber: Int) -> String { "tv-\(seriesTmdbId)-s\(seasonNumber)" }
@@ -40,6 +42,10 @@ struct SeerrMissingEpisode: Identifiable, Equatable, Sendable {
     let seasonNumber: Int
     let episodeNumber: Int
     let name: String
+    /// `yyyy-MM-dd`, already aired (`SeerrMissing.episodes` keeps no other).
+    var airDate: String?
+    /// TMDb's still, a path for `SeerrSession.posterURL`.
+    var stillPath: String?
     var id: String { "tv-\(seriesTmdbId)-s\(seasonNumber)-e\(episodeNumber)" }
 }
 
@@ -201,8 +207,46 @@ enum SeerrMissing {
             .map {
                 SeerrMissingEpisode(
                     seriesTmdbId: seriesTmdbId, seasonNumber: seasonNumber,
-                    episodeNumber: $0.episodeNumber, name: $0.name)
+                    episodeNumber: $0.episodeNumber, name: $0.name,
+                    airDate: $0.airDate, stillPath: $0.stillPath)
             }
+    }
+
+    /// Whether the library numbers this series as TMDb does — the condition for
+    /// showing ANY missing episode (owner 2026-11-11, measured on the owner's
+    /// library: 171 series, 13 with « missing » episodes, most of them false).
+    /// Pure. `false` when:
+    /// - a season holds a number past TMDb's count for it, or more files than
+    ///   that count, or does not exist at TMDb (« S20 ») — the files follow
+    ///   another order (absolute, DVD, split pilots, a « 501 » for S05E01), so
+    ///   a gap means nothing. Season 0 is never compared;
+    /// - the season's files last at least 3× TMDb's longest episode length:
+    ///   each file is a compilation (« Un gars, une fille » — 33 min a file,
+    ///   6 at TMDb).
+    /// Prudent on purpose: in a series it distrusts, a real gap is hidden too.
+    static func followsTMDbNumbering(
+        _ numbering: [EpisodeNumbering], tmdbEpisodeCounts: [Int: Int],
+        fileMinutes: Double?, tmdbRunTimes: [Int]
+    ) -> Bool {
+        var seasons: [Int: (count: Int, highest: Int)] = [:]
+        for file in numbering where file.season > 0 {
+            let current = seasons[file.season] ?? (0, 0)
+            seasons[file.season] = (current.count + file.last - file.first + 1, max(current.highest, file.last))
+        }
+        for (season, owned) in seasons {
+            guard let count = tmdbEpisodeCounts[season], owned.highest <= count, owned.count <= count else { return false }
+        }
+        if let fileMinutes, let longest = tmdbRunTimes.max(), longest > 0, fileMinutes >= 3 * Double(longest) {
+            return false
+        }
+        return true
+    }
+
+    /// The mean length of `episodes` in minutes, nil when none reports one.
+    static func meanMinutes(_ episodes: [BaseItemDto]) -> Double? {
+        let ticks = episodes.compactMap(\.runTimeTicks).filter { $0 > 0 }
+        guard !ticks.isEmpty else { return nil }
+        return Double(ticks.reduce(0, +)) / Double(ticks.count) / 600_000_000
     }
 
     /// `today` for `episodes`, in the device's calendar day.
@@ -227,7 +271,7 @@ enum SeerrMissing {
             let badge = info.flatMap { seasonBadge(for: $0.requests.filter { $0.seasons.contains(number) }) }
                 ?? (seerrStatus == .processing ? .processing : .request)
             result.append(SeerrMissingSeason(
-                seriesTmdbId: tv.tmdbId, seasonNumber: number, badge: badge, posterPath: season.posterPath))
+                seriesTmdbId: tv.tmdbId, seasonNumber: number, badge: badge, posterPath: season.posterPath ?? tv.posterPath))
         }
         return result
     }

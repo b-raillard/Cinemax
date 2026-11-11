@@ -310,20 +310,35 @@ public struct SeerrEpisode: Sendable, Equatable, Decodable {
     /// `yyyy-MM-dd`, or nil / empty while TMDb has no date: not aired, as far
     /// as anyone knows.
     public let airDate: String?
+    /// TMDb's still of the episode as a PATH (« /abc.jpg »), nil without one.
+    /// Seerr 3.5.1 sends a whole URL here (`…/t/p/original//abc.jpg`, measured
+    /// on the bench 2026-11-11): only its file name is kept, so the image goes
+    /// through `SeerrImages` like every poster, sized and proxied the same way.
+    public let stillPath: String?
 
-    public init(episodeNumber: Int, name: String, airDate: String?) {
+    public init(episodeNumber: Int, name: String, airDate: String?, stillPath: String? = nil) {
         self.episodeNumber = episodeNumber
         self.name = name
         self.airDate = airDate
+        self.stillPath = stillPath
     }
 
-    private enum CodingKeys: String, CodingKey { case episodeNumber, name, airDate }
+    private enum CodingKeys: String, CodingKey { case episodeNumber, name, airDate, stillPath }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         episodeNumber = try c.decode(Int.self, forKey: .episodeNumber)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         airDate = try c.decodeIfPresent(String.self, forKey: .airDate)
+        stillPath = Self.imagePath(try c.decodeIfPresent(String.self, forKey: .stillPath))
+    }
+
+    /// « /abc.jpg » from a TMDb path or a whole TMDb URL; nil when empty.
+    public static func imagePath(_ raw: String?) -> String? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        guard raw.lowercased().hasPrefix("http") else { return raw.hasPrefix("/") ? raw : "/" + raw }
+        guard let name = raw.split(separator: "/").last, !name.isEmpty, name.contains(".") else { return nil }
+        return "/" + name
     }
 }
 
@@ -449,19 +464,22 @@ public struct SeerrTVDetails: Sendable, Equatable, Decodable {
     public let mediaInfo: SeerrMediaInfo?
     /// The TMDb poster path (Mes demandes' rows).
     public let posterPath: String?
+    /// TMDb's episode lengths in minutes (often several, often none).
+    public let episodeRunTime: [Int]
 
     public init(
         tmdbId: Int, name: String, seasons: [SeerrSeason], mediaInfo: SeerrMediaInfo? = nil,
-        posterPath: String? = nil
+        posterPath: String? = nil, episodeRunTime: [Int] = []
     ) {
         self.tmdbId = tmdbId
         self.name = name
         self.seasons = seasons
         self.mediaInfo = mediaInfo
         self.posterPath = posterPath
+        self.episodeRunTime = episodeRunTime
     }
 
-    private enum CodingKeys: String, CodingKey { case id, name, seasons, mediaInfo, posterPath }
+    private enum CodingKeys: String, CodingKey { case id, name, seasons, mediaInfo, posterPath, episodeRunTime }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -470,6 +488,7 @@ public struct SeerrTVDetails: Sendable, Equatable, Decodable {
         seasons = try c.decodeIfPresent([SeerrSeason].self, forKey: .seasons) ?? []
         mediaInfo = try c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
         posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
+        episodeRunTime = (try? c.decodeIfPresent([Int].self, forKey: .episodeRunTime)) ?? []
     }
 }
 

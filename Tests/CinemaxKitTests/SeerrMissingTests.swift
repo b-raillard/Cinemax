@@ -305,14 +305,17 @@ struct SeerrMissingTests {
         #expect(result.first?.id == "tv-9-s1")
     }
 
-    @Test("a missing season carries its own poster, nil when TMDb has none")
+    @Test("a missing season carries its own poster, else the series' one, nil when neither exists")
     func seasonPoster() {
-        let tv = SeerrTVDetails(tmdbId: 9, name: "S", seasons: [
+        let seasons = [
             SeerrSeason(seasonNumber: 1, episodeCount: 8, posterPath: "/s1.jpg"),
             SeerrSeason(seasonNumber: 2, episodeCount: 8),
-        ], mediaInfo: nil)
-        let result = SeerrMissing.seasons(tv, ownedSeasonNumbers: [], includeSpecials: false)
-        #expect(result.map(\.posterPath) == ["/s1.jpg", nil])
+        ]
+        let withSeries = SeerrTVDetails(tmdbId: 9, name: "S", seasons: seasons, mediaInfo: nil, posterPath: "/show.jpg")
+        #expect(SeerrMissing.seasons(withSeries, ownedSeasonNumbers: [], includeSpecials: false)
+            .map(\.posterPath) == ["/s1.jpg", "/show.jpg"])
+        let bare = SeerrTVDetails(tmdbId: 9, name: "S", seasons: seasons, mediaInfo: nil)
+        #expect(SeerrMissing.seasons(bare, ownedSeasonNumbers: [], includeSpecials: false).map(\.posterPath) == ["/s1.jpg", nil])
     }
 
     @Test("specials only when enabled")
@@ -1011,6 +1014,83 @@ struct SeerrMissingEpisodesTests {
         let missing = SeerrMissing.episodes(all, seriesTmdbId: 9, seasonNumber: 2, owned: [1], today: "2026-11-11")
         #expect(missing.map(\.episodeNumber) == [2, 3, 4])
         #expect(missing.first?.id == "tv-9-s2-e2")
+    }
+
+    @Test("a still is kept as a path, whether Seerr sends a path or a whole TMDb URL")
+    func stillPaths() throws {
+        #expect(SeerrEpisode.imagePath("https://image.tmdb.org/t/p/original//Ai2.jpg") == "/Ai2.jpg")
+        #expect(SeerrEpisode.imagePath("/abc.jpg") == "/abc.jpg")
+        #expect(SeerrEpisode.imagePath("abc.jpg") == "/abc.jpg")
+        #expect(SeerrEpisode.imagePath("") == nil)
+        #expect(SeerrEpisode.imagePath(nil) == nil)
+        let body = #"{"episodes":[{"episodeNumber":4,"name":"Quatre","airDate":"2011-05-08","stillPath":"https://image.tmdb.org/t/p/original//q.jpg"}]}"#
+        let season = try JSONDecoder().decode(SeerrSeasonEpisodes.self, from: Data(body.utf8))
+        let missing = SeerrMissing.episodes(season.episodes, seriesTmdbId: 1, seasonNumber: 1, owned: [1], today: "2026-11-11")
+        #expect(missing.first?.stillPath == "/q.jpg")
+        #expect(missing.first?.airDate == "2011-05-08")
+    }
+
+    @Test("missing episodes take their place among the owned ones")
+    @MainActor
+    func interleave() {
+        func owned(_ number: Int?, _ id: String) -> BaseItemDto {
+            var dto = BaseItemDto()
+            dto.id = id
+            dto.indexNumber = number
+            return dto
+        }
+        func missing(_ number: Int) -> SeerrMissingEpisode {
+            SeerrMissingEpisode(seriesTmdbId: 1, seasonNumber: 1, episodeNumber: number, name: "E\(number)")
+        }
+        let slots = MediaDetailEpisodeSlot.interleave(
+            owned: [owned(1, "a"), owned(3, "c"), owned(nil, "x"), owned(6, "f")],
+            missing: [missing(7), missing(2), missing(4), missing(5)])
+        #expect(slots.map(\.id) == ["owned-a", "tv-1-s1-e2", "owned-c", "owned-x", "tv-1-s1-e4", "tv-1-s1-e5", "owned-f", "tv-1-s1-e7"])
+        #expect(MediaDetailEpisodeSlot.interleave(owned: [owned(1, "a")], missing: []).map(\.id) == ["owned-a"])
+    }
+
+    @Test("a missing episode's air date reads in the app's language")
+    func airDateText() {
+        let fr = MissingEpisodeLook.airDate("2011-05-08", locale: Locale(identifier: "fr_FR"))
+        #expect(fr?.contains("2011") == true && fr?.contains("mai") == true)
+        #expect(MissingEpisodeLook.airDate("pas une date", locale: Locale(identifier: "fr_FR")) == nil)
+        #expect(MissingEpisodeLook.airDate(nil, locale: Locale(identifier: "fr_FR")) == nil)
+    }
+
+    @Test("missing episodes show only when the library numbers the series as TMDb does")
+    func followsTMDbNumbering() {
+        func files(_ season: Int, _ numbers: ClosedRange<Int>) -> [EpisodeNumbering] {
+            numbers.map { EpisodeNumbering(season: season, first: $0) }
+        }
+        let counts = [1: 13, 2: 22, 5: 13]
+        let trust = { (n: [EpisodeNumbering], minutes: Double?, runTimes: [Int]) in
+            SeerrMissing.followsTMDbNumbering(n, tmdbEpisodeCounts: counts, fileMinutes: minutes, tmdbRunTimes: runTimes)
+        }
+        // A real gap, numbered as TMDb: shown.
+        #expect(trust(files(1, 1...3) + files(2, 1...22), 45, [45]))
+        // Season 0 is never compared.
+        #expect(trust(files(0, 1...40) + files(1, 1...13), nil, []))
+        // A number past TMDb's count (« L'Agence tous risques » S1: 13 files up to 14).
+        #expect(!trust(files(1, 2...14), nil, []))
+        // More files than TMDb counts.
+        #expect(!trust(files(2, 1...23), nil, []))
+        // « 501 » for S05E01 (« Sons of Anarchy »), and a season TMDb does not have (« S20 »).
+        #expect(!trust(files(5, 501...513), nil, []))
+        #expect(!trust(files(1, 1...13) + [EpisodeNumbering(season: 20, first: 1)], nil, []))
+        // A two-episode file counts both.
+        #expect(!trust([EpisodeNumbering(season: 1, first: 1, last: 14)], nil, []))
+        // Compilations: files 3× TMDb's longest episode (« Un gars, une fille »: 33 min vs 6).
+        #expect(!trust(files(1, 1...3), 33, [6]))
+        #expect(trust(files(1, 1...3), 33, [40, 52, 4, 7]))
+        #expect(trust(files(1, 1...3), 33, []))
+    }
+
+    @Test("the mean length of episodes, in minutes")
+    func meanMinutes() {
+        var a = BaseItemDto(); a.runTimeTicks = 600_000_000 * 20
+        var b = BaseItemDto(); b.runTimeTicks = 600_000_000 * 40
+        #expect(SeerrMissing.meanMinutes([a, b, BaseItemDto()]) == 30)
+        #expect(SeerrMissing.meanMinutes([BaseItemDto()]) == nil)
     }
 
     @Test("today is the device's calendar day, zero-padded")

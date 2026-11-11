@@ -198,6 +198,36 @@ final class MediaDetailViewModel {
     private(set) var reportedEpisodeSeasons: Set<String> = []
     /// « Today » for the aired test — injectable for the tests.
     @ObservationIgnored var seerrToday: @MainActor () -> String = { SeerrMissing.today() }
+    /// Where « Masquer pour cette série » is kept — injectable for the tests.
+    @ObservationIgnored var defaults: UserDefaults = .standard
+
+    /// This series' missing episodes are hidden on this device: the fiche
+    /// shows « Épisodes manquants masqués · Afficher » instead of them.
+    private(set) var missingEpisodesHidden = false
+
+    /// Whether the user hid this series' missing episodes on this device.
+    func hidesMissingEpisodes(tmdbId: Int) -> Bool {
+        (defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] ?? []).contains(tmdbId)
+    }
+
+    /// « Masquer pour cette série »: kept on this device, the block goes at once.
+    func hideMissingEpisodes() {
+        guard let item, let tmdbId = SeerrMissing.tmdbId(of: item) else { return }
+        var hidden = defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] ?? []
+        if !hidden.contains(tmdbId) { hidden.append(tmdbId) }
+        defaults.set(hidden, forKey: SettingsKey.seerrHiddenMissingEpisodes)
+        missingEpisodesHidden = true
+        seerrEpisodesTask?.cancel()
+        setSeerrEpisodes(.hidden, snapshot: nil)
+    }
+
+    /// The toast's « Annuler »: the series shows its missing episodes again.
+    func unhideMissingEpisodes(using appState: AppState) {
+        guard let item, let tmdbId = SeerrMissing.tmdbId(of: item) else { return }
+        let hidden = (defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] ?? []).filter { $0 != tmdbId }
+        defaults.set(hidden, forKey: SettingsKey.seerrHiddenMissingEpisodes)
+        reloadSeerrEpisodes(using: appState)
+    }
 
     /// The missing episodes for the account Seerr serves right now.
     func seerrEpisodes(for current: SeerrSession.Snapshot?) -> [SeerrMissingEpisode] {
@@ -214,25 +244,50 @@ final class MediaDetailViewModel {
 
     /// Starts (again) the side task for the season on screen — after the first
     /// load and after each season change, once its episodes are written.
-    private func reloadSeerrEpisodes() {
+    private func reloadSeerrEpisodes(using appState: AppState) {
         seerrEpisodesTask?.cancel()
         setSeerrEpisodes(.hidden, snapshot: nil)
-        guard resolvedType == .series, errorMessage == nil, let series = item, let seasonId = selectedSeasonId else { return }
-        seerrEpisodesTask = Task { await loadSeerrEpisodes(for: series, seasonId: seasonId) }
+        let tmdbId = item.flatMap { SeerrMissing.tmdbId(of: $0) }
+        let hidden = resolvedType == .series && tmdbId.map(hidesMissingEpisodes(tmdbId:)) == true
+        if missingEpisodesHidden != hidden { missingEpisodesHidden = hidden }
+        guard resolvedType == .series, errorMessage == nil, let series = item, let seasonId = selectedSeasonId,
+              let seriesId = series.id, let userId = appState.currentUserId else { return }
+        let apiClient = appState.apiClient
+        seerrEpisodesTask = Task {
+            await loadSeerrEpisodes(for: series, seasonId: seasonId) {
+                try await apiClient.getEpisodeNumbering(seriesId: seriesId, userId: userId)
+            }
+        }
     }
 
-    private func loadSeerrEpisodes(for series: BaseItemDto, seasonId: String) async {
+    private func loadSeerrEpisodes(
+        for series: BaseItemDto, seasonId: String,
+        numbering: @escaping @Sendable () async throws -> [EpisodeNumbering]
+    ) async {
         guard !Task.isCancelled, selectedSeasonId == seasonId,
               let seasonNumber = seasons.first(where: { $0.id == seasonId })?.indexNumber, seasonNumber > 0,
-              let tmdbId = SeerrMissing.tmdbId(of: series),
+              let tmdbId = SeerrMissing.tmdbId(of: series), !hidesMissingEpisodes(tmdbId: tmdbId),
               allowsSeerr(), let seerr, let snapshot = seerr.snapshot() else { return }
         let owned = SeerrMissing.ownedEpisodeNumbers(episodes)
         // Nothing owned = the episodes did not load: never « everything is missing ».
         guard !owned.isEmpty else { return }
         let today = seerrToday()
+        let fileMinutes = SeerrMissing.meanMinutes(episodes)
         let section = await seerr.loadSection(deadline: seerrDeadline) { client, credential in
             let all = try await client.seasonEpisodes(tmdbId: tmdbId, seasonNumber: seasonNumber, credential)
-            return SeerrMissing.episodes(all, seriesTmdbId: tmdbId, seasonNumber: seasonNumber, owned: owned, today: today)
+            let missing = SeerrMissing.episodes(all, seriesTmdbId: tmdbId, seasonNumber: seasonNumber, owned: owned, today: today)
+            // A complete season costs nothing more. Only a gap pays for the
+            // check — the series at TMDb and the whole library's numbering
+            // (measured on the owner's NAS: 342 KB / 72 ms for 448 episodes).
+            guard !missing.isEmpty else { return missing }
+            async let details = client.tv(tmdbId: tmdbId, credential)
+            async let library = numbering()
+            let tv = try await details
+            let counts = Dictionary(tv.seasons.map { ($0.seasonNumber, $0.episodeCount) }, uniquingKeysWith: max)
+            guard SeerrMissing.followsTMDbNumbering(
+                try await library, tmdbEpisodeCounts: counts, fileMinutes: fileMinutes, tmdbRunTimes: tv.episodeRunTime
+            ) else { return [SeerrMissingEpisode]() }
+            return missing
         }
         guard !Task.isCancelled, selectedSeasonId == seasonId, let section else { return }
         setSeerrEpisodes(section, snapshot: snapshot)
@@ -443,7 +498,7 @@ final class MediaDetailViewModel {
         if resolvedType == .series, errorMessage == nil, let seriesItem = item {
             seerrSeasonsTask = Task { await loadSeerrSeasons(for: seriesItem, generation: generation) }
         }
-        reloadSeerrEpisodes()
+        reloadSeerrEpisodes(using: appState)
         // Collections are a movie-only garnish — resolved after the main load
         // so a slow boxset lookup never delays the detail render. The saga's
         // missing films follow in the same task: its owned set is that row.
@@ -1004,7 +1059,7 @@ final class MediaDetailViewModel {
             guard seasonGeneration == expectedGeneration else { return }
             episodes = newEpisodes
             rebuildNavigationMaps()
-            reloadSeerrEpisodes()
+            reloadSeerrEpisodes(using: appState)
         } catch {
             // Keep existing episodes on error
         }

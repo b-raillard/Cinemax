@@ -1801,18 +1801,29 @@ struct MediaDetailScreen: View {
             // tvOS: vertical list of unified episode rows. `LazyVStack` so a
             // 20+ episode season doesn't render every row up-front.
             LazyVStack(spacing: 12) {
-                ForEach(viewModel.episodes, id: \.id) { episode in
-                    let nav = episodeNavigation(for: episode.id ?? "")
-                    MediaDetailEpisodeRow(
-                        episode: episode,
-                        epPrev: nav.previous,
-                        epNext: nav.next,
-                        epNavigator: nav.navigator,
-                        episodeThumbnailWidth: episodeThumbnailWidth,
-                        episodeTitleFontSize: episodeTitleFontSize,
-                        onSelectOverview: { episodeOverview = $0 }
-                    )
-                    .equatable()
+                ForEach(episodeSlots) { slot in
+                    switch slot {
+                    case .owned(let episode):
+                        let nav = episodeNavigation(for: episode.id ?? "")
+                        MediaDetailEpisodeRow(
+                            episode: episode,
+                            epPrev: nav.previous,
+                            epNext: nav.next,
+                            epNavigator: nav.navigator,
+                            episodeThumbnailWidth: episodeThumbnailWidth,
+                            episodeTitleFontSize: episodeTitleFontSize,
+                            onSelectOverview: { episodeOverview = $0 }
+                        )
+                        .equatable()
+                    case .missing(let episode):
+                        MediaDetailMissingEpisodeRow(
+                            episode: episode,
+                            stillURL: seerr?.posterURL(episode.stillPath),
+                            episodeThumbnailWidth: episodeThumbnailWidth,
+                            episodeTitleFontSize: episodeTitleFontSize,
+                            onReport: canReportEpisodes ? { openEpisodeReport() } : nil
+                        )
+                    }
                 }
             }
             .padding(.horizontal, contentPadding)
@@ -1861,20 +1872,32 @@ struct MediaDetailScreen: View {
             // iOS: horizontal scroll of episode cards
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 16) {
-                    ForEach(viewModel.episodes, id: \.id) { episode in
-                        let nav = episodeNavigation(for: episode.id ?? "")
-                        MediaDetailEpisodeCard(
-                            episode: episode,
-                            epPrev: nav.previous,
-                            epNext: nav.next,
-                            epNavigator: nav.navigator,
-                            episodeTitleFontSize: episodeTitleFontSize,
-                            onSelectOverview: { episodeOverview = $0 },
-                            onToggleWatched: { ep in
-                                Task { await viewModel.toggleEpisodeWatched(ep, using: appState) }
+                    ForEach(episodeSlots) { slot in
+                        Group {
+                            switch slot {
+                            case .owned(let episode):
+                                let nav = episodeNavigation(for: episode.id ?? "")
+                                MediaDetailEpisodeCard(
+                                    episode: episode,
+                                    epPrev: nav.previous,
+                                    epNext: nav.next,
+                                    epNavigator: nav.navigator,
+                                    episodeTitleFontSize: episodeTitleFontSize,
+                                    onSelectOverview: { episodeOverview = $0 },
+                                    onToggleWatched: { ep in
+                                        Task { await viewModel.toggleEpisodeWatched(ep, using: appState) }
+                                    }
+                                )
+                                .equatable()
+                            case .missing(let episode):
+                                MediaDetailMissingEpisodeCard(
+                                    episode: episode,
+                                    stillURL: seerr?.posterURL(episode.stillPath),
+                                    episodeTitleFontSize: episodeTitleFontSize,
+                                    onReport: canReportEpisodes ? { openEpisodeReport() } : nil
+                                )
                             }
-                        )
-                        .equatable()
+                        }
                         .containerRelativeFrame(.horizontal) { w, _ in w - contentPadding * 2 - 32 }
                     }
                 }
@@ -1926,16 +1949,51 @@ struct MediaDetailScreen: View {
         return user.permissions.canReportIssues
     }
 
+    /// Whether the missing episodes could show at all for this account right
+    /// now — Seerr visible and a request-capable account — so the « masqués »
+    /// line never appears where the block itself never would.
+    private var missingEpisodesApply: Bool {
+        guard let seerr, seerrRequests != nil else { return false }
+        return seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+    }
+
+    /// The season's episodes with its missing ones in place (mockup A).
+    private var episodeSlots: [MediaDetailEpisodeSlot] {
+        MediaDetailEpisodeSlot.interleave(owned: viewModel.episodes, missing: missingEpisodes)
+    }
+
+    /// « Masquer pour cette série ». No « Annuler » in the toast: the block
+    /// is replaced in place by « Épisodes manquants masqués · Afficher »,
+    /// which undoes it at any time (owner 2026-11-11 — the toast with an
+    /// action wrapped onto three loose rows).
+    private func hideMissingEpisodes() {
+        viewModel.hideMissingEpisodes()
+        toast.info(loc.localized("seerr.episodes.hiddenLine"))
+    }
+
+    private func openEpisodeReport() {
+        let missing = missingEpisodes
+        guard !missing.isEmpty else { return }
+        episodeReport = SeerrEpisodeReportDraft(episodes: missing)
+    }
+
     @ViewBuilder
     private var missingEpisodesBlock: some View {
         let missing = missingEpisodes
-        if let first = missing.first {
+        if viewModel.missingEpisodesHidden, missingEpisodesApply {
+            MediaDetailHiddenMissingEpisodesLine {
+                viewModel.unhideMissingEpisodes(using: appState)
+            }
+            .padding(.horizontal, contentPadding)
+            .padding(.top, CinemaSpacing.spacing2)
+        } else if let first = missing.first {
             MediaDetailMissingEpisodesBlock(
                 episodes: missing,
                 canReport: canReportEpisodes,
                 isReported: viewModel.reportedEpisodeSeasons.contains(
                     SeerrMissingSeason.id(seriesTmdbId: first.seriesTmdbId, seasonNumber: first.seasonNumber)),
-                onReport: { episodeReport = SeerrEpisodeReportDraft(episodes: missing) }
+                onReport: { openEpisodeReport() },
+                onHide: { hideMissingEpisodes() }
             )
             .equatable()
             .padding(.horizontal, contentPadding)

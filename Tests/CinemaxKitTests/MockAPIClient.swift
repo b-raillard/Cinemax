@@ -829,6 +829,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// existing fixtures keep working without being rewritten.
     var getEpisodeRefsHandler: (@Sendable (String) async throws -> [EpisodeReference])?
 
+    var stubbedEpisodeNumbering: [EpisodeNumbering] = []
+    private(set) var getEpisodeNumberingCallCount = 0
+    func getEpisodeNumbering(seriesId: String, userId: String) async throws -> [EpisodeNumbering] {
+        recordLock.withLock { getEpisodeNumberingCallCount += 1 }
+        return stubbedEpisodeNumbering
+    }
+
     func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference] {
         recordLock.withLock { getEpisodeRefsCallCount += 1 }
         if let handler = getEpisodeRefsHandler {
