@@ -15,10 +15,15 @@ struct MediaQualityBadges: View {
     /// is what playback would choose. Pass the user's selection when the detail
     /// screen has one so the badges track the version row.
     var source: MediaSourceInfo?
+    /// Short text drawn before the pills, naming what they describe when it
+    /// is not the fiche itself: a series' row describes its next episode, so
+    /// it reads « S02:E08  4K  HDR10 ».
+    var prefix: String?
 
-    init(item: BaseItemDto, source: MediaSourceInfo? = nil) {
+    init(item: BaseItemDto, source: MediaSourceInfo? = nil, prefix: String? = nil) {
         self.item = item
         self.source = source
+        self.prefix = prefix
     }
 
     var body: some View {
@@ -28,6 +33,11 @@ struct MediaQualityBadges: View {
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
+                    if let prefix {
+                        Text(prefix)
+                            .font(CinemaFont.label(.medium))
+                            .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    }
                     ForEach(labels, id: \.self) { label in
                         Text(label)
                             .font(CinemaFont.label(.medium))
@@ -50,5 +60,14 @@ struct MediaQualityBadges: View {
             return []
         }
         return MediaSourceQuality.badgeLabels(for: resolved)
+    }
+
+    /// The picture of one episode, for the line under its title: resolution
+    /// and HDR of the source playback would pick. `nil` when there is nothing
+    /// to say (no source, no video stream).
+    static func episodeVideoSummary(for episode: BaseItemDto) -> String? {
+        guard let best = MediaSourceQuality.best(of: episode.mediaSources ?? []) else { return nil }
+        let summary = MediaSourceQuality.videoSummary(for: best)
+        return summary.isEmpty ? nil : summary
     }
 }

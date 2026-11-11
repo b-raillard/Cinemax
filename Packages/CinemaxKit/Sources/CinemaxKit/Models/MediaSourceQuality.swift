@@ -294,6 +294,15 @@ public enum MediaSourceQuality {
         }
     }
 
+    /// The picture alone — resolution and HDR — for the line under an episode
+    /// of a series (« 4K · Dolby Vision »). Audio is left to the full badge
+    /// row: at card width it is the picture that tells two episodes apart.
+    /// Empty when the source has no readable video stream.
+    public static func videoSummary(for source: MediaSourceInfo) -> String {
+        guard let video = (source.mediaStreams ?? []).first(where: { $0.type == .video }) else { return "" }
+        return [resolutionLabel(of: video), hdrLabel(of: video)].compactMap { $0 }.joined(separator: " · ")
+    }
+
     private static func summaryParts(for source: MediaSourceInfo) -> [String] {
         let streams = source.mediaStreams ?? []
         let video = streams.first { $0.type == .video }

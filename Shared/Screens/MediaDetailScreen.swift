@@ -520,7 +520,7 @@ struct MediaDetailScreen: View {
         // Quality badges — described for the version that will actually play,
         // not `mediaSources.first`, so the row and the picker never disagree.
         if showQualityBadges {
-            MediaQualityBadges(item: item, source: selectedSource(item))
+            MediaQualityBadges(item: versionTarget(item), source: selectedSource(item), prefix: episodeCode(item))
                 .padding(.horizontal, contentPadding)
         }
 
@@ -957,12 +957,18 @@ struct MediaDetailScreen: View {
     /// not the full `episodeLabel`: the title is drawn uppercase in a small
     /// label and an episode name wraps it onto two lines.
     private func versionRowTitle(_ item: BaseItemDto) -> String {
+        guard let code = episodeCode(item) else { return loc.localized("detail.version") }
+        return "\(loc.localized("detail.version")) · " + code
+    }
+
+    /// « S01:E01 » when what will play is an episode other than the fiche's
+    /// own item — a series' version row and quality badges both describe that
+    /// episode, and say so. `nil` on a film, or on an episode's own fiche.
+    private func episodeCode(_ item: BaseItemDto) -> String? {
         let target = versionTarget(item)
         guard target.id != item.id, target.type == .episode,
-              let season = target.parentIndexNumber, let episode = target.indexNumber else {
-            return loc.localized("detail.version")
-        }
-        return "\(loc.localized("detail.version")) · " + String(format: "S%02d:E%02d", season, episode)
+              let season = target.parentIndexNumber, let episode = target.indexNumber else { return nil }
+        return String(format: "S%02d:E%02d", season, episode)
     }
 
     /// Mirrors the ceiling the players pass to `getPlaybackInfo`, so the row
