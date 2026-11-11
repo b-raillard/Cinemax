@@ -1642,6 +1642,11 @@
 "seerr.user.autoApprove.notAllowed" = "Your Seerr account can’t change other accounts. Ask the Seerr administrator.";
 "seerr.user.autoApprove.ownAccount" = "Seerr doesn’t let anyone change their own permissions.";
 "seerr.user.autoApprove.failed" = "Couldn’t change auto-approval for %@: Seerr refused or didn’t answer.";
+"seerr.user.report" = "Reporting";
+"seerr.user.report.episodes" = "Can report missing episodes";
+"seerr.user.report.note" = "On an incomplete series, a button lets them report the missing episodes to the admin.";
+"seerr.user.report.always" = "Their role in Seerr already lets them report.";
+"seerr.user.report.failed" = "Couldn’t change reporting for %@: Seerr refused or didn’t answer.";
 "seerr.settings.line.willBeCreated" = "No Seerr account yet: it will be created at first sign-in";
 "seerr.settings.line.mustBeAdded" = "No Seerr account, and Seerr doesn't create one on its own: add it in Seerr → Users";
 "seerr.settings.line.unknown" = "Seerr status unknown for now";

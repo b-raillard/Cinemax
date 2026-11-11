@@ -74,6 +74,7 @@ struct SeerrAccountPage: View, SeerrSettingsChrome {
 
                 if let target = line.kind.seerrUser {
                     autoApproveSection(line, target: target)
+                    issueReportSection(line, target: target)
                 }
             }
         }
@@ -105,6 +106,42 @@ struct SeerrAccountPage: View, SeerrSettingsChrome {
             noteText(loc.localized("seerr.user.autoApprove.enableFirst"))
         } else {
             noteText(loc.localized("seerr.user.autoApprove.note"))
+        }
+    }
+
+    // MARK: Signalement
+
+    /// The right to report an owned season's missing episodes — without it
+    /// the fiche shows the missing lines but no « Signaler » button.
+    @ViewBuilder
+    private func issueReportSection(_ line: SeerrUserLine, target: SeerrUser) -> some View {
+        let access = SeerrIssueReportAccess.of(target, me: me)
+        let isOn = target.permissions.canReportIssues
+        let locked = access != .editable || !line.isEnabled
+
+        sectionHeader(loc.localized("seerr.user.report"))
+            .padding(.top, CinemaSpacing.spacing3)
+        panel {
+            switchRow(
+                id: "seerr.account.report", label: loc.localized("seerr.user.report.episodes"), detail: nil,
+                state: (isOn, activation.savingAutoApprove.contains(line.id))
+            ) {
+                Task {
+                    let saved = await activation.setIssueReporting(!isOn, userId: userId, session: seerr, appState: appState)
+                    if !saved, let name = activation.lines.first(where: { $0.id == userId })?.name {
+                        toasts.error(loc.localized("seerr.user.report.failed", name))
+                    }
+                }
+            }
+            .disabled(locked)
+            .opacity(locked ? 0.5 : 1)
+        }
+        if let key = access.noteKey {
+            noteText(loc.localized(key))
+        } else if !line.isEnabled {
+            noteText(loc.localized("seerr.user.autoApprove.enableFirst"))
+        } else {
+            noteText(loc.localized("seerr.user.report.note"))
         }
     }
 

@@ -160,6 +160,12 @@ public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decoda
         return next
     }
 
+    /// The same permissions with the right to report a problem switched: only
+    /// `createIssues` moves, every other bit is kept.
+    public func settingIssueReporting(_ on: Bool) -> Self {
+        on ? union(.createIssues) : subtracting(.createIssues)
+    }
+
     public init(from decoder: Decoder) throws {
         rawValue = try decoder.singleValueContainer().decode(Int.self)
     }

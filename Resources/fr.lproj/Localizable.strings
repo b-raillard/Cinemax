@@ -1644,6 +1644,11 @@
 "seerr.user.autoApprove.notAllowed" = "Ton compte Seerr ne peut pas modifier les autres comptes. Demande-le à l’administrateur de Seerr.";
 "seerr.user.autoApprove.ownAccount" = "Seerr ne laisse personne modifier ses propres permissions.";
 "seerr.user.autoApprove.failed" = "Impossible de modifier la validation automatique de %@ : Seerr a refusé ou n’a pas répondu.";
+"seerr.user.report" = "Signalement";
+"seerr.user.report.episodes" = "Peut signaler des épisodes manquants";
+"seerr.user.report.note" = "Sur une série incomplète, un bouton lui permet de signaler à l’admin les épisodes qui manquent.";
+"seerr.user.report.always" = "Son rôle dans Seerr lui permet déjà de signaler.";
+"seerr.user.report.failed" = "Impossible de modifier le signalement de %@ : Seerr a refusé ou n’a pas répondu.";
 "seerr.settings.line.willBeCreated" = "Pas encore de compte Seerr : il sera créé à sa première connexion";
 "seerr.settings.line.mustBeAdded" = "Aucun compte Seerr, et Seerr n'en crée pas tout seul : ajoute-le dans Seerr → Utilisateurs";
 "seerr.settings.line.unknown" = "État dans Seerr inconnu pour l'instant";

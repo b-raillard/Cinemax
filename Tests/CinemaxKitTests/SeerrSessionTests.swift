@@ -2241,6 +2241,45 @@ struct SeerrActivationTests {
         #expect(world.model.lines.first { $0.id == "ANN" }?.kind.seerrUser?.permissions == .request)
     }
 
+    @Test("the right to report moves CREATE_ISSUES alone, through the same read-modify-write")
+    func issueReportingIsAReadModifyWrite() async throws {
+        let current = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":65824}"#)
+        let stored = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":4260128}"#)
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()],
+            extraRoutes: ["/user/7/settings/permissions": [current, stored]])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let saved = await world.model.setIssueReporting(true, userId: "ANN", session: world.session, appState: world.app)
+
+        #expect(saved)
+        let calls = world.transport.requests.filter { $0.url?.path.hasSuffix("/user/7/settings/permissions") == true }
+        #expect(calls.map(\.httpMethod) == ["GET", "POST"])
+        let sent = try JSONSerialization.jsonObject(with: try #require(calls.last?.httpBody)) as? [String: Int]
+        #expect(sent == ["permissions": 65824 | 4194304])
+        let line = try #require(world.model.lines.first { $0.id == "ANN" })
+        #expect(line.kind.seerrUser?.permissions.canReportIssues == true)
+        #expect(SeerrPermissions(rawValue: 65824 | 4194304).settingIssueReporting(false).rawValue == 65824)
+    }
+
+    @Test("who may change the right to report")
+    func issueReportAccess() {
+        let owner = SeerrUser(id: SeerrUserID(rawValue: 1), permissions: .admin)
+        let usersManager = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: [.request, .manageUsers])
+        let issuesManager = SeerrUser(id: SeerrUserID(rawValue: 3), permissions: [.request, .manageIssues])
+        let requestsManager = SeerrUser(id: SeerrUserID(rawValue: 5), permissions: [.request, .manageRequests])
+        let plain = SeerrUser(id: SeerrUserID(rawValue: 4), permissions: .request)
+        typealias Access = SeerrIssueReportAccess
+        #expect(Access.of(plain, me: owner) == .editable)
+        #expect(Access.of(requestsManager, me: owner) == .editable)
+        #expect(Access.of(plain, me: plain) == .notAllowed)
+        #expect(Access.of(plain, me: nil) == .notAllowed)
+        #expect(Access.of(owner, me: owner) == .always)
+        #expect(Access.of(issuesManager, me: owner) == .always)
+        #expect(Access.of(usersManager, me: usersManager) == .ownAccount)
+    }
+
     @Test("who may change « Validation automatique »")
     func autoApprovalAccess() {
         let owner = SeerrUser(id: SeerrUserID(rawValue: 1), permissions: .admin)

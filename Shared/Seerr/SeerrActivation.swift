@@ -71,6 +71,32 @@ enum SeerrAutoApprovalAccess: Equatable, Sendable {
     }
 }
 
+/// Whether the account page may change a user's right to report missing
+/// episodes, and why not. Pure. An admin and a manager of issues report
+/// whatever the bit says; the rest is `SeerrAutoApprovalAccess`'s reasoning.
+enum SeerrIssueReportAccess: Equatable, Sendable {
+    case editable
+    case always
+    case notAllowed
+    case ownAccount
+
+    nonisolated static func of(_ target: SeerrUser, me: SeerrUser?) -> Self {
+        if target.permissions.contains(.admin) || target.permissions.contains(.manageIssues) { return .always }
+        guard let me, me.permissions.canManageUsers else { return .notAllowed }
+        if me.id == target.id { return .ownAccount }
+        return .editable
+    }
+
+    var noteKey: String? {
+        switch self {
+        case .editable: nil
+        case .always: "seerr.user.report.always"
+        case .notAllowed: "seerr.user.autoApprove.notAllowed"
+        case .ownAccount: "seerr.user.autoApprove.ownAccount"
+        }
+    }
+}
+
 struct SeerrUserLine: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
@@ -381,6 +407,24 @@ final class SeerrActivationModel {
     func setAutoApprove(
         _ kind: SeerrMediaKind, _ on: Bool, userId: String, session: SeerrSession, appState: AppState
     ) async -> Bool {
+        await writePermissions(userId: userId, session: session, appState: appState) {
+            $0.settingAutoApprove(kind, on)
+        }
+    }
+
+    /// Switches a linked user's right to report missing episodes
+    /// (`CREATE_ISSUES`) — the same read-modify-write, the same one write per
+    /// user at a time.
+    func setIssueReporting(_ on: Bool, userId: String, session: SeerrSession, appState: AppState) async -> Bool {
+        await writePermissions(userId: userId, session: session, appState: appState) {
+            $0.settingIssueReporting(on)
+        }
+    }
+
+    private func writePermissions(
+        userId: String, session: SeerrSession, appState: AppState,
+        change: @escaping @Sendable (SeerrPermissions) -> SeerrPermissions
+    ) async -> Bool {
         guard !savingAutoApprove.contains(userId),
               let line = lines.first(where: { $0.id == userId }), let target = line.kind.seerrUser else { return true }
         savingAutoApprove.insert(userId)
@@ -389,8 +433,7 @@ final class SeerrActivationModel {
         do {
             let stored = try await session.perform { client, credential in
                 let current = try await client.permissions(ofUser: target.id, credential)
-                return try await client.setPermissions(
-                    current.settingAutoApprove(kind, on), ofUser: target.id, credential)
+                return try await client.setPermissions(change(current), ofUser: target.id, credential)
             }
             guard appState.activeAccountKey == account,
                   let index = lines.firstIndex(where: { $0.id == userId }) else { return true }
@@ -401,7 +444,7 @@ final class SeerrActivationModel {
         } catch is CancellationError {
             return true
         } catch {
-            logger.notice("Seerr ▸ auto-approval write failed")
+            logger.notice("Seerr ▸ permission write failed")
             return false
         }
     }
