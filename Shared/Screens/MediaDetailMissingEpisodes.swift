@@ -242,7 +242,6 @@ struct MediaDetailHiddenMissingEpisodesLine: View {
 struct MediaDetailMissingEpisodesBlock: View, Equatable {
     let episodes: [SeerrMissingEpisode]
     let canReport: Bool
-    let isReported: Bool
     let onReport: () -> Void
     let onHide: () -> Void
 
@@ -250,8 +249,12 @@ struct MediaDetailMissingEpisodesBlock: View, Equatable {
     @Environment(LocalizationManager.self) private var loc
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.episodes == rhs.episodes && lhs.canReport == rhs.canReport && lhs.isReported == rhs.isReported
+        lhs.episodes == rhs.episodes && lhs.canReport == rhs.canReport
     }
+
+    /// The ones no open report names yet: the button counts them alone, and
+    /// « Signalé à ton admin » once there are none left.
+    private var unreportedCount: Int { episodes.count { !$0.isReported } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -271,13 +274,13 @@ struct MediaDetailMissingEpisodesBlock: View, Equatable {
                     hideButton
                 }
             }
-            if isReported {
+            if unreportedCount == 0 {
                 Label(loc.localized("seerr.episodes.reported"), systemImage: "checkmark.circle.fill")
                     .font(CinemaFont.label(.medium))
                     .foregroundStyle(themeManager.accent)
             } else if canReport {
                 CinemaButton(
-                    title: loc.counted("seerr.episodes.report", episodes.count),
+                    title: loc.counted("seerr.episodes.report", unreportedCount),
                     style: .ghost, icon: "flag", wrapsTitle: true, action: onReport
                 )
             }

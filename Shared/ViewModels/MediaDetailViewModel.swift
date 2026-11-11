@@ -193,9 +193,6 @@ final class MediaDetailViewModel {
     /// The side task filling `seerrEpisodes`. Internal so a test can await it.
     private(set) var seerrEpisodesTask: Task<Void, Never>?
     @ObservationIgnored private var seerrEpisodesSnapshot: SeerrSession.Snapshot?
-    /// Seasons already reported from this fiche (`SeerrMissingSeason`'s key
-    /// spelling): the button reads « Signalé » until the fiche is reopened.
-    private(set) var reportedEpisodeSeasons: Set<String> = []
     /// « Today » for the aired test — injectable for the tests.
     @ObservationIgnored var seerrToday: @MainActor () -> String = { SeerrMissing.today() }
     /// Where « Masquer pour cette série » is kept — injectable for the tests.
@@ -273,6 +270,10 @@ final class MediaDetailViewModel {
         guard !owned.isEmpty else { return }
         let today = seerrToday()
         let fileMinutes = SeerrMissing.meanMinutes(episodes)
+        let mayReport: Bool = {
+            guard case .connected(let user) = seerr.connection else { return false }
+            return user.permissions.canReportIssues
+        }()
         let section = await seerr.loadSection(deadline: seerrDeadline) { client, credential in
             let all = try await client.seasonEpisodes(tmdbId: tmdbId, seasonNumber: seasonNumber, credential)
             let missing = SeerrMissing.episodes(all, seriesTmdbId: tmdbId, seasonNumber: seasonNumber, owned: owned, today: today)
@@ -287,7 +288,14 @@ final class MediaDetailViewModel {
             guard SeerrMissing.followsTMDbNumbering(
                 try await library, tmdbEpisodeCounts: counts, fileMinutes: fileMinutes, tmdbRunTimes: tv.episodeRunTime
             ) else { return [SeerrMissingEpisode]() }
-            return missing
+            // What is already reported is never offered again — a second
+            // tap, a relaunch, another device (recette 2026-11-11: the same
+            // season reported twice). Without MANAGE_ISSUES Seerr lists only
+            // the caller's own reports; a failed read offers everything.
+            guard mayReport, let open = try? await client.issues(filter: .open, take: 100, skip: 0, credential) else {
+                return missing
+            }
+            return SeerrMissing.markReported(missing, openIssues: open.results, seriesTmdbId: tmdbId, seasonNumber: seasonNumber)
         }
         guard !Task.isCancelled, selectedSeasonId == seasonId, let section else { return }
         setSeerrEpisodes(section, snapshot: snapshot)
@@ -310,7 +318,10 @@ final class MediaDetailViewModel {
         } catch {
             return false
         }
-        reportedEpisodeSeasons.insert(SeerrMissingSeason.id(seriesTmdbId: tmdbId, seasonNumber: seasonNumber))
+        if case .loaded(let shown) = seerrEpisodes {
+            let sent = Set(episodes.map(\.episodeNumber))
+            seerrEpisodes = .loaded(SeerrMissing.markReported(shown, numbers: sent))
+        }
         return true
     }
 

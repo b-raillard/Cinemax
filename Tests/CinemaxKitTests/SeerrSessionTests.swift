@@ -3434,6 +3434,15 @@ struct SeerrIssuesTests {
         #expect(SeerrIssueText.parse("Missing episodes: 4", kind: .other, mediaKind: .movie).missingEpisodes.isEmpty)
         #expect(SeerrIssueText.parse("   ", kind: .other, mediaKind: .tv) == SeerrIssueText(missingEpisodes: [], note: nil))
         #expect(SeerrIssueText.parse("Missing episodes: 0", kind: .other, mediaKind: .tv).missingEpisodes.isEmpty)
+        // A colon in the user's own text is not our list (recette 2026-11-11:
+        // « 4:3 » read as episode 3, the text gone).
+        for word in ["L image est en 4:3", "Coupure à 12:30", "Remarque : 4, 5"] {
+            let text = SeerrIssueText.parse(word, kind: .other, mediaKind: .tv)
+            #expect(text.missingEpisodes.isEmpty, "\(word)")
+            #expect(text.note == word)
+        }
+        // The prefixes come from the app's own tables, in its three languages.
+        #expect(Set(SeerrIssueText.reportPrefixes) == ["Épisodes manquants :", "Missing episodes:", "Fehlende Folgen:"])
     }
 
     @Test("the problem line: « Saison 2 · épisodes 4, 5 manquants », « Saison 2 », or the kind")

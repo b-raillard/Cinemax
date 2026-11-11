@@ -23,28 +23,53 @@ struct SeerrIssueText: Equatable, Sendable {
     /// What the reporter wrote themselves — `nil` when nothing.
     let note: String?
 
-    /// Our report reads « <words>: 4, 5 » then, on the next line, the user's
+    /// Our report reads « <prefix> 4, 5 » then, on the next line, the user's
     /// word (`SeerrEpisodeReportDraft.message`) — in the REPORTER's language,
-    /// which may not be the viewer's: the numbers are read from whatever
-    /// follows the first line's last colon, never from a localized prefix.
-    /// Only for a series report of type « other » (ours); a report written
-    /// anywhere else is the user's word as a whole.
+    /// which may not be the viewer's: the first line must start with OUR
+    /// prefix in any of the app's languages (`reportPrefixes`), then hold
+    /// nothing but the numbers. Anything else — « L'image est en 4:3 »,
+    /// « coupure à 12:30 », once read as episode 3 / 30 with the user's text
+    /// gone (recette 2026-11-11) — is the user's word as a whole. Only for a
+    /// series report of type « other » (ours).
     static func parse(_ message: String?, kind: SeerrIssueKind, mediaKind: SeerrMediaKind) -> Self {
+        parse(message, kind: kind, mediaKind: mediaKind, prefixes: reportPrefixes)
+    }
+
+    static func parse(
+        _ message: String?, kind: SeerrIssueKind, mediaKind: SeerrMediaKind, prefixes: [String]
+    ) -> Self {
         let text = (message ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return Self(missingEpisodes: [], note: nil) }
         let lines = text.components(separatedBy: .newlines)
-        if kind == .other, mediaKind == .tv, let first = lines.first, let numbers = episodeList(first) {
+        if kind == .other, mediaKind == .tv, let first = lines.first,
+           let numbers = episodeList(first, prefixes: prefixes) {
             let rest = lines.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
             return Self(missingEpisodes: numbers, note: rest.isEmpty ? nil : rest)
         }
         return Self(missingEpisodes: [], note: text)
     }
 
-    /// « Épisodes manquants : 4, 5 » ⇒ [4, 5]; `nil` unless everything after
-    /// the last colon is a list of positive numbers.
-    private static func episodeList(_ line: String) -> [Int]? {
-        guard let colon = line.lastIndex(of: ":") else { return nil }
-        let parts = line[line.index(after: colon)...].split(separator: ",", omittingEmptySubsequences: false)
+    /// The text before the numbers in `seerr.episodes.report.message`, in
+    /// every language the app ships (« Épisodes manquants : », « Missing
+    /// episodes: », « Fehlende Folgen: »), read from the bundle's tables.
+    static let reportPrefixes: [String] = ["fr", "en", "de"].compactMap { language in
+        guard let path = Bundle.main.path(forResource: language, ofType: "lproj"),
+              let table = Bundle(path: path) else { return nil }
+        let format = table.localizedString(forKey: "seerr.episodes.report.message", value: nil, table: nil)
+        guard let marker = format.range(of: "%@") else { return nil }
+        let prefix = format[..<marker.lowerBound].trimmingCharacters(in: .whitespaces)
+        return prefix.isEmpty ? nil : prefix
+    }
+
+    /// « Épisodes manquants : 4, 5 » ⇒ [4, 5]; `nil` unless the line starts
+    /// with one of `prefixes` and everything after it is a list of positive
+    /// numbers.
+    private static func episodeList(_ line: String, prefixes: [String]) -> [Int]? {
+        let line = line.trimmingCharacters(in: .whitespaces)
+        guard let matched = prefixes.lazy.compactMap({
+            line.range(of: $0, options: [.anchored, .caseInsensitive])
+        }).first else { return nil }
+        let parts = line[matched.upperBound...].split(separator: ",", omittingEmptySubsequences: false)
         var numbers: Set<Int> = []
         for part in parts {
             guard let number = Int(part.trimmingCharacters(in: .whitespaces)), number > 0 else { return nil }

@@ -462,26 +462,35 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
         switch pending.phase {
         case .idle, .loading: loc.localized("seerr.hub.loading")
         case .failed: loc.localized("seerr.settings.connection.unavailable")
-        case .loaded: Self.countDetail(pending.count, none: "seerr.hub.pending.none", some: "seerr.hub.pending.count", loc: loc)
+        case .loaded: Self.countDetail(pendingTotal, none: "seerr.hub.pending.none", some: "seerr.hub.pending.count", loc: loc)
         }
     }
 
     /// The listing's own total, once it said it (nothing at 0).
     private var pendingBadge: Int? {
-        pending.phase == .loaded ? pending.count : nil
+        pending.phase == .loaded ? pendingTotal : nil
     }
+
+    /// The session's count when it has one — re-read at every return to the
+    /// foreground, like the tab's bubble, and written by the listing itself —
+    /// else the listing's. The listing's alone stayed one behind the tab
+    /// after a foreground (recette 2026-11-11: tab 20, row 20 for 19 open).
+    private var pendingTotal: Int { seerr.pendingCount ?? pending.count }
 
     private var issuesDetail: String {
         switch issues.phase {
         case .idle, .loading: loc.localized("seerr.hub.loading")
         case .failed: loc.localized("seerr.settings.connection.unavailable")
-        case .loaded: Self.countDetail(issues.count, none: "seerr.hub.issues.none", some: "seerr.hub.issues.count", loc: loc)
+        case .loaded: Self.countDetail(issuesTotal, none: "seerr.hub.issues.none", some: "seerr.hub.issues.count", loc: loc)
         }
     }
 
     private var issuesBadge: Int? {
-        issues.phase == .loaded ? issues.count : nil
+        issues.phase == .loaded ? issuesTotal : nil
     }
+
+    /// Same as `pendingTotal`, for the reports.
+    private var issuesTotal: Int { seerr.issueCount ?? issues.count }
 
     private var myRequestsDetail: String {
         switch myRequests.phase {

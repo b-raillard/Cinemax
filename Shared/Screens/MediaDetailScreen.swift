@@ -1835,7 +1835,7 @@ struct MediaDetailScreen: View {
                             stillURL: seerr?.posterURL(episode.stillPath),
                             episodeThumbnailWidth: episodeThumbnailWidth,
                             episodeTitleFontSize: episodeTitleFontSize,
-                            onReport: canReportEpisodes ? { openEpisodeReport() } : nil
+                            onReport: canReportEpisodes && !episode.isReported ? { openEpisodeReport() } : nil
                         )
                     }
                 }
@@ -1913,7 +1913,7 @@ struct MediaDetailScreen: View {
                                     episode: episode,
                                     stillURL: seerr?.posterURL(episode.stillPath),
                                     episodeTitleFontSize: episodeTitleFontSize,
-                                    onReport: canReportEpisodes ? { openEpisodeReport() } : nil
+                                    onReport: canReportEpisodes && !episode.isReported ? { openEpisodeReport() } : nil
                                 )
                             }
                         }
@@ -1990,10 +1990,12 @@ struct MediaDetailScreen: View {
         toast.info(loc.localized("seerr.episodes.hiddenLine"))
     }
 
+    /// The report offers only what no open report names yet; nothing left ⇒
+    /// nothing opens (a second report of the same episodes, recette 2026-11-11).
     private func openEpisodeReport() {
-        let missing = missingEpisodes
-        guard !missing.isEmpty else { return }
-        episodeReport = SeerrEpisodeReportDraft(episodes: missing)
+        let unreported = missingEpisodes.filter { !$0.isReported }
+        guard !unreported.isEmpty else { return }
+        episodeReport = SeerrEpisodeReportDraft(episodes: unreported)
     }
 
     @ViewBuilder
@@ -2005,12 +2007,10 @@ struct MediaDetailScreen: View {
             }
             .padding(.horizontal, contentPadding)
             .padding(.top, CinemaSpacing.spacing2)
-        } else if let first = missing.first {
+        } else if !missing.isEmpty {
             MediaDetailMissingEpisodesBlock(
                 episodes: missing,
                 canReport: canReportEpisodes,
-                isReported: viewModel.reportedEpisodeSeasons.contains(
-                    SeerrMissingSeason.id(seriesTmdbId: first.seriesTmdbId, seasonNumber: first.seasonNumber)),
                 onReport: { openEpisodeReport() },
                 onHide: { hideMissingEpisodes() }
             )

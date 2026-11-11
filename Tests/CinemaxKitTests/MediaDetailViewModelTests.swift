@@ -774,14 +774,23 @@ private final class DetailSeerrTransport: SeerrTransport, @unchecked Sendable {
     private var seasonBodies: [String: String] = [:]
     /// The bodies of the `POST /issue` calls received.
     private var issueBodies: [String] = []
+    /// `GET /issue` (the open reports); none ⇒ the call fails.
+    private var openIssuesBody: String?
+    /// The Seerr user's permissions (`/auth/me`): 32 = request only.
+    private let permissions: Int
 
     func setSeason(_ path: String, _ body: String) { lock.withLock { seasonBodies[path] = body } }
+    func setOpenIssues(_ body: String) { lock.withLock { openIssuesBody = body } }
     var issues: [String] { lock.withLock { issueBodies } }
     var seasonRequestCount: Int {
         lock.withLock { sent }.filter { $0.url?.path.contains("/season/") == true }.count
     }
 
-    init(series: [Int: String], gates: [Int: TestLatch] = [:], specials: Bool = false, collections: [Int: String] = [:]) {
+    init(
+        series: [Int: String], gates: [Int: TestLatch] = [:], specials: Bool = false,
+        collections: [Int: String] = [:], permissions: Int = 32
+    ) {
+        self.permissions = permissions
         self.series = series
         self.gates = gates
         self.specials = specials
@@ -807,7 +816,7 @@ private final class DetailSeerrTransport: SeerrTransport, @unchecked Sendable {
             body = #"{"mediaServerType":2,"partialRequestsEnabled":true,"enableSpecialEpisodes":\#(specials)}"#
         case "/auth/me":
             status = 200
-            body = #"{"id":7,"permissions":32,"jellyfinUserId":"A","displayName":"Alice"}"#
+            body = #"{"id":7,"permissions":\#(permissions),"jellyfinUserId":"A","displayName":"Alice"}"#
         case "/request":
             status = 201
             body = """
@@ -818,6 +827,10 @@ private final class DetailSeerrTransport: SeerrTransport, @unchecked Sendable {
             guard let id = Int(saga.dropFirst("/collection/".count)), let reply = collections[id] else {
                 throw StubSeerrTransport.Exhausted()
             }
+            status = 200
+            body = reply
+        case "/issue" where request.httpMethod == "GET":
+            guard let reply = lock.withLock({ openIssuesBody }) else { throw StubSeerrTransport.Exhausted() }
             status = 200
             body = reply
         case "/issue":
@@ -982,7 +995,53 @@ struct MediaDetailMissingEpisodesTests {
         #expect(sent.contains(#""issueType":4"#))
         #expect(sent.contains("2, 4"))
         #expect(sent.contains("merci"))
-        #expect(vm.reportedEpisodeSeasons == ["tv-1399-s1"])
+        // Sent ⇒ never offered again from this fiche.
+        #expect(vm.seerrEpisodes(for: session.snapshot()).allSatisfy { $0.isReported })
+    }
+
+    @Test("episodes an open report already names are marked reported, the others stay on offer")
+    func openReportsMarkEpisodes() async {
+        // CREATE_ISSUES + REQUEST: this account may report, so its open reports are read.
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])], permissions: 4_194_336)
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        func row(_ id: Int, season: Int, tmdb: Int = 1399, type: Int = 4, _ message: String) -> String {
+            #"{"id":\#(id),"issueType":\#(type),"status":1,"problemSeason":\#(season),"problemEpisode":0,"#
+                + #""createdAt":"2026-11-11T10:00:00.000Z","media":{"id":8,"tmdbId":\#(tmdb),"mediaType":"tv"},"#
+                + #""comments":[{"id":\#(id),"message":"\#(message)"}]}"#
+        }
+        let rows = [
+            row(1, season: 1, "Missing episodes: 2"),
+            row(2, season: 1, "L image est en 4:3"),          // a free text, not ours
+            row(3, season: 2, "Missing episodes: 4"),          // another season
+            row(4, season: 1, tmdb: 1, "Missing episodes: 4"), // another series
+            row(5, season: 1, type: 1, "Missing episodes: 4")  // another kind
+        ]
+        transport.setOpenIssues(#"{"pageInfo":{"pages":1,"pageSize":100,"results":5,"page":1},"results":["#
+            + rows.joined(separator: ",") + "]}")
+        let (app, session) = await seerrBench(api: partialSeasonAPI([1, 3]), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+
+        let missing = vm.seerrEpisodes(for: session.snapshot())
+        #expect(missing.map(\.episodeNumber) == [2, 4])
+        #expect(missing.map(\.isReported) == [true, false])
+    }
+
+    @Test("a failed read of the open reports still shows every missing episode")
+    func failedOpenReportsReadOffersAll() async {
+        let transport = DetailSeerrTransport(series: [1399: seerrTVBody(1399, seasons: [1])], permissions: 4_194_336)
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        let (app, session) = await seerrBench(api: partialSeasonAPI([1, 3]), transport: transport)
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrEpisodesTask?.value
+
+        let missing = vm.seerrEpisodes(for: session.snapshot())
+        #expect(missing.map(\.episodeNumber) == [2, 4])
+        #expect(!missing.contains { $0.isReported })
     }
 
     @Test("a complete season asks neither the series nor the library's numbering")
@@ -1064,7 +1123,7 @@ struct MediaDetailMissingEpisodesTests {
 
         #expect(await vm.reportMissingEpisodes(missing, message: "x") == false)
         #expect(transport.issues.isEmpty)
-        #expect(vm.reportedEpisodeSeasons.isEmpty)
+        #expect(!vm.seerrEpisodes(for: session.snapshot()).contains { $0.isReported })
     }
 }
 

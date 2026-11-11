@@ -46,6 +46,10 @@ struct SeerrMissingEpisode: Identifiable, Equatable, Sendable {
     var airDate: String?
     /// TMDb's still, a path for `SeerrSession.posterURL`.
     var stillPath: String?
+    /// Already in an OPEN report this account can see (its own, or the
+    /// household's for a manager), or reported from this fiche: never offered
+    /// again (`SeerrMissing.markReported`).
+    var isReported = false
     var id: String { "tv-\(seriesTmdbId)-s\(seasonNumber)-e\(episodeNumber)" }
 }
 
@@ -247,6 +251,29 @@ enum SeerrMissing {
         let ticks = episodes.compactMap(\.runTimeTicks).filter { $0 > 0 }
         guard !ticks.isEmpty else { return nil }
         return Double(ticks.reduce(0, +)) / Double(ticks.count) / 600_000_000
+    }
+
+    /// Marks the episodes an open report of this season already names — our
+    /// own report of missing episodes (`SeerrIssueText`), on this series and
+    /// season. Pure.
+    static func markReported(
+        _ missing: [SeerrMissingEpisode], openIssues: [SeerrIssue], seriesTmdbId: Int, seasonNumber: Int
+    ) -> [SeerrMissingEpisode] {
+        var numbers = Set<Int>()
+        for issue in openIssues where issue.status == .open && issue.media.kind == .tv
+            && issue.media.tmdbId == seriesTmdbId && issue.problemSeason == seasonNumber {
+            numbers.formUnion(SeerrIssueText.parse(issue.message, kind: issue.kind, mediaKind: issue.media.kind).missingEpisodes)
+        }
+        return markReported(missing, numbers: numbers)
+    }
+
+    /// Marks `numbers` as reported. Pure.
+    static func markReported(_ missing: [SeerrMissingEpisode], numbers: Set<Int>) -> [SeerrMissingEpisode] {
+        missing.map { episode in
+            var episode = episode
+            if numbers.contains(episode.episodeNumber) { episode.isReported = true }
+            return episode
+        }
     }
 
     /// `today` for `episodes`: the device's day, in the GREGORIAN calendar
