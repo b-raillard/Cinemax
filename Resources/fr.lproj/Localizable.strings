@@ -1559,7 +1559,7 @@
 
 // MARK: - Seerr
 
-"settings.requests" = "Demandes";
+"settings.requests" = "Seerr";
 "pro.feature.requests.title" = "Demandes de films et de séries";
 "pro.feature.requests.detail" = "Un titre manque ? Demandez-le depuis la recherche, une fiche ou une saga, sans quitter JellyGlass. Avec Seerr sur votre serveur.";
 "pro.feature.requests.row" = "Demandez un titre manquant, avec Seerr";
@@ -1715,7 +1715,7 @@
 "seerr.episodes.hiddenLine" = "Épisodes manquants masqués";
 "seerr.episodes.show" = "Afficher";
 "seerr.episodes.report.title" = "Épisodes manquants";
-"seerr.episodes.report.word" = "Un mot pour l’admin";
+"seerr.episodes.report.word" = "Un mot pour ton admin";
 "seerr.episodes.report.placeholder" = "Facultatif";
 "seerr.episodes.report.note" = "Ce n’est pas une demande : ton admin reçoit un signalement et complète la saison de son côté.";
 "seerr.episodes.report.send" = "Envoyer le signalement";
@@ -1790,6 +1790,32 @@
 "seerr.pending.alreadyHandled" = "Déjà traitée";
 "seerr.pending.approveFailed" = "Impossible d'approuver la demande";
 "seerr.pending.declineFailed" = "Impossible de refuser la demande";
+"seerr.settings.section.issues" = "Signalements";
+"seerr.settings.section.issuesCount" = "Signalements (%d)";
+"seerr.settings.section.issuesCount.one" = "Signalements (%d)";
+"seerr.hub.issues.none" = "Aucun signalement ouvert";
+"seerr.hub.issues.count" = "%d signalements ouverts";
+"seerr.hub.issues.count.one" = "%d signalement ouvert";
+"seerr.settings.issuesBubble" = "%d signalements à traiter";
+"seerr.settings.issuesBubble.one" = "%d signalement à traiter";
+"seerr.issues.empty" = "Aucun signalement ouvert pour l'instant";
+"seerr.issues.reportedBy" = "Signalé par %1$@ · %2$@";
+"seerr.issues.reportedAt" = "Signalé %@";
+"seerr.issues.season" = "Saison %d";
+"seerr.issues.episode" = "épisode %d";
+"seerr.issues.missingEpisodes" = "épisodes %@ manquants";
+"seerr.issues.missingEpisodes.one" = "épisode %@ manquant";
+"seerr.issues.type.video" = "Problème vidéo";
+"seerr.issues.type.audio" = "Problème audio";
+"seerr.issues.type.subtitles" = "Problème de sous-titres";
+"seerr.issues.type.other" = "Autre problème";
+"seerr.issues.note" = "« %@ »";
+"seerr.issues.resolve" = "Marquer comme résolu";
+"seerr.issues.resolving" = "Résolution en cours…";
+"seerr.issues.open" = "Voir la fiche";
+"seerr.issues.resolved" = "Signalement résolu";
+"seerr.issues.alreadyHandled" = "Déjà traité";
+"seerr.issues.resolveFailed" = "Impossible de résoudre le signalement";
 "seerr.arrival.title" = "%@ est disponible";
 "seerr.arrival.several" = "%d demandes sont disponibles";
 "seerr.arrival.several.one" = "%d demande est disponible";

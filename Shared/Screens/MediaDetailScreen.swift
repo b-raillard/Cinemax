@@ -135,6 +135,23 @@ struct MediaDetailScreen: View {
     /// The first cast card: entering the section under the action row lands
     /// on it (`defaultFocus`), not on whichever card tvOS finds nearest.
     @FocusState private var belowActionsFocused: Bool
+    /// « Lecture »: where the fiche opens (`defaultFocus` on the whole column).
+    @FocusState private var lectureFocused: Bool
+    private var lectureFocusBinding: FocusState<Bool>.Binding? { $lectureFocused }
+    /// « Masquer » of the missing episodes: « Afficher » hands it the focus
+    /// once the block is back (`refocusHideOnShow`), else the vanished line
+    /// left the fiche jumping up to « Lecture » (recette 2026-11-12).
+    @FocusState private var missingHideFocused: Bool
+    @State private var refocusHideOnShow = false
+    private var missingHideFocusBinding: FocusState<Bool>.Binding? { $missingHideFocused }
+    /// The reverse: « Masquer » hands the focus to « Afficher » — left alone,
+    /// the vanished block left NO focus and a black page (recette 2026-11-12).
+    @FocusState private var missingShowFocused: Bool
+    private var missingShowFocusBinding: FocusState<Bool>.Binding? { $missingShowFocused }
+    #else
+    private var lectureFocusBinding: FocusState<Bool>.Binding? { nil }
+    private var missingHideFocusBinding: FocusState<Bool>.Binding? { nil }
+    private var missingShowFocusBinding: FocusState<Bool>.Binding? { nil }
     #endif
 
     /// Mirrors the ceiling the players hand `getPlaybackInfo`, so the version
@@ -483,6 +500,21 @@ struct MediaDetailScreen: View {
             Spacer(minLength: 80)
         }
         .padding(.top, CinemaSpacing.spacing4)
+        #if os(tvOS)
+        // Entering the fiche lands on « Lecture ». Opened right after a press
+        // (Réglages → Seerr → Signalements → « Voir la fiche »), the engine
+        // treats the first pick as user-initiated, and the section's own
+        // default above won it: the fiche opened scrolled to the cast
+        // (recette 2026-11-11). This outer default answers first.
+        .defaultFocus($lectureFocused, true, priority: .userInitiated)
+        // « Afficher » pressed: the line goes once the block is drawn, and
+        // its « Masquer » takes the focus — next turn, once it exists.
+        .onChange(of: viewModel.missingEpisodesHidden) { _, hidden in
+            guard !hidden, refocusHideOnShow else { return }
+            refocusHideOnShow = false
+            Task { @MainActor in missingHideFocused = true }
+        }
+        #endif
     }
 
     /// Metadata sections: action buttons, admin menu (iOS), quality badges,
@@ -1403,7 +1435,8 @@ struct MediaDetailScreen: View {
             buttonFontSize: buttonFontSize,
             buttonVerticalPadding: buttonVerticalPadding,
             playButtonWidth: playButtonWidth,
-            contentPadding: 0
+            contentPadding: 0,
+            lectureFocus: lectureFocusBinding
         )
         .equatable()
 
@@ -1800,7 +1833,12 @@ struct MediaDetailScreen: View {
             .focusSection()
             // tvOS: vertical list of unified episode rows. `LazyVStack` so a
             // 20+ episode season doesn't render every row up-front.
-            LazyVStack(spacing: 12) {
+            // A plain `VStack`: one season's rows. Shrunk in place by
+            // « Masquer » (10 rows → 3), the lazy stack first left the owned
+            // rows undrawn (a black gap), then — rebuilt with `.id` — left the
+            // whole page black with no focus at all (recettes 2026-11-11 and
+            // 12). Thumbnails still load lazily (`CinemaLazyImage`).
+            VStack(spacing: 12) {
                 ForEach(episodeSlots) { slot in
                     switch slot {
                     case .owned(let episode):
@@ -1821,7 +1859,7 @@ struct MediaDetailScreen: View {
                             stillURL: seerr?.posterURL(episode.stillPath),
                             episodeThumbnailWidth: episodeThumbnailWidth,
                             episodeTitleFontSize: episodeTitleFontSize,
-                            onReport: canReportEpisodes ? { openEpisodeReport() } : nil
+                            onReport: canReportEpisodes && !episode.isReported ? { openEpisodeReport() } : nil
                         )
                     }
                 }
@@ -1894,7 +1932,7 @@ struct MediaDetailScreen: View {
                                     episode: episode,
                                     stillURL: seerr?.posterURL(episode.stillPath),
                                     episodeTitleFontSize: episodeTitleFontSize,
-                                    onReport: canReportEpisodes ? { openEpisodeReport() } : nil
+                                    onReport: canReportEpisodes && !episode.isReported ? { openEpisodeReport() } : nil
                                 )
                             }
                         }
@@ -1969,31 +2007,38 @@ struct MediaDetailScreen: View {
     private func hideMissingEpisodes() {
         viewModel.hideMissingEpisodes()
         toast.info(loc.localized("seerr.episodes.hiddenLine"))
+        #if os(tvOS)
+        Task { @MainActor in missingShowFocused = true }
+        #endif
     }
 
+    /// The report offers only what no open report names yet; nothing left ⇒
+    /// nothing opens (a second report of the same episodes, recette 2026-11-11).
     private func openEpisodeReport() {
-        let missing = missingEpisodes
-        guard !missing.isEmpty else { return }
-        episodeReport = SeerrEpisodeReportDraft(episodes: missing)
+        let unreported = missingEpisodes.filter { !$0.isReported }
+        guard !unreported.isEmpty else { return }
+        episodeReport = SeerrEpisodeReportDraft(episodes: unreported)
     }
 
     @ViewBuilder
     private var missingEpisodesBlock: some View {
         let missing = missingEpisodes
         if viewModel.missingEpisodesHidden, missingEpisodesApply {
-            MediaDetailHiddenMissingEpisodesLine {
+            MediaDetailHiddenMissingEpisodesLine(onShow: {
+                #if os(tvOS)
+                refocusHideOnShow = true
+                #endif
                 viewModel.unhideMissingEpisodes(using: appState)
-            }
+            }, showFocus: missingShowFocusBinding)
             .padding(.horizontal, contentPadding)
             .padding(.top, CinemaSpacing.spacing2)
-        } else if let first = missing.first {
+        } else if !missing.isEmpty {
             MediaDetailMissingEpisodesBlock(
                 episodes: missing,
                 canReport: canReportEpisodes,
-                isReported: viewModel.reportedEpisodeSeasons.contains(
-                    SeerrMissingSeason.id(seriesTmdbId: first.seriesTmdbId, seasonNumber: first.seasonNumber)),
                 onReport: { openEpisodeReport() },
-                onHide: { hideMissingEpisodes() }
+                onHide: { hideMissingEpisodes() },
+                hideFocus: missingHideFocusBinding
             )
             .equatable()
             .padding(.horizontal, contentPadding)
@@ -2320,6 +2365,9 @@ private struct PlayActionButtonsSection: View, Equatable {
     let buttonVerticalPadding: CGFloat
     let playButtonWidth: CGFloat
     let contentPadding: CGFloat
+    /// tvOS: the screen's « Lecture » focus, where the fiche opens. Not
+    /// compared — the binding is the same for the life of the screen.
+    var lectureFocus: FocusState<Bool>.Binding?
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -2407,6 +2455,7 @@ private struct PlayActionButtonsSection: View, Equatable {
                 // fixed width is what produced the ellipsis.
                 HStack(spacing: CinemaSpacing.spacing3) {
                     lectureButton
+                        .modifier(FirstCardFocus(binding: lectureFocus))
                         .frame(width: playButtonWidth, height: CinemaTVLayout.actionRowHeight)
                         // Exposes this row's center to the parent HStack so the
                         // heart / watched accessories center on the Play button

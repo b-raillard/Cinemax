@@ -56,11 +56,12 @@ func serverStatusBadge(label: String, fontSize: Double, dotSize: CGFloat = 6) ->
 // Shared layout helpers used by SettingsScreen and IOSAppearanceDetailView on iOS.
 // Extracted to avoid duplication between the main screen and pushed detail views.
 
-/// The bubble beside « Demandes » — how many requests wait for a Seerr manager
-/// (`SeerrSession.pendingBadgeCount`), in the accent like the Réglages tab's.
-/// `onAccent`: drawn on an accent-filled pill (the focused tvOS pill), where it
-/// turns inside out to stay visible. Decoration for VoiceOver: the row reads
-/// the count as its value (`seerr.settings.pendingBubble`).
+/// The bubble beside « Seerr » — requests waiting plus reports open, for a
+/// Seerr manager (`SeerrSession.settingsBadgeCount`), in the accent like the
+/// Réglages tab's; also a summary row's own count. `onAccent`: drawn on an
+/// accent-filled pill (the focused tvOS pill), where it turns inside out to
+/// stay visible. Decoration for VoiceOver: the row reads the count as its
+/// value (`SettingsScreen.badgeValue`).
 struct SettingsCountBadge: View {
     @Environment(ThemeManager.self) private var themeManager
     /// Read so a text-size change re-renders the bubble: its font is a point

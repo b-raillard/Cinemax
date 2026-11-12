@@ -178,6 +178,29 @@ extension SeerrClient {
         guard (200..<300).contains(status) else { throw SeerrError.http(status) }
     }
 
+    /// The household's reports (MANAGE_ISSUES — without it Seerr lists only
+    /// the caller's own), newest first. `sort=added`: Seerr 3.5.1 accepts only
+    /// `added` / `modified` (`created` answers 400, measured on the bench).
+    public func issues(
+        filter: SeerrIssueFilter, take: Int, skip: Int, _ credential: SeerrCredential
+    ) async throws -> SeerrIssuePage {
+        let query = [
+            URLQueryItem(name: "take", value: String(take)),
+            URLQueryItem(name: "skip", value: String(skip)),
+            URLQueryItem(name: "filter", value: filter.rawValue),
+            URLQueryItem(name: "sort", value: "added")
+        ]
+        return try await get("/issue", query: query, auth: .credential(credential), localized: false)
+    }
+
+    /// Marks a report resolved (MANAGE_ISSUES, or its author). Resolving one
+    /// already resolved answers 200; an unknown id answers 500 « Issue not
+    /// found. » (Seerr 3.5.1), which the client maps to `.notFound`.
+    public func resolveIssue(issueId: Int, _ credential: SeerrCredential) async throws {
+        let _: (Empty?, Int) = try await mutate(
+            "POST", "/issue/\(issueId)/resolved", body: nil, auth: .credential(credential))
+    }
+
     // MARK: Requests
 
     public func createRequest(_ request: SeerrNewRequest, _ credential: SeerrCredential) async throws -> SeerrRequest {

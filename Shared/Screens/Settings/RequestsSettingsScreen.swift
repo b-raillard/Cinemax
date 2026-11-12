@@ -1,11 +1,12 @@
 import SwiftUI
 import CinemaxKit
 
-/// Réglages → Demandes (Seerr, spec 2026-11-06), iOS AND tvOS.
+/// Réglages → Seerr (« Demandes » until 2026-11-11; spec 2026-11-06), iOS AND tvOS.
 ///
 /// A Jellyfin ADMIN gets a summary (layout A, owner 2026-11-09): a card for
 /// the connection and its one useful action (`SeerrSummaryCard`), then rows
-/// that each open a page — **À valider**, **Mes demandes**, and under
+/// that each open a page — **À valider**, **Signalements** (a Seerr user who
+/// may manage problem reports), **Mes demandes**, and under
 /// « Administration » **Qui peut demander** and **Serveur Seerr** (Connexion,
 /// address + « Tester la connexion », Sur cet appareil). iOS pushes the page
 /// (`RequestsSubpageHost`); tvOS draws it in place
@@ -58,6 +59,10 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
     /// Replaced on an account change, like `activation`.
     @State private var pending = SeerrPendingModel()
     @State private var pendingLoadedFor: RequestListTrigger?
+    /// « Signalements » — replaced on an account change, like `activation`.
+    @State private var issues = SeerrIssuesModel()
+    @State private var issuesLoadedFor: RequestListTrigger?
+    @State private var isRetryingIssues = false
     /// « Actualiser » is under way (the iOS pull or bar button, the tvOS row):
     /// the bar button turns into a spinner, the tvOS row says so.
     @State private var isRefreshing = false
@@ -137,6 +142,16 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
     /// requests without requesting anything still validates them.
     private var pendingTrigger: RequestListTrigger? {
         guard SeerrPendingModel.isShown(for: seerr.connection), case .connected(let user) = seerr.connection else {
+            return nil
+        }
+        return RequestListTrigger(account: appState.activeAccountKey, user: user.id, url: seerr.config?.url)
+    }
+
+    /// `nil` = « Signalements » is not shown: not signed in to Seerr, or a
+    /// Seerr user who may not manage problem reports (Seerr's permission,
+    /// never Jellyfin's admin flag; whatever the account's own switch).
+    private var issuesTrigger: RequestListTrigger? {
+        guard SeerrIssuesModel.isShown(for: seerr.connection), case .connected(let user) = seerr.connection else {
             return nil
         }
         return RequestListTrigger(account: appState.activeAccountKey, user: user.id, url: seerr.config?.url)
@@ -232,6 +247,7 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
             .task(id: trigger) { await loadLinesIfNeeded() }
             .task(id: myRequestsTrigger) { await loadMyRequestsIfNeeded() }
             .task(id: pendingTrigger) { await loadPendingIfNeeded() }
+            .task(id: issuesTrigger) { await loadIssuesIfNeeded() }
             .onAppear {
                 seedAddress()
                 refreshStoredKey()
@@ -248,9 +264,9 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
             .onChange(of: appState.activeAccountKey) { _, _ in resetForAccountChange() }
     }
 
-    /// Something to re-read: one of the two lists is on the page.
+    /// Something to re-read: one of the lists is on the page.
     private var showsRefresh: Bool {
-        isVisible && (myRequestsTrigger != nil || pendingTrigger != nil)
+        isVisible && (myRequestsTrigger != nil || pendingTrigger != nil || issuesTrigger != nil)
     }
 
     #if os(iOS)
@@ -311,6 +327,9 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
         #endif
         if pendingTrigger != nil {
             pendingSection
+        }
+        if issuesTrigger != nil {
+            issuesSection
         }
         if myRequestsTrigger != nil {
             myRequestsSection
@@ -410,21 +429,28 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
         }
     }
 
-    /// « À valider » and « Mes demandes ». Connected: each one only when it
-    /// applies (a Seerr manager; Seerr enabled for this account). Otherwise
-    /// both greyed with `lockedBy` — who manages requests is Seerr's to say.
+    /// « À valider », « Signalements » and « Mes demandes ». Connected: each
+    /// one only when it applies (a Seerr manager of requests / of reports;
+    /// Seerr enabled for this account). Otherwise all greyed with `lockedBy` —
+    /// who manages what is Seerr's to say.
     @ViewBuilder
     private func requestRows(lockedBy: String?) -> some View {
         let isLocked = lockedBy != nil
         let showsPending = isLocked || pendingTrigger != nil
+        let showsIssues = isLocked || issuesTrigger != nil
         let showsMine = isLocked ? seerr.config?.isEnabled == true : myRequestsTrigger != nil
-        if showsPending || showsMine {
+        if showsPending || showsIssues || showsMine {
             panel {
                 if showsPending {
                     hubRow(.pending, detail: lockedBy ?? pendingDetail, badge: isLocked ? nil : pendingBadge,
                            isLocked: isLocked)
                 }
-                if showsPending, showsMine { divider }
+                if showsPending, showsIssues || showsMine { divider }
+                if showsIssues {
+                    hubRow(.issues, detail: lockedBy ?? issuesDetail, badge: isLocked ? nil : issuesBadge,
+                           isLocked: isLocked)
+                }
+                if showsIssues, showsMine { divider }
                 if showsMine {
                     hubRow(.mine, detail: lockedBy ?? myRequestsDetail, isLocked: isLocked)
                 }
@@ -436,14 +462,35 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
         switch pending.phase {
         case .idle, .loading: loc.localized("seerr.hub.loading")
         case .failed: loc.localized("seerr.settings.connection.unavailable")
-        case .loaded: Self.countDetail(pending.count, none: "seerr.hub.pending.none", some: "seerr.hub.pending.count", loc: loc)
+        case .loaded: Self.countDetail(pendingTotal, none: "seerr.hub.pending.none", some: "seerr.hub.pending.count", loc: loc)
         }
     }
 
     /// The listing's own total, once it said it (nothing at 0).
     private var pendingBadge: Int? {
-        pending.phase == .loaded ? pending.count : nil
+        pending.phase == .loaded ? pendingTotal : nil
     }
+
+    /// The session's count when it has one — re-read at every return to the
+    /// foreground, like the tab's bubble, and written by the listing itself —
+    /// else the listing's. The listing's alone stayed one behind the tab
+    /// after a foreground (recette 2026-11-11: tab 20, row 20 for 19 open).
+    private var pendingTotal: Int { seerr.pendingCount ?? pending.count }
+
+    private var issuesDetail: String {
+        switch issues.phase {
+        case .idle, .loading: loc.localized("seerr.hub.loading")
+        case .failed: loc.localized("seerr.settings.connection.unavailable")
+        case .loaded: Self.countDetail(issuesTotal, none: "seerr.hub.issues.none", some: "seerr.hub.issues.count", loc: loc)
+        }
+    }
+
+    private var issuesBadge: Int? {
+        issues.phase == .loaded ? issuesTotal : nil
+    }
+
+    /// Same as `pendingTotal`, for the reports.
+    private var issuesTotal: Int { seerr.issueCount ?? issues.count }
 
     private var myRequestsDetail: String {
         switch myRequests.phase {
@@ -534,7 +581,7 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
                 .font(CinemaFont.headline(.large))
                 .foregroundStyle(CinemaColor.onSurface)
                 .accessibilityAddTraits(.isHeader)
-            if target == .pending || target == .mine {
+            if target.isList {
                 tvRefreshRow
             }
             #endif
@@ -542,6 +589,12 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
             case .pending:
                 if pendingTrigger != nil {
                     pendingContent
+                } else {
+                    noteText(loc.localized(summaryCard.lockedReasonKey ?? "seerr.hub.locked.signIn"))
+                }
+            case .issues:
+                if issuesTrigger != nil {
+                    issuesContent
                 } else {
                     noteText(loc.localized(summaryCard.lockedReasonKey ?? "seerr.hub.locked.signIn"))
                 }
@@ -570,7 +623,7 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
     /// two lists only), the account page's destination (« Qui peut
     /// demander »), and the confirmations — the summary under it is covered.
     fileprivate func subpage(_ target: RequestsPage) -> some View {
-        let isList = target == .pending || target == .mine
+        let isList = target.isList
         return ScrollView(showsIndicators: false) {
             subpageContent(target)
                 .padding(.horizontal, CinemaSpacing.spacing3)
@@ -825,14 +878,18 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
     }
 
     private func requestPoster(_ row: SeerrRequestRow) -> some View {
+        poster(path: row.posterPath, kind: row.request.kind)
+    }
+
+    private func poster(path: String?, kind: SeerrMediaKind) -> some View {
         let url = seerr.client.flatMap {
-            SeerrImages.posterURL(path: row.posterPath, seerrBase: $0.baseURL,
+            SeerrImages.posterURL(path: path, seerrBase: $0.baseURL,
                                   cacheImages: seerr.publicSettings?.cacheImages ?? false)
         }
         return Color.clear
             .frame(width: requestPosterWidth, height: requestPosterWidth * 1.5)
             .overlay {
-                CinemaLazyImage(url: url, fallbackIcon: row.request.kind == .movie ? "film" : "tv")
+                CinemaLazyImage(url: url, fallbackIcon: kind == .movie ? "film" : "tv")
             }
             .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.small))
             .contentShape(Rectangle())
@@ -1032,6 +1089,215 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
             return
         }
         focusedItem = .toggle(pendingButtonId(rows[min(formerIndex, rows.count - 1)].id, action))
+    }
+    #endif
+
+    // MARK: - Signalements
+
+    private var issuesSection: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+            // The count only once the listing said it, as « À valider ».
+            sectionHeader(issues.phase == .loaded
+                          ? loc.counted("seerr.settings.section.issuesCount", issues.count)
+                          : loc.localized("seerr.settings.section.issues"))
+            issuesContent
+        }
+    }
+
+    @ViewBuilder
+    private var issuesContent: some View {
+        switch issues.phase {
+        case .idle, .loading:
+            if isRetryingIssues {
+                failedPanel(retryId: "seerr.issues.retry", isRetrying: true) {}
+            } else {
+                skeletonPanel(rows: 1)
+            }
+        case .failed:
+            failedPanel(retryId: "seerr.issues.retry", isRetrying: false) {
+                Task { await retryIssues() }
+            }
+        case .loaded:
+            let rows = issues.rows
+            panel {
+                if rows.isEmpty, !issues.canLoadMore {
+                    infoRow(icon: "checkmark.circle", text: loc.localized("seerr.issues.empty"))
+                }
+                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                    issueRow(row)
+                    if index < rows.count - 1 || issues.canLoadMore { divider }
+                }
+                if issues.canLoadMore {
+                    actionRow(id: "seerr.issues.more", icon: "ellipsis.circle",
+                              label: loc.localized("seerr.myRequests.more"), isBusy: issues.isLoadingMore) {
+                        Task { await issues.loadNextPage(session: seerr) }
+                    }
+                }
+            }
+        }
+    }
+
+    /// One open report: poster, title, the problem (amber), who reported it
+    /// and when, their own word, then « Marquer comme résolu » and — when
+    /// Seerr knows the Jellyfin title — « Voir la fiche ». tvOS: the buttons
+    /// are the row's focus units, as on « À valider ».
+    @ViewBuilder
+    private func issueRow(_ row: SeerrIssueRow) -> some View {
+        let issue = row.issue
+        let note = SeerrIssuesModel.note(issue)
+        let content = VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
+                poster(path: row.posterPath, kind: issue.media.kind)
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                    Text(row.title ?? loc.localized("seerr.myRequests.titleUnavailable"))
+                        .font(rowLabelFont)
+                        .foregroundStyle(row.title == nil ? CinemaColor.onSurfaceVariant : CinemaColor.onSurface)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .redacted(reason: row.isTitlePending ? .placeholder : [])
+                        .accessibilityHidden(row.isTitlePending)
+                    Text(SeerrIssuesModel.problemLine(issue, loc: loc))
+                        .font(rowDetailFont.weight(.semibold))
+                        .foregroundStyle(CinemaColor.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(SeerrIssuesModel.reportedLine(issue, loc: loc))
+                        .font(rowDetailFont)
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let note {
+                        Text(loc.localized("seerr.issues.note", note))
+                            .font(rowDetailFont.italic())
+                            .foregroundStyle(CinemaColor.onSurface)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement(children: .combine)
+            issueButtons(row)
+        }
+        #if os(tvOS)
+        content
+            .padding(.horizontal, CinemaSpacing.spacing4)
+            .padding(.vertical, CinemaSpacing.spacing3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: CinemaRadius.large).fill(CinemaColor.surfaceContainer))
+        #else
+        iOSSettingsRow { content }
+        #endif
+    }
+
+    private enum IssueAction { case resolve, open }
+
+    /// Side by side when both titles fit whole, else one under the other — a
+    /// side-by-side « Marquer comme… » was cut on an iPhone 17 Pro (iOS
+    /// simulator, 2026-11-11). tvOS: always side by side, its focus lane.
+    @ViewBuilder
+    private func issueButtons(_ row: SeerrIssueRow) -> some View {
+        let opens = SeerrIssuesModel.openTarget(row.issue) != nil
+        #if os(tvOS)
+        HStack(spacing: CinemaSpacing.spacing3) {
+            issueButton(row, .resolve)
+            if opens { issueButton(row, .open) }
+        }
+        #else
+        if opens {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: CinemaSpacing.spacing3) {
+                    // ViewThatFits measures their IDEAL widths (whole titles).
+                    issueButton(row, .resolve)
+                    issueButton(row, .open)
+                }
+                VStack(spacing: CinemaSpacing.spacing2) {
+                    issueButton(row, .resolve)
+                    issueButton(row, .open)
+                }
+            }
+        } else {
+            issueButton(row, .resolve)
+        }
+        #endif
+    }
+
+    /// « Marquer comme résolu » acts on one tap (nothing is lost: the report
+    /// can be reopened in Seerr); « Voir la fiche » opens the title. While the
+    /// report is being resolved the resolve button waits — disabled on iOS,
+    /// still focusable on tvOS (disabling the focused button would throw
+    /// focus), reading « Résolution en cours… », the model ignoring a press.
+    @ViewBuilder
+    private func issueButton(_ row: SeerrIssueRow, _ action: IssueAction) -> some View {
+        let isResolving = issues.resolving.contains(row.id)
+        let current = action == .resolve
+            ? loc.localized(SeerrIssuesModel.resolveTitleKey(isResolving: isResolving))
+            : loc.localized("seerr.issues.open")
+        let press: () -> Void = {
+            switch action {
+            case .resolve: resolveIssue(row)
+            case .open: SeerrIssuesModel.open(row.issue, appState: appState)
+            }
+        }
+        #if os(tvOS)
+        let id = issueButtonId(row.id, action)
+        Button {
+            press()
+        } label: {
+            rowChrome(id: id) {
+                HStack(spacing: CinemaSpacing.spacing2) {
+                    rowIcon(action == .resolve ? "checkmark.circle.fill" : "arrow.up.forward.app",
+                            tint: themeManager.accent)
+                    Text(current)
+                        .font(rowLabelFont)
+                        .foregroundStyle(CinemaColor.onSurface)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .modifier(RowFocus(id: id, focus: focusBinding))
+        .accessibilityLabel(current)
+        #else
+        CinemaButton(title: action == .resolve ? loc.localized("seerr.issues.resolve") : current,
+                     style: action == .resolve ? .accent : .ghost,
+                     isLoading: action == .resolve && isResolving) {
+            press()
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .disabled(action == .resolve && isResolving)
+        .accessibilityLabel(current)
+        #endif
+    }
+
+    /// Sends the resolution. tvOS: then puts focus back where it was.
+    private func resolveIssue(_ row: SeerrIssueRow) {
+        #if os(tvOS)
+        let formerIndex = issues.rows.firstIndex { $0.id == row.id }
+        let wasOnButton = focusedItem == .toggle(issueButtonId(row.id, .resolve))
+        #endif
+        Task {
+            await issues.resolve(row.id, session: seerr, toasts: toasts, loc: loc)
+            #if os(tvOS)
+            focusAfterResolving(row.id, formerIndex: formerIndex, wasOnButton: wasOnButton)
+            #endif
+        }
+    }
+
+    #if os(tvOS)
+    private func issueButtonId(_ issueId: Int, _ action: IssueAction) -> String {
+        "seerr.issue.\(issueId).\(action == .resolve ? "resolve" : "open")"
+    }
+
+    /// The resolved row left the list: focus goes to the resolve button of
+    /// the row now in its place (or the last one) — `focusAfterSettling`'s
+    /// reasoning, for the same reason (left to itself the engine sends focus
+    /// back to the top of the page).
+    private func focusAfterResolving(_ issueId: Int, formerIndex: Int?, wasOnButton: Bool) {
+        let rows = issues.rows
+        let pressed = SettingsFocus.toggle(issueButtonId(issueId, .resolve))
+        guard wasOnButton, focusedItem == nil || focusedItem == pressed, let formerIndex,
+              !rows.contains(where: { $0.id == issueId }) else { return }
+        if rows.isEmpty {
+            if issues.canLoadMore { focusedItem = .toggle("seerr.issues.more") }
+            return
+        }
+        focusedItem = .toggle(issueButtonId(rows[min(formerIndex, rows.count - 1)].id, .resolve))
     }
     #endif
 
@@ -1339,8 +1605,11 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
         myRequestsLoadedFor = nil
         pending = SeerrPendingModel()
         pendingLoadedFor = nil
+        issues = SeerrIssuesModel()
+        issuesLoadedFor = nil
         isRetryingMyRequests = false
         isRetryingPending = false
+        isRetryingIssues = false
         report = nil
         reportAddress = nil
         keyText = ""
@@ -1410,23 +1679,46 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
         if pending.phase == .loaded, current == pendingTrigger { pendingLoadedFor = current }
     }
 
-    /// « Actualiser »: both lists re-read side by side (each shows its
-    /// skeleton meanwhile), « À valider » writing the bubble's fresh count.
-    /// A second press while one runs does nothing.
+    /// « Signalements », on the same terms as « À valider ».
+    private func loadIssuesIfNeeded() async {
+        guard let current = issuesTrigger else {
+            issuesLoadedFor = nil
+            return
+        }
+        guard current != issuesLoadedFor else { return }
+        await issues.load(session: seerr)
+        guard !Task.isCancelled, issues.phase == .loaded else { return }
+        issuesLoadedFor = current
+    }
+
+    private func retryIssues() async {
+        guard !isRetryingIssues, let current = issuesTrigger else { return }
+        isRetryingIssues = true
+        defer { isRetryingIssues = false }
+        await issues.load(session: seerr)
+        if issues.phase == .loaded, current == issuesTrigger { issuesLoadedFor = current }
+    }
+
+    /// « Actualiser »: every list on the page re-read side by side (each
+    /// shows its skeleton meanwhile), « À valider » and « Signalements »
+    /// writing the bubble's fresh counts. A second press while one runs does
+    /// nothing.
     private func refresh() async {
         guard !isRefreshing, showsRefresh else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        let mine = myRequestsTrigger, waiting = pendingTrigger
-        let myModel = myRequests, pendingModel = pending, session = seerr
+        let mine = myRequestsTrigger, waiting = pendingTrigger, reports = issuesTrigger
+        let myModel = myRequests, pendingModel = pending, issuesModel = issues, session = seerr
         await withTaskGroup(of: Void.self) { group in
             if mine != nil { group.addTask { await myModel.loadFirstPage(session: session) } }
             if waiting != nil { group.addTask { await pendingModel.load(session: session) } }
+            if reports != nil { group.addTask { await issuesModel.load(session: session) } }
         }
         // A list that had failed to open is now loaded: its `.task` re-fire
         // must not read it a third time.
         if let mine, mine == myRequestsTrigger, myRequests.phase == .loaded { myRequestsLoadedFor = mine }
         if let waiting, waiting == pendingTrigger, pending.phase == .loaded { pendingLoadedFor = waiting }
+        if let reports, reports == issuesTrigger, issues.phase == .loaded { issuesLoadedFor = reports }
     }
 
     /// « Tester la connexion »: on the TYPED address (R18), in key mode when
@@ -1686,13 +1978,17 @@ struct OpenedSeerrUser: Hashable, Identifiable {
 
 /// A page of an admin's Réglages → Demandes summary (layout A).
 enum RequestsPage: String, Hashable, Identifiable {
-    case pending, mine, users, server
+    case pending, issues, mine, users, server
 
     var id: String { rawValue }
+
+    /// A list « Actualiser » re-reads (pull, bar button, tvOS row).
+    var isList: Bool { self == .pending || self == .issues || self == .mine }
 
     var titleKey: String {
         switch self {
         case .pending: "seerr.settings.section.pending"
+        case .issues: "seerr.settings.section.issues"
         case .mine: "seerr.settings.section.myRequests"
         case .users: "seerr.hub.users"
         case .server: "seerr.hub.server"
@@ -1702,6 +1998,7 @@ enum RequestsPage: String, Hashable, Identifiable {
     var icon: String {
         switch self {
         case .pending: "tray.full"
+        case .issues: "exclamationmark.bubble"
         case .mine: "clock"
         case .users: "person.2"
         case .server: "server.rack"

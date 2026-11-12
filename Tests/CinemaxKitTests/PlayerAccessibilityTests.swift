@@ -288,6 +288,9 @@ struct PluralRuleTests {
                     "seerr.myRequests.seasons", "seerr.settings.section.pendingCount", "seerr.settings.pendingBubble",
                     // Seerr — the admin's summary rows.
                     "seerr.hub.pending.count", "seerr.hub.mine.count",
+                    // Seerr — « Signalements » (its header, summary row, bubble, problem line).
+                    "seerr.settings.section.issuesCount", "seerr.hub.issues.count", "seerr.settings.issuesBubble",
+                    "seerr.issues.missingEpisodes",
                     // Seerr — the arrival message.
                     "seerr.arrival.several"]
         for language in AppLanguage.supported {

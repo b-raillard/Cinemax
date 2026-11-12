@@ -71,6 +71,11 @@ final class SeerrSession {
     /// fresher number landed (an approval, « À valider »'s listing) drops its
     /// older answer.
     @ObservationIgnored private var pendingCountWrites = 0
+    /// How many problem reports are open, as last read — the other half of
+    /// the Réglages bubble, for a user who may manage reports
+    /// (`issueBadgeCount`). Same ordering of writes as `pendingCount`.
+    private(set) var issueCount: Int?
+    @ObservationIgnored private var issueCountWrites = 0
 
     /// Capped by age — the server policy, or this device's setting read LIVE.
     var isAgeCapped: Bool {
@@ -207,6 +212,7 @@ final class SeerrSession {
         usesDeviceKey = false
         policyCapped = true
         pendingCount = nil
+        issueCount = nil
         downUntil = nil
         unconfiguredReadAt = nil
         titleMemo.removeAll()
@@ -291,8 +297,9 @@ final class SeerrSession {
             client = SeerrClient(baseURL: url, languageCode: languageCode, transport: transport)
             setConnection(.unavailable)
             if publicSettings != nil { publicSettings = nil }
-            // Another Seerr's queue: its count is not this one's.
+            // Another Seerr's queue: its counts are not this one's.
             if pendingCount != nil { pendingCount = nil }
+            if issueCount != nil { issueCount = nil }
             downUntil = nil
         }
         guard let client else { return }
@@ -411,6 +418,70 @@ final class SeerrSession {
         guard isCurrent(snapshot) else { return }
         pendingCountWrites &+= 1
         if pendingCount != count { pendingCount = count }
+    }
+
+    // MARK: Reports open (the other half of the bubble)
+
+    /// The open reports' count, for a connected Seerr user who may manage
+    /// them (Pro, not age-capped); `nil` otherwise and while unknown.
+    var issueBadgeCount: Int? {
+        showsIssueBadge ? issueCount : nil
+    }
+
+    /// `servesActiveAccount` LAST, as in `showsPendingBadge`.
+    var showsIssueBadge: Bool {
+        SeerrIssuesModel.isShown(for: connection) && proAllowsProvider() && !isAgeCapped && servesActiveAccount
+    }
+
+    /// Re-reads the open reports' count: one row asked, the listing's total
+    /// kept (`GET /issue?filter=open&take=1`, never `/issue/count`). Same
+    /// gates and same ordering of writes as `refreshPendingCount`.
+    func refreshIssueCount() async {
+        guard SeerrIssuesModel.isShown(for: connection), !isDown, let snap = snapshot() else { return }
+        let asked = issueCountWrites
+        let page: SeerrIssuePage
+        do {
+            page = try await perform { client, credential in
+                try await client.issues(filter: .open, take: 1, skip: 0, credential)
+            }
+        } catch {
+            return
+        }
+        guard issueCountWrites == asked else { return }
+        noteIssueCount(page.total, for: snap)
+    }
+
+    /// « Signalements » read or resolved a report: its total is the fresh count.
+    func noteIssueCount(_ count: Int, for snapshot: Snapshot) {
+        guard isCurrent(snapshot) else { return }
+        issueCountWrites &+= 1
+        if issueCount != count { issueCount = count }
+    }
+
+    // MARK: The Réglages bubble, both halves
+
+    /// What the bubble on the Réglages tab and on the Seerr entry counts:
+    /// requests waiting (a manager of requests) PLUS reports open (a manager
+    /// of reports). `nil` when neither half applies or is known yet. Every
+    /// observed value is read before the first gate that could short-circuit.
+    var settingsBadgeCount: Int? {
+        let parts = [pendingBadgeCount, issueBadgeCount].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.reduce(0, +)
+    }
+
+    /// Whether either half of the bubble may show: `MainTabView` re-reads
+    /// both counts whenever this changes. Both halves are evaluated (no
+    /// short-circuit), so SwiftUI tracks what each one reads.
+    var badgeEligibility: [Bool] {
+        [showsPendingBadge, showsIssueBadge]
+    }
+
+    /// Both counts, side by side — each asks nothing for an account it does
+    /// not apply to. The hook of `onCurrentUserRefreshed` and `MainTabView`.
+    func refreshBadgeCounts() async {
+        async let pending: Void = refreshPendingCount()
+        async let issues: Void = refreshIssueCount()
+        _ = await (pending, issues)
     }
 
     // MARK: Stale-answer token
@@ -799,6 +870,7 @@ final class SeerrSession {
         if !keepingConfig, config != nil { config = nil }
         // No identity, no count: a number kept here would come back unread.
         if pendingCount != nil { pendingCount = nil }
+        if issueCount != nil { issueCount = nil }
         client = nil
         cookie = nil
         deviceKey = nil

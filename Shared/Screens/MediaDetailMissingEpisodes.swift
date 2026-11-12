@@ -65,11 +65,15 @@ enum MissingEpisodeLook {
     }
 
     /// « 8 mai 2011 », in the app's language; nil when the date is unreadable.
+    /// Read AND written in GMT: a calendar day, not an instant — shown in the
+    /// device's zone, « 8 mai » read « 7 mai » west of UTC.
     nonisolated static func airDate(_ raw: String?, locale: Locale) -> String? {
         guard let raw, let date = try? Date(raw, strategy: Date.ISO8601FormatStyle().year().month().day()) else {
             return nil
         }
-        return date.formatted(.dateTime.month(.abbreviated).day().year().locale(locale))
+        var style = Date.FormatStyle.dateTime.month(.abbreviated).day().year().locale(locale)
+        style.timeZone = .gmt
+        return date.formatted(style)
     }
 }
 
@@ -197,6 +201,8 @@ struct MediaDetailMissingEpisodeRow: View {
 /// (owner 2026-11-11, option A): one quiet line, « Afficher » brings them back.
 struct MediaDetailHiddenMissingEpisodesLine: View {
     let onShow: () -> Void
+    /// tvOS: « Afficher »'s focus, which « Masquer » hands over.
+    var showFocus: FocusState<Bool>.Binding?
 
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
@@ -221,6 +227,7 @@ struct MediaDetailHiddenMissingEpisodesLine: View {
             }
             #if os(tvOS)
             .buttonStyle(TVEpisodeZoneButtonStyle(accent: themeManager.accent))
+            .modifier(FirstCardFocus(binding: showFocus))
             #else
             .buttonStyle(.plain)
             #endif
@@ -238,16 +245,21 @@ struct MediaDetailHiddenMissingEpisodesLine: View {
 struct MediaDetailMissingEpisodesBlock: View, Equatable {
     let episodes: [SeerrMissingEpisode]
     let canReport: Bool
-    let isReported: Bool
     let onReport: () -> Void
     let onHide: () -> Void
+    /// tvOS: « Masquer »'s focus, which « Afficher » hands back. Not compared.
+    var hideFocus: FocusState<Bool>.Binding?
 
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.episodes == rhs.episodes && lhs.canReport == rhs.canReport && lhs.isReported == rhs.isReported
+        lhs.episodes == rhs.episodes && lhs.canReport == rhs.canReport
     }
+
+    /// The ones no open report names yet: the button counts them alone, and
+    /// « Signalé à ton admin » once there are none left.
+    private var unreportedCount: Int { episodes.count { !$0.isReported } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
@@ -267,17 +279,39 @@ struct MediaDetailMissingEpisodesBlock: View, Equatable {
                     hideButton
                 }
             }
-            if isReported {
-                Label(loc.localized("seerr.episodes.reported"), systemImage: "checkmark.circle.fill")
-                    .font(CinemaFont.label(.medium))
-                    .foregroundStyle(themeManager.accent)
+            #if os(tvOS)
+            // ONE button whatever the state: sending turned it into a label,
+            // the focused control vanished and the fiche jumped back up to
+            // « Lecture » (recette 2026-11-12). Reported, it stays where the
+            // focus is and does nothing.
+            if canReport {
+                CinemaButton(
+                    title: unreportedCount == 0
+                        ? loc.localized("seerr.episodes.reported")
+                        : loc.counted("seerr.episodes.report", unreportedCount),
+                    style: .ghost, icon: unreportedCount == 0 ? "checkmark.circle.fill" : "flag",
+                    wrapsTitle: true, action: unreportedCount == 0 ? {} : onReport
+                )
+            } else if unreportedCount == 0 {
+                reportedLabel
+            }
+            #else
+            if unreportedCount == 0 {
+                reportedLabel
             } else if canReport {
                 CinemaButton(
-                    title: loc.counted("seerr.episodes.report", episodes.count),
+                    title: loc.counted("seerr.episodes.report", unreportedCount),
                     style: .ghost, icon: "flag", wrapsTitle: true, action: onReport
                 )
             }
+            #endif
         }
+    }
+
+    private var reportedLabel: some View {
+        Label(loc.localized("seerr.episodes.reported"), systemImage: "checkmark.circle.fill")
+            .font(CinemaFont.label(.medium))
+            .foregroundStyle(themeManager.accent)
     }
 
     private var countTitle: some View {
@@ -299,6 +333,7 @@ struct MediaDetailMissingEpisodesBlock: View, Equatable {
         }
         #if os(tvOS)
         .buttonStyle(TVEpisodeZoneButtonStyle(accent: themeManager.accent))
+        .modifier(FirstCardFocus(binding: hideFocus))
         #else
         .buttonStyle(.plain)
         #endif
@@ -403,8 +438,11 @@ struct SeerrEpisodeReportSheet: View {
             .navigationTitle(loc.localized("seerr.episodes.report.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // The system close button (an ✕): a worded « Abbrechen » pill
+                // pushed the centred title aside in German (recette 2026-11-12).
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(loc.localized("action.cancel")) { dismiss() }.tint(themeManager.accent)
+                    Button(role: .close) { dismiss() }
+                        .accessibilityLabel(loc.localized("action.cancel"))
                 }
             }
         }

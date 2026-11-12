@@ -291,9 +291,10 @@ struct AppNavigation: View {
         appState.onCurrentUserRefreshed = { [seerr, appState, toasts, loc, settingsNav] in
             Task {
                 await seerr.reload(appState: appState, isRoutine: true)
-                // The Réglages bubble: re-read at launch and on every return,
-                // side by side with the arrival check (two independent reads).
-                async let bubble: Void = seerr.refreshPendingCount()
+                // The Réglages bubble (requests waiting + reports open):
+                // re-read at launch and on every return, side by side with the
+                // arrival check (independent reads).
+                async let bubble: Void = seerr.refreshBadgeCounts()
                 if Self.arrivalGate.admit() {
                     await Self.checkArrivals(
                         seerr: seerr, appState: appState, toasts: toasts, loc: loc, settingsNav: settingsNav)
