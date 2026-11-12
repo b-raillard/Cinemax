@@ -390,6 +390,12 @@ struct WhatsNew260Tests {
         #expect(pages.map(\.id) == ["localAddress", "episodeQuality", "seerrRequests", "missingEpisodes"])
     }
 
+    @Test("Seules les pages Seerr portent la note « * Nécessite un serveur Seerr »")
+    func seerrFootnote() {
+        let pages = WhatsNewCatalogue.pages(since: ServerVersion(2, 5, 0), upTo: ServerVersion(2, 6, 0), platform: .iOS)
+        #expect(pages.map(\.footnoteKey) == [nil, nil, "whatsNew.footnote.seerr", "whatsNew.footnote.seerr"])
+    }
+
     @Test("Sans animations, chaque dessin est le dessin fixe")
     func restIsStaticDrawing() {
         #expect(MotifMotion.request(at: nil) == MotifMotion.Request())
