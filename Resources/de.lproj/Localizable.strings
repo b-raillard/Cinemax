@@ -1162,7 +1162,7 @@
 "servers.localAddress.savedNeedsApproval" = "Gespeichert — speichere sie zu Hause erneut, um ihr Zertifikat zu bestätigen";
 "servers.localAddress.reachable" = "Lokale Adresse erreichbar";
 "servers.localAddress.savedUnreachable" = "Gespeichert — wird genutzt, wenn dieses Gerät im selben Netz ist";
-"servers.localAddress.denied" = "Zugriff aufs lokale Netzwerk verweigert — erlaube ihn in Einstellungen › JellyGlass";
+"servers.localAddress.denied" = "Kein Zugriff aufs lokale Netz — erlaube ihn in Einstellungen › JellyGlass";
 "servers.localAddress.otherServer" = "Das ist nicht dieser Server";
 "servers.localAddress.notLocal" = "Gib eine Adresse aus deinem Heimnetz ein (z. B. 192.168.1.128)";
 "servers.localAddress.signInFirst" = "Melde dich zuerst bei diesem Server an";
@@ -1594,7 +1594,7 @@
 "seerr.test.ok.role.manage" = "kann Anfragen genehmigen";
 "seerr.test.ok.role.request" = "kann anfragen";
 "seerr.test.warning.cannotManage" = "Dein Seerr-Konto kann keine Anfragen genehmigen: gib ihm in Seerr das Recht „Anfragen verwalten“.";
-"seerr.test.warning.httpKey" = "Seerr nutzt HTTP: Der API-Schlüssel wird unverschlüsselt über das Netzwerk übertragen. Verwende möglichst eine HTTPS-Adresse.";
+"seerr.test.warning.httpKey" = "Seerr nutzt HTTP: Der API-Schlüssel geht unverschlüsselt übers Netz. Nimm lieber eine HTTPS-Adresse.";
 "seerr.test.warning.httpSeerr" = "Seerr nutzt HTTP, dein Jellyfin-Server aber HTTPS: Die erneute Anmeldung erfolgt von Hand über „Bei Seerr anmelden“.";
 "seerr.activation.refused.capped" = "%@ konnte nicht aktiviert werden: das Konto hat eine Altersgrenze. Entferne sie in Jellyfin, um die Anfragen freizugeben.";
 "seerr.activation.noAddress" = "Gib zuerst die Adresse von Seerr ein.";
@@ -1645,8 +1645,8 @@
 "seerr.user.report" = "Meldungen";
 "seerr.user.report.episodes" = "Kann fehlende Folgen melden";
 "seerr.user.report.note" = "Bei einer unvollständigen Serie kann dieses Konto dem Admin die fehlenden Folgen melden.";
-"seerr.user.report.always" = "Die Rolle in Seerr erlaubt das Melden bereits.";
-"seerr.user.report.failed" = "Das Melden für %@ konnte nicht geändert werden: Seerr hat abgelehnt oder nicht geantwortet.";
+"seerr.user.report.always" = "Seine Rolle in Seerr erlaubt das Melden bereits.";
+"seerr.user.report.failed" = "Die Meldeberechtigung von %@ konnte nicht geändert werden: Seerr hat abgelehnt oder nicht geantwortet.";
 "seerr.settings.line.willBeCreated" = "Noch kein Seerr-Konto: es wird bei der ersten Anmeldung angelegt";
 "seerr.settings.line.mustBeAdded" = "Kein Seerr-Konto, und Seerr legt keines selbst an: füge es unter Seerr → Benutzer hinzu";
 "seerr.settings.line.unknown" = "Status in Seerr noch unbekannt";
@@ -1713,7 +1713,7 @@
 "seerr.episodes.hiddenLine" = "Fehlende Folgen ausgeblendet";
 "seerr.episodes.show" = "Anzeigen";
 "seerr.episodes.report.title" = "Fehlende Folgen";
-"seerr.episodes.report.word" = "Eine Nachricht an den Admin";
+"seerr.episodes.report.word" = "Nachricht an deinen Admin";
 "seerr.episodes.report.placeholder" = "Optional";
 "seerr.episodes.report.note" = "Das ist keine Anfrage: Dein Admin erhält eine Meldung und ergänzt die Staffel selbst.";
 "seerr.episodes.report.send" = "Meldung senden";
@@ -1810,7 +1810,7 @@
 "seerr.issues.note" = "„%@“";
 "seerr.issues.resolve" = "Als gelöst markieren";
 "seerr.issues.resolving" = "Wird gelöst…";
-"seerr.issues.open" = "Titel ansehen";
+"seerr.issues.open" = "Seite ansehen";
 "seerr.issues.resolved" = "Meldung gelöst";
 "seerr.issues.alreadyHandled" = "Bereits bearbeitet";
 "seerr.issues.resolveFailed" = "Meldung konnte nicht gelöst werden";

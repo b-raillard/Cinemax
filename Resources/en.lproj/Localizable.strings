@@ -1713,9 +1713,9 @@
 "seerr.episodes.hiddenLine" = "Missing episodes hidden";
 "seerr.episodes.show" = "Show";
 "seerr.episodes.report.title" = "Missing episodes";
-"seerr.episodes.report.word" = "A word for the admin";
+"seerr.episodes.report.word" = "A word for your admin";
 "seerr.episodes.report.placeholder" = "Optional";
-"seerr.episodes.report.note" = "This is not a request: your admin gets a report and completes the season on their side.";
+"seerr.episodes.report.note" = "This is not a request: your admin gets a report and fills in the season on their end.";
 "seerr.episodes.report.send" = "Send the report";
 "seerr.episodes.report.sent" = "Report sent";
 "seerr.episodes.report.failed" = "The report could not be sent.";
@@ -1800,9 +1800,9 @@
 "seerr.issues.reportedBy" = "Reported by %1$@ · %2$@";
 "seerr.issues.reportedAt" = "Reported %@";
 "seerr.issues.season" = "Season %d";
-"seerr.issues.episode" = "episode %d";
-"seerr.issues.missingEpisodes" = "episodes %@ missing";
-"seerr.issues.missingEpisodes.one" = "episode %@ missing";
+"seerr.issues.episode" = "Episode %d";
+"seerr.issues.missingEpisodes" = "Episodes %@ missing";
+"seerr.issues.missingEpisodes.one" = "Episode %@ missing";
 "seerr.issues.type.video" = "Video problem";
 "seerr.issues.type.audio" = "Audio problem";
 "seerr.issues.type.subtitles" = "Subtitle problem";
@@ -1810,7 +1810,7 @@
 "seerr.issues.note" = "“%@”";
 "seerr.issues.resolve" = "Mark as resolved";
 "seerr.issues.resolving" = "Resolving…";
-"seerr.issues.open" = "View title";
+"seerr.issues.open" = "View page";
 "seerr.issues.resolved" = "Report resolved";
 "seerr.issues.alreadyHandled" = "Already handled";
 "seerr.issues.resolveFailed" = "Couldn't resolve the report";

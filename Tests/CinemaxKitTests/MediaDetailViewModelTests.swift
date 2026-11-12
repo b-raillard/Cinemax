@@ -926,6 +926,9 @@ struct MediaDetailMissingEpisodesTests {
         vm.allowsSeerr = { allowed }
         vm.seerrDeadline = neverExpires
         vm.seerrToday = { "2026-11-11" }
+        // Never `.standard`: the test host is the app, whose own « Masquer »
+        // (a series hidden on the simulator) hid the episodes under test.
+        vm.defaults = UserDefaults.isolatedForTesting()
         return vm
     }
 
@@ -1105,6 +1108,8 @@ struct MediaDetailMissingEpisodesTests {
         #expect(transport.seasonRequestCount == asked)
 
         again.unhideMissingEpisodes(using: app)
+        // The « masqués » line stays until the answer (tvOS hands the focus on).
+        #expect(again.missingEpisodesHidden)
         await again.seerrEpisodesTask?.value
         #expect(again.seerrEpisodes(for: session.snapshot()).map(\.episodeNumber) == [2, 4])
         #expect(!again.missingEpisodesHidden)

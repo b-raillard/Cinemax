@@ -223,7 +223,7 @@ final class MediaDetailViewModel {
         guard let item, let tmdbId = SeerrMissing.tmdbId(of: item) else { return }
         let hidden = (defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] ?? []).filter { $0 != tmdbId }
         defaults.set(hidden, forKey: SettingsKey.seerrHiddenMissingEpisodes)
-        reloadSeerrEpisodes(using: appState)
+        reloadSeerrEpisodes(using: appState, keepsHiddenLine: true)
     }
 
     /// The missing episodes for the account Seerr serves right now.
@@ -241,18 +241,28 @@ final class MediaDetailViewModel {
 
     /// Starts (again) the side task for the season on screen — after the first
     /// load and after each season change, once its episodes are written.
-    private func reloadSeerrEpisodes(using appState: AppState) {
+    /// `keepsHiddenLine` (« Afficher »): « Épisodes manquants masqués » stays
+    /// until the answer, so the block replaces it in one go — tvOS hands the
+    /// focus on rather than losing it to an empty gap.
+    private func reloadSeerrEpisodes(using appState: AppState, keepsHiddenLine: Bool = false) {
         seerrEpisodesTask?.cancel()
         setSeerrEpisodes(.hidden, snapshot: nil)
         let tmdbId = item.flatMap { SeerrMissing.tmdbId(of: $0) }
         let hidden = resolvedType == .series && tmdbId.map(hidesMissingEpisodes(tmdbId:)) == true
-        if missingEpisodesHidden != hidden { missingEpisodesHidden = hidden }
+        if missingEpisodesHidden != hidden, hidden || !keepsHiddenLine { missingEpisodesHidden = hidden }
         guard resolvedType == .series, errorMessage == nil, let series = item, let seasonId = selectedSeasonId,
-              let seriesId = series.id, let userId = appState.currentUserId else { return }
+              let seriesId = series.id, let userId = appState.currentUserId else {
+            if missingEpisodesHidden != hidden { missingEpisodesHidden = hidden }
+            return
+        }
         let apiClient = appState.apiClient
         seerrEpisodesTask = Task {
             await loadSeerrEpisodes(for: series, seasonId: seasonId) {
                 try await apiClient.getEpisodeNumbering(seriesId: seriesId, userId: userId)
+            }
+            // Whatever the answer: the line never outlives « Afficher ».
+            if missingEpisodesHidden, let tmdbId, !hidesMissingEpisodes(tmdbId: tmdbId) {
+                missingEpisodesHidden = false
             }
         }
     }

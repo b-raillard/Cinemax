@@ -1715,7 +1715,7 @@
 "seerr.episodes.hiddenLine" = "Épisodes manquants masqués";
 "seerr.episodes.show" = "Afficher";
 "seerr.episodes.report.title" = "Épisodes manquants";
-"seerr.episodes.report.word" = "Un mot pour l’admin";
+"seerr.episodes.report.word" = "Un mot pour ton admin";
 "seerr.episodes.report.placeholder" = "Facultatif";
 "seerr.episodes.report.note" = "Ce n’est pas une demande : ton admin reçoit un signalement et complète la saison de son côté.";
 "seerr.episodes.report.send" = "Envoyer le signalement";
