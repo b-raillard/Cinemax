@@ -318,8 +318,9 @@ enum DuoFoldTimeline {
         return t < 0 ? t + 1 : t
     }
 
-    /// Piecewise keyframes, each segment eased like a CSS keyframe.
-    private static func value(_ p: Double, _ frames: [(Double, Double)], _ ease: (Double) -> Double) -> Double {
+    /// Piecewise keyframes, each segment eased like a CSS keyframe. Shared with
+    /// `MotifMotion`, the 2.6.0 motifs' timelines.
+    static func value(_ p: Double, _ frames: [(Double, Double)], _ ease: (Double) -> Double) -> Double {
         for (a, b) in zip(frames, frames.dropFirst()) where p >= a.0 && p <= b.0 {
             if a.1 == b.1 || b.0 == a.0 { return a.1 }
             return a.1 + (b.1 - a.1) * ease((p - a.0) / (b.0 - a.0))
@@ -328,8 +329,8 @@ enum DuoFoldTimeline {
     }
 
     private static let fold = bezier(0.45, 0, 0.2, 1)
-    private static let easeOut = bezier(0, 0, 0.58, 1)
-    private static let easeInOut = bezier(0.42, 0, 0.58, 1)
+    static let easeOut = bezier(0, 0, 0.58, 1)
+    static let easeInOut = bezier(0.42, 0, 0.58, 1)
 
     /// CSS `cubic-bezier(x1, y1, x2, y2)`.
     private static func bezier(_ x1: Double, _ y1: Double, _ x2: Double, _ y2: Double) -> @Sendable (Double) -> Double {

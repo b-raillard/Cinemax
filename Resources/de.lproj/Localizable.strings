@@ -1329,6 +1329,14 @@
 "whatsNew.page" = "Seite %d von %d";
 "whatsNew.channelLogos.title" = "Das Senderlogo";
 "whatsNew.channelLogos.body" = "Die Seite einer Serie zeigt jetzt das Logo ihres Senders neben der Bewertung, und die Besetzung nennt niemanden mehr doppelt.";
+"whatsNew.localAddress.title" = "Schneller zu Hause";
+"whatsNew.localAddress.body" = "Trag die lokale Adresse deines Servers unter Einstellungen → Server ein: Zu Hause nutzt JellyGlass dein Netzwerk, unterwegs die gewohnte Adresse.";
+"whatsNew.episodeQuality.title" = "Die Qualität jeder Folge";
+"whatsNew.episodeQuality.body" = "Auf der Seite einer Serie zeigt jede Folge jetzt ihre Qualität, 4K, HDR oder Dolby Vision, und die Zeile unter „Abspielen“ beschreibt die Folge, die gleich startet.";
+"whatsNew.seerrRequests.title" = "Titel anfragen";
+"whatsNew.seerrRequests.body" = "Ein Film oder eine Serie fehlt in deiner Bibliothek? Such danach: „Anfragen“ schickt ihn an deinen Admin, und JellyGlass sagt dir Bescheid, sobald er da ist. Dein Admin schaltet Seerr unter Einstellungen → Seerr ein.";
+"whatsNew.missingEpisodes.title" = "Fehlende Folgen";
+"whatsNew.missingEpisodes.body" = "In einer unvollständigen Staffel erscheinen die fehlenden Folgen an ihrem Platz, mit ihrem Bild. Ein Knopf meldet sie deinem Admin, der sie in Seerr wiederfindet.";
 "whatsNew.accounts.title" = "Wer schaut?";
 "whatsNew.accounts.body" = "Jeder behält sein eigenes Konto auf demselben Gerät, mit eigenem Fortschritt und eigenen Einstellungen. Dein Avatar oben links wechselt zwischen ihnen, und ein Code kann jedes Konto schützen.";
 "whatsNew.resumeHere.title" = "Hier fortsetzen";
