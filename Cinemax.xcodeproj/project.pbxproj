@@ -293,6 +293,7 @@
 		5268C36D803C151025ABFF22 /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFDBB3DBF0AAFBEA73B948A /* AddToPlaylistSheet.swift */; };
 		52D9F71CE7412B0B293AF0AF /* LibraryCollectionsRowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68373EC6A78E3A4BDD527E69 /* LibraryCollectionsRowTests.swift */; };
 		52F51831022AFCDC5833B695 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BC952DF89C9791E8414656 /* NetworkMonitor.swift */; };
+		53021C9179D274C84516B833 /* WhatsNewAnimatedMotifs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51BE513AABC2888804BBF3AF /* WhatsNewAnimatedMotifs.swift */; };
 		5304504904282010ED3A1400 /* CinemaIllustration.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96ADE87168AF0370A64A5B6 /* CinemaIllustration.swift */; };
 		5387266807C86D4BE2FC1828 /* WhatsNewPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E19706AD8199FD7B1BDF875 /* WhatsNewPolicy.swift */; };
 		53C1963BDCD2235326155AE6 /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5F40A4DB82730AD3871CB7 /* SettingsScreen.swift */; };
@@ -344,6 +345,7 @@
 		615404387A1AE6CADC2CCC5C /* AdminLoadStateContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FCF5A94AA4897A4644B777A /* AdminLoadStateContainer.swift */; };
 		61997EEBB3CB4ED65DC0A037 /* ServerRouteControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF9E460D071984F8E70D96C7 /* ServerRouteControllerTests.swift */; };
 		61C7BBF02E8DBC65C220B0FC /* ServerEntryEditing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 076A4CE6F139CF6F4AB73749 /* ServerEntryEditing.swift */; };
+		620051DBE3D61B38E5836F50 /* WhatsNewAnimatedMotifs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51BE513AABC2888804BBF3AF /* WhatsNewAnimatedMotifs.swift */; };
 		622D6AC34C377048FFE8750A /* TrickplayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFAC463F8054600F3BCEB911 /* TrickplayController.swift */; };
 		629034F00C9B9A91F1DFDFAF /* ContentRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAFD25D98FA0E18A0F441F5 /* ContentRow.swift */; };
 		62F7E3C1CAB9A895D8A5D456 /* SettingsNavCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D8C4660090ABCAD7FF2FA16 /* SettingsNavCoordinator.swift */; };
@@ -1027,6 +1029,7 @@
 		4E7EF991448FA04C0201CBBD /* SearchRelevanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchRelevanceTests.swift; sourceTree = "<group>"; };
 		4E89BA58B136AF96428F4078 /* MediaQualityBadgesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaQualityBadgesTests.swift; sourceTree = "<group>"; };
 		4F5D9387C11356CF0140347C /* ServerRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRegistryTests.swift; sourceTree = "<group>"; };
+		51BE513AABC2888804BBF3AF /* WhatsNewAnimatedMotifs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewAnimatedMotifs.swift; sourceTree = "<group>"; };
 		51EA3ACED7C511625904B26B /* TVBackNavigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVBackNavigation.swift; sourceTree = "<group>"; };
 		520518BCFA8AF149838E5906 /* MediaDetailEpisodeOverviewSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDetailEpisodeOverviewSheet.swift; sourceTree = "<group>"; };
 		52D91998DD6889F208AE78CC /* IPhoneDuoDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IPhoneDuoDetection.swift; sourceTree = "<group>"; };
@@ -1401,6 +1404,7 @@
 				9FAFE033C26A9BF1B8CDF937 /* AppUpdatePolicy.swift */,
 				CAE7D2FCE0D1E553996F8787 /* ReviewPromptPolicy.swift */,
 				7FECC078CF0E11539ABE5316 /* ReviewPromptTracker.swift */,
+				51BE513AABC2888804BBF3AF /* WhatsNewAnimatedMotifs.swift */,
 				1B57183A10839E3056C3659D /* WhatsNewCatalogue.swift */,
 				2E6ABA2067D1592776041CEF /* WhatsNewDuoScene.swift */,
 				EB7FA28DFA0088FAC846EED1 /* WhatsNewHalloweenScene.swift */,
@@ -2871,6 +2875,7 @@
 				CF9AC2FE2683ACF8F970C686 /* VideoPlayerView.swift in Sources */,
 				5D88CC33F8334EF5E6CD5475 /* WatchTogetherLobby.swift in Sources */,
 				86526F1D7EA8C308D75CD1FE /* WatchedHistoryScreen.swift in Sources */,
+				620051DBE3D61B38E5836F50 /* WhatsNewAnimatedMotifs.swift in Sources */,
 				3ED7BC82385E90F72DE07604 /* WhatsNewCatalogue.swift in Sources */,
 				9EF88DCE280B7911F2FBD125 /* WhatsNewDuoScene.swift in Sources */,
 				2FE46B13F4BCB62EEB66B345 /* WhatsNewHalloweenScene.swift in Sources */,
@@ -3298,6 +3303,7 @@
 				0E09FF53825D339001BB6137 /* VideoPlayerView.swift in Sources */,
 				415D6E200AACAF80F3B06507 /* WatchTogetherLobby.swift in Sources */,
 				94D50ED24372C2DF858DA620 /* WatchedHistoryScreen.swift in Sources */,
+				53021C9179D274C84516B833 /* WhatsNewAnimatedMotifs.swift in Sources */,
 				CF9B70C7595EA08B2F235061 /* WhatsNewCatalogue.swift in Sources */,
 				6F71626045F4B7E8EDC99876 /* WhatsNewDuoScene.swift in Sources */,
 				C20E16BB64AFF1A1C12F0D7E /* WhatsNewHalloweenScene.swift in Sources */,
@@ -3403,7 +3409,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2.5.5;
+				CURRENT_PROJECT_VERSION = 2.6.0;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -3422,7 +3428,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 2.5.0;
+				MARKETING_VERSION = 2.6.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -3673,7 +3679,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2.5.5;
+				CURRENT_PROJECT_VERSION = 2.6.0;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -3686,7 +3692,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 2.5.0;
+				MARKETING_VERSION = 2.6.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

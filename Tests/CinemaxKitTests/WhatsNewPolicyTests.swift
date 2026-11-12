@@ -379,3 +379,73 @@ struct DuoFoldTimelineTests {
     }
 }
 #endif
+
+/// The 2.6.0 reel and its four animated motifs: the order is the owner's
+/// (2026-11-12), the timings the approved mockup's.
+@Suite("Nouveautés 2.6.0")
+struct WhatsNew260Tests {
+    @Test("La 2.6.0 : adresse locale, qualité, demandes, épisodes manquants, sur les deux apps", arguments: [WhatsNewPlatform.iOS, .tvOS])
+    func shipped260(platform: WhatsNewPlatform) {
+        let pages = WhatsNewCatalogue.pages(since: ServerVersion(2, 5, 0), upTo: ServerVersion(2, 6, 0), platform: platform)
+        #expect(pages.map(\.id) == ["localAddress", "episodeQuality", "seerrRequests", "missingEpisodes"])
+    }
+
+    @Test("Seules les pages Seerr portent la note « * Nécessite un serveur Seerr »")
+    func seerrFootnote() {
+        let pages = WhatsNewCatalogue.pages(since: ServerVersion(2, 5, 0), upTo: ServerVersion(2, 6, 0), platform: .iOS)
+        #expect(pages.map(\.footnoteKey) == [nil, nil, "whatsNew.footnote.seerr", "whatsNew.footnote.seerr"])
+    }
+
+    @Test("Sans animations, chaque dessin est le dessin fixe")
+    func restIsStaticDrawing() {
+        #expect(MotifMotion.request(at: nil) == MotifMotion.Request())
+        #expect(MotifMotion.missing(at: nil) == MotifMotion.Missing())
+        #expect(MotifMotion.home(at: nil) == MotifMotion.Home())
+        #expect(MotifMotion.tags(at: nil).allSatisfy { $0 == MotifMotion.Layer() })
+        let rest = MotifMotion.request(at: nil)
+        #expect(rest.typed == 1 && rest.poster.opacity == 1 && rest.pill.opacity == 1 && rest.ping.opacity == 1)
+    }
+
+    @Test("Au départ, la recherche est vide et rien n'est encore trouvé")
+    func requestStartsEmpty() {
+        let start = MotifMotion.request(at: 0)
+        #expect(start.typed == 0)
+        #expect(start.poster.opacity == 0)
+        #expect(start.pill.opacity == 0)
+        #expect(start.ping.opacity == 0)
+        let end = MotifMotion.request(at: MotifMotion.requestPeriod * 0.95)
+        #expect(end.typed == 1 && end.poster.opacity == 1 && end.pill.opacity == 1 && end.ping.opacity == 1)
+    }
+
+    @Test("La pastille « Demander » s'enfonce après être apparue")
+    func requestPillIsPressed() {
+        let pressed = MotifMotion.request(at: MotifMotion.requestPeriod * 0.68)
+        #expect(abs(pressed.pill.scale - 0.92) < 0.001)
+    }
+
+    @Test("L'épisode manquant apparaît avant la pastille, qui arrive de la droite")
+    func missingOrder() {
+        let mid = MotifMotion.missing(at: MotifMotion.missingPeriod * 0.31)
+        #expect(mid.row == 1)
+        #expect(mid.pill.opacity == 0)
+        #expect(mid.pill.dx == 11.4)
+        let placed = MotifMotion.missing(at: MotifMotion.missingPeriod * 0.5)
+        #expect(placed.pill.dx == 0 && placed.pill.opacity == 1)
+    }
+
+    @Test("Les pastilles de qualité arrivent l'une après l'autre")
+    func tagsStagger() {
+        let tags = MotifMotion.tags(at: 0.2 * MotifMotion.tagPeriod)
+        #expect(tags[0].opacity > tags[1].opacity)
+        #expect(tags[1].opacity > tags[2].opacity)
+        #expect(MotifMotion.tags(at: 0.1).allSatisfy { $0.opacity == 0 })
+    }
+
+    @Test("Avant son départ, un point retardé reste sur sa première image")
+    func delayedDotWaits() {
+        let home = MotifMotion.home(at: 0.1)
+        #expect(home.hops[1].opacity == 0.25)
+        #expect(home.hops[0].opacity > 0.25)
+        #expect(home.led == 1)
+    }
+}

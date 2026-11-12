@@ -1331,6 +1331,15 @@
 "whatsNew.page" = "Page %d sur %d";
 "whatsNew.channelLogos.title" = "Le logo de la chaîne";
 "whatsNew.channelLogos.body" = "La fiche d’une série affiche désormais le logo de sa chaîne à côté de la note, et le casting ne montre plus deux fois la même personne.";
+"whatsNew.localAddress.title" = "Plus rapide à la maison";
+"whatsNew.localAddress.body" = "Ajoutez l’adresse locale de votre serveur dans Réglages → Serveurs : à la maison, JellyGlass passe par votre réseau, ailleurs par l’adresse habituelle.";
+"whatsNew.episodeQuality.title" = "La qualité de chaque épisode";
+"whatsNew.episodeQuality.body" = "Sur la fiche d’une série, chaque épisode affiche maintenant sa qualité, 4K, HDR ou Dolby Vision, et la rangée sous « Lecture » décrit celui qui va s’ouvrir.";
+"whatsNew.seerrRequests.title" = "Demander un titre*";
+"whatsNew.seerrRequests.body" = "Un film ou une série absent de votre bibliothèque ? Cherchez-le : « Demander » l’envoie à votre admin, et JellyGlass vous prévient quand il arrive. Votre admin active Seerr dans Réglages → Seerr.";
+"whatsNew.missingEpisodes.title" = "Les épisodes manquants*";
+"whatsNew.missingEpisodes.body" = "Dans une saison incomplète, les épisodes absents apparaissent à leur place, avec leur image. Un bouton les signale à votre admin, qui les retrouve dans Seerr.";
+"whatsNew.footnote.seerr" = "* Nécessite un serveur Seerr";
 "whatsNew.accounts.title" = "Qui regarde ?";
 "whatsNew.accounts.body" = "Chacun garde son compte sur le même appareil, avec ses reprises et ses réglages. Votre avatar, en haut à gauche, passe de l’un à l’autre, et un code peut protéger chaque compte.";
 "whatsNew.resumeHere.title" = "Reprendre ici";

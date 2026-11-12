@@ -7,11 +7,11 @@ import SwiftUI
 /// the next UI change and has to be re-shot per platform, per theme, per accent
 /// — which is precisely how a "what's new" screen ends up showing an interface
 /// the user is not looking at. These follow the user's accent, flip with
-/// dark/light and scale through `CinemaScale`, and the motifs do not animate,
-/// so there is nothing for Motion Effects or Reduce Motion to switch off — the
-/// two exceptions have their own views, whose motion both of them stop:
-/// `.halloweenNight` (`WhatsNewHalloweenScene`) and `.duoTable`
-/// (`WhatsNewDuoScene`). The onboarding draws its pages with this enum too.
+/// dark/light and scale through `CinemaScale`. Most motifs are still; the ones
+/// that move have their own views, whose motion Motion Effects and Reduce
+/// Motion both stop: `.halloweenNight` (`WhatsNewHalloweenScene`), `.duoTable`
+/// (`WhatsNewDuoScene`) and the four 2.6.0 motifs (`WhatsNewAnimatedMotif`).
+/// The onboarding draws its pages with this enum too.
 ///
 /// Kept apart from `CinemaIllustration` on purpose: that enum is the vocabulary
 /// of empty and error states, and folding feature art into it would make "which
@@ -56,6 +56,14 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     case quickConnect
     /// Onboarding — the accent colour and the menu are yours.
     case personalize
+    /// The local server address — the phone taking the short way home (animated).
+    case localAddress
+    /// Quality tags on each episode — a poster whose tags arrive (animated).
+    case episodeQuality
+    /// Seerr requests — a search, the poster found, « Demander » pressed (animated).
+    case seerrRequests
+    /// Missing episodes — the absent one in its place, reported (animated).
+    case missingEpisodes
 
     /// Drawn as a wide scene across the page, not a motif on the halo.
     var isScene: Bool { self == .halloweenNight }
@@ -109,6 +117,8 @@ struct WhatsNewIllustrationView: View {
             case .language:      language(u)
             case .everyScreen, .smoothSpeed, .server, .quickConnect, .personalize, .accounts, .resumeHere, .appIcon:
                 MotifCanvas(kind: kind, ink: ink)
+            case .localAddress, .episodeQuality, .seerrRequests, .missingEpisodes:
+                WhatsNewAnimatedMotif(kind: kind, ink: ink)
             case .halloweenNight, .duoTable: EmptyView()   // drawn by `body` as scenes
             }
         }
