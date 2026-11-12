@@ -1334,9 +1334,9 @@
 "whatsNew.episodeQuality.title" = "Each episode’s quality";
 "whatsNew.episodeQuality.body" = "On a show’s page, each episode now shows its quality, 4K, HDR or Dolby Vision, and the row under “Play” describes the one about to open.";
 "whatsNew.seerrRequests.title" = "Request a title";
-"whatsNew.seerrRequests.body" = "A film or show missing from your library? Search for it: “Request” sends it to your admin, and JellyGlass tells you when it arrives. Your admin turns Seerr on in Settings → Seerr.";
+"whatsNew.seerrRequests.body" = "A film or show missing from your library? Search for it: “Request” sends it to your admin, and JellyGlass tells you when it arrives. Requires a Seerr server, which your admin turns on in Settings → Seerr.";
 "whatsNew.missingEpisodes.title" = "Missing episodes";
-"whatsNew.missingEpisodes.body" = "In an incomplete season, the missing episodes appear in their place, with their picture. One button reports them to your admin, who finds them in Seerr.";
+"whatsNew.missingEpisodes.body" = "In an incomplete season, the missing episodes appear in their place, with their picture. One button reports them to your admin. Requires a Seerr server.";
 "whatsNew.accounts.title" = "Who’s watching?";
 "whatsNew.accounts.body" = "Everyone keeps their own account on the same device, with their own progress and settings. Your avatar, top left, switches between them, and a code can protect each account.";
 "whatsNew.resumeHere.title" = "Resume here";
