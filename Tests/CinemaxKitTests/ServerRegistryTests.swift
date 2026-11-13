@@ -364,13 +364,13 @@ struct ServerRegistryTests {
     @Test("Upsert keeps the stored local address over an incoming nil")
     func upsertKeepsLocalURL() {
         var existing = entry("NAS", "https://host/jellyfin", daysAgo: 5)
-        existing.localURL = URL(string: "http://192.168.1.128:8899")
+        existing.localURL = URL(string: "http://192.168.1.10:8899")
         let incoming = entry("NAS", "https://host/jellyfin")
 
         let result = ServerRegistry.upsert(incoming, into: [existing])
 
         #expect(result.count == 1)
-        #expect(result[0].localURL == URL(string: "http://192.168.1.128:8899"))
+        #expect(result[0].localURL == URL(string: "http://192.168.1.10:8899"))
     }
 
     @Test("A registry stored before the local address still decodes")
@@ -805,7 +805,7 @@ struct MultiServerAppStateTests {
         let kc = MockKeychain()
         let a = entry("NAS", "https://a.example.com")
         let app = makeState(keychain: kc, servers: [a], activeId: a.id)
-        let local = URL(string: "http://192.168.1.128:8899")!
+        let local = URL(string: "http://192.168.1.10:8899")!
 
         let result = app.setLocalURL(id: a.id, to: local)
 
@@ -973,6 +973,32 @@ struct MultiServerAppStateTests {
         #expect(app.serverURL == b.url)
     }
 
+    /// Audit 2026-11-13, BUG-01: `connectToServer` installs the new client only
+    /// once the server answered, so a failed handshake leaves the shared client
+    /// on A with A's token — B's login screen would then post B's password to A.
+    @Test("A re-login whose handshake fails stays on the current server, never on B's login screen")
+    func reLoginHandshakeFailureStaysOnCurrentServer() async {
+        let api = MockAPIClient()
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local", token: nil, userId: nil)
+        let app = makeState(api: api, servers: [a, b], activeId: a.id)
+        app.settingsDefaults = .isolatedForTesting()
+        await app.applyActiveServer(a)
+        api.shouldThrow = true
+        api.stubbedError = URLError(.cannotConnectToHost)
+
+        let decision = await app.switchTo(b)
+
+        #expect(decision == .unreachable)
+        #expect(app.serverURL == a.url)
+        #expect(app.isAuthenticated)
+        #expect(app.currentUserId == "user1")
+        #expect(app.accessToken == "tok")
+        #expect(app.activeServerId == a.id)
+        #expect(app.pendingRollbackServer == nil)
+        #expect(api.identityURL == a.url)
+    }
+
     @Test("A re-login whose route is the identity passes no dial URL")
     func reLoginOnIdentityPassesNoDial() async {
         let api = MockAPIClient()
@@ -1079,7 +1105,7 @@ struct MultiServerAppStateTests {
             return .answered(serverID: "S", connectedAddressIsLocal: true)
         }
 
-        let outcome = await app.setLocalAddress(id: server.id, raw: "http://192.168.1.128:8899")
+        let outcome = await app.setLocalAddress(id: server.id, raw: "http://192.168.1.10:8899")
 
         #expect(outcome == .refusedNotHTTPS)
         #expect(log.urls.isEmpty)
@@ -1309,7 +1335,7 @@ private final class RouteLog {
 /// user rather than trusting a status.
 @Suite("ServerSessionValidator")
 struct ServerSessionValidatorTests {
-    private let user = Data(#"{"Name":"bastien","Id":"4b1c0e8f2a3d4e5f8a9b0c1d2e3f4a5b"}"#.utf8)
+    private let user = Data(#"{"Name":"alex","Id":"fedcba9876543210fedcba9876543210"}"#.utf8)
 
     @Test("a 2xx carrying a user is valid, anything else on a 2xx proves nothing")
     func twoHundredNeedsAUser() {

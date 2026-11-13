@@ -322,8 +322,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var stubbedActivityLogTotal: Int = 0
     var stubbedSystemInfo: SystemInfo = SystemInfo()
 
+    /// Called by `getUserByID(id:)` when set, with the id asked for, so a test
+    /// can answer per account and hold one answer open (a late refresh).
+    /// Falls back to `stubbedUserByID`.
+    var getUserByIDHandler: (@Sendable (String) async throws -> UserDto)?
+
     func getUserByID(id: String) async throws -> UserDto {
         if shouldThrow { throw stubbedError }
+        if let getUserByIDHandler { return try await getUserByIDHandler(id) }
         return stubbedUserByID
     }
     func createUserByName(name: String, password: String?) async throws -> UserDto {

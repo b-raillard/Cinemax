@@ -985,7 +985,7 @@ struct HomeRouteWaitTests {
             entered.raised = true
             await route.wait()
         }
-        let lan = URL(string: "https://192.168.1.128:8920")!
+        let lan = URL(string: "https://192.168.1.10:8920")!
 
         let loading = Task { await vm.load(using: appState) }
         #expect(await eventually { entered.raised })

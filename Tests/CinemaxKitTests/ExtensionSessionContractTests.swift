@@ -113,18 +113,18 @@ struct ExtensionSessionContractTests {
     func blobCarriesLocalAddress() throws {
         let session = ExtensionSessionBridge.Session(
             serverURL: URL(string: "https://jelly.example.com")!, accessToken: "t", userId: "u",
-            localServerURL: URL(string: "https://192.168.1.128:8920")!,
+            localServerURL: URL(string: "https://192.168.1.10:8920")!,
             serverID: "S",
             localPinnedCertificateSHA256: "cd34")
         let data = try JSONEncoder().encode(session)
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        #expect(object["localServerURL"] as? String == "https://192.168.1.128:8920")
+        #expect(object["localServerURL"] as? String == "https://192.168.1.10:8920")
         #expect(object["serverID"] as? String == "S")
         #expect(object["localPinnedCertificateSHA256"] as? String == "cd34")
         // The exact wire shape an extension reads back.
         let wire = Data("""
         {"serverURL":"https://jelly.example.com","accessToken":"t","userId":"u",\
-        "localServerURL":"https://192.168.1.128:8920","serverID":"S","localPinnedCertificateSHA256":"cd34"}
+        "localServerURL":"https://192.168.1.10:8920","serverID":"S","localPinnedCertificateSHA256":"cd34"}
         """.utf8)
         let back = try JSONDecoder().decode(ExtensionSessionBridge.Session.self, from: wire)
         #expect(back == session)

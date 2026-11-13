@@ -324,6 +324,11 @@ final class AppState {
         }
         do {
             let user = try await apiClient.getUserByID(id: id)
+            // The account moved while the request was out (a switch, a
+            // sign-out): this answer is the previous account's, and `reconnect`
+            // never cancels a request already sent. Its own refresh writes the
+            // new one (audit 2026-11-13, BUG-03).
+            guard currentUserId == id else { return }
             // Equality-guarded: this runs on EVERY return to the foreground and
             // on every `UserUpdated` socket frame, and `@Observable` fires
             // `withMutation` even for an identical value — which invalidated
@@ -885,14 +890,12 @@ final class AppState {
         case .offline:
             return .offline                     // caller toasts; nothing mutated
         case .needsLogin:
-            await beginReLogin(for: entry)
-            return .needsLogin
+            return await beginReLogin(for: entry) ? .needsLogin : .unreachable
         default:
             break
         }
         guard let token = entry.accessToken else {
-            await beginReLogin(for: entry)
-            return .needsLogin
+            return await beginReLogin(for: entry) ? .needsLogin : .unreachable
         }
 
         // Validated OFF the shared client: it stays on the working server until
@@ -907,8 +910,7 @@ final class AppState {
         case .invalid:
             // Server-confirmed revocation — drop THIS entry's credentials only.
             clearSession(of: entry)
-            await beginReLogin(for: entry)
-            return .needsLogin
+            return await beginReLogin(for: entry) ? .needsLogin : .unreachable
         case .indeterminate:
             // Unprovable failure: KEEP the target's token (the "never destroy
             // on indeterminate" rule). The client was never repointed, so the
@@ -922,10 +924,14 @@ final class AppState {
     /// renders as `LoginScreen` — password and Quick Connect both scoped to that
     /// server for free. A successful login commits the entry through
     /// `upsertActiveEntry(session:)`.
-    func beginReLogin(for entry: ServerEntry) async {
-        if pendingRollbackServer == nil, let current = currentActiveEntry, current.id != entry.id {
-            pendingRollbackServer = current
-        }
+    ///
+    /// Returns `false` when the handshake failed: nothing moved, the app stays
+    /// where it was (`switchTo` answers `.unreachable`). `connectToServer`
+    /// installs the new client only once the server answered, so B's login
+    /// screen over a failed handshake posted B's credentials to A, on A's
+    /// client (audit 2026-11-13, BUG-01).
+    @discardableResult
+    func beginReLogin(for entry: ServerEntry) async -> Bool {
         serverTransitionGeneration &+= 1
         let generation = serverTransitionGeneration
         // The session still reads as A's until the handshake lands: no route
@@ -936,17 +942,30 @@ final class AppState {
         // Handshake on the entry's route (its LAN address at home), the
         // identity unchanged; a dial URL only when it is not the identity.
         let route = await routeURL(entry)
-        let info = try? await apiClient.connectToServer(url: entry.url, dialURL: route == entry.url ? nil : route)
+        let info: ServerInfo
+        do {
+            info = try await apiClient.connectToServer(url: entry.url, dialURL: route == entry.url ? nil : route)
+        } catch {
+            logger.error("Re-login handshake failed: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
         // Race guard: a newer transition (another switch, an add, a logout)
         // started while this handshake was in flight — its state has already been
         // committed and must not be overwritten by this stale one.
-        guard generation == serverTransitionGeneration else { return }
+        guard generation == serverTransitionGeneration else { return true }
+        // Set only once the handshake landed: a failed one leaves no rollback
+        // target behind.
+        if pendingRollbackServer == nil, let current = currentActiveEntry, current.id != entry.id {
+            pendingRollbackServer = current
+        }
+        saveLeavingAccountSettings()
         serverURL = entry.url
         serverInfo = info
         hasServer = true
         isAuthenticated = false
         currentUserId = nil
         accessToken = nil
+        return true
     }
 
     /// Reuses the pre-auth flow (`ServerSetupScreen` → `LoginScreen`) to add a
@@ -955,6 +974,7 @@ final class AppState {
     /// cancelled add, which `restorePreviousServer()` then replays.
     func beginAddServer() {
         serverTransitionGeneration &+= 1
+        saveLeavingAccountSettings()
         pendingRollbackServer = currentActiveEntry
         isAddingServer = true
         hasServer = false
@@ -1088,6 +1108,9 @@ final class AppState {
     @discardableResult
     func logout(reason: LogoutReason = .userInitiated) async -> LogoutOutcome {
         let active = currentActiveEntry
+        // An expired session comes back through the login screen: keep what
+        // followed it. (`.userInitiated` forgets the account below instead.)
+        if reason == .sessionExpired { saveLeavingAccountSettings() }
 
         if reason == .userInitiated, let active {
             revokeSessionInBackground(for: active)
@@ -1247,6 +1270,18 @@ final class AppState {
         guard AccountSettingsStore.isLessRestrictive(snapshot.maxContentAge, than: current) else { return }
         snapshot.maxContentAge = current
         AccountSettingsStore.save(snapshot, for: key, defaults: settingsDefaults)
+    }
+
+    /// Saves the ACTIVE account's settings (age cap, accent, light / dark) under
+    /// its key before an exit through the login screen (`beginAddServer`,
+    /// `beginReLogin`, `logout(.sessionExpired)`). `applyActiveServer` saves
+    /// the account it leaves through `swap`; the login-screen path cannot
+    /// (`upsertActiveEntry` swaps from `nil`, the account being already gone),
+    /// and an account never saved came back with whatever cap was current —
+    /// a child's lifted by the parent (audit 2026-11-13, BUG-02).
+    private func saveLeavingAccountSettings() {
+        guard let key = activeAccountKey else { return }
+        AccountSettingsStore.save(AccountSettingsStore.current(defaults: settingsDefaults), for: key, defaults: settingsDefaults)
     }
 
     /// Everything that followed an account leaving this device for good: its
