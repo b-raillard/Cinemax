@@ -94,6 +94,15 @@ nonisolated enum EarlyAdopterPlatform: String, Sendable, CaseIterable {
         }
     }
 
+    /// The app's bundle id — what a published app transaction's signed
+    /// payload must name (`AppStoreSignature.founderFacts`).
+    var bundleID: String {
+        switch self {
+        case .iOS: "com.cinemax.ios"
+        case .tvOS: "com.cinemax.tvos"
+        }
+    }
+
     /// One key PER platform, so neither app can overwrite the other's facts
     /// (a TV app installed after the Pro would otherwise erase the iPhone's
     /// early-adopter proof). Versioned like `entitlement.pro.v1`.

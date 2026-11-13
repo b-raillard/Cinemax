@@ -51,6 +51,18 @@ struct EarlyAdopterStoreKitTests {
                 print("Local AppTransaction unverified and refused: \(error)")
             }
 
+            // The app-transaction JWS StoreKit really emits carries what
+            // `AppStoreSignature` reads (audit SEC-02).
+            let jws = try await AppTransaction.shared.jwsRepresentation
+            let fields = try #require(storeKitJWSFields(jws))
+            #expect(fields.header["alg"] as? String == "ES256")
+            // No `signedDate` in an app transaction: its signing date is
+            // `receiptCreationDate`, which the verifier falls back on.
+            #expect(fields.payload["receiptCreationDate"] is NSNumber)
+            let app = try JSONDecoder().decode(SignedAppTransactionPayload.self, from: JSONSerialization.data(withJSONObject: fields.payload))
+            #expect(app.bundleId == Bundle.main.bundleIdentifier)
+            #expect(app.receiptType == "Xcode")
+
             let service = EarlyAdopterService(
                 source: source,
                 cache: StoreKitTestCache(nil),

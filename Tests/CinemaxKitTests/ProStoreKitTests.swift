@@ -39,6 +39,19 @@ func localStoreKitColdStartTolerant(_ body: () async throws -> Void) async throw
 /// (the product lookup, the purchase).
 @MainActor private var localStoreKitInactiveProbe: Bool?
 
+/// The header and payload of a JWS StoreKit emitted, UNVERIFIED — to check
+/// that its shape is the one `AppStoreSignature` reads.
+func storeKitJWSFields(_ jws: String?) -> (header: [String: Any], payload: [String: Any])? {
+    guard let parts = jws?.split(separator: ".", omittingEmptySubsequences: false), parts.count == 3 else { return nil }
+    func object(_ part: Substring) -> [String: Any]? {
+        var text = part.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        text += String(repeating: "=", count: (4 - text.count % 4) % 4)
+        return Data(base64Encoded: text).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    }
+    guard let header = object(parts[0]), let payload = object(parts[1]) else { return nil }
+    return (header, payload)
+}
+
 @MainActor
 private func localStoreKitIsInactive() async -> Bool {
     if let measured = localStoreKitInactiveProbe { return measured }
@@ -47,6 +60,9 @@ private func localStoreKitIsInactive() async -> Bool {
         .url(forResource: "JellyGlassPro", withExtension: "storekit", subdirectory: "Fixtures"),
        let session = try? SKTestSession(contentsOf: url) {
         session.disableDialogs = true
+        // A simulated error outlives its session (area RULE): a leftover one
+        // would read as the cold start and make the whole process tolerant.
+        try? await session.setSimulatedError(nil, forAPI: .appTransaction)
         if let result = try? await AppTransaction.shared {
             inactive = result.unsafePayloadValue.environment != .xcode
         }
@@ -101,6 +117,14 @@ struct ProStoreKitTests {
             }
             #expect(fact.productID == ProProduct.current)
             #expect(fact.environment == .xcode)
+            // The JWS StoreKit really emits carries what `AppStoreSignature`
+            // reads (audit SEC-02 — its own fixtures are hand-written).
+            let fields = try #require(storeKitJWSFields(fact.signedTransaction))
+            #expect(fields.header["alg"] as? String == "ES256")
+            #expect(fields.payload["signedDate"] is NSNumber)
+            let purchase = try JSONDecoder().decode(SignedPurchasePayload.self, from: JSONSerialization.data(withJSONObject: fields.payload))
+            #expect(purchase.productId == ProProduct.current)
+            #expect(purchase.environment == "Xcode")
             #expect(entitlements.state == .pro(.purchase))
             // A test purchase never reaches the user's real iCloud store.
             #expect(cloud.data(forKey: CloudEntitlementMirror.key) == nil)

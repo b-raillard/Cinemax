@@ -34,7 +34,7 @@ struct RevokeOwnPurchaseTests {
     @Test("Le miroir écrit par CETTE app part avec l'enregistrement local")
     func ownMirrorRemoved() {
         let cloud = InMemoryCloudKeyValueStore()
-        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)
+        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud, vouches: { _ in true })
         store.recordPurchase(record(writer: iosBundle))
         #expect(store.state.isPro)
 
@@ -52,7 +52,7 @@ struct RevokeOwnPurchaseTests {
         cloud.set(record(writer: tvBundle, transaction: "tv").encoded(), forKey: CloudEntitlementMirror.key)
         let defaults = UserDefaults.isolatedForTesting()
         defaults.set(record(writer: iosBundle).encoded(), forKey: SettingsKey.entitlementLocalRecord)
-        let store = EntitlementStore(defaults: defaults, cloud: cloud)
+        let store = EntitlementStore(defaults: defaults, cloud: cloud, vouches: { _ in true })
 
         store.revokeOwnPurchase(ownBundleID: iosBundle)
 
@@ -64,7 +64,7 @@ struct RevokeOwnPurchaseTests {
     @Test("Le miroir est relu juste avant d'être retiré : un record neuf de l'autre plateforme survit")
     func rereadsMirrorBeforeRemoving() {
         let cloud = InMemoryCloudKeyValueStore()
-        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)
+        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud, vouches: { _ in true })
         store.recordPurchase(record(writer: iosBundle))
         // The Apple TV rewrote the key; its notification is not processed yet.
         cloud.set(record(writer: tvBundle, transaction: "tv").encoded(), forKey: CloudEntitlementMirror.key)
@@ -80,7 +80,7 @@ struct RevokeOwnPurchaseTests {
         let cloud = InMemoryCloudKeyValueStore()
         let sandbox = fact(transaction: "sb", environment: .sandbox).record(writerBundleID: tvBundle)
         cloud.set(sandbox.encoded(), forKey: CloudEntitlementMirror.key)
-        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)
+        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud, vouches: { _ in true })
         #expect(store.state == .free)
     }
 }
