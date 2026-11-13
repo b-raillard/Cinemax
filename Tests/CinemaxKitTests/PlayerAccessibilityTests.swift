@@ -177,6 +177,102 @@ struct AccentLabelContrastTests {
     }
 }
 
+// MARK: - Small text contrast in light mode (audit 2026-11-13, UX-01 / 02 / 03)
+
+/// Small text needs 4.5:1. Each test reads the REAL tokens — `CinemaColor`
+/// resolved through a trait collection, `AccentOption.palette` — so a later
+/// edit of a value is what fails, not a copy kept here.
+@MainActor
+@Suite("Small text contrast")
+struct SmallTextContrastTests {
+    private func hex(_ color: Color, dark: Bool) -> UInt {
+        let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+        let resolved = UIColor(color).resolvedColor(with: traits)
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        resolved.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        func byte(_ v: CGFloat) -> UInt { UInt((min(max(v, 0), 1) * 255).rounded()) }
+        return byte(red) << 16 | byte(green) << 8 | byte(blue)
+    }
+
+    /// `top` at `opacity` composited over an opaque `bottom`.
+    private func over(_ top: UInt, opacity: Double, on bottom: UInt) -> UInt {
+        [16, 8, 0].reduce(0) { result, shift in
+            let t = Double((top >> UInt(shift)) & 0xFF), b = Double((bottom >> UInt(shift)) & 0xFF)
+            return result | UInt((t * opacity + b * (1 - opacity)).rounded()) << UInt(shift)
+        }
+    }
+
+    private func ratio(_ a: UInt, _ b: UInt) -> Double {
+        AccentLabelContrast.contrast(AccentLabelContrast.luminance(hex: a), AccentLabelContrast.luminance(hex: b))
+    }
+
+    private func name(_ hex: UInt) -> String { String(hex, radix: 16) }
+
+    @Test("the token read resolves the real palette in both modes")
+    func tokensResolve() {
+        #expect(hex(CinemaColor.surface, dark: false) == 0xF7F7F8)
+        #expect(hex(CinemaColor.surface, dark: true) == 0x0E0E0E)
+        #expect(hex(CinemaColor.surfaceContainerHigh, dark: false) == 0xE2E2E5)
+    }
+
+    /// UX-03: orange (3.23:1) and cyan (3.08:1) — and, at the same bar, green
+    /// (4.10:1) and blue (4.46:1) — fell short as small labels on
+    /// `surfaceContainerHigh`, the darkest surface such a label sits on.
+    @Test("every accent reads as small text on surface and surfaceContainerHigh, both modes")
+    func accentsReadAsSmallText() {
+        for dark in [false, true] {
+            let surfaces = [hex(CinemaColor.surface, dark: dark), hex(CinemaColor.surfaceContainerHigh, dark: dark)]
+            for option in AccentOption.cyclingCases {
+                let accent = dark ? option.palette.accentDark : option.palette.accentLight
+                for surface in surfaces {
+                    #expect(ratio(accent, surface) >= 4.5, "\(option) \(dark ? "dark" : "light"): \(ratio(accent, surface)) on \(name(surface))")
+                }
+            }
+        }
+    }
+
+    /// UX-02: `success` is TEXT too (« Arrivée dans ta bibliothèque », « Cet
+    /// appareil », the server badge) — 2.72:1 on `surfaceContainerHigh` in
+    /// light mode. The badge is the worst case: its label sits on its own 12 %
+    /// tint (`serverStatusBadge`) over that surface.
+    @Test("success reads as small text, its badge's own tint included")
+    func successReadsAsText() {
+        for dark in [false, true] {
+            let success = hex(CinemaColor.success, dark: dark)
+            for surface in [CinemaColor.surface, CinemaColor.surfaceContainer, CinemaColor.surfaceContainerHigh] {
+                let ground = hex(surface, dark: dark)
+                #expect(ratio(success, ground) >= 4.5, "\(dark ? "dark" : "light") on \(name(ground)): \(ratio(success, ground))")
+                let tint = over(success, opacity: 0.12, on: ground)
+                #expect(ratio(success, tint) >= 4.5, "\(dark ? "dark" : "light") badge on \(name(ground)): \(ratio(success, tint))")
+            }
+        }
+    }
+
+    /// UX-01: over a poster the missing-title card is the poster under a
+    /// `surfaceContainerLowest` veil; « Demander » in the accent and « 2021 ·
+    /// Film » in `onSurfaceVariant` read 1.5–3.7:1 on a black poster in light
+    /// mode (#9E9E9E). The badge now sits on its own pill and the title lines
+    /// take `onSurface`. Black and white posters are the two extremes.
+    @Test("the missing-title card's text reads over a black and a white poster")
+    func missingTitleCardReadsOverPosters() {
+        for dark in [false, true] {
+            let mode = dark ? "dark" : "light"
+            let lowest = hex(CinemaColor.surfaceContainerLowest, dark: dark)
+            for poster: UInt in [0x000000, 0xFFFFFF] {
+                let veil = over(lowest, opacity: MissingTitleCard.posterVeilOpacity, on: poster)
+                let pill = over(lowest, opacity: MissingTitleCard.badgePillOpacity, on: veil)
+                let onSurface = hex(CinemaColor.onSurface, dark: dark)
+                #expect(ratio(onSurface, veil) >= 4.5, "\(mode) title/year on \(name(poster)): \(ratio(onSurface, veil))")
+                let variant = hex(CinemaColor.onSurfaceVariant, dark: dark)
+                #expect(ratio(variant, pill) >= 4.5, "\(mode) badge on \(name(poster)): \(ratio(variant, pill))")
+                for option in AccentOption.cyclingCases {
+                    let accent = dark ? option.palette.accentDark : option.palette.accentLight
+                    #expect(ratio(accent, pill) >= 4.5, "\(mode) \(option) « Demander » on \(name(poster)): \(ratio(accent, pill))")
+                }
+            }
+        }
+    }
+}
 
 // MARK: - Toasts under VoiceOver (audit 2026-09-22, U3)
 
