@@ -166,11 +166,11 @@ All ten live in `AccentOption.palette` (`Shared/DesignSystem/AccentOption.swift`
 │ Accent  │ accentLT  │ accentDK  │ containerLT  │ containerDK  │ dimLT     │ dimDK     │ onAccentLT │ onAccentDK │
 ├─────────┼───────────┼───────────┼──────────────┼──────────────┼───────────┼───────────┼────────────┼────────────┤
 │ red     │ #C1272D   │ #FF6B6B   │ #E53935      │ #E53935      │ #8C1C20   │ #CC2C30   │ #FFFFFF    │ #3D0000    │
-│ orange  │ #CC5A0A   │ #FF8C42   │ #E06A1A      │ #E06A1A      │ #A84508   │ #CC5500   │ #FFFFFF    │ #3D1500    │
+│ orange  │ #A44808   │ #FF8C42   │ #E06A1A      │ #E06A1A      │ #A84508   │ #CC5500   │ #FFFFFF    │ #3D1500    │
 │ yellow  │ #8A5A00   │ #FFC940   │ #D19500      │ #D19500      │ #6B4500   │ #B37B00   │ #FFFFFF    │ #2B1F00    │
-│ green ★ │ #1F7A50   │ #4CAF82   │ #2E8A5E      │ #2E8A5E      │ #155F3E   │ #1F7A50   │ #FFFFFF    │ #001A0D    │
-│ cyan    │ #0E8F84   │ #2DD4BF   │ #0BAEA0      │ #0BAEA0      │ #08756B   │ #009A8C   │ #FFFFFF    │ #001A18    │
-│ blue    │ #0060D6   │ #679CFF   │ #007AFF      │ #007AFF      │ #0050B8   │ #0070EB   │ #FFFFFF    │ #001F4A    │
+│ green ★ │ #1D714A   │ #4CAF82   │ #2E8A5E      │ #2E8A5E      │ #155F3E   │ #1F7A50   │ #FFFFFF    │ #001A0D    │
+│ cyan    │ #0B6F67   │ #2DD4BF   │ #0BAEA0      │ #0BAEA0      │ #08756B   │ #009A8C   │ #FFFFFF    │ #001A18    │
+│ blue    │ #005ED1   │ #679CFF   │ #007AFF      │ #007AFF      │ #0050B8   │ #0070EB   │ #FFFFFF    │ #001F4A    │
 │ indigo  │ #3730A3   │ #818CF8   │ #4F46E5      │ #4F46E5      │ #262183   │ #3B3FB5   │ #FFFFFF    │ #0A0A2B    │
 │ purple  │ #7A2BD0   │ #BF7FFF   │ #8E3CE0      │ #9B57E0      │ #651FB0   │ #8B44CF   │ #FFFFFF    │ #1A0040    │
 │ pink    │ #C2185B   │ #FF6BB5   │ #D63384      │ #E0458F      │ #A0144A   │ #CC3578   │ #FFFFFF    │ #3D001A    │
@@ -179,7 +179,7 @@ All ten live in `AccentOption.palette` (`Shared/DesignSystem/AccentOption.swift`
 ★ default
 ```
 
-Light-mode `accent` values are deeper/more saturated than dark-mode values to maintain ≥4.5:1 contrast on the soft-grey `surface` background.
+Light-mode `accent` values are deeper/more saturated than dark-mode values so that every accent, used as small text, clears 4.5:1 on `surface` AND on `surfaceContainerHigh` (the darkest surface such a label sits on), in both modes — locked by `SmallTextContrastTests`. Before the audit of 2026-11-13 (UX-03) orange (`#CC5A0A`, 3.23:1 on `surfaceContainerHigh`), cyan (`#0E8F84`, 3.08:1), green (`#1F7A50`, 4.10:1) and blue (`#0060D6`, 4.46:1) did not; red, yellow and pink sit just above the bar (4.52–4.58:1), so a new or retuned accent must be checked against it.
 
 ### Rainbow easter egg
 
