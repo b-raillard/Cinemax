@@ -7,7 +7,8 @@ import Foundation
 /// - an entitlement ⇒ record it (and mirror it if it was a real purchase);
 /// - a PROVEN revocation ⇒ withdraw the local record AND this app's mirror,
 ///   even with no local record left (refunded, deleted, reinstalled);
-/// - a mere absence ⇒ withdraw the local record only. The mirror stays: the
+/// - a mere absence ⇒ withdraw the local record only (whoever it claims
+///   wrote it). The mirror stays: the
 ///   App Store may simply be signed out, or not synced yet on a restored
 ///   device, and the other platform must not lose its Pro over that. Accepted
 ///   cost: a signed-out device stays Pro through its own mirror.
@@ -28,13 +29,18 @@ nonisolated enum ProPurchasePolicy {
         cloudRecord: CloudEntitlementRecord?,
         ownBundleID: String
     ) -> Action {
-        let ownLocal = localRecord.map { $0.writerBundleID == ownBundleID } ?? false
+        // ANY local record answers to this app's StoreKit: only `recordPurchase`
+        // writes one, always with this app's bundle id, so one carrying
+        // another writer was fabricated — it must not survive an absence or a
+        // revocation (audit SEC-01). The local record is never trusted on its
+        // own: this reconciliation, run at every launch, is its verifier.
+        let hasLocal = localRecord != nil
         switch entitlement {
         case .revoked:
             let ownMirror = cloudRecord.map { $0.writerBundleID == ownBundleID } ?? false
-            return ownLocal || ownMirror ? .revoke : .none
+            return hasLocal || ownMirror ? .revoke : .none
         case .absent:
-            return ownLocal ? .clearLocal : .none
+            return hasLocal ? .clearLocal : .none
         case .entitled(let fact):
             let candidate = fact.record(writerBundleID: ownBundleID)
             let localUpToDate = localRecord.map { sameTransaction($0, candidate) } ?? false
