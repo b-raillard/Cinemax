@@ -17,11 +17,42 @@ private final class ProStoreKitFixtureToken {}
 /// only the next process gets the `.storekit` file. Every CI runner is a fresh
 /// simulator, so there the real-StoreKit tests record a KNOWN, intermittent
 /// issue; on a simulator that has run the suite once, they pass in full.
+/// ONLY that cause is tolerated: the precondition measures, before the body,
+/// whether local StoreKit is serving this process (`localStoreKitIsInactive`).
+/// When it is, any failure of the body is a real failure (audit CI-06: the
+/// unconditional wrapper turned every `#expect` into a known issue).
 @MainActor
-func localStoreKitColdStartTolerant(_ body: () async throws -> Void) async {
-    await withKnownIssue("Local StoreKit inactive on a simulator's first test run", isIntermittent: true) {
+func localStoreKitColdStartTolerant(_ body: () async throws -> Void) async throws {
+    try await withKnownIssue("Local StoreKit inactive on a simulator's first test run", isIntermittent: true) {
         try await body()
+    } when: {
+        await localStoreKitIsInactive()
     }
+}
+
+/// Measured once per process (the cold start is a property of the process —
+/// waiting does not end it): with a local `SKTestSession` open, the app
+/// transaction comes from Xcode's local testing (`.xcode`) — verified or not,
+/// its certificate may be expired — when local StoreKit is active, and the
+/// real Sandbox answers (`noAccount` → throws, or a non-Xcode environment)
+/// when it is not. Keyed on the ENVIRONMENT, never on what a test asserts
+/// (the product lookup, the purchase).
+@MainActor private var localStoreKitInactiveProbe: Bool?
+
+@MainActor
+private func localStoreKitIsInactive() async -> Bool {
+    if let measured = localStoreKitInactiveProbe { return measured }
+    var inactive = true
+    if let url = Bundle(for: ProStoreKitFixtureToken.self)
+        .url(forResource: "JellyGlassPro", withExtension: "storekit", subdirectory: "Fixtures"),
+       let session = try? SKTestSession(contentsOf: url) {
+        session.disableDialogs = true
+        if let result = try? await AppTransaction.shared {
+            inactive = result.unsafePayloadValue.environment != .xcode
+        }
+    }
+    localStoreKitInactiveProbe = inactive
+    return inactive
 }
 
 @Suite("Achat Pro — StoreKit réel (local)", .serialized)
@@ -46,7 +77,7 @@ struct ProStoreKitTests {
 
     @Test("Le produit de cette app se charge, avec le prix de l'App Store")
     func productLoads() async throws {
-        await localStoreKitColdStartTolerant {
+        try await localStoreKitColdStartTolerant {
             let session = try await session()
             defer { _ = session }
             let product = try await StoreKitProClient().product(id: ProProduct.current)
@@ -57,7 +88,7 @@ struct ProStoreKitTests {
 
     @Test("Acheté → Pro sur cet appareil, SANS miroir (achat de test) ; remboursé → gratuit")
     func purchaseThenRefund() async throws {
-        await localStoreKitColdStartTolerant {
+        try await localStoreKitColdStartTolerant {
             let session = try await session()
             let cloud = InMemoryCloudKeyValueStore()
             let entitlements = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)

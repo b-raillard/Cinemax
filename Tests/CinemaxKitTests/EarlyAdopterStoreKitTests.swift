@@ -39,7 +39,7 @@ struct EarlyAdopterStoreKitTests {
     /// « 1.0 » is the sandbox's value, not Xcode's.
     @Test("Real local StoreKit never makes an early adopter, verified or not")
     func realTransactionNeverGrants() async throws {
-        await localStoreKitColdStartTolerant {
+        try await localStoreKitColdStartTolerant {
             let session = try await session()
             defer { _ = session }
             let source = StoreKitAppTransactionSource()
