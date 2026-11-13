@@ -16,8 +16,8 @@ struct CloudEntitlementRecord: Codable, Sendable, Equatable {
     let productID: String
     let originalTransactionID: String
     let purchaseDate: Date
-    /// The StoreKit 2 JWS of the transaction, kept so a future reader can
-    /// verify the mirror instead of trusting it. `nil` until StoreKit lands.
+    /// The StoreKit 2 JWS of the transaction. A record read from the iCloud
+    /// mirror unlocks only when it verifies (`AppStoreSignature`).
     let signedTransaction: String?
     /// Bundle id of the app that wrote the record (`com.cinemax.ios` /
     /// `com.cinemax.tvos`) — tells a reader whether it is looking at its own

@@ -24,17 +24,23 @@ final class EntitlementStore {
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let mirror: CloudEntitlementMirror
+    /// Whether a mirrored record's App Store signature vouches for it
+    /// (`AppStoreSignature`, audit SEC-02).
+    @ObservationIgnored private let vouches: @Sendable (CloudEntitlementRecord) -> Bool
     @ObservationIgnored private var externalChangesTask: Task<Void, Never>?
 
     /// `defaults` is a test seam (`UserDefaults.isolatedForTesting()`); `cloud`
-    /// too (`InMemoryCloudKeyValueStore`). The app runs on `.standard` and the
-    /// real iCloud key-value store.
+    /// too (`InMemoryCloudKeyValueStore`), and `vouches` (a test root, or a
+    /// stand-in where the signature is not the subject). The app runs on
+    /// `.standard`, the real iCloud key-value store and Apple's root.
     init(
         defaults: UserDefaults = .standard,
-        cloud: any CloudKeyValueStore = UbiquitousCloudKeyValueStore()
+        cloud: any CloudKeyValueStore = UbiquitousCloudKeyValueStore(),
+        vouches: @escaping @Sendable (CloudEntitlementRecord) -> Bool = { AppStoreSignature.appStore.vouchesForPurchase($0) }
     ) {
         self.defaults = defaults
         self.mirror = CloudEntitlementMirror(store: cloud)
+        self.vouches = vouches
         refresh()
         externalChangesTask = Task { [weak self, mirror] in
             for await _ in mirror.externalChanges() {
@@ -56,7 +62,7 @@ final class EntitlementStore {
         let local = defaults.data(forKey: SettingsKey.entitlementLocalRecord)
             .flatMap(CloudEntitlementRecord.decode)
         if local != localRecord { localRecord = local }
-        let cloud = Self.trusted(mirror.read())
+        let cloud = trusted(mirror.read())
         if cloud != cloudRecord { cloudRecord = cloud }
         #if DEBUG
         let override = defaults.bool(forKey: SettingsKey.debugSimulatePro)
@@ -86,9 +92,11 @@ final class EntitlementStore {
 
     /// The iCloud record this build trusts: a test purchase found there (an
     /// older build, or a tester's) unlocks nothing — the key-value store has
-    /// no test / production split.
-    private static func trusted(_ record: CloudEntitlementRecord?) -> CloudEntitlementRecord? {
-        guard let record, record.isProduction else { return nil }
+    /// no test / production split — and neither does one whose App Store
+    /// signature does not vouch for it: the store is user-writable (audit
+    /// SEC-02).
+    private func trusted(_ record: CloudEntitlementRecord?) -> CloudEntitlementRecord? {
+        guard let record, record.isProduction, vouches(record) else { return nil }
         return record
     }
 
@@ -116,7 +124,7 @@ final class EntitlementStore {
             mirror.remove()
             if cloudRecord != nil { cloudRecord = nil }
         } else {
-            let trusted = Self.trusted(current)
+            let trusted = trusted(current)
             if trusted != cloudRecord { cloudRecord = trusted }
         }
         resolve()
