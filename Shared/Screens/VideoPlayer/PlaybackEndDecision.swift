@@ -160,14 +160,21 @@ enum PlaybackRetryPolicy {
     ///   - usingProxy: the attempt that just failed went through the proxy.
     ///   - routeChanged: the stream was negotiated on another route than the
     ///     one dialled now (`routeChanged(negotiated:currentDial:)`).
+    ///   - recoveryExhausted: a rebuild net (frozen picture, cut feed, stranded
+    ///     seek) wanted to rebuild and the shared budget is spent
+    ///     (`PictureStallPolicy.recoveriesLeft == 0`). That IS the bound: a
+    ///     retry here would be one more re-negotiation outside it, and the
+    ///     next successful open would re-arm it — so it gives up whatever
+    ///     `didRetry` says, once (a second signal is `.ignore`).
     static func decide(
         didRetry: Bool,
         errorAlertShowing: Bool,
         retryPending: Bool,
         usingProxy: Bool,
-        routeChanged: Bool = false
+        routeChanged: Bool = false,
+        recoveryExhausted: Bool = false
     ) -> PlaybackRetryDecision {
-        if !didRetry {
+        if !didRetry, !recoveryExhausted {
             if routeChanged { return .rebuildOnCurrentRoute }
             return .retry(noteDirectFailure: !usingProxy)
         }

@@ -350,6 +350,30 @@ struct PlaybackRetryPolicyTests {
         #expect(!PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: nil))
     }
 
+    @Test("a rebuild net with its budget spent gives up at once — never a retry outside the bound")
+    func spentRecoveryBudgetGivesUp() {
+        // Mid-film `didRetry` is false (every open renews it): without the flag
+        // this would retry, and the retry's open would re-arm it — a loop of
+        // re-negotiations the shared rebuild budget exists to prevent (PL-01).
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: false,
+                                           recoveryExhausted: true) == .giveUp(releaseStickyProxy: false))
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: true,
+                                           routeChanged: true,
+                                           recoveryExhausted: true) == .giveUp(releaseStickyProxy: true))
+    }
+
+    @Test("a spent budget surfaces ONCE: a second net firing behind the alert is ignored")
+    func spentRecoveryBudgetSurfacesOnce() {
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: true,
+                                           retryPending: false, usingProxy: false,
+                                           recoveryExhausted: true) == .ignore)
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: true, usingProxy: false,
+                                           recoveryExhausted: true) == .ignore)
+    }
+
     @Test("a route rebuild reopens where playback dropped, else at the open's own resume point")
     func rebuildPosition() {
         #expect(PlaybackRetryPolicy.rebuildFromMs(lastKnownPositionMs: 4_915_487, startTime: 30) == 4_915_487)

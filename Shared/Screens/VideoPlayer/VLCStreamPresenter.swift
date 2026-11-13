@@ -1217,6 +1217,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard pictureStall.recoveriesLeft > 0 else {
             logger.error("seek-stranded no recovery left target=\(targetMs, privacy: .public)")
             DiagnosticsUploader.send(reason: "seek-stranded-exhausted", engine: "vlc")
+            giveUpAfterSpentRecovery("seek-stranded")
             return false
         }
         logger.notice("""
@@ -1246,6 +1247,23 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         return true
     }
 
+    /// A net wanted a rebuild and the shared budget is spent: « Lecture
+    /// impossible », once, instead of a frozen picture under a HUD that says
+    /// « playing » (audit 2026-11-13, PL-01). Only for THAT refusal — a rebuild
+    /// already negotiating owns the recovery, a closing player needs nothing.
+    /// The engine is paused first: a wedged decoder keeps its clock and its
+    /// sound running, and its ticks would otherwise go on behind the alert
+    /// (progress reports climbing, audio playing). `recoveryExhausted` makes
+    /// the retry policy give up without spending a retry the next open would
+    /// re-arm; the error path then releases the server session and uploads its
+    /// `playback-failed` document.
+    private func giveUpAfterSpentRecovery(_ net: String) {
+        guard !isTearingDown, !reResolve.isNegotiating, pictureStall.recoveriesLeft == 0 else { return }
+        logger.error("\(net, privacy: .public) recovery budget spent — surfacing the failure")
+        player.pause()
+        handlePlaybackError(recoveryExhausted: true)
+    }
+
     /// The one guard that watches the PICTURE instead of the clock, the engine
     /// state or an error — the state and the errors say nothing when the video
     /// decoder wedges or the pipeline stalls, and the clock may or may not move.
@@ -1261,13 +1279,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             seekSettling: seeks.isSettling || reResolve.isNegotiating,
             mediaConfirmedOpen: mediaConfirmedOpen
         ) {
-        case .healthy:
+        case .healthy, .stalling:
             break
-        case .stalling(let seconds):
-            // Logged once per episode of stalling, at the threshold: past it the
-            // budget is spent and the counter keeps climbing, which must not
-            // become one log line per second for the rest of the film.
-            guard seconds == PictureStallPolicy.stallSeconds else { return }
+        case .exhausted:
+            // Once per run of frozen samples, at the threshold: the budget is
+            // spent, so the app gives up rather than leave the frozen picture
+            // on screen with nothing said (PL-01).
             let clockMoved = pictureStall.stallClockMoved
             logger.notice("""
                 picture-stall no recovery left pos=\(Int(self.currentMs / 1000), privacy: .public)s \
@@ -1280,6 +1297,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 reason: clockMoved ? "picture-stall-exhausted" : "playback-freeze-exhausted",
                 engine: "vlc"
             )
+            giveUpAfterSpentRecovery("picture-stall")
         case .recover:
             // Everything worth knowing about WHY, in one line: the picture
             // counters, the demuxer's own complaints, and the module chain
@@ -1397,6 +1415,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         StreamTransportPolicy.shared.noteDirectPlaybackFailed()
         if !rebuildSpendingRecovery(from: currentMs) {
             logger.error("feed-stall relay failover refused (no recovery left, or a rebuild is running)")
+            giveUpAfterSpentRecovery("feed-stall-relay")
         }
     }
 
@@ -1451,6 +1470,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 """)
             if !self.rebuildSpendingRecovery(from: self.currentMs) {
                 logger.error("feed-stall escalation refused (no recovery left, or a rebuild is running)")
+                self.giveUpAfterSpentRecovery("feed-stall-escalation")
             }
         }
         feedReanchorWatchdog = work
@@ -4448,7 +4468,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func noteMediaOpened() {
         let wasOpen = mediaConfirmedOpen
         cancelOpenWatchdog()
-        recoverFromErrorIfNeeded()
+        // Only an OPEN takes a stale alert down (a stalled handshake that
+        // recovered after the watchdog surfaced it). This runs on every time
+        // tick: a give-up on a media that is still open — a rebuild net with
+        // its budget spent (`giveUpAfterSpentRecovery`) — must not be dismissed
+        // by the next tick of a clock that kept running.
+        if !wasOpen { recoverFromErrorIfNeeded() }
         didRetry = false
         // Releases the spinner gate — see `clearLoadingIfOpen()`. The engine
         // state that follows (`.playing` / a time tick) does the actual hiding.
@@ -5592,7 +5617,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
     #endif
 
-    private func handlePlaybackError() {
+    /// `recoveryExhausted`: called by `giveUpAfterSpentRecovery` — a rebuild
+    /// net found the shared budget spent, so this gives up without a retry.
+    private func handlePlaybackError(recoveryExhausted: Bool = false) {
         cancelOpenWatchdog()
         seeks.endSettle() // the media is being reloaded (or given up on)
         // The decision is pure and unit-tested (`PlaybackRetryPolicy`); this
@@ -5604,7 +5631,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             usingProxy: usingProxy,
             routeChanged: PlaybackRetryPolicy.routeChanged(
                 negotiated: info.url, currentDial: apiClient.currentDialURL()
-            )
+            ),
+            recoveryExhausted: recoveryExhausted
         )
         let releaseStickyProxy: Bool
         switch decision {
