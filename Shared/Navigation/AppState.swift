@@ -324,6 +324,11 @@ final class AppState {
         }
         do {
             let user = try await apiClient.getUserByID(id: id)
+            // The account moved while the request was out (a switch, a
+            // sign-out): this answer is the previous account's, and `reconnect`
+            // never cancels a request already sent. Its own refresh writes the
+            // new one (audit 2026-11-13, BUG-03).
+            guard currentUserId == id else { return }
             // Equality-guarded: this runs on EVERY return to the foreground and
             // on every `UserUpdated` socket frame, and `@Observable` fires
             // `withMutation` even for an identical value — which invalidated

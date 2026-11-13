@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import Observation
+import JellyfinAPI
 @testable import CinemaxKit
 @testable import Cinemax
 
@@ -284,6 +285,43 @@ struct MultiAccountAppStateTests {
         #expect(api.reconnectedTokens.last == "tokB")
         #expect(kc.savedSession?.userID == "B")
         #expect(Set(app.activeAccounts.map(\.userId)) == ["A", "B"])
+    }
+
+    /// Audit 2026-11-13, BUG-03: the launch refresh (or a foreground one) for
+    /// Alice answers AFTER the switch to Bob and Bob's own refresh.
+    @Test("Une réponse tardive du profil du compte quitté n'écrase pas celui du nouveau compte")
+    func lateRefreshOfPreviousAccountIsDropped() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let entered = TestLatch()
+        let gate = TestLatch()
+        var alice = UserDto(id: "A", name: "Alice")
+        var adminPolicy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
+        adminPolicy.isAdministrator = true
+        alice.policy = adminPolicy
+        var bob = UserDto(id: "B", name: "Bob")
+        bob.policy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
+        let (aliceDto, bobDto) = (alice, bob)
+        api.getUserByIDHandler = { id in
+            guard id == "A" else { return bobDto }
+            entered.open()
+            await gate.wait()
+            return aliceDto
+        }
+        let app = makeState(api: api, servers: [household()])
+        app.settingsDefaults = .isolatedForTesting()
+
+        let late = Task { await app.refreshCurrentUser() }
+        await entered.wait()
+        #expect(await app.switchAccount(to: "B") == .switched)
+        #expect(app.currentUser?.id == "B")
+        gate.open()
+        await late.value
+
+        #expect(app.currentUserId == "B")
+        #expect(app.currentUser?.id == "B")
+        #expect(app.currentUser?.name == "Bob")
+        #expect(app.isAdministrator == false)
     }
 
     @Test("Bascule refusée par le serveur : compte marqué expiré, rien d'autre ne bouge")
