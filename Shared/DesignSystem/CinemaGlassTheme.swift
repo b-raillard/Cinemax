@@ -72,8 +72,12 @@ enum CinemaColor {
     static let errorContainer   = Color.dynamic(light: 0xFADBD8, dark: 0x7F2927)
     static let onErrorContainer = Color.dynamic(light: 0x7B1A12, dark: 0xFF9993)
 
-    // Success
-    static let success = Color.dynamic(light: 0x1F9D45, dark: 0x34C759)
+    // Success — TEXT as well as a dot (« Arrivée dans ta bibliothèque »,
+    // « Cet appareil », the server badge). Clears 4.5:1 on `surface` …
+    // `surfaceContainerHigh` and on the badge's own 12 % tint over them, in
+    // both modes (light was #1F9D45, 2.72:1 on `surfaceContainerHigh` —
+    // audit 2026-11-13, UX-02).
+    static let success = Color.dynamic(light: 0x14672D, dark: 0x34C759)
 
     // Warning — amber TEXT for something to look into (a report's problem
     // line, Réglages → Seerr → Signalements). Clears 4.5:1 on `surface` and

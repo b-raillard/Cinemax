@@ -230,6 +230,23 @@ struct SmallTextContrastTests {
             }
         }
     }
+
+    /// UX-02: `success` is TEXT too (« Arrivée dans ta bibliothèque », « Cet
+    /// appareil », the server badge) — 2.72:1 on `surfaceContainerHigh` in
+    /// light mode. The badge is the worst case: its label sits on its own 12 %
+    /// tint (`serverStatusBadge`) over that surface.
+    @Test("success reads as small text, its badge's own tint included")
+    func successReadsAsText() {
+        for dark in [false, true] {
+            let success = hex(CinemaColor.success, dark: dark)
+            for surface in [CinemaColor.surface, CinemaColor.surfaceContainer, CinemaColor.surfaceContainerHigh] {
+                let ground = hex(surface, dark: dark)
+                #expect(ratio(success, ground) >= 4.5, "\(dark ? "dark" : "light") on \(name(ground)): \(ratio(success, ground))")
+                let tint = over(success, opacity: 0.12, on: ground)
+                #expect(ratio(success, tint) >= 4.5, "\(dark ? "dark" : "light") badge on \(name(ground)): \(ratio(success, tint))")
+            }
+        }
+    }
 }
 
 // MARK: - Toasts under VoiceOver (audit 2026-09-22, U3)

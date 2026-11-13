@@ -126,7 +126,7 @@ Don't reach for these to build hierarchy. Use tonal surface shifts.
 | `error` | `#C0392B` | `#EE7D77` | Error text, destructive icon |
 | `errorContainer` | `#FADBD8` | `#7F2927` | Error toast / badge background, `CinemaButton(style: .destructive)` fill |
 | `onErrorContainer` | `#7B1A12` | `#FF9993` | Text on `errorContainer`, `CinemaButton(style: .destructive)` label |
-| `success` | `#1F9D45` | `#34C759` | Success icon, connected-status dot |
+| `success` | `#14672D` | `#34C759` | Success text, icon, connected-status dot — as text ≥ 4.5:1 on `surface` … `surfaceContainerHigh` and on its own 12 % badge tint, both modes (light was `#1F9D45` before the 2026-11-13 audit, UX-02) |
 
 ---
 
