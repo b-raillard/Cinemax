@@ -13,7 +13,8 @@ aubergine » variant).
                                                                 #   alternate icons (ALTERNATES)
                                                                 #   + the picker's previews
 
-Needs Pillow + numpy.
+Needs Pillow + numpy. Every mode ends with `lighten.py` (the iOS 1024 icons'
+grain smoothed by at most 2 levels, so `Assets.car` halves — see its docstring).
 
 Sources
 - The icons whose rounded corners are painted in (`CORNERED`) are read from
@@ -49,6 +50,8 @@ import sys
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+import lighten  # design/logo-variantes/lighten.py — run at the end of every mode
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -357,6 +360,7 @@ def install_alternates():
         write_preview_set(preview, previews(declined(variant, ICON), declined(variant, TV_SMALL_BACK_2X),
                                             declined(variant, TV_SMALL_FRONT_2X)))
     print(f"{len(ALTERNATES)} alternate icon(s) + previews installed in {ASSETS}")
+    lighten.main()  # no-op when the copied files were already lightened
 
 
 def main():
@@ -381,7 +385,10 @@ def main():
         target = os.path.join(ASSETS, rel)
         if install:
             to_image(rgb).save(target, optimize=True)
-        if not (np.array(Image.open(target).convert("RGB")) == np.array(to_image(rgb))).all():
+        expected = np.array(to_image(rgb))
+        if lighten.MARKER in getattr(Image.open(target), "text", {}):  # an iOS icon lighten.py already ran on
+            expected = lighten.lighten_array(expected)
+        if not (np.array(Image.open(target).convert("RGB")) == expected).all():
             print(f"note: {rel} in Resources/ still has its painted corners (--install-corners)")
 
     # 1b. « classique » — the identity variant (corners filled, original hue),
@@ -501,6 +508,7 @@ def main():
 
     n_variants = len({name for name, _ in written})
     print(f"{len(written)} files for {n_variants} variants + 3 previews written to {HERE}")
+    lighten.main()  # the iOS 1024 icons just (re)written, in declinaisons/ and Resources/
 
 
 if __name__ == "__main__":

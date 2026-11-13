@@ -84,7 +84,16 @@ Le détail d'UNE icône (Halloween aubergine, première mesure) :
 - **Palette de 256 couleurs (avec perte, NON appliquée)** : PNG 1 092 215 → 452 091 o (−59 %) ; dans `Assets.car`, clair + sombre 2,63 → 1,42 Mo, soit −1,2 Mo par icône iOS. Risque d'aplats ou de bandes sur les halos à vérifier à l'œil avant tout usage.
 - **Palette de 256 couleurs sur les 12** (avec perte, NON appliquée, mesurée en compilant avec actool les 12 icônes telles quelles puis réduites) : iOS 36 438 344 → 22 508 152 o (**−13,9 Mo**), tvOS 5 666 888 → 1 392 872 o (**−4,3 Mo**). À l'œil : à la taille de l'écran d'accueil, aucune différence ; au zoom, du grain (tramage) dans le fond, et sur la cloche orange de la variante aubergine des aplats visibles avec un léger virage au rose. Comparaisons : `_artifacts/lot-d-icone/quantise-comparaison-bleu.png` et `-halloween-aubergine.png`, à côté du dépôt.
 - **Sans perte, un seul levier** : la teintée, identique pour les 12 et non dédupliquée, pèse 12 × 484 106 o ≈ 5,8 Mo sur iOS. La retirer des icônes alternatives laisserait le système dériver lui-même leur aspect teinté. C'est un choix produit.
-- Ce que paie un utilisateur : l'App Store découpe le catalogue par appareil, mais l'icône 1024 sert à toutes les tailles. Comptez environ 3 Mo par icône alternative sur iOS et 0,5 Mo sur Apple TV.
+- Ce que paie un utilisateur : l'App Store découpe le catalogue par appareil, mais l'icône 1024 sert à toutes les tailles. Comptez environ 3 Mo par icône alternative sur iOS et 0,5 Mo sur Apple TV (avant le lissage ci-dessous).
+
+### Grain lissé (appliqué le 2026-11-13, audit M-01)
+
+La 2.5.0 a fait passer le téléchargement iPhone de 26,8 à 64,8 Mo, à cause des 13 jeux d'icônes. `lighten.py` rapproche chaque pixel d'un flou gaussien (rayon 6 px) **d'au plus 2 niveaux par canal**. Dans le fond, le grain tient dans ces 2 niveaux et devient une surface lisse, faite de longues suites de pixels égaux, que lzfse compresse enfin. Sur les traits de la méduse, chaque pixel bouge de 2 niveaux au plus. Le script tourne sur les 39 icônes iOS de `Resources/` et sur les 26 de `declinaisons/`, que `--alternates` et `seasonal-icon.py` recopient telles quelles. `recolor.py` l'appelle à la fin de chaque mode. Il est idempotent : un PNG traité porte le bloc texte `LIGHTENED` et n'est plus touché. Les calques tvOS ne changent pas.
+
+- **Qualité** (39 images) : PSNR de 46,5 à 47,6 dB, écart maximal de 2 niveaux sur 255. Aucune différence à l'œil, ni à l'écran d'accueil ni à 1:1. En contraste poussé ×20, le grain laisse place à des plaques d'un ou deux niveaux, invisibles en vraies valeurs. La planche avant/après (180 px, 1024 px, recadrages) est à valider par le propriétaire avant la fusion.
+- **Poids** : catalogue iOS des 13 jeux, iPhone, 39 662 616 → 20 964 808 o (**−47 %, −18,7 Mo**). `Assets.car` du build Release simulateur générique (iPhone + iPad, sans découpage) : 82 065 496 → 44 669 880 o. Une icône alternative pèse maintenant de 1,50 à 1,90 Mo sur iOS, et la teintée 0,25 Mo au lieu de 0,48.
+- **Variante plus prudente, NON appliquée** (au plus 1 niveau) : 39,7 → 26,8 Mo (−32 %).
+- Les deux leviers ci-dessus (palette, teintée retirée) restent ouverts et se cumulent avec celui-ci.
 
 ## Pour aller plus loin
 
