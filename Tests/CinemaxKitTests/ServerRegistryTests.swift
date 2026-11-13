@@ -973,6 +973,32 @@ struct MultiServerAppStateTests {
         #expect(app.serverURL == b.url)
     }
 
+    /// Audit 2026-11-13, BUG-01: `connectToServer` installs the new client only
+    /// once the server answered, so a failed handshake leaves the shared client
+    /// on A with A's token — B's login screen would then post B's password to A.
+    @Test("A re-login whose handshake fails stays on the current server, never on B's login screen")
+    func reLoginHandshakeFailureStaysOnCurrentServer() async {
+        let api = MockAPIClient()
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local", token: nil, userId: nil)
+        let app = makeState(api: api, servers: [a, b], activeId: a.id)
+        app.settingsDefaults = .isolatedForTesting()
+        await app.applyActiveServer(a)
+        api.shouldThrow = true
+        api.stubbedError = URLError(.cannotConnectToHost)
+
+        let decision = await app.switchTo(b)
+
+        #expect(decision == .unreachable)
+        #expect(app.serverURL == a.url)
+        #expect(app.isAuthenticated)
+        #expect(app.currentUserId == "user1")
+        #expect(app.accessToken == "tok")
+        #expect(app.activeServerId == a.id)
+        #expect(app.pendingRollbackServer == nil)
+        #expect(api.identityURL == a.url)
+    }
+
     @Test("A re-login whose route is the identity passes no dial URL")
     func reLoginOnIdentityPassesNoDial() async {
         let api = MockAPIClient()

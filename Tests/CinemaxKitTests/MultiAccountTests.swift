@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import Observation
+import JellyfinAPI
 @testable import CinemaxKit
 @testable import Cinemax
 
@@ -284,6 +285,43 @@ struct MultiAccountAppStateTests {
         #expect(api.reconnectedTokens.last == "tokB")
         #expect(kc.savedSession?.userID == "B")
         #expect(Set(app.activeAccounts.map(\.userId)) == ["A", "B"])
+    }
+
+    /// Audit 2026-11-13, BUG-03: the launch refresh (or a foreground one) for
+    /// Alice answers AFTER the switch to Bob and Bob's own refresh.
+    @Test("Une réponse tardive du profil du compte quitté n'écrase pas celui du nouveau compte")
+    func lateRefreshOfPreviousAccountIsDropped() async {
+        let api = MockAPIClient()
+        api.stubbedValidity = .valid
+        let entered = TestLatch()
+        let gate = TestLatch()
+        var alice = UserDto(id: "A", name: "Alice")
+        var adminPolicy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
+        adminPolicy.isAdministrator = true
+        alice.policy = adminPolicy
+        var bob = UserDto(id: "B", name: "Bob")
+        bob.policy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
+        let (aliceDto, bobDto) = (alice, bob)
+        api.getUserByIDHandler = { id in
+            guard id == "A" else { return bobDto }
+            entered.open()
+            await gate.wait()
+            return aliceDto
+        }
+        let app = makeState(api: api, servers: [household()])
+        app.settingsDefaults = .isolatedForTesting()
+
+        let late = Task { await app.refreshCurrentUser() }
+        await entered.wait()
+        #expect(await app.switchAccount(to: "B") == .switched)
+        #expect(app.currentUser?.id == "B")
+        gate.open()
+        await late.value
+
+        #expect(app.currentUserId == "B")
+        #expect(app.currentUser?.id == "B")
+        #expect(app.currentUser?.name == "Bob")
+        #expect(app.isAdministrator == false)
     }
 
     @Test("Bascule refusée par le serveur : compte marqué expiré, rien d'autre ne bouge")
@@ -825,6 +863,67 @@ struct MultiAccountSignInTests {
         #expect(app.currentUserId == "parent")
         #expect(forgotten == ["S1|kid"])
         #expect(AccountSettingsStore.load(for: "S1|kid", defaults: defaults) == nil)
+    }
+
+    /// Audit 2026-11-13, BUG-02, the finding's sequence: the child account has
+    /// NO snapshot (never left by an account switch — any one-account install),
+    /// the parent adds a server through the login screen, lifts his own cap,
+    /// then « Mes serveurs » goes back to the child's server.
+    @Test("Contrôle parental : un compte quitté par « Ajouter un serveur » garde sa limite à son retour")
+    func accountLeftThroughAddServerKeepsItsCap() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(12, forKey: SettingsKey.privacyMaxContentAge)
+        let (app, api) = makeApp(defaults: defaults, parentalLock: true, entry: maison, currentUser: "kid")
+        app.accessToken = "tokKid"
+
+        // Réglages → Serveurs → Ajouter un serveur.
+        app.beginAddServer()
+        // `ServerSetupViewModel.connect` (add mode): the new server is chosen.
+        app.serverURL = ServerURLNormalizer.normalize("https://chalet.local")!
+        app.hasServer = true
+        // `LoginViewModel.completeSession`: the parent signs in there.
+        let parent = UserSession(userID: "parent", username: "Parent", accessToken: "tokP", serverID: "srv2")
+        app.accessToken = parent.accessToken
+        app.currentUserId = parent.userID
+        app.upsertActiveEntry(session: parent)
+        app.isAuthenticated = true
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 12)   // inherited
+        // Confidentialité (behind the parental code): no limit for himself —
+        // the screen writes the global key (`@AppStorage`).
+        defaults.set(0, forKey: SettingsKey.privacyMaxContentAge)
+
+        // Réglages → Serveurs → Maison. More restricted than the parent, so no
+        // code is asked — by design.
+        let kidServer = try #require(app.servers.first { $0.id == "S1" })
+        #expect(await app.switchTo(kidServer) == .commit)
+
+        #expect(app.activeAccountKey == "S1|kid")
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 12)
+        #expect(api.appliedRatingLimits.last == 12)
+        // …and lifting it again (the parent's server) asks the parental code.
+        let parentServer = try #require(app.servers.first { $0.id != "S1" })
+        #expect(await app.switchTo(parentServer) == .locked)
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 12)
+    }
+
+    /// BUG-02, the variant: a stale snapshot from an earlier account round
+    /// trip, then the cap raised to 12, then the session expires.
+    @Test("Session expirée : la reconnexion retrouve la limite du compte, pas un ancien instantané")
+    func sessionExpiryKeepsCurrentCap() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 0, accentColor: "blue", darkMode: true),
+                                  for: "S1|kid", defaults: defaults)
+        defaults.set(12, forKey: SettingsKey.privacyMaxContentAge)
+        let (app, api) = makeApp(defaults: defaults, parentalLock: false, entry: maison, currentUser: "kid")
+
+        _ = await app.logout(reason: .sessionExpired)
+        let kid = UserSession(userID: "kid", username: "Enfants", accessToken: "tokKid2", serverID: "srv")
+        app.accessToken = kid.accessToken
+        app.currentUserId = kid.userID
+        app.upsertActiveEntry(session: kid)
+
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 12)
+        #expect(api.appliedRatingLimits.last == 12)
     }
 }
 
