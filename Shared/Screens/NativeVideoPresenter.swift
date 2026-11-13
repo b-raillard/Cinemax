@@ -50,6 +50,10 @@ final class NativeVideoPresenter {
     private let autoPlayNextEpisode: Bool
     private let imageBuilder: ImageURLBuilder
     private let onDismiss: () -> Void
+    /// Runs ONCE, at the first `.readyToPlay` — « Reprendre ici » stops the
+    /// other device then, never before (see `VLCStreamPresenter.onPlaybackStarted`).
+    /// Set before `present`; cleared when it fires.
+    var onPlaybackStarted: (@MainActor () -> Void)?
 
     // Retained for the lifetime of the asset — AVAssetResourceLoader holds only a weak ref.
     private var manifestLoader = HLSManifestLoader()
@@ -358,6 +362,7 @@ final class NativeVideoPresenter {
                 Task { @MainActor in
                     switch item.status {
                     case .readyToPlay:
+                        self?.notePlaybackStarted()
                         if let st, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
                             let generation = self?.pendingResumeGeneration
                             avPlayer?.seek(to: CMTime(seconds: target, preferredTimescale: 600),
@@ -396,6 +401,14 @@ final class NativeVideoPresenter {
             self.sleepTimer.startIfNeeded()
             showSkipToEndButtonIfDebugEnabled()
         }
+    }
+
+    /// The first item is ready: playback is really happening HERE. One-shot —
+    /// the direct-URL fallback and every episode swap reach `.readyToPlay` again.
+    private func notePlaybackStarted() {
+        guard let started = onPlaybackStarted else { return }
+        onPlaybackStarted = nil
+        started()
     }
 
     /// Clears the pending report position, unless a newer one replaced it
@@ -484,6 +497,7 @@ final class NativeVideoPresenter {
             Task { @MainActor in
                 switch item.status {
                 case .readyToPlay:
+                    self?.notePlaybackStarted()
                     if let st = startTime, let target = Self.safeResumeSeconds(st, duration: item.duration.seconds) {
                         let generation = self?.pendingResumeGeneration
                         player.seek(to: CMTime(seconds: target, preferredTimescale: 600),

@@ -121,9 +121,12 @@ struct PlayLink<Label: View>: View {
     /// the detail screen's version row. `nil` lets `MediaSourceQuality` rank
     /// and choose, which is the default for every other entry point.
     var mediaSourceId: String? = nil
-    /// Runs as the player opens — « Reprendre ici » stops the other device
-    /// there (iOS: when the player appears, tvOS: on the press). Never decides
-    /// whether something plays.
+    /// Runs ONCE, when playback has really started here — the presenter's
+    /// first confirmed open (VLC: the first `noteMediaOpened()`, AVPlayer: the
+    /// first `.readyToPlay`), on both platforms. « Reprendre ici » stops the
+    /// other device there: a negotiation that fails, a refused item or a close
+    /// on « Préparation du flux… » must leave it playing (audit 2026-11-13,
+    /// PL-02). Never decides whether something plays.
     var onStart: (@MainActor () -> Void)?
     /// Asked when the player OPENS, in place of `startTime` — « Reprendre ici »
     /// carries a playing source's position forward to that moment. A value
@@ -139,11 +142,11 @@ struct PlayLink<Label: View>: View {
     var body: some View {
         #if os(tvOS)
         Button {
-            onStart?()
             coordinator.play(
                 itemId: itemId, title: title, startTime: startTimeAtOpen?() ?? startTime,
                 previousEpisode: previousEpisode, nextEpisode: nextEpisode,
                 episodeNavigator: episodeNavigator, mediaSourceId: mediaSourceId,
+                onPlaybackStarted: onStart,
                 using: appState
             )
         } label: {
@@ -157,10 +160,10 @@ struct PlayLink<Label: View>: View {
                 VideoPlayerView(
                     itemId: itemId, title: title, startTime: start,
                     previousEpisode: previousEpisode, nextEpisode: nextEpisode,
-                    episodeNavigator: episodeNavigator, mediaSourceId: mediaSourceId
+                    episodeNavigator: episodeNavigator, mediaSourceId: mediaSourceId,
+                    onPlaybackStarted: onStart
                 )
             }
-            .onAppear { onStart?() }
         } label: {
             label()
         }

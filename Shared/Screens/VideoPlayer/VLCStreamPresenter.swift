@@ -51,6 +51,11 @@ final class VLCStreamPresenter: NSObject {
     /// to the API's 40 Mbps default and a >40 Mbps 4K remux that DirectPlayed on
     /// launch would get force-transcoded on resume.
     private let maxBitrate: Int
+    /// Runs ONCE, when the first media actually opens here (the first
+    /// `noteMediaOpened()`) — « Reprendre ici » stops the other device then,
+    /// never before: a failed negotiation, a refused open or a close during the
+    /// spinner must leave the other device playing. Set before `present`.
+    var onPlaybackStarted: (@MainActor () -> Void)?
 
     /// Stream init — online playback negotiated through Jellyfin's PlaybackInfo
     /// flow with VLC's broad DirectPlay profile.
@@ -113,6 +118,7 @@ final class VLCStreamPresenter: NSObject {
             autoPlayNext: autoPlayNext, maxBitrate: maxBitrate,
             imageBuilder: imageBuilder, loc: loc, onDismiss: onDismiss
         )
+        vc.onPlaybackStarted = onPlaybackStarted
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
         topVC.present(vc, animated: true)
@@ -228,6 +234,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let imageBuilder: ImageURLBuilder
     private let loc: LocalizationManager
     private let onDismiss: (() -> Void)?
+    /// See `VLCStreamPresenter.onPlaybackStarted`. One-shot: cleared when it
+    /// fires, because `noteMediaOpened()` runs again on every retry, rebuild
+    /// and episode swap.
+    var onPlaybackStarted: (@MainActor () -> Void)?
 
     // SwiftVLC engine (libVLC 4.0). `videoView` stays a plain UIView so the
     // existing gesture / HUD layout is untouched; the SwiftVLC rendering
@@ -4457,6 +4467,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // silent; its own settle reports.
         if !wasOpen {
             announceSyncPlayReadyIfPositionIsReal(isPlaying: player.state == .playing)
+            if let started = onPlaybackStarted {
+                onPlaybackStarted = nil
+                started()
+            }
         }
     }
 
