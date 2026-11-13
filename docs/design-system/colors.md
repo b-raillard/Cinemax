@@ -93,13 +93,13 @@ Tonal hierarchy (dark mode):
 
 ### Primary / Secondary — neutral action greys
 
-Used by `CinemaButton(style: .primary)` and the few places that need a high-contrast-but-colorless button.
+Neutral greys. **No button uses them**: the grey gradient « primary » button was never part of the design and was removed on 2026-11-13 — never bring it back (a CTA is `.accent`, a secondary action `.ghost`).
 
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
-| `primary` | `#3A3B3D` | `#C6C6C7` | `CinemaGradient.primaryButton` start |
-| `primaryContainer` | `#D0D1D4` | `#454747` | `CinemaGradient.primaryButton` end |
-| `onPrimary` | `#FFFFFF` | `#3F4041` | Text on primary button |
+| `primary` | `#3A3B3D` | `#C6C6C7` | Neutral grey (no button) |
+| `primaryContainer` | `#D0D1D4` | `#454747` | Neutral grey (no button) |
+| `onPrimary` | `#FFFFFF` | `#3F4041` | Text on `primary` |
 | `secondary` | `#55585E` | `#9D9E9E` | Secondary label, rarely direct |
 
 ### Tertiary — **legacy, do not use for new code**
@@ -203,9 +203,8 @@ When active:
 
 ## Gradients
 
-Two defined in `CinemaGradient`:
+One defined in `CinemaGradient` (`primaryButton` went with the grey button, 2026-11-13):
 
-- `primaryButton` — `[primary, primaryContainer]` topLeading → bottomTrailing. Used by `CinemaButton(style: .primary)`.
 - `heroOverlay` — `[surface.opacity(0.4), surface]` top → bottom. Scrim that sits over backdrops so hero text stays legible.
 
 Define new gradients here, never inline in views.

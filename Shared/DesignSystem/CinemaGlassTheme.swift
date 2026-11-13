@@ -290,12 +290,6 @@ enum CinemaBloom {
 // MARK: - Gradients
 
 enum CinemaGradient {
-    static let primaryButton = LinearGradient(
-        colors: [CinemaColor.primary, CinemaColor.primaryContainer],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-
     static let heroOverlay = LinearGradient(
         colors: [
             CinemaColor.surface.opacity(0.4),

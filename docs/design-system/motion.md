@@ -104,7 +104,6 @@ What it does:
 
 | Surface | Apply |
 | --- | --- |
-| Primary action button | `Button { } label: { … }.buttonStyle(CinemaTVButtonStyle(cinemaStyle: .primary))` — handled by `CinemaButton(style: .primary)` |
 | Accent button | `CinemaButton(style: .accent)` |
 | Ghost button | `CinemaButton(style: .ghost)` |
 | Destructive button | `CinemaButton(style: .destructive)` — rings and haloes in `error`, since a white ring vanishes on light mode's pale `errorContainer` |
