@@ -179,7 +179,7 @@ All ten live in `AccentOption.palette` (`Shared/DesignSystem/AccentOption.swift`
 ★ default
 ```
 
-Light-mode `accent` values are deeper/more saturated than dark-mode values so that every accent, used as small text, clears 4.5:1 on `surface` AND on `surfaceContainerHigh` (the darkest surface such a label sits on), in both modes — locked by `SmallTextContrastTests`. Before the audit of 2026-11-13 (UX-03) orange (`#CC5A0A`, 3.23:1 on `surfaceContainerHigh`), cyan (`#0E8F84`, 3.08:1), green (`#1F7A50`, 4.10:1) and blue (`#0060D6`, 4.46:1) did not; red, yellow and pink sit just above the bar (4.52–4.58:1), so a new or retuned accent must be checked against it.
+Light-mode `accent` values are deeper/more saturated than dark-mode values so that each of the nine picker accents, used as small text, clears 4.5:1 on `surface` AND on `surfaceContainerHigh` (the darkest surface such a label sits on), in both modes — locked by `SmallTextContrastTests`. Before the audit of 2026-11-13 (UX-03) orange (`#CC5A0A`, 3.23:1 on `surfaceContainerHigh`), cyan (`#0E8F84`, 3.08:1), green (`#1F7A50`, 4.10:1) and blue (`#0060D6`, 4.46:1) did not; red, yellow and pink sit just above the bar (4.52–4.58:1), so a new or retuned accent must be checked against it.
 
 ### Rainbow easter egg
 
