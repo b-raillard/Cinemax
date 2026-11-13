@@ -8,6 +8,11 @@
 #
 # Fails unless the app was built against the iOS 27.1 SDK or later AND its
 # binary references UIHingeInteraction (an import from UIKit, read by `nm`).
+# Also fails on a `PRO_PREVIEW` build (audit CI-07): such a build answers
+# « Pro launched » and recognises no founder — a paywall for every user and
+# for App Review. Its mark is `JGCompilationConditions` in the Info.plist, the
+# build setting SWIFT_ACTIVE_COMPILATION_CONDITIONS itself (project.yml), so
+# the flag cannot be passed without leaving it.
 # The archive-time guard in project.yml (« Require the iOS 27.1 SDK ») stops
 # the archive earlier; this is the check on what will actually be uploaded.
 set -euo pipefail
@@ -31,12 +36,19 @@ if [ "${sdk%%[0-9]*}" != "iphoneos" ] || [ "$major" -lt 27 ] || { [ "$major" -eq
   status=1
 fi
 
+conditions=$(/usr/libexec/PlistBuddy -c 'Print :JGCompilationConditions' "$plist" 2>/dev/null || true)
+case " $conditions " in
+  *" PRO_PREVIEW "*)
+    echo "error: JGCompilationConditions = '$conditions' — a PRO_PREVIEW build is never submitted for review (Shared/Entitlements/CLAUDE.md)" >&2
+    status=1 ;;
+esac
+
 hinge_refs=$(nm -m "$binary" 2>/dev/null | grep -c 'UIHingeInteraction' || true)
 if [ "$hinge_refs" -eq 0 ]; then
   echo "error: no UIHingeInteraction reference in $(basename "$binary") — the iPhone Duo code was compiled out (NO_HINGE_API)" >&2
   status=1
 fi
 
-echo "$(basename "$app") $version ($build): DTSDKName=$sdk, UIHingeInteraction references=$hinge_refs"
+echo "$(basename "$app") $version ($build): DTSDKName=$sdk, UIHingeInteraction references=$hinge_refs, compilation conditions='$conditions'"
 [ $status -eq 0 ] && echo "OK — ready for -exportArchive"
 exit $status
