@@ -22,8 +22,9 @@ Sources
   their corner-filled versions. Everything else is read from Resources/.
 - Each variant is written to `declinaisons/<variant>/<path inside Assets.xcassets>`,
   only for the files it actually changes (the tvOS back layers are plain ground,
-  so only the aubergine variant has them). The tinted icon is greyscale, and
-  `app_logo.png` is `app_icon_1024.png` pixel for pixel: neither is duplicated.
+  so only the aubergine variant has them). The tinted icon is greyscale: not
+  duplicated. The iOS Settings logo (`AppLogo.imageset`, 112/224/336 px) is
+  written by scripts/seasonal-icon.py from the primary icon, never here.
 
 How it works
 - The original glow runs from green (hue ~150°, tentacles / diaphragm) to blue
@@ -62,7 +63,6 @@ OUT = os.path.join(HERE, "declinaisons")
 ICON = "AppIcon.appiconset/app_icon_1024.png"
 ICON_DARK = "AppIcon.appiconset/app_icon_1024_dark.png"
 ICON_TINTED = "AppIcon.appiconset/app_icon_1024_tinted.png"
-LOGO = "AppLogo.imageset/app_logo.png"
 LOGO_TV = "AppLogo.imageset/app_logo_tv.png"
 TV = "App Icon & Top Shelf Image.brandassets"
 TV_LARGE = f"{TV}/App Icon - Large.imagestack"
@@ -76,7 +76,7 @@ TV_BACKS = [f"{TV_LARGE}/Back.imagestacklayer/Content.imageset/back_appstore.png
 # The Middle layers are empty (fully transparent) and the Top Shelf images are
 # not part of an app icon (an alternate icon never swaps them): not declined.
 
-CORNERED = [ICON, ICON_DARK, ICON_TINTED, LOGO]           # painted corners → filled
+CORNERED = [ICON, ICON_DARK, ICON_TINTED]                 # painted corners → filled
 RECOLOURED = [ICON, ICON_DARK, LOGO_TV] + TV_FRONTS + TV_BACKS
 
 # AccentOption.swift — accentDark (the hue the app shows on its dark theme).

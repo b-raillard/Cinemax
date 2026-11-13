@@ -10,7 +10,7 @@ Les icônes d'origine avaient leurs coins arrondis peints dans l'image, blancs �
 
 **Logo tvOS des Réglages (`AppLogo.imageset/app_logo_tv.png`), redécoupé le 2026-10-13** : l'ancien détourage gardait autour de la méduse une bande du fond sombre de l'icône (et des taches entre les tentacules), visible sur le fond des Réglages. `recut_tv_logo.py <original> <sortie> <dossier d'aperçus> 90 30` retire tout ce fond : remplissage depuis les bords de l'image sur les pixels proches du fond (le néon l'arrête ; l'objectif est protégé), seuls les pixels collés au néon restent, adoucis et recolorés à la couleur du néon voisin. L'original est gardé dans `originaux/AppLogo.imageset/app_logo_tv.png`. Les déclinaisons de couleur sous `declinaisons/` gardent l'ancien détourage.
 
-Les icônes de `Resources/` ont reçu cette version sans coins : `app_icon_1024.png`, `_dark`, `_tinted` (couleurs inchangées) et `AppLogo.imageset/app_logo.png`. Les originaux, coins compris, sont gardés dans `originaux/` et restent la source du script. Les calques tvOS et le logo tvOS n'avaient pas de coins peints.
+Les icônes de `Resources/` ont reçu cette version sans coins : `app_icon_1024.png`, `_dark`, `_tinted` (couleurs inchangées) et `AppLogo.imageset/app_logo.png` (depuis le 2026-11-13, audit DC-12, ce logo est l'icône claire réduite à 112 / 224 / 336 px, écrite par `scripts/seasonal-icon.py`). Les originaux, coins compris, sont gardés dans `originaux/` et restent la source du script. Les calques tvOS et le logo tvOS n'avaient pas de coins peints.
 
 ## Contenu
 
@@ -28,7 +28,7 @@ Les variantes :
 
 Pas de variante pour :
 - l'icône teintée d'iOS : elle est en niveaux de gris ;
-- `app_logo.png` : c'est `app_icon_1024.png` au pixel près ;
+- le logo des Réglages iOS (`app_logo.png`, `@2x`, `@3x`) : `scripts/seasonal-icon.py` le réduit depuis l'icône principale (112 pt à l'écran) ;
 - les calques Middle de tvOS : ils sont vides ;
 - les images Top Shelf : une icône alternative ne les remplace jamais.
 
