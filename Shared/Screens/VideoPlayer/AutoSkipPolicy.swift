@@ -25,8 +25,14 @@ import JellyfinAPI
 /// An outro with autoplay armed hands off to the next episode immediately
 /// (`.handOffToNext`) instead of seeking to the end and waiting for the engine
 /// to report EOF — same destination, one fewer hop through the end-of-media
-/// disambiguation. Without a next episode it seeks to the segment's end like
-/// an intro, and the ordinary end-of-playback path takes over.
+/// disambiguation — but ONLY when what remains of the media is one the
+/// countdown card would admit (`NextUpCountdownPolicy.shouldShowCard`: at most
+/// `episodeMaxSeconds` for an episode). A detected outro can open 13 minutes
+/// before the end (measured 2026-09-04); handing off there left those minutes
+/// unwatched and reported the stop at the outro's start. Outside the cap, and
+/// without a next episode, it seeks to the segment's end like an intro — what
+/// the engine does with auto-play off, and what the native player always does
+/// — and the ordinary end-of-playback path takes over.
 nonisolated enum AutoSkipPolicy {
     enum Action: Equatable {
         case none
@@ -41,6 +47,16 @@ nonisolated enum AutoSkipPolicy {
         "\(type?.rawValue ?? "?")@\(startTicks ?? -1)"
     }
 
+    /// A next item the outro could hand off to, and what the cap needs to
+    /// judge it: what remains of the MEDIA (not of the segment) and whether
+    /// it is an episode (a film has no cap — see `NextUpCountdownPolicy`).
+    struct HandOff: Equatable {
+        var secondsRemaining: Double
+        var isEpisode: Bool
+    }
+
+    /// - Parameter handOff: `nil` when nothing can be handed off to (auto-play
+    ///   off, no next item, the countdown cancelled for this item).
     static func decide(
         segmentType: MediaSegmentType?,
         autoSkipIntro: Bool,
@@ -48,7 +64,7 @@ nonisolated enum AutoSkipPolicy {
         alreadySkipped: Bool,
         isPlaying: Bool,
         inSyncPlayGroup: Bool,
-        canHandOffToNext: Bool
+        handOff: HandOff?
     ) -> Action {
         guard isPlaying, !inSyncPlayGroup, !alreadySkipped else { return .none }
         switch segmentType {
@@ -56,7 +72,11 @@ nonisolated enum AutoSkipPolicy {
             return autoSkipIntro ? .seekToEnd : .none
         case .outro:
             guard autoSkipCredits else { return .none }
-            return canHandOffToNext ? .handOffToNext : .seekToEnd
+            guard let handOff,
+                  NextUpCountdownPolicy.shouldShowCard(
+                      secondsRemaining: handOff.secondsRemaining, isEpisode: handOff.isEpisode
+                  ) else { return .seekToEnd }
+            return .handOffToNext
         default:
             return .none
         }

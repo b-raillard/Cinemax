@@ -1517,6 +1517,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // echo of a target the engine has not reached yet.
             let canHandOff = autoPlayNext && nextEpisode != nil && episodeNavigator != nil
                 && !nextUpCancelledForThisItem
+            // What remains of the MEDIA, not of the segment: the hand-off obeys
+            // the countdown card's cap (see `AutoSkipPolicy`).
+            let secondsRemaining = Double(lengthMs) / 1000 - currentTime
             let key = AutoSkipPolicy.key(type: segment.type, startTicks: segment.startTicks)
             let action = AutoSkipPolicy.decide(
                 segmentType: segment.type,
@@ -1524,7 +1527,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 alreadySkipped: autoSkippedSegmentKeys.contains(key),
                 isPlaying: enginePlaying && !seeks.isSettling,
                 inSyncPlayGroup: syncPlay.isInGroup,
-                canHandOffToNext: canHandOff
+                handOff: canHandOff
+                    ? .init(secondsRemaining: secondsRemaining, isEpisode: resolvedIsEpisode ?? true)
+                    : nil
             )
             if action != .none {
                 autoSkippedSegmentKeys.insert(key)
@@ -1553,7 +1558,6 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // screen (measured on device 2026-09-04). Until the policy admits
             // the card, the segment is an ordinary one and the skip button
             // stands, exactly as it does when auto-play is off.
-            let secondsRemaining = Double(lengthMs) / 1000 - currentTime
             if segment.type == .outro, autoPlayNext, let next = nextEpisode,
                episodeNavigator != nil, !nextUpCancelledForThisItem,
                NextUpCountdownPolicy.shouldShowCard(secondsRemaining: secondsRemaining,
