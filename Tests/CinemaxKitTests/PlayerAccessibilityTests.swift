@@ -247,6 +247,31 @@ struct SmallTextContrastTests {
             }
         }
     }
+
+    /// UX-01: over a poster the missing-title card is the poster under a
+    /// `surfaceContainerLowest` veil; « Demander » in the accent and « 2021 ·
+    /// Film » in `onSurfaceVariant` read 1.5–3.7:1 on a black poster in light
+    /// mode (#9E9E9E). The badge now sits on its own pill and the title lines
+    /// take `onSurface`. Black and white posters are the two extremes.
+    @Test("the missing-title card's text reads over a black and a white poster")
+    func missingTitleCardReadsOverPosters() {
+        for dark in [false, true] {
+            let mode = dark ? "dark" : "light"
+            let lowest = hex(CinemaColor.surfaceContainerLowest, dark: dark)
+            for poster: UInt in [0x000000, 0xFFFFFF] {
+                let veil = over(lowest, opacity: MissingTitleCard.posterVeilOpacity, on: poster)
+                let pill = over(lowest, opacity: MissingTitleCard.badgePillOpacity, on: veil)
+                let onSurface = hex(CinemaColor.onSurface, dark: dark)
+                #expect(ratio(onSurface, veil) >= 4.5, "\(mode) title/year on \(name(poster)): \(ratio(onSurface, veil))")
+                let variant = hex(CinemaColor.onSurfaceVariant, dark: dark)
+                #expect(ratio(variant, pill) >= 4.5, "\(mode) badge on \(name(poster)): \(ratio(variant, pill))")
+                for option in AccentOption.cyclingCases {
+                    let accent = dark ? option.palette.accentDark : option.palette.accentLight
+                    #expect(ratio(accent, pill) >= 4.5, "\(mode) \(option) « Demander » on \(name(poster)): \(ratio(accent, pill))")
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Toasts under VoiceOver (audit 2026-09-22, U3)
