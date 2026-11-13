@@ -58,8 +58,8 @@ private final class Counter: @unchecked Sendable {
 @Suite("Adresse locale — route active")
 struct ServerRouteControllerTests {
 
-    private let identity = URL(string: "https://movies.nivadax.net")!
-    private let lan = URL(string: "https://192.168.1.128:8920")!
+    private let identity = URL(string: "https://media.example.com")!
+    private let lan = URL(string: "https://192.168.1.10:8920")!
     private let other = URL(string: "https://chalet.example.org")!
 
     private func entry(id: String = "E1", url: URL? = nil, serverID: String? = "S", local: Bool = true) -> ServerEntry {
@@ -462,7 +462,7 @@ struct ServerRouteControllerTests {
 
     @Test func lanIdentityWithNoLocalAddressReadsLocal() async {
         let api = MockAPIClient()
-        let lanIdentity = URL(string: "http://192.168.1.128:8899")!
+        let lanIdentity = URL(string: "http://192.168.1.10:8899")!
         let server = entry(url: lanIdentity, local: false)
         let app = makeApp(api: api, entries: [server])
         let stub = ProbeStub(.answered(serverID: "S", connectedAddressIsLocal: true))

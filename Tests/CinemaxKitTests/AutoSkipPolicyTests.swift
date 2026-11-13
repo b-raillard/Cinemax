@@ -17,12 +17,14 @@ struct AutoSkipPolicyTests {
         _ type: MediaSegmentType?,
         intro: Bool = true, credits: Bool = true,
         alreadySkipped: Bool = false, isPlaying: Bool = true,
-        inGroup: Bool = false, canHandOff: Bool = false
+        inGroup: Bool = false, canHandOff: Bool = false,
+        remaining: Double = 60, isEpisode: Bool = true
     ) -> AutoSkipPolicy.Action {
         AutoSkipPolicy.decide(
             segmentType: type, autoSkipIntro: intro, autoSkipCredits: credits,
             alreadySkipped: alreadySkipped, isPlaying: isPlaying,
-            inSyncPlayGroup: inGroup, canHandOffToNext: canHandOff
+            inSyncPlayGroup: inGroup,
+            handOff: canHandOff ? .init(secondsRemaining: remaining, isEpisode: isEpisode) : nil
         )
     }
 
@@ -51,6 +53,33 @@ struct AutoSkipPolicyTests {
     @Test("Générique sans suivant : saut à la fin, la fin de lecture ordinaire prend le relais")
     func creditsWithoutNextSeeks() {
         #expect(decide(.outro, canHandOff: false) == .seekToEnd)
+    }
+
+    @Test("Générique détecté 13 min avant la fin : pas d'enchaînement, saut à la fin du segment")
+    func creditsTooEarlyDoNotHandOff() {
+        // Mesuré le 2026-09-04 : un générique ouvert 788 s avant la fin. Enchaîner
+        // là laissait 13 minutes non vues et rapportait l'arrêt au début du segment.
+        #expect(decide(.outro, canHandOff: true, remaining: 788) == .seekToEnd)
+    }
+
+    @Test("Le plafond du compte à rebours borne l'enchaînement, au même seuil")
+    func handOffObeysTheCountdownCap() {
+        let cap = NextUpCountdownPolicy.episodeMaxSeconds
+        #expect(decide(.outro, canHandOff: true, remaining: cap) == .handOffToNext)
+        #expect(decide(.outro, canHandOff: true, remaining: cap + 1) == .seekToEnd)
+        // Durée inconnue ou déjà dépassée : jamais d'enchaînement anticipé.
+        #expect(decide(.outro, canHandOff: true, remaining: 0) == .seekToEnd)
+        #expect(decide(.outro, canHandOff: true, remaining: -5) == .seekToEnd)
+    }
+
+    @Test("Un film (« Tout lire ») n'a pas de plafond : son générique peut durer dix minutes")
+    func filmCreditsHaveNoCap() {
+        #expect(decide(.outro, canHandOff: true, remaining: 600, isEpisode: false) == .handOffToNext)
+    }
+
+    @Test("L'intro ne dépend pas du temps restant")
+    func introIgnoresRemaining() {
+        #expect(decide(.intro, credits: false, remaining: 3000) == .seekToEnd)
     }
 
     @Test("Un segment déjà sauté ne l'est pas deux fois (retour arrière dans l'intro)")

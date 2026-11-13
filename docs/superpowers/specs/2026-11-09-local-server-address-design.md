@@ -4,11 +4,11 @@ Decided with the product owner on 2026-11-09, after two playback cuts the same d
 
 ## Why
 
-Both cuts of 2026-11-09 happened **at home**, and both had the same cause: Cloudflare (the tunnel in front of `https://movies.nivadax.net`) cancelled a long HTTP/2 download on the visitor side, while the tunnel kept the origin request open ~30 s longer.
+Both cuts of 2026-11-09 happened **at home**, and both had the same cause: Cloudflare (the tunnel in front of `https://media.example.com`) cancelled a long HTTP/2 download on the visitor side, while the tunnel kept the origin request open ~30 s longer.
 - The iPhone of the owner's wife gave up after several retries, and she quit the app.
 - The Apple TV recovered in a few seconds through the feed-stall guard.
 
-At home the server is one hop away (`http://192.168.1.128:8899`), so going through Cloudflare there is pure loss: cuts, extra latency, and tunnel traffic. The owner also wants the home traffic off the tunnel.
+At home the server is one hop away (`http://192.168.1.10:8899`), so going through Cloudflare there is pure loss: cuts, extra latency, and tunnel traffic. The owner also wants the home traffic off the tunnel.
 
 Family members watch from outside, so the public URL stays. Tailscale was rejected: too many people would need it. Opening the server directly on the internet is not wanted.
 
@@ -182,8 +182,8 @@ Found by an automated security review of the probe commit: the `Id` match plus a
 - **Changing or removing the local address forgets the old LAN pin**, unless another registry entry's local URL or public URL uses the same `host:port`.
 - **Every transport already honours `ServerTrustDelegate` pins by `host:port`**: the API client, Nuke's loader, the socket, and `CinemaxStreamProxy` for libVLC. The native engine (AVPlayer, opt-in) must be checked: if it cannot honour the pin, it plays through the public URL or the proxy, never by disabling trust.
 - **Extensions**: the session blob carries the LAN pin (`localPinnedCertificateSHA256`, optional), and the extensions validate the LAN certificate against it with `ExtensionServerTrust`, exactly as they do for the public URL's pin.
-- **The owner's server, set up on 2026-11-09**: self-signed RSA-2048 certificate for `IP:192.168.1.128, DNS:nas-raillard.local`, valid until 2051-11-09, SHA-256 `B5:CD:58:51:42:72:9F:D8:01:98:58:3A:95:AC:83:5A:F9:49:0C:63:E5:66:71:58:88:DE:DE:7C:EE:A7:D4:D3`.
-- **No automatic renewal, on purpose** (owner asked for one; decided 2026-11-09): the pin is the leaf's SHA-256, and a pinned leaf is accepted on its fingerprint alone (`ServerCertificateTrust.decide`, `ExtensionServerTrust.accepts`), whatever its dates. Renewing would change the fingerprint and force a re-approval on every device, i.e. the opposite of « tranquille ». A 25-year leaf replaces renewal. If renewal is ever needed, pin the public key (SPKI) and renew with the same key — a change to the existing trust code, app and extensions. Jellyfin `EnableHttps=true` (`RequireHttps=false`, so the tunnel's `http://192.168.1.128:8899` origin is unchanged), PKCS#12 at `/config/ssl/jellyfin-lan.pfx`, published as `8920:8920`. Local address to type: `192.168.1.128:8920`. Backups: `docker-compose.yaml.bak-20261109-https`, `config/config/network.xml.bak-20261109-https`.
+- **The owner's server, set up on 2026-11-09**: self-signed RSA-2048 certificate for `IP:192.168.1.10, DNS:nas.local`, valid until 2051-11-09, SHA-256 `AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99`.
+- **No automatic renewal, on purpose** (owner asked for one; decided 2026-11-09): the pin is the leaf's SHA-256, and a pinned leaf is accepted on its fingerprint alone (`ServerCertificateTrust.decide`, `ExtensionServerTrust.accepts`), whatever its dates. Renewing would change the fingerprint and force a re-approval on every device, i.e. the opposite of « tranquille ». A 25-year leaf replaces renewal. If renewal is ever needed, pin the public key (SPKI) and renew with the same key — a change to the existing trust code, app and extensions. Jellyfin `EnableHttps=true` (`RequireHttps=false`, so the tunnel's `http://192.168.1.10:8899` origin is unchanged), PKCS#12 at `/config/ssl/jellyfin-lan.pfx`, published as `8920:8920`. Local address to type: `192.168.1.10:8920`. Backups: `docker-compose.yaml.bak-20261109-https`, `config/config/network.xml.bak-20261109-https`.
 
 ## Diagnostics
 

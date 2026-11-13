@@ -339,15 +339,39 @@ struct PlaybackRetryPolicyTests {
 
     @Test("the route changed when the negotiated stream is not on the base dialled now")
     func routeChangedCompare() throws {
-        let lanStream = try #require(URL(string: "http://192.168.1.128:8899/Videos/1/stream"))
-        let publicBase = try #require(URL(string: "https://movies.nivadax.net"))
+        let lanStream = try #require(URL(string: "http://192.168.1.10:8899/Videos/1/stream"))
+        let publicBase = try #require(URL(string: "https://media.example.com"))
         #expect(PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: publicBase))
-        let sameOrigin = try #require(URL(string: "http://192.168.1.128:8899"))
+        let sameOrigin = try #require(URL(string: "http://192.168.1.10:8899"))
         #expect(!PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: sameOrigin))
-        let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream?static=true"))
+        let publicStream = try #require(URL(string: "https://media.example.com/Videos/1/stream?static=true"))
         #expect(!PlaybackRetryPolicy.routeChanged(negotiated: publicStream, currentDial: publicBase))
         // No dial known (a mock, no connection): never read as « the public route ».
         #expect(!PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: nil))
+    }
+
+    @Test("a rebuild net with its budget spent gives up at once — never a retry outside the bound")
+    func spentRecoveryBudgetGivesUp() {
+        // Mid-film `didRetry` is false (every open renews it): without the flag
+        // this would retry, and the retry's open would re-arm it — a loop of
+        // re-negotiations the shared rebuild budget exists to prevent (PL-01).
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: false,
+                                           recoveryExhausted: true) == .giveUp(releaseStickyProxy: false))
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: false, usingProxy: true,
+                                           routeChanged: true,
+                                           recoveryExhausted: true) == .giveUp(releaseStickyProxy: true))
+    }
+
+    @Test("a spent budget surfaces ONCE: a second net firing behind the alert is ignored")
+    func spentRecoveryBudgetSurfacesOnce() {
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: true,
+                                           retryPending: false, usingProxy: false,
+                                           recoveryExhausted: true) == .ignore)
+        #expect(PlaybackRetryPolicy.decide(didRetry: false, errorAlertShowing: false,
+                                           retryPending: true, usingProxy: false,
+                                           recoveryExhausted: true) == .ignore)
     }
 
     @Test("a route rebuild reopens where playback dropped, else at the open's own resume point")
@@ -438,7 +462,7 @@ struct ReResolveGateTests {
 
     @Test("Une négociation ratée est redemandée une fois si la route a changé pendant qu'elle courait")
     func failedNegotiationIsAskedAgainOnlyOnAnotherRoute() {
-        let lan = URL(string: "https://192.168.1.128:8920")
+        let lan = URL(string: "https://192.168.1.10:8920")
         let identity = URL(string: "https://movies.example.net")
         #expect(ReResolveGate.renegotiatesAfterFailure(dialAtStart: lan, dialNow: identity))
         #expect(ReResolveGate.renegotiatesAfterFailure(dialAtStart: identity, dialNow: lan))

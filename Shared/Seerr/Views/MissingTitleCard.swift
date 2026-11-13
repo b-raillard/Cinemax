@@ -20,6 +20,12 @@ struct MissingTitleCard: View {
     /// Seerr's poster (`SeerrSession.posterURL`); nil draws the outline alone.
     var posterURL: URL?
 
+    /// The `surfaceContainerLowest` veil over the poster, and the pill the
+    /// badge sits on over it — `SmallTextContrastTests` computes the card's
+    /// contrast from these two.
+    static let posterVeilOpacity = 0.62
+    static let badgePillOpacity = 0.9
+
     var body: some View {
         Color.clear
             .aspectRatio(aspectRatio, contentMode: .fit)
@@ -27,7 +33,7 @@ struct MissingTitleCard: View {
             .overlay {
                 if let posterURL {
                     CinemaLazyImage(url: posterURL, fallbackIcon: nil, fallbackBackground: .clear)
-                        .overlay(CinemaColor.surfaceContainerLowest.opacity(0.62))
+                        .overlay(CinemaColor.surfaceContainerLowest.opacity(Self.posterVeilOpacity))
                         .accessibilityHidden(true)
                 }
             }
@@ -44,7 +50,7 @@ struct MissingTitleCard: View {
                     if let subtitle, !dynamicTypeSize.isAccessibilitySize {
                         Text(subtitle)
                             .font(CinemaFont.label(.medium))
-                            .foregroundStyle(secondaryText)
+                            .foregroundStyle(subtitleColor)
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -53,6 +59,15 @@ struct MissingTitleCard: View {
                         .foregroundStyle(badge == .request ? themeManager.accent : secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
+                        .padding(.horizontal, posterURL == nil ? 0 : CinemaSpacing.spacing2)
+                        .padding(.vertical, posterURL == nil ? 0 : 5)
+                        .background {
+                            // Over a poster the badge takes its own pill: on the
+                            // veil alone « Demander » read 1.5–3.7:1 (UX-01).
+                            if posterURL != nil {
+                                Capsule().fill(CinemaColor.surfaceContainerLowest.opacity(Self.badgePillOpacity))
+                            }
+                        }
                         .layoutPriority(1)
                 }
                 .padding(CinemaSpacing.spacing3)
@@ -68,9 +83,17 @@ struct MissingTitleCard: View {
             .accessibilityLabel(loc.localized("seerr.missing.a11y", title, badgeLabel))
     }
 
-    /// Muted reads too faint over a poster: the lighter variant there.
+    /// Muted reads too faint over a poster: the lighter variant there, on the
+    /// badge's pill.
     private var secondaryText: Color {
         posterURL == nil ? CinemaColor.onSurfaceMuted : CinemaColor.onSurfaceVariant
+    }
+
+    /// « 2021 · Film » sits on the veil itself, where only `onSurface` clears
+    /// 4.5:1 over a black poster in light mode or a white one in dark mode
+    /// (`onSurfaceVariant` read 2.7:1 there — audit 2026-11-13, UX-01).
+    private var subtitleColor: Color {
+        posterURL == nil ? CinemaColor.onSurfaceMuted : CinemaColor.onSurface
     }
 
     private var badgeLabel: String { badge.label(loc) }
