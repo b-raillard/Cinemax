@@ -9,6 +9,16 @@ nonisolated enum ProProduct {
     static let iOSProductID = "com.cinemax.ios.pro"
     static let tvOSProductID = "com.cinemax.tvos.pro"
 
+    /// The product the app with this bundle id sells — `nil` for any other
+    /// app (a genuine App Store JWS of another app must never unlock ours).
+    static func id(forBundleID bundleID: String) -> String? {
+        switch bundleID {
+        case "com.cinemax.ios": iOSProductID
+        case "com.cinemax.tvos": tvOSProductID
+        default: nil
+        }
+    }
+
     /// The product THIS app sells.
     static var current: String {
         #if os(tvOS)

@@ -34,7 +34,7 @@ struct RevokeOwnPurchaseTests {
     @Test("Le miroir écrit par CETTE app part avec l'enregistrement local")
     func ownMirrorRemoved() {
         let cloud = InMemoryCloudKeyValueStore()
-        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)
+        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud, vouches: { _ in true })
         store.recordPurchase(record(writer: iosBundle))
         #expect(store.state.isPro)
 
@@ -52,7 +52,7 @@ struct RevokeOwnPurchaseTests {
         cloud.set(record(writer: tvBundle, transaction: "tv").encoded(), forKey: CloudEntitlementMirror.key)
         let defaults = UserDefaults.isolatedForTesting()
         defaults.set(record(writer: iosBundle).encoded(), forKey: SettingsKey.entitlementLocalRecord)
-        let store = EntitlementStore(defaults: defaults, cloud: cloud)
+        let store = EntitlementStore(defaults: defaults, cloud: cloud, vouches: { _ in true })
 
         store.revokeOwnPurchase(ownBundleID: iosBundle)
 
@@ -64,7 +64,7 @@ struct RevokeOwnPurchaseTests {
     @Test("Le miroir est relu juste avant d'être retiré : un record neuf de l'autre plateforme survit")
     func rereadsMirrorBeforeRemoving() {
         let cloud = InMemoryCloudKeyValueStore()
-        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)
+        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud, vouches: { _ in true })
         store.recordPurchase(record(writer: iosBundle))
         // The Apple TV rewrote the key; its notification is not processed yet.
         cloud.set(record(writer: tvBundle, transaction: "tv").encoded(), forKey: CloudEntitlementMirror.key)
@@ -80,7 +80,7 @@ struct RevokeOwnPurchaseTests {
         let cloud = InMemoryCloudKeyValueStore()
         let sandbox = fact(transaction: "sb", environment: .sandbox).record(writerBundleID: tvBundle)
         cloud.set(sandbox.encoded(), forKey: CloudEntitlementMirror.key)
-        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)
+        let store = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud, vouches: { _ in true })
         #expect(store.state == .free)
     }
 }
@@ -195,6 +195,45 @@ struct ProPurchasePolicyTests {
             )
             #expect(action == .none)
         }
+    }
+
+    /// Audit SEC-01: only `recordPurchase` writes the local record, always with
+    /// this app's bundle id — one carrying the OTHER app's was fabricated, and
+    /// it used to survive every StoreKit answer (Pro for ever, no purchase).
+    @Test("Un record LOCAL signé d'une autre app (fabriqué) part, à l'absence comme à la révocation")
+    func foreignLocalRecordIsWithdrawn() {
+        let forged = record(writer: tvBundle)
+        #expect(ProPurchasePolicy.reconcile(
+            entitlement: .absent, localRecord: forged, cloudRecord: nil, ownBundleID: iosBundle
+        ) == .clearLocal)
+        #expect(ProPurchasePolicy.reconcile(
+            entitlement: .revoked, localRecord: forged, cloudRecord: nil, ownBundleID: iosBundle
+        ) == .revoke)
+        // A real entitlement replaces it with this app's own record.
+        #expect(ProPurchasePolicy.reconcile(
+            entitlement: .entitled(fact()), localRecord: forged, cloudRecord: nil, ownBundleID: iosBundle
+        ) == .record(fact().record(writerBundleID: iosBundle), mirror: true))
+    }
+
+    @Test("Le record local fabriqué retiré, l'achat miroité de l'autre plateforme reste")
+    @MainActor
+    func foreignLocalRecordGoesTheOtherMirrorStays() {
+        let cloud = InMemoryCloudKeyValueStore()
+        let defaults = UserDefaults.isolatedForTesting()
+        let theirs = record(writer: tvBundle, transaction: "9")
+        CloudEntitlementMirror(store: cloud).write(theirs)
+        defaults.set(record(writer: tvBundle).encoded(), forKey: SettingsKey.entitlementLocalRecord)
+        let store = EntitlementStore(defaults: defaults, cloud: cloud)
+        #expect(store.localRecord != nil)
+
+        let action = ProPurchasePolicy.reconcile(
+            entitlement: .revoked, localRecord: store.localRecord, cloudRecord: store.cloudRecord, ownBundleID: iosBundle
+        )
+        #expect(action == .revoke)
+        store.revokeOwnPurchase(ownBundleID: iosBundle)
+        #expect(store.localRecord == nil)
+        #expect(defaults.data(forKey: SettingsKey.entitlementLocalRecord) == nil)
+        #expect(CloudEntitlementMirror(store: cloud).read() == theirs)
     }
 
     @Test("Chaque app vend son propre produit")

@@ -17,11 +17,58 @@ private final class ProStoreKitFixtureToken {}
 /// only the next process gets the `.storekit` file. Every CI runner is a fresh
 /// simulator, so there the real-StoreKit tests record a KNOWN, intermittent
 /// issue; on a simulator that has run the suite once, they pass in full.
+/// ONLY that cause is tolerated: the precondition measures, before the body,
+/// whether local StoreKit is serving this process (`localStoreKitIsInactive`).
+/// When it is, any failure of the body is a real failure (audit CI-06: the
+/// unconditional wrapper turned every `#expect` into a known issue).
 @MainActor
-func localStoreKitColdStartTolerant(_ body: () async throws -> Void) async {
-    await withKnownIssue("Local StoreKit inactive on a simulator's first test run", isIntermittent: true) {
+func localStoreKitColdStartTolerant(_ body: () async throws -> Void) async throws {
+    try await withKnownIssue("Local StoreKit inactive on a simulator's first test run", isIntermittent: true) {
         try await body()
+    } when: {
+        await localStoreKitIsInactive()
     }
+}
+
+/// Measured once per process (the cold start is a property of the process —
+/// waiting does not end it): with a local `SKTestSession` open, the app
+/// transaction comes from Xcode's local testing (`.xcode`) — verified or not,
+/// its certificate may be expired — when local StoreKit is active, and the
+/// real Sandbox answers (`noAccount` → throws, or a non-Xcode environment)
+/// when it is not. Keyed on the ENVIRONMENT, never on what a test asserts
+/// (the product lookup, the purchase).
+@MainActor private var localStoreKitInactiveProbe: Bool?
+
+/// The header and payload of a JWS StoreKit emitted, UNVERIFIED — to check
+/// that its shape is the one `AppStoreSignature` reads.
+func storeKitJWSFields(_ jws: String?) -> (header: [String: Any], payload: [String: Any])? {
+    guard let parts = jws?.split(separator: ".", omittingEmptySubsequences: false), parts.count == 3 else { return nil }
+    func object(_ part: Substring) -> [String: Any]? {
+        var text = part.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        text += String(repeating: "=", count: (4 - text.count % 4) % 4)
+        return Data(base64Encoded: text).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    }
+    guard let header = object(parts[0]), let payload = object(parts[1]) else { return nil }
+    return (header, payload)
+}
+
+@MainActor
+private func localStoreKitIsInactive() async -> Bool {
+    if let measured = localStoreKitInactiveProbe { return measured }
+    var inactive = true
+    if let url = Bundle(for: ProStoreKitFixtureToken.self)
+        .url(forResource: "JellyGlassPro", withExtension: "storekit", subdirectory: "Fixtures"),
+       let session = try? SKTestSession(contentsOf: url) {
+        session.disableDialogs = true
+        // A simulated error outlives its session (area RULE): a leftover one
+        // would read as the cold start and make the whole process tolerant.
+        try? await session.setSimulatedError(nil, forAPI: .appTransaction)
+        if let result = try? await AppTransaction.shared {
+            inactive = result.unsafePayloadValue.environment != .xcode
+        }
+    }
+    localStoreKitInactiveProbe = inactive
+    return inactive
 }
 
 @Suite("Achat Pro — StoreKit réel (local)", .serialized)
@@ -46,7 +93,7 @@ struct ProStoreKitTests {
 
     @Test("Le produit de cette app se charge, avec le prix de l'App Store")
     func productLoads() async throws {
-        await localStoreKitColdStartTolerant {
+        try await localStoreKitColdStartTolerant {
             let session = try await session()
             defer { _ = session }
             let product = try await StoreKitProClient().product(id: ProProduct.current)
@@ -57,7 +104,7 @@ struct ProStoreKitTests {
 
     @Test("Acheté → Pro sur cet appareil, SANS miroir (achat de test) ; remboursé → gratuit")
     func purchaseThenRefund() async throws {
-        await localStoreKitColdStartTolerant {
+        try await localStoreKitColdStartTolerant {
             let session = try await session()
             let cloud = InMemoryCloudKeyValueStore()
             let entitlements = EntitlementStore(defaults: .isolatedForTesting(), cloud: cloud)
@@ -70,6 +117,14 @@ struct ProStoreKitTests {
             }
             #expect(fact.productID == ProProduct.current)
             #expect(fact.environment == .xcode)
+            // The JWS StoreKit really emits carries what `AppStoreSignature`
+            // reads (audit SEC-02 — its own fixtures are hand-written).
+            let fields = try #require(storeKitJWSFields(fact.signedTransaction))
+            #expect(fields.header["alg"] as? String == "ES256")
+            #expect(fields.payload["signedDate"] is NSNumber)
+            let purchase = try JSONDecoder().decode(SignedPurchasePayload.self, from: JSONSerialization.data(withJSONObject: fields.payload))
+            #expect(purchase.productId == ProProduct.current)
+            #expect(purchase.environment == "Xcode")
             #expect(entitlements.state == .pro(.purchase))
             // A test purchase never reaches the user's real iCloud store.
             #expect(cloud.data(forKey: CloudEntitlementMirror.key) == nil)

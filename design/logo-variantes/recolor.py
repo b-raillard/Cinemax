@@ -13,7 +13,8 @@ aubergine » variant).
                                                                 #   alternate icons (ALTERNATES)
                                                                 #   + the picker's previews
 
-Needs Pillow + numpy.
+Needs Pillow + numpy. Every mode ends with `lighten.py` (the iOS 1024 icons'
+grain smoothed by at most 2 levels, so `Assets.car` halves — see its docstring).
 
 Sources
 - The icons whose rounded corners are painted in (`CORNERED`) are read from
@@ -21,8 +22,9 @@ Sources
   their corner-filled versions. Everything else is read from Resources/.
 - Each variant is written to `declinaisons/<variant>/<path inside Assets.xcassets>`,
   only for the files it actually changes (the tvOS back layers are plain ground,
-  so only the aubergine variant has them). The tinted icon is greyscale, and
-  `app_logo.png` is `app_icon_1024.png` pixel for pixel: neither is duplicated.
+  so only the aubergine variant has them). The tinted icon is greyscale: not
+  duplicated. The iOS Settings logo (`AppLogo.imageset`, 112/224/336 px) is
+  written by scripts/seasonal-icon.py from the primary icon, never here.
 
 How it works
 - The original glow runs from green (hue ~150°, tentacles / diaphragm) to blue
@@ -50,6 +52,8 @@ import sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+import lighten  # design/logo-variantes/lighten.py — run at the end of every mode
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 ASSETS = os.path.join(ROOT, "Resources/Assets.xcassets")
@@ -59,7 +63,6 @@ OUT = os.path.join(HERE, "declinaisons")
 ICON = "AppIcon.appiconset/app_icon_1024.png"
 ICON_DARK = "AppIcon.appiconset/app_icon_1024_dark.png"
 ICON_TINTED = "AppIcon.appiconset/app_icon_1024_tinted.png"
-LOGO = "AppLogo.imageset/app_logo.png"
 LOGO_TV = "AppLogo.imageset/app_logo_tv.png"
 TV = "App Icon & Top Shelf Image.brandassets"
 TV_LARGE = f"{TV}/App Icon - Large.imagestack"
@@ -73,7 +76,7 @@ TV_BACKS = [f"{TV_LARGE}/Back.imagestacklayer/Content.imageset/back_appstore.png
 # The Middle layers are empty (fully transparent) and the Top Shelf images are
 # not part of an app icon (an alternate icon never swaps them): not declined.
 
-CORNERED = [ICON, ICON_DARK, ICON_TINTED, LOGO]           # painted corners → filled
+CORNERED = [ICON, ICON_DARK, ICON_TINTED]                 # painted corners → filled
 RECOLOURED = [ICON, ICON_DARK, LOGO_TV] + TV_FRONTS + TV_BACKS
 
 # AccentOption.swift — accentDark (the hue the app shows on its dark theme).
@@ -357,6 +360,7 @@ def install_alternates():
         write_preview_set(preview, previews(declined(variant, ICON), declined(variant, TV_SMALL_BACK_2X),
                                             declined(variant, TV_SMALL_FRONT_2X)))
     print(f"{len(ALTERNATES)} alternate icon(s) + previews installed in {ASSETS}")
+    lighten.main()  # no-op when the copied files were already lightened
 
 
 def main():
@@ -381,7 +385,10 @@ def main():
         target = os.path.join(ASSETS, rel)
         if install:
             to_image(rgb).save(target, optimize=True)
-        if not (np.array(Image.open(target).convert("RGB")) == np.array(to_image(rgb))).all():
+        expected = np.array(to_image(rgb))
+        if lighten.MARKER in getattr(Image.open(target), "text", {}):  # an iOS icon lighten.py already ran on
+            expected = lighten.lighten_array(expected)
+        if not (np.array(Image.open(target).convert("RGB")) == expected).all():
             print(f"note: {rel} in Resources/ still has its painted corners (--install-corners)")
 
     # 1b. « classique » — the identity variant (corners filled, original hue),
@@ -501,6 +508,7 @@ def main():
 
     n_variants = len({name for name, _ in written})
     print(f"{len(written)} files for {n_variants} variants + 3 previews written to {HERE}")
+    lighten.main()  # the iOS 1024 icons just (re)written, in declinaisons/ and Resources/
 
 
 if __name__ == "__main__":

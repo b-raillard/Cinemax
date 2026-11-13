@@ -148,6 +148,12 @@ targets:
         # clobber it back to its literal defaults on regen.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # The Swift compilation conditions this binary was built with, so an
+        # archive SAYS whether it is a PRO_PREVIEW build (passed only on the
+        # archive's command line, see Shared/Entitlements/CLAUDE.md) —
+        # scripts/check-archive-sdk.sh refuses one. Derived from the flag
+        # itself, so it cannot be passed without leaving the mark.
+        JGCompilationConditions: "$(SWIFT_ACTIVE_COMPILATION_CONDITIONS)"
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
           NSAllowsArbitraryLoadsForMedia: true
@@ -293,6 +299,8 @@ targets:
         # Single-source the version from settings.base (see iOS note).
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        # PRO_PREVIEW mark — see the iOS note.
+        JGCompilationConditions: "$(SWIFT_ACTIVE_COMPILATION_CONDITIONS)"
         # The update prompt's « Mettre à jour » asks `canOpenURL` whether the
         # Apple TV's App Store answers this scheme, and renders no button when
         # it does not — see Shared/Update/CLAUDE.md.

@@ -178,7 +178,9 @@ jobs:
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/ios-test.log" | xcbeautify
           # « ━ » = passed WITH known issues: the real-StoreKit tests, inactive on
-          # a fresh simulator (`localStoreKitColdStartTolerant`).
+          # a fresh simulator (`localStoreKitColdStartTolerant`). Only that cause
+          # is tolerated — measured before each body — so a real failure there
+          # still fails the run.
           grep -E '^(✔|━) Test run with [1-9][0-9]* tests in [0-9]+ suites passed' "$RUNNER_TEMP/ios-test.log"
           grep -F '✔ Suite "Identify applies the chosen artwork" passed' "$RUNNER_TEMP/ios-test.log"
 
@@ -225,6 +227,37 @@ jobs:
               CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
               2>&1 | xcbeautify
           done
+
+      # A PRO_PREVIEW build (the TestFlight preview of the purchase) is only
+      # ever compiled at archive time, so its `#if … PRO_PREVIEW` branches were
+      # first seen there. One platform is enough to catch a compile error. The
+      # step also proves the build carries its Info.plist mark and that
+      # scripts/check-archive-sdk.sh refuses it — a preview build answers
+      # « Pro launched » with no founders, and is never submitted for review.
+      - name: Build Release with PRO_PREVIEW (iOS)
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project Cinemax.xcodeproj \
+            -scheme Cinemax \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) PRO_PREVIEW' \
+            2>&1 | xcbeautify
+          app=$(find ~/Library/Developer/Xcode/DerivedData -type d -path '*/Build/Products/Release-iphonesimulator/Cinemax.app' -prune | head -n 1)
+          /usr/libexec/PlistBuddy -c 'Print :JGCompilationConditions' "$app/Info.plist" | grep -qw PRO_PREVIEW
+          archive="$RUNNER_TEMP/preview.xcarchive"
+          mkdir -p "$archive/Products/Applications"
+          cp -R "$app" "$archive/Products/Applications/"
+          if scripts/check-archive-sdk.sh "$archive" 2> "$RUNNER_TEMP/archive-check.err"; then
+            echo "::error::scripts/check-archive-sdk.sh accepted a PRO_PREVIEW build"
+            exit 1
+          fi
+          grep -F 'a PRO_PREVIEW build is never submitted for review' "$RUNNER_TEMP/archive-check.err"
 
   lint:
     name: SwiftLint
