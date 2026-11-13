@@ -863,7 +863,7 @@ struct IOSActiveServerLabel<Badge: View>: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
 
-            // The road being dialled: « Local · 192.168.1.128:8920 » / « Internet ».
+            // The road being dialled: « Local · 192.168.1.10:8920 » / « Internet ».
             ServerRouteLine(font: CinemaFont.dynamicLabel(.medium))
         }
     }

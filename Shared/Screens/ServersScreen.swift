@@ -223,7 +223,7 @@ enum LocalAddressToast {
 }
 
 /// The route line under the active server's address in Réglages → Serveur:
-/// « Local · 192.168.1.128:8920 » or « Internet », from the host of the
+/// « Local · 192.168.1.10:8920 » or « Internet », from the host of the
 /// address in use (`ServerRouteController.activeDialURL`). Reads the route owner
 /// directly (no environment injection) — a standalone `View`, so it redraws
 /// on a route change even inside a pushed destination.
@@ -565,7 +565,7 @@ struct ServersScreen: View {
     private func titleRow(
         _ entry: ServerEntry, route: ServerRouteKind?, compactRoute: Bool, nameFits: Bool
     ) -> some View {
-        // `spacing1`, as the mockup's tight gap: at `spacing2` « Nivadax ·
+        // `spacing1`, as the mockup's tight gap: at `spacing2` « Serveur ·
         // Actuel · 🏠 Local » missed the iPhone 17 Pro card by a few points.
         HStack(spacing: CinemaSpacing.spacing1) {
             Text(entry.displayName)
