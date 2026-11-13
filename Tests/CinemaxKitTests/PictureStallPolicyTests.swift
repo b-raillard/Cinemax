@@ -148,6 +148,38 @@ struct PictureStallPolicyTests {
         #expect(f.policy.recoveriesLeft == 0)
     }
 
+    @Test("Budget épuisé : l'abandon est signalé UNE fois, au seuil — jamais une image figée muette")
+    func exhaustedBudgetGivesUpOnceAtThreshold() {
+        // PL-01 : budget vide, le lecteur se contentait d'un journal ; l'image
+        // restait figée sous un HUD « lecture », sans spinner ni alerte.
+        var f = Feeder()
+        _ = f.policy.spendRecovery()
+        _ = f.policy.spendRecovery()
+        #expect(f.policy.recoveriesLeft == 0)
+        let out = f.run(200, picturesMove: false)
+        #expect(out.filter { $0 == .exhausted }.count == 1)
+        #expect(!out.contains(.recover))
+        // Au seuil exactement : le 1er échantillon n'a rien à comparer.
+        #expect(out[PictureStallPolicy.stallSeconds] == .exhausted)
+        // Avant et après : du décompte, pas un second abandon.
+        #expect(out[PictureStallPolicy.stallSeconds - 1] == .stalling(seconds: PictureStallPolicy.stallSeconds - 1))
+        #expect(out[PictureStallPolicy.stallSeconds + 1] == .stalling(seconds: PictureStallPolicy.stallSeconds + 1))
+    }
+
+    @Test("Tant qu'il reste une reprise, jamais d'abandon")
+    func noGiveUpWhileBudgetLeft() {
+        var f = Feeder()
+        var outcomes: [PictureStallPolicy.Outcome] = []
+        for _ in 0..<(PictureStallPolicy.stallSeconds * PictureStallPolicy.recoveryBudget + 1) {
+            outcomes.append(f.tick(picturesMove: false))
+        }
+        #expect(outcomes.filter { $0 == .recover }.count == PictureStallPolicy.recoveryBudget)
+        #expect(!outcomes.contains(.exhausted))
+        // La reprise suivante, budget vide, est l'abandon.
+        let next = f.run(PictureStallPolicy.stallSeconds, picturesMove: false)
+        #expect(next.last == .exhausted)
+    }
+
     @Test("La reprise NE rend PAS le budget — sinon la borne n'en est pas une")
     func reopenDoesNotRestoreBudget() {
         var f = Feeder()

@@ -1252,9 +1252,11 @@ final class HomeViewModel {
         handedOff = [:]
     }
 
-    /// The playback is now HERE: tell the source, then stop it. Fire-and-
-    /// forget — a failure is logged, never shown, and never holds the local
-    /// player back (it is already opening). Idempotent per session + item.
+    /// The playback is now HERE: tell the source, then stop it. Called by
+    /// `PlayLink.onStart`, i.e. once the local player has really opened the
+    /// media — never on the tap, so a failed or abandoned open leaves the
+    /// source playing. Fire-and-forget — a failure is logged, never shown.
+    /// Idempotent per session + item.
     func handOff(_ entry: ElsewherePlayback, using appState: AppState, message: String) {
         let key = "\(entry.sessionId)|\(entry.itemId)"
         guard handedOff[key] == nil else { return }
