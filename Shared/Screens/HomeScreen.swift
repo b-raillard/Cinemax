@@ -957,7 +957,7 @@ struct HomeScreen: View {
                             let heroStart = elsewhere?.startSeconds ?? CardPlayTargetResolver.resumeSeconds(
                                 positionTicks: item.userData?.playbackPositionTicks ?? 0
                             )
-                            let playTitle = elsewhere.map(resumeHereTitle) ?? loc.localized("action.play")
+                            let playTitle = elsewhere == nil ? loc.localized("action.play") : loc.localized("elsewhere.resumeHere")
                             PlayLink(
                                 itemId: id, title: item.name ?? "",
                                 startTime: heroStart,
@@ -1487,10 +1487,6 @@ struct HomeScreen: View {
         let state = loc.localized(entry.isPaused ? "elsewhere.paused" : "elsewhere.playing", elsewhereDeviceName(entry))
         guard entry.isPaused, let seconds = entry.startSeconds else { return state }
         return "\(state) · \(PlayerTimeFormat.ms(Int32(clamping: Int(seconds) * 1000)))"
-    }
-
-    private func resumeHereTitle(_ entry: ElsewherePlayback) -> String {
-        loc.localized("elsewhere.resumeHere")
     }
 
     /// « SUR APPLE TV » — same chrome as the « En direct » pill, in the accent.
