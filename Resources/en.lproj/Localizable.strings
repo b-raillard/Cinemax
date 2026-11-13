@@ -1157,14 +1157,14 @@
 "servers.localAddress" = "Local address…";
 "servers.localAddress.title" = "Local address";
 "servers.localAddress.message" = "This server's address on your home network. JellyGlass uses it first when this device is on that network. Leave empty to remove it.";
-"servers.localAddress.placeholder" = "192.168.1.128:8920";
+"servers.localAddress.placeholder" = "192.168.1.10:8920";
 "servers.localAddress.notHTTPS" = "The local address must use https";
 "servers.localAddress.savedNeedsApproval" = "Saved — at home, save it again to approve its certificate";
 "servers.localAddress.reachable" = "Local address reachable";
 "servers.localAddress.savedUnreachable" = "Saved — used when this device is on the same network";
 "servers.localAddress.denied" = "Local network access denied — allow it in Settings › JellyGlass";
 "servers.localAddress.otherServer" = "That's not this server";
-"servers.localAddress.notLocal" = "Enter an address on your home network (e.g. 192.168.1.128)";
+"servers.localAddress.notLocal" = "Enter an address on your home network (e.g. 192.168.1.10)";
 "servers.localAddress.signInFirst" = "Sign in to this server first";
 "servers.localAddress.removed" = "Local address removed";
 "servers.route.local" = "Local";

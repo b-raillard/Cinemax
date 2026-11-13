@@ -364,13 +364,13 @@ struct ServerRegistryTests {
     @Test("Upsert keeps the stored local address over an incoming nil")
     func upsertKeepsLocalURL() {
         var existing = entry("NAS", "https://host/jellyfin", daysAgo: 5)
-        existing.localURL = URL(string: "http://192.168.1.128:8899")
+        existing.localURL = URL(string: "http://192.168.1.10:8899")
         let incoming = entry("NAS", "https://host/jellyfin")
 
         let result = ServerRegistry.upsert(incoming, into: [existing])
 
         #expect(result.count == 1)
-        #expect(result[0].localURL == URL(string: "http://192.168.1.128:8899"))
+        #expect(result[0].localURL == URL(string: "http://192.168.1.10:8899"))
     }
 
     @Test("A registry stored before the local address still decodes")
@@ -805,7 +805,7 @@ struct MultiServerAppStateTests {
         let kc = MockKeychain()
         let a = entry("NAS", "https://a.example.com")
         let app = makeState(keychain: kc, servers: [a], activeId: a.id)
-        let local = URL(string: "http://192.168.1.128:8899")!
+        let local = URL(string: "http://192.168.1.10:8899")!
 
         let result = app.setLocalURL(id: a.id, to: local)
 
@@ -1105,7 +1105,7 @@ struct MultiServerAppStateTests {
             return .answered(serverID: "S", connectedAddressIsLocal: true)
         }
 
-        let outcome = await app.setLocalAddress(id: server.id, raw: "http://192.168.1.128:8899")
+        let outcome = await app.setLocalAddress(id: server.id, raw: "http://192.168.1.10:8899")
 
         #expect(outcome == .refusedNotHTTPS)
         #expect(log.urls.isEmpty)
@@ -1335,7 +1335,7 @@ private final class RouteLog {
 /// user rather than trusting a status.
 @Suite("ServerSessionValidator")
 struct ServerSessionValidatorTests {
-    private let user = Data(#"{"Name":"bastien","Id":"4b1c0e8f2a3d4e5f8a9b0c1d2e3f4a5b"}"#.utf8)
+    private let user = Data(#"{"Name":"alex","Id":"fedcba9876543210fedcba9876543210"}"#.utf8)
 
     @Test("a 2xx carrying a user is valid, anything else on a 2xx proves nothing")
     func twoHundredNeedsAUser() {

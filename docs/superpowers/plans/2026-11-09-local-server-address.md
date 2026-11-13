@@ -26,7 +26,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 - No address in any log or diagnostics line: only the class `local` / `internet` and the reason.
 - SwiftLint strict (`--strict` against `.swiftlint-baseline.json`); never re-baseline a new violation.
 - Probe timeouts: launch **1.0 s**, runtime **1.5 s**, extensions **1.0 s**. Every probe session sets `allowsCellularAccess = false`, `waitsForConnectivity = false`, `urlCache = nil`, and is ephemeral.
-- **The local address is https only, its certificate pinned at save** (owner amendment 2026-11-09, spec « Amendment — HTTPS only »). Bare host → `https://`; `http://` refused. Test data uses `https://192.168.1.128:8920`.
+- **The local address is https only, its certificate pinned at save** (owner amendment 2026-11-09, spec « Amendment — HTTPS only »). Bare host → `https://`; `http://` refused. Test data uses `https://192.168.1.10:8920`.
 - Local means: IPv4 `10/8`, `172.16/12`, `192.168/16`, `169.254/16`; IPv6 `fc00::/7`, `fe80::/10`. Not local: loopback, CGNAT `100.64/10`, everything else.
 - Test command (`RUN_TESTS`), run in full (`-only-testing` runs 0 swift-testing tests):
   ```bash
@@ -69,10 +69,10 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   ```
 
 - [ ] **Step 1: Write the failing tests** — `@Suite("Adresse locale — classement")` in `LocalServerAddressTests.swift`:
-  - `rangeBoundaries`: `kind("10.0.0.1") == .privateIPv4`, `"172.15.255.255" == .publicIPv4`, `"172.16.0.0" == .privateIPv4`, `"172.31.255.255" == .privateIPv4`, `"172.32.0.0" == .publicIPv4`, `"192.168.1.128" == .privateIPv4`, `"192.169.0.1" == .publicIPv4`, `"169.254.3.4" == .linkLocalIPv4`, `"100.64.0.1" == .cgnatIPv4`, `"100.127.255.255" == .cgnatIPv4`, `"100.128.0.1" == .publicIPv4`, `"127.0.0.1" == .loopbackIPv4`.
+  - `rangeBoundaries`: `kind("10.0.0.1") == .privateIPv4`, `"172.15.255.255" == .publicIPv4`, `"172.16.0.0" == .privateIPv4`, `"172.31.255.255" == .privateIPv4`, `"172.32.0.0" == .publicIPv4`, `"192.168.1.10" == .privateIPv4`, `"192.169.0.1" == .publicIPv4`, `"169.254.3.4" == .linkLocalIPv4`, `"100.64.0.1" == .cgnatIPv4`, `"100.127.255.255" == .cgnatIPv4`, `"100.128.0.1" == .publicIPv4`, `"127.0.0.1" == .loopbackIPv4`.
   - `ipv6Forms`: `"fd12:3456::1" == .uniqueLocalIPv6`, `"fc00::1" == .uniqueLocalIPv6`, `"fe80::1c2b" == .linkLocalIPv6`, `"fe80::1%en0" == .linkLocalIPv6`, `"[fd00::5]" == .uniqueLocalIPv6`, `"::1" == .loopbackIPv6`, `"2a01:cb00:1234::5" == .publicIPv6`.
-  - `malformedAndHostnames`: `"999.1.1.1"`, `"192.168.1"`, `"nas.lan"`, `"movies.nivadax.net"` and `""` are all `.notAnIPLiteral`.
-  - `eligibility`: `isEligibleHost("192.168.1.128") && isEligibleHost("nas.local") && isEligibleHost("NAS.LOCAL")`; `!isEligibleHost("nas.lan")`, `!isEligibleHost(".local")`, `!isEligibleHost("100.64.0.1")`, `!isEligibleHost("127.0.0.1")`, `!isEligibleHost("8.8.8.8")`.
+  - `malformedAndHostnames`: `"999.1.1.1"`, `"192.168.1"`, `"nas.lan"`, `"media.example.com"` and `""` are all `.notAnIPLiteral`.
+  - `eligibility`: `isEligibleHost("192.168.1.10") && isEligibleHost("nas.local") && isEligibleHost("NAS.LOCAL")`; `!isEligibleHost("nas.lan")`, `!isEligibleHost(".local")`, `!isEligibleHost("100.64.0.1")`, `!isEligibleHost("127.0.0.1")`, `!isEligibleHost("8.8.8.8")`.
 - [ ] **Step 2: Update `VerboseDiagnosticsTests` (`:125-133`)**: keep every existing expectation and add `localAddressClass("999.1.1.1") == "unknown"` and `localAddressClass("nas.local") == "unknown"` (they printed `public-ipv6`; the spec says that quirk must not survive).
 - [ ] **Step 3: `xcodegen generate`, then `RUN_TESTS`.** Expected: compile failure, `cannot find 'LocalNetworkAddress'`.
 - [ ] **Step 4: Implement `LocalNetworkAddress`** with `inet_pton(AF_INET / AF_INET6)` on the literal, after stripping `[...]` and any `%zone`. A 4-byte or 16-byte compare decides the range. Then rewrite `localAddressClass` on top of `kind(ofLiteral:)`:
@@ -112,16 +112,16 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 
 - [ ] **Step 1: Write the failing tests.**
   - `@Suite("Adresse locale — saisie")`:
-    - `bareHostDefaultsToHTTP`: `normalizeLocal("192.168.1.128:8899") == .success(URL(string: "http://192.168.1.128:8899")!)`.
-    - `keepsHTTPSAndSubPath`: `normalizeLocal("https://192.168.1.128/jellyfin/")` gives `https://192.168.1.128/jellyfin`.
+    - `bareHostDefaultsToHTTP`: `normalizeLocal("192.168.1.10:8899") == .success(URL(string: "http://192.168.1.10:8899")!)`.
+    - `keepsHTTPSAndSubPath`: `normalizeLocal("https://192.168.1.10/jellyfin/")` gives `https://192.168.1.10/jellyfin`.
     - `acceptsMDNS`: `normalizeLocal("nas.local:8096")` gives `http://nas.local:8096`.
     - `acceptsBracketedIPv6`: `normalizeLocal("[fd00::5]:8096")` gives `http://[fd00::5]:8096`.
     - `refusals`:
       - `normalizeLocal("nas.lan") == .failure(.notLocal)`
-      - `"movies.nivadax.net"`, `"http://8.8.8.8"` and `"100.64.1.2"` → `.notLocal`
+      - `"media.example.com"`, `"http://8.8.8.8"` and `"100.64.1.2"` → `.notLocal`
       - `"ftp://192.168.1.2"`, `"   "` and `"http://"` → `.malformed`
   - In `ServerRegistryTests` (`@Suite("ServerRegistry")`):
-    - `upsertKeepsLocalURL`: the stored entry has `localURL = http://192.168.1.128:8899`, the incoming one has `nil` → the result keeps the stored value.
+    - `upsertKeepsLocalURL`: the stored entry has `localURL = http://192.168.1.10:8899`, the incoming one has `nil` → the result keeps the stored value.
     - `legacyRegistryDecodesWithoutLocalURL`: a JSON `[ServerEntry]` without the key decodes, with `localURL == nil`.
     - `localURLRoundTrips`: encode then decode keeps it.
   - In `@Suite("Multi-server AppState")`:
@@ -189,17 +189,17 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - `publicConnectedAddressIsInternet`: `.answered("S", false)` → `nil`.
     - `unknownExpectedIdIsInternet`: expected `nil`, `.answered("S", true)` → `nil`. The token never goes to an unproven machine.
   - `@Suite("Adresse locale — sonde")`:
-    - `probeAcceptsMatchingBody`: `evaluate(statusCode: 200, body: #"{"Id":"S","ServerName":"NAS"}"#, connectedAddress: "192.168.1.128") == .answered(serverID: "S", connectedAddressIsLocal: true)`.
+    - `probeAcceptsMatchingBody`: `evaluate(statusCode: 200, body: #"{"Id":"S","ServerName":"NAS"}"#, connectedAddress: "192.168.1.10") == .answered(serverID: "S", connectedAddressIsLocal: true)`.
     - `probeRejectsPublicConnectedAddress`: the same body with `connectedAddress: "86.245.10.3"` → `.answered("S", false)`.
     - `probeRejectsNon200`: statuses 301, 401 and 500 → `.failed(localNetworkDenied: false)`.
     - `probeRejectsBodyWithoutId`: `#"{"ServerName":"NAS"}"#` → `.failed(localNetworkDenied: false)`.
     - `probeUnknownAddressIsNotLocal`: the valid body with `connectedAddress: nil` (a `.local` name with no metrics) → `.answered(serverID: "S", connectedAddressIsLocal: false)`. An unclassified machine never counts as local.
   - `@Suite("Adresse locale — réécriture d'URL")`:
-    - `rewriteNoBasePaths`: `rewrite("https://movies.nivadax.net/Items/1/Images/Primary?tag=t", identityBase: "https://movies.nivadax.net", dialBase: "http://192.168.1.128:8899")` gives `http://192.168.1.128:8899/Items/1/Images/Primary?tag=t`.
-    - `rewriteIdentityBasePathToRoot`: identity `https://box.example.org/jellyfin`, dial `http://192.168.1.128:8096`. `https://box.example.org/jellyfin/Items/1/Images/Primary` gives `http://192.168.1.128:8096/Items/1/Images/Primary`.
-    - `rewriteRootToDialBasePath`: identity `https://movies.nivadax.net`, dial `http://nas.local/jellyfin`. `/Items/1` gives `http://nas.local/jellyfin/Items/1`.
+    - `rewriteNoBasePaths`: `rewrite("https://media.example.com/Items/1/Images/Primary?tag=t", identityBase: "https://media.example.com", dialBase: "http://192.168.1.10:8899")` gives `http://192.168.1.10:8899/Items/1/Images/Primary?tag=t`.
+    - `rewriteIdentityBasePathToRoot`: identity `https://box.example.org/jellyfin`, dial `http://192.168.1.10:8096`. `https://box.example.org/jellyfin/Items/1/Images/Primary` gives `http://192.168.1.10:8096/Items/1/Images/Primary`.
+    - `rewriteRootToDialBasePath`: identity `https://media.example.com`, dial `http://nas.local/jellyfin`. `/Items/1` gives `http://nas.local/jellyfin/Items/1`.
     - `rewriteLeavesForeignURL`: a URL on another host gives `nil`.
-    - `kindOfDialURL`: `kind(ofDialURL: "http://192.168.1.128:8899") == .local`, `"http://nas.local" == .local`, `"https://movies.nivadax.net" == .internet`.
+    - `kindOfDialURL`: `kind(ofDialURL: "http://192.168.1.10:8899") == .local`, `"http://nas.local" == .local`, `"https://media.example.com" == .internet`.
 - [ ] **Step 2: `xcodegen generate`, then `RUN_TESTS`.** Expected: compile failure.
 - [ ] **Step 3: Implement** `ServerRoute.swift` and `LocalRouteProbe.swift`, and the `PingResult` change. Update the one pattern match in `ServersScreen.apply`, which passes the id through `updateServerMetadata(id:name:version:serverID:)` (`AppState.swift:607`). This also fills a missing `serverID` from the public URL.
 - [ ] **Step 4: `RUN_TESTS`.** Expected: pass.
@@ -216,8 +216,8 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 - Produces: `LocalAddressInputError.notHTTPS` (a third case). `normalizeLocal` defaults a bare host to `https://` and returns `.failure(.notHTTPS)` for an explicit `http://` whose host is otherwise eligible (an ineligible host keeps `.notLocal`). `ServerRoutePolicy.decide` returns `nil` for a `localURL` whose scheme is not `https`.
 
 - [ ] **Step 1: Update the failing tests.**
-  - `@Suite("Adresse locale — saisie")`: `bareHostDefaultsToHTTP` is renamed `bareHostDefaultsToHTTPS` and expects `https://192.168.1.128:8899`; `acceptsMDNS` expects `https://nas.local:8096`; `acceptsBracketedIPv6` expects `https://[fd00::5]:8096`; new `refusesHTTP`: `normalizeLocal("http://192.168.1.128:8899") == .failure(.notHTTPS)`, `normalizeLocal("http://nas.local") == .failure(.notHTTPS)`, and `normalizeLocal("http://8.8.8.8") == .failure(.notLocal)` (moved out of `refusals` if it lives there). Every other refusal is unchanged.
-  - `@Suite("Adresse locale — décision de route")`: switch the suite's `lan` fixture to `https://192.168.1.128:8920`; new `httpLocalURLIsInternet`: `decide(localURL: http://192.168.1.128:8899, reach: .lanCapable, expectedServerID: "S", probe: .answered(serverID: "S", connectedAddressIsLocal: true)) == nil`.
+  - `@Suite("Adresse locale — saisie")`: `bareHostDefaultsToHTTP` is renamed `bareHostDefaultsToHTTPS` and expects `https://192.168.1.10:8899`; `acceptsMDNS` expects `https://nas.local:8096`; `acceptsBracketedIPv6` expects `https://[fd00::5]:8096`; new `refusesHTTP`: `normalizeLocal("http://192.168.1.10:8899") == .failure(.notHTTPS)`, `normalizeLocal("http://nas.local") == .failure(.notHTTPS)`, and `normalizeLocal("http://8.8.8.8") == .failure(.notLocal)` (moved out of `refusals` if it lives there). Every other refusal is unchanged.
+  - `@Suite("Adresse locale — décision de route")`: switch the suite's `lan` fixture to `https://192.168.1.10:8920`; new `httpLocalURLIsInternet`: `decide(localURL: http://192.168.1.10:8899, reach: .lanCapable, expectedServerID: "S", probe: .answered(serverID: "S", connectedAddressIsLocal: true)) == nil`.
 - [ ] **Step 2: `RUN_TESTS`.** Expected: compile failure on `.notHTTPS`.
 - [ ] **Step 3: Implement.** Update the doc comments (the « LAN Jellyfin is almost always http » rationale goes; cite the amendment).
 - [ ] **Step 4: `RUN_TESTS`.** Expected: pass.
@@ -294,7 +294,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   `RoutedImageDataLoader` forwards `loadData(with: table.rewrite(request), …)` to `base`.
 
 - [ ] **Step 1: Write the failing tests** — `@Suite("Adresse locale — images")`:
-  - `tableRewritesUnderIdentity`: `set(identity: https://movies.nivadax.net, dial: http://192.168.1.128:8899)`. A request for `https://movies.nivadax.net/Items/1/Images/Primary` becomes `http://192.168.1.128:8899/Items/1/Images/Primary`, keeping every header (`Authorization` included).
+  - `tableRewritesUnderIdentity`: `set(identity: https://media.example.com, dial: http://192.168.1.10:8899)`. A request for `https://media.example.com/Items/1/Images/Primary` becomes `http://192.168.1.10:8899/Items/1/Images/Primary`, keeping every header (`Authorization` included).
   - `tableNoDialIsIdentity`: `set(identity:, dial: nil)` leaves the request unchanged.
   - `loaderForwardsRewrittenRequest`: a spy `DataLoading` records the URL it receives. It is the dial one.
   - `cacheKeyStaysIdentity`: `ImageRequest(url: identityURL).imageId == identityURL.absoluteString` with the table set to a dial base. Nuke computes the key before the loader runs.
@@ -417,7 +417,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - `header` appends `server_route: <value>` LAST, after `network`, only when non-nil.
     - Both callers set `facts.serverRoute = ServerRouteController.shared.route.rawValue`.
 
-- [ ] **Step 1: Write the failing tests** in `ServerRouteControllerTests.swift` — `@Suite("Adresse locale — route active")`, `@MainActor`. Use `MockAPIClient` + `MockKeychain` + a stub probe closure; the active entry has `url = https://movies.nivadax.net`, `serverID = "S"`, `localURL = https://192.168.1.128:8920`:
+- [ ] **Step 1: Write the failing tests** in `ServerRouteControllerTests.swift` — `@Suite("Adresse locale — route active")`, `@MainActor`. Use `MockAPIClient` + `MockKeychain` + a stub probe closure; the active entry has `url = https://media.example.com`, `serverID = "S"`, `localURL = https://192.168.1.10:8920`:
   - `launchAtHomeGoesLocal`: reach `.lanCapable`, probe `.answered("S", true)` → `api.dialURLs.last == lan`, `route == .local`, and one `.cinemaxShouldRefreshCatalogue` posted.
   - `cellularSkipsProbe`: reach `.cellularOnly` → the probe closure is never called; `route == .internet`; `api.dialURLs.last == nil` (or none).
   - `failedProbeKeepsInternet`: `.failed(false)` → `route == .internet`.
@@ -505,8 +505,8 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - `setLocalAddressBlankRemoves`: → `.removed`, `localURL == nil`.
     - `saveOffersCertificateApproval`: probe `.failed(false)` with the certificate state `.pendingApproval` → `.needsCertificateApproval`, `localURL` unchanged (pure table test in « enregistrement », plus this AppState test with a seam `var localCertificateState: @MainActor (URL) -> LocalCertificateState` defaulted to the `ServerTrustDelegate` reading).
     - `savedAwayNeedsApproval`: `.failed(false)` + `.unknown` → `.savedNeedsApproval`, saved.
-    - `httpTypedIsRefused`: raw `http://192.168.1.128:8899` → `.refusedNotHTTPS`.
-    - `changingAddressForgetsOldPin`: pin `192.168.1.128:8920` (`ServerTrustDelegate.shared.trust`), change the address to `https://192.168.1.129:8920` → `isPinned("192.168.1.128:8920") == false`; clean the pins up in the test.
+    - `httpTypedIsRefused`: raw `http://192.168.1.10:8899` → `.refusedNotHTTPS`.
+    - `changingAddressForgetsOldPin`: pin `192.168.1.10:8920` (`ServerTrustDelegate.shared.trust`), change the address to `https://192.168.1.129:8920` → `isPinned("192.168.1.10:8920") == false`; clean the pins up in the test.
 - [ ] **Step 2: `xcodegen generate`, then `RUN_TESTS`.** Expected: compile failure.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: `RUN_TESTS`.** Expected: pass, `SessionResilienceTests` and `MultiAccountTests` included.
@@ -534,7 +534,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   - `routeChangeRebuilds`: `decide(didRetry: false, …, usingProxy: false, routeChanged: true) == .rebuildOnCurrentRoute`.
   - `routeChangeAfterRetryGivesUp`: `didRetry: true, routeChanged: true` → `.giveUp(releaseStickyProxy: false)`.
   - `routeChangedCompare`:
-    - `routeChanged(negotiated: "http://192.168.1.128:8899/Videos/1/stream", currentDial: "https://movies.nivadax.net")` is true
+    - `routeChanged(negotiated: "http://192.168.1.10:8899/Videos/1/stream", currentDial: "https://media.example.com")` is true
     - the same host and port → false
     - `currentDial: nil` → false
   - The existing rows stay green (default `routeChanged: false`).
@@ -577,22 +577,22 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   | `servers.localAddress` | `Adresse locale…` |
   | `servers.localAddress.title` | `Adresse locale` |
   | `servers.localAddress.message` | `L'adresse de ce serveur sur le réseau de la maison. JellyGlass l'utilise en priorité quand cet appareil est sur ce réseau. Laissez vide pour la retirer.` |
-  | `servers.localAddress.placeholder` | `192.168.1.128:8920` |
+  | `servers.localAddress.placeholder` | `192.168.1.10:8920` |
   | `servers.localAddress.notHTTPS` | `L'adresse locale doit être en https` |
   | `servers.localAddress.savedNeedsApproval` | `Enregistrée — à la maison, enregistrez-la à nouveau pour approuver son certificat` |
   | `servers.localAddress.reachable` | `Adresse locale joignable` |
   | `servers.localAddress.savedUnreachable` | `Enregistrée — utilisée quand cet appareil est sur le même réseau` |
   | `servers.localAddress.denied` | `Accès au réseau local refusé — autorisez-le dans Réglages › JellyGlass` |
   | `servers.localAddress.otherServer` | `Ce n'est pas ce serveur` |
-  | `servers.localAddress.notLocal` | `Saisissez une adresse du réseau de la maison (ex. 192.168.1.128)` |
+  | `servers.localAddress.notLocal` | `Saisissez une adresse du réseau de la maison (ex. 192.168.1.10)` |
   | `servers.localAddress.signInFirst` | `Connectez-vous d'abord à ce serveur` |
   | `servers.localAddress.removed` | `Adresse locale retirée` |
   | `servers.route.local` | `Local` |
   | `servers.route.internet` | `Internet` |
   | `settings.server.route.local` | `Local · %@` |
 
-  - en: `Local address…`, `Local address`, `This server's address on your home network. JellyGlass uses it first when this device is on that network. Leave empty to remove it.`, `Local address reachable`, `Saved — used when this device is on the same network`, `Local network access denied — allow it in Settings › JellyGlass`, `That's not this server`, `Enter an address on your home network (e.g. 192.168.1.128)`, `Sign in to this server first`, `Local address removed`, `Local`, `Internet`, `Local · %@`, `The local address must use https`, `Saved — at home, save it again to approve its certificate`.
-  - de: `Lokale Adresse…`, `Lokale Adresse`, `Die Adresse dieses Servers in deinem Heimnetz. JellyGlass nutzt sie zuerst, wenn dieses Gerät in diesem Netz ist. Leer lassen, um sie zu entfernen.`, `Lokale Adresse erreichbar`, `Gespeichert — wird genutzt, wenn dieses Gerät im selben Netz ist`, `Zugriff aufs lokale Netzwerk verweigert — erlaube ihn in Einstellungen › JellyGlass`, `Das ist nicht dieser Server`, `Gib eine Adresse aus deinem Heimnetz ein (z. B. 192.168.1.128)`, `Melde dich zuerst bei diesem Server an`, `Lokale Adresse entfernt`, `Lokal`, `Internet`, `Lokal · %@`, `Die lokale Adresse muss https verwenden`, `Gespeichert — speichere sie zu Hause erneut, um ihr Zertifikat zu bestätigen`.
+  - en: `Local address…`, `Local address`, `This server's address on your home network. JellyGlass uses it first when this device is on that network. Leave empty to remove it.`, `Local address reachable`, `Saved — used when this device is on the same network`, `Local network access denied — allow it in Settings › JellyGlass`, `That's not this server`, `Enter an address on your home network (e.g. 192.168.1.10)`, `Sign in to this server first`, `Local address removed`, `Local`, `Internet`, `Local · %@`, `The local address must use https`, `Saved — at home, save it again to approve its certificate`.
+  - de: `Lokale Adresse…`, `Lokale Adresse`, `Die Adresse dieses Servers in deinem Heimnetz. JellyGlass nutzt sie zuerst, wenn dieses Gerät in diesem Netz ist. Leer lassen, um sie zu entfernen.`, `Lokale Adresse erreichbar`, `Gespeichert — wird genutzt, wenn dieses Gerät im selben Netz ist`, `Zugriff aufs lokale Netzwerk verweigert — erlaube ihn in Einstellungen › JellyGlass`, `Das ist nicht dieser Server`, `Gib eine Adresse aus deinem Heimnetz ein (z. B. 192.168.1.10)`, `Melde dich zuerst bei diesem Server an`, `Lokale Adresse entfernt`, `Lokal`, `Internet`, `Lokal · %@`, `Die lokale Adresse muss https verwenden`, `Gespeichert — speichere sie zu Hause erneut, um ihr Zertifikat zu bestätigen`.
   - `NSLocalNetworkUsageDescription`, widened, in `project.yml` base (English) and the three `InfoPlist.strings`:
     - fr: `JellyGlass utilise votre réseau local pour trouver les serveurs Jellyfin de votre Wi-Fi et s'y connecter directement à la maison.`
     - en: `JellyGlass uses your local network to find Jellyfin servers on your Wi-Fi and connect to them directly at home.`
@@ -635,7 +635,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
 - [ ] **Step 4: `RUN_TESTS`.** Expected: pass.
 - [ ] **Step 5: Simulator check, iOS and tvOS.**
   1. Open « Mes serveurs »: the pill shows and the action is in the menu.
-  2. Type `192.168.1.128:8920` on the bench: the approval shows, then the toast matches.
+  2. Type `192.168.1.10:8920` on the bench: the approval shows, then the toast matches.
   3. Réglages → Serveur shows the third line.
   4. Check tvOS focus in the text entry.
   
@@ -687,7 +687,7 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
     - `blobCarriesLocalAddress`: encode a `Session` with both new fields → decode with the JSON shape the extensions use, and they are kept.
     - `oldBlobDecodes`: a blob without the keys decodes with both `nil`.
   - `@Suite("Adresse locale — extensions")`:
-    - `extensionAcceptsMatchingLocal`: `accepts(200, #"{"Id":"S"}"#, "S", "192.168.1.128")` is true.
+    - `extensionAcceptsMatchingLocal`: `accepts(200, #"{"Id":"S"}"#, "S", "192.168.1.10")` is true.
     - `extensionRejectsMismatch`: `"OTHER"` → false.
     - `extensionRejectsPublicAddress`: `"86.245.10.3"` → false.
     - `extensionNoLocalAddressIsPublic`: `await dialURL(publicURL: pub, localURL: nil, serverID: "S", …) == pub`.
@@ -719,9 +719,9 @@ One `@MainActor` owner, `ServerRouteController.shared`, probes (`GET /System/Inf
   - the same with `-scheme CinemaxTV -destination 'generic/platform=tvOS Simulator'`
   
   Expected: `** BUILD SUCCEEDED **` twice.
-- [ ] **Step 6: Device checks** (owner's iPhone + Apple TV, at home on `http://192.168.1.128:8899`). List each as passed or failed in the report:
-  0. **Restart Jellyfin first** if not done (`docker compose up -d` in `/volume1/docker/jellyfin-server`, when nobody is playing): it activates HTTPS on 8920. Then `curl -k https://192.168.1.128:8920/System/Info/Public` answers the `Id`, and the tunnel and `http://192.168.1.128:8899` still answer.
-  1. Saving `192.168.1.128:8920` offers the certificate approval with fingerprint `B5:CD:58:51:…:EE:A7:D4:D3`; once approved, API calls, images and a stream (VLC through the proxy; the native engine opt-in) work over https to the LAN IP.
+- [ ] **Step 6: Device checks** (owner's iPhone + Apple TV, at home on `http://192.168.1.10:8899`). List each as passed or failed in the report:
+  0. **Restart Jellyfin first** if not done (`docker compose up -d` in `/volume1/docker/jellyfin-server`, when nobody is playing): it activates HTTPS on 8920. Then `curl -k https://192.168.1.10:8920/System/Info/Public` answers the `Id`, and the tunnel and `http://192.168.1.10:8899` still answer.
+  1. Saving `192.168.1.10:8920` offers the certificate approval with fingerprint `AA:BB:CC:DD:…:66:77:88:99`; once approved, API calls, images and a stream (VLC through the proxy; the native engine opt-in) work over https to the LAN IP.
   2. The « Réseau local » prompt appears on the first save, and denying it gives the `denied` toast.
   3. After a home playback, `docker logs cloudflared` shows no `/Videos/` request, and Jellyfin logs the client as `192.168.1.x`.
   4. With the router's WAN unplugged: launch, browse, play, switch, widget and Top Shelf still work.

@@ -339,12 +339,12 @@ struct PlaybackRetryPolicyTests {
 
     @Test("the route changed when the negotiated stream is not on the base dialled now")
     func routeChangedCompare() throws {
-        let lanStream = try #require(URL(string: "http://192.168.1.128:8899/Videos/1/stream"))
-        let publicBase = try #require(URL(string: "https://movies.nivadax.net"))
+        let lanStream = try #require(URL(string: "http://192.168.1.10:8899/Videos/1/stream"))
+        let publicBase = try #require(URL(string: "https://media.example.com"))
         #expect(PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: publicBase))
-        let sameOrigin = try #require(URL(string: "http://192.168.1.128:8899"))
+        let sameOrigin = try #require(URL(string: "http://192.168.1.10:8899"))
         #expect(!PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: sameOrigin))
-        let publicStream = try #require(URL(string: "https://movies.nivadax.net/Videos/1/stream?static=true"))
+        let publicStream = try #require(URL(string: "https://media.example.com/Videos/1/stream?static=true"))
         #expect(!PlaybackRetryPolicy.routeChanged(negotiated: publicStream, currentDial: publicBase))
         // No dial known (a mock, no connection): never read as « the public route ».
         #expect(!PlaybackRetryPolicy.routeChanged(negotiated: lanStream, currentDial: nil))
@@ -438,7 +438,7 @@ struct ReResolveGateTests {
 
     @Test("Une négociation ratée est redemandée une fois si la route a changé pendant qu'elle courait")
     func failedNegotiationIsAskedAgainOnlyOnAnotherRoute() {
-        let lan = URL(string: "https://192.168.1.128:8920")
+        let lan = URL(string: "https://192.168.1.10:8920")
         let identity = URL(string: "https://movies.example.net")
         #expect(ReResolveGate.renegotiatesAfterFailure(dialAtStart: lan, dialNow: identity))
         #expect(ReResolveGate.renegotiatesAfterFailure(dialAtStart: identity, dialNow: lan))

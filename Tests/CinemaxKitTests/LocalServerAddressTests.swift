@@ -13,7 +13,7 @@ struct LocalNetworkAddressTests {
         #expect(LocalNetworkAddress.kind(ofLiteral: "172.16.0.0") == .privateIPv4)
         #expect(LocalNetworkAddress.kind(ofLiteral: "172.31.255.255") == .privateIPv4)
         #expect(LocalNetworkAddress.kind(ofLiteral: "172.32.0.0") == .publicIPv4)
-        #expect(LocalNetworkAddress.kind(ofLiteral: "192.168.1.128") == .privateIPv4)
+        #expect(LocalNetworkAddress.kind(ofLiteral: "192.168.1.10") == .privateIPv4)
         #expect(LocalNetworkAddress.kind(ofLiteral: "192.169.0.1") == .publicIPv4)
         #expect(LocalNetworkAddress.kind(ofLiteral: "169.254.3.4") == .linkLocalIPv4)
         #expect(LocalNetworkAddress.kind(ofLiteral: "100.64.0.1") == .cgnatIPv4)
@@ -35,20 +35,20 @@ struct LocalNetworkAddressTests {
 
     @Test("Adresses mal formées et noms d'hôte")
     func malformedAndHostnames() {
-        for text in ["999.1.1.1", "192.168.1", "nas.lan", "movies.nivadax.net", ""] {
+        for text in ["999.1.1.1", "192.168.1", "nas.lan", "media.example.com", ""] {
             #expect(LocalNetworkAddress.kind(ofLiteral: text) == .notAnIPLiteral)
         }
     }
 
     @Test("IPv4 mappée en IPv6 : classée par l'IPv4 embarquée")
     func ipv4MappedIPv6() {
-        #expect(LocalNetworkAddress.kind(ofLiteral: "::ffff:192.168.1.128") == .privateIPv4)
+        #expect(LocalNetworkAddress.kind(ofLiteral: "::ffff:192.168.1.10") == .privateIPv4)
         #expect(LocalNetworkAddress.kind(ofLiteral: "::ffff:8.8.8.8") == .publicIPv4)
     }
 
     @Test("Éligibilité d'un hôte")
     func eligibility() {
-        #expect(LocalNetworkAddress.isEligibleHost("192.168.1.128"))
+        #expect(LocalNetworkAddress.isEligibleHost("192.168.1.10"))
         #expect(LocalNetworkAddress.isEligibleHost("nas.local"))
         #expect(LocalNetworkAddress.isEligibleHost("NAS.LOCAL"))
         #expect(!LocalNetworkAddress.isEligibleHost("nas.lan"))
@@ -65,13 +65,13 @@ struct LocalAddressInputTests {
 
     @Test("Un hôte nu part en HTTPS")
     func bareHostDefaultsToHTTPS() {
-        #expect(ServerURLNormalizer.normalizeLocal("192.168.1.128:8899") == .success(url("https://192.168.1.128:8899")))
+        #expect(ServerURLNormalizer.normalizeLocal("192.168.1.10:8899") == .success(url("https://192.168.1.10:8899")))
     }
 
     @Test("HTTPS et sous-chemin conservés")
     func keepsHTTPSAndSubPath() {
-        #expect(ServerURLNormalizer.normalizeLocal("https://192.168.1.128/jellyfin/")
-                == .success(url("https://192.168.1.128/jellyfin")))
+        #expect(ServerURLNormalizer.normalizeLocal("https://192.168.1.10/jellyfin/")
+                == .success(url("https://192.168.1.10/jellyfin")))
     }
 
     @Test("Un nom mDNS est accepté")
@@ -86,7 +86,7 @@ struct LocalAddressInputTests {
 
     @Test("HTTP refusé, sauf hôte non local qui reste notLocal")
     func refusesHTTP() {
-        #expect(ServerURLNormalizer.normalizeLocal("http://192.168.1.128:8899") == .failure(.notHTTPS))
+        #expect(ServerURLNormalizer.normalizeLocal("http://192.168.1.10:8899") == .failure(.notHTTPS))
         #expect(ServerURLNormalizer.normalizeLocal("http://nas.local") == .failure(.notHTTPS))
         #expect(ServerURLNormalizer.normalizeLocal("http://8.8.8.8") == .failure(.notLocal))
     }
@@ -94,7 +94,7 @@ struct LocalAddressInputTests {
     @Test("Refus")
     func refusals() {
         #expect(ServerURLNormalizer.normalizeLocal("nas.lan") == .failure(.notLocal))
-        #expect(ServerURLNormalizer.normalizeLocal("movies.nivadax.net") == .failure(.notLocal))
+        #expect(ServerURLNormalizer.normalizeLocal("media.example.com") == .failure(.notLocal))
         #expect(ServerURLNormalizer.normalizeLocal("100.64.1.2") == .failure(.notLocal))
         #expect(ServerURLNormalizer.normalizeLocal("ftp://192.168.1.2") == .failure(.malformed))
         #expect(ServerURLNormalizer.normalizeLocal("   ") == .failure(.malformed))
@@ -104,7 +104,7 @@ struct LocalAddressInputTests {
 
 @Suite("Adresse locale — décision de route")
 struct ServerRoutePolicyTests {
-    private let lan = URL(string: "https://192.168.1.128:8920")!
+    private let lan = URL(string: "https://192.168.1.10:8920")!
 
     @Test func noLocalAddressIsInternet() {
         #expect(ServerRoutePolicy.decide(localURL: nil, reach: .lanCapable, expectedServerID: "S", probe: nil) == nil)
@@ -137,7 +137,7 @@ struct ServerRoutePolicyTests {
     }
 
     @Test func httpLocalURLIsInternet() {
-        let http = URL(string: "http://192.168.1.128:8899")!
+        let http = URL(string: "http://192.168.1.10:8899")!
         let probe = LocalProbeOutcome.answered(serverID: "S", connectedAddressIsLocal: true)
         #expect(ServerRoutePolicy.decide(localURL: http, reach: .lanCapable, expectedServerID: "S", probe: probe) == nil)
     }
@@ -153,12 +153,12 @@ struct LocalRouteProbeTests {
     private let body = Data(#"{"Id":"S","ServerName":"NAS"}"#.utf8)
 
     @Test func probeAcceptsMatchingBody() {
-        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: body, connectedAddress: "192.168.1.128")
+        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: body, connectedAddress: "192.168.1.10")
             == .answered(serverID: "S", connectedAddressIsLocal: true))
     }
 
     @Test func probeAcceptsIPv4MappedAddress() {
-        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: body, connectedAddress: "::ffff:192.168.1.128")
+        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: body, connectedAddress: "::ffff:192.168.1.10")
             == .answered(serverID: "S", connectedAddressIsLocal: true))
     }
 
@@ -169,14 +169,14 @@ struct LocalRouteProbeTests {
 
     @Test func probeRejectsNon200() {
         for status in [301, 401, 500] {
-            #expect(LocalRouteProbe.evaluate(statusCode: status, body: body, connectedAddress: "192.168.1.128")
+            #expect(LocalRouteProbe.evaluate(statusCode: status, body: body, connectedAddress: "192.168.1.10")
                 == .failed(localNetworkDenied: false))
         }
     }
 
     @Test func probeRejectsBodyWithoutId() {
         let noId = Data(#"{"ServerName":"NAS"}"#.utf8)
-        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: noId, connectedAddress: "192.168.1.128")
+        #expect(LocalRouteProbe.evaluate(statusCode: 200, body: noId, connectedAddress: "192.168.1.10")
             == .failed(localNetworkDenied: false))
     }
 
@@ -191,43 +191,43 @@ struct ServerRouteRewriteTests {
     private func url(_ s: String) -> URL { URL(string: s)! }
 
     @Test func rewriteNoBasePaths() {
-        let out = ServerRoutePolicy.rewrite(url("https://movies.nivadax.net/Items/1/Images/Primary?tag=t"),
-                                            identityBase: url("https://movies.nivadax.net"),
-                                            dialBase: url("http://192.168.1.128:8899"))
-        #expect(out?.absoluteString == "http://192.168.1.128:8899/Items/1/Images/Primary?tag=t")
+        let out = ServerRoutePolicy.rewrite(url("https://media.example.com/Items/1/Images/Primary?tag=t"),
+                                            identityBase: url("https://media.example.com"),
+                                            dialBase: url("http://192.168.1.10:8899"))
+        #expect(out?.absoluteString == "http://192.168.1.10:8899/Items/1/Images/Primary?tag=t")
     }
 
     @Test func rewriteIdentityBasePathToRoot() {
         let out = ServerRoutePolicy.rewrite(url("https://box.example.org/jellyfin/Items/1/Images/Primary"),
                                             identityBase: url("https://box.example.org/jellyfin"),
-                                            dialBase: url("http://192.168.1.128:8096"))
-        #expect(out?.absoluteString == "http://192.168.1.128:8096/Items/1/Images/Primary")
+                                            dialBase: url("http://192.168.1.10:8096"))
+        #expect(out?.absoluteString == "http://192.168.1.10:8096/Items/1/Images/Primary")
     }
 
     @Test func rewriteRootToDialBasePath() {
-        let out = ServerRoutePolicy.rewrite(url("https://movies.nivadax.net/Items/1"),
-                                            identityBase: url("https://movies.nivadax.net"),
+        let out = ServerRoutePolicy.rewrite(url("https://media.example.com/Items/1"),
+                                            identityBase: url("https://media.example.com"),
                                             dialBase: url("http://nas.local/jellyfin"))
         #expect(out?.absoluteString == "http://nas.local/jellyfin/Items/1")
     }
 
     @Test func rewriteLeavesForeignURL() {
         #expect(ServerRoutePolicy.rewrite(url("https://other.example.com/Items/1"),
-                                          identityBase: url("https://movies.nivadax.net"),
-                                          dialBase: url("http://192.168.1.128:8899")) == nil)
+                                          identityBase: url("https://media.example.com"),
+                                          dialBase: url("http://192.168.1.10:8899")) == nil)
     }
 
     @Test func kindOfDialURL() {
-        #expect(ServerRoutePolicy.kind(ofDialURL: url("http://192.168.1.128:8899")) == .local)
+        #expect(ServerRoutePolicy.kind(ofDialURL: url("http://192.168.1.10:8899")) == .local)
         #expect(ServerRoutePolicy.kind(ofDialURL: url("http://nas.local")) == .local)
-        #expect(ServerRoutePolicy.kind(ofDialURL: url("https://movies.nivadax.net")) == .internet)
+        #expect(ServerRoutePolicy.kind(ofDialURL: url("https://media.example.com")) == .internet)
     }
 }
 
 @Suite("Adresse locale — images")
 struct LocalServerImageRouteTests {
-    private let identity = URL(string: "https://movies.nivadax.net")!
-    private let dial = URL(string: "http://192.168.1.128:8899")!
+    private let identity = URL(string: "https://media.example.com")!
+    private let dial = URL(string: "http://192.168.1.10:8899")!
 
     private final class SpyLoader: DataLoading, @unchecked Sendable {
         private let lock = NSLock()
@@ -245,16 +245,16 @@ struct LocalServerImageRouteTests {
     @Test func tableRewritesUnderIdentity() {
         let table = ImageRouteTable()
         table.set(identity: identity, dial: dial)
-        var request = URLRequest(url: URL(string: "https://movies.nivadax.net/Items/1/Images/Primary")!)
+        var request = URLRequest(url: URL(string: "https://media.example.com/Items/1/Images/Primary")!)
         request.setValue("MediaBrowser Token=\"t\"", forHTTPHeaderField: "Authorization")
         let out = table.rewrite(request)
-        #expect(out.url?.absoluteString == "http://192.168.1.128:8899/Items/1/Images/Primary")
+        #expect(out.url?.absoluteString == "http://192.168.1.10:8899/Items/1/Images/Primary")
         #expect(out.value(forHTTPHeaderField: "Authorization") == "MediaBrowser Token=\"t\"")
     }
 
     @Test func tableNoDialIsIdentity() {
         let table = ImageRouteTable()
-        let request = URLRequest(url: URL(string: "https://movies.nivadax.net/Items/1/Images/Primary")!)
+        let request = URLRequest(url: URL(string: "https://media.example.com/Items/1/Images/Primary")!)
         table.set(identity: identity, dial: nil)
         #expect(table.rewrite(request).url == request.url)
         table.set(identity: identity, dial: identity)
@@ -266,9 +266,9 @@ struct LocalServerImageRouteTests {
         table.set(identity: identity, dial: dial)
         let spy = SpyLoader()
         let loader = RoutedImageDataLoader(wrapping: spy, table: table)
-        _ = loader.loadData(with: URLRequest(url: URL(string: "https://movies.nivadax.net/Items/1/Images/Primary")!),
+        _ = loader.loadData(with: URLRequest(url: URL(string: "https://media.example.com/Items/1/Images/Primary")!),
                             didReceiveData: { _, _ in }, completion: { _ in })
-        #expect(spy.urls.map(\.absoluteString) == ["http://192.168.1.128:8899/Items/1/Images/Primary"])
+        #expect(spy.urls.map(\.absoluteString) == ["http://192.168.1.10:8899/Items/1/Images/Primary"])
     }
 
     /// A loader that records what it was asked to fetch, then fails — so a
@@ -299,16 +299,16 @@ struct LocalServerImageRouteTests {
         configuration.imageCache = nil
         configuration.dataCache = nil
         let pipeline = ImagePipeline(configuration: configuration)
-        let url = URL(string: "https://movies.nivadax.net/Items/1/Images/Primary")!
+        let url = URL(string: "https://media.example.com/Items/1/Images/Primary")!
         let request = ImageRequest(url: url)
 
         _ = try? await pipeline.data(for: request)
 
-        #expect(spy.urls.map(\.absoluteString) == ["http://192.168.1.128:8899/Items/1/Images/Primary"])
+        #expect(spy.urls.map(\.absoluteString) == ["http://192.168.1.10:8899/Items/1/Images/Primary"])
         #expect(request.imageId == url.absoluteString)
         let dataKey = pipeline.cache.makeDataCacheKey(for: request)
         #expect(dataKey.hasPrefix(url.absoluteString))
-        #expect(!dataKey.contains("192.168.1.128"))
+        #expect(!dataKey.contains("192.168.1.10"))
         #expect(pipeline.cache.makeImageCacheKey(for: request) == pipeline.cache.makeImageCacheKey(for: ImageRequest(url: url)))
     }
 }
@@ -317,9 +317,9 @@ struct LocalServerImageRouteTests {
 /// the HOST of the URL that answered, as soon as either probe answers.
 @Suite("Adresse locale — indication des cartes")
 struct ServersRouteIndicationTests {
-    private let lanIdentity = URL(string: "http://192.168.1.128:8899")!
-    private let publicIdentity = URL(string: "https://movies.nivadax.net")!
-    private let lan = URL(string: "https://192.168.1.128:8920")!
+    private let lanIdentity = URL(string: "http://192.168.1.10:8899")!
+    private let publicIdentity = URL(string: "https://media.example.com")!
+    private let lan = URL(string: "https://192.168.1.10:8920")!
     private let online = PingResult.online(name: nil, version: nil, serverID: "S")
 
     @Test func lanIdentityReadsLocalWithNoLocalAddress() {
@@ -373,19 +373,19 @@ struct LocalNetworkReachTests {
 struct ExtensionServerRouteTests {
     private let body = Data(#"{"Id":"S","ServerName":"NAS"}"#.utf8)
     private let pub = URL(string: "https://jelly.example.com")!
-    private let lan = URL(string: "https://192.168.1.128:8920")!
+    private let lan = URL(string: "https://192.168.1.10:8920")!
 
     @Test func extensionProbeTimeout() {
         #expect(ExtensionServerRoute.probeTimeout == 1.0)
     }
 
     @Test func extensionAcceptsMatchingLocal() {
-        #expect(ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "S", connectedAddress: "192.168.1.128"))
-        #expect(ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "S", connectedAddress: "::ffff:192.168.1.128"))
+        #expect(ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "S", connectedAddress: "192.168.1.10"))
+        #expect(ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "S", connectedAddress: "::ffff:192.168.1.10"))
     }
 
     @Test func extensionRejectsMismatch() {
-        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "OTHER", connectedAddress: "192.168.1.128"))
+        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: body, serverID: "OTHER", connectedAddress: "192.168.1.10"))
     }
 
     @Test func extensionRejectsPublicAddress() {
@@ -396,11 +396,11 @@ struct ExtensionServerRouteTests {
 
     @Test func extensionRejectsNon200AndBodyWithoutId() {
         for status in [301, 401, 500] {
-            #expect(!ExtensionServerRoute.accepts(statusCode: status, body: body, serverID: "S", connectedAddress: "192.168.1.128"))
+            #expect(!ExtensionServerRoute.accepts(statusCode: status, body: body, serverID: "S", connectedAddress: "192.168.1.10"))
         }
         let noId = Data(#"{"ServerName":"NAS"}"#.utf8)
-        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: noId, serverID: "S", connectedAddress: "192.168.1.128"))
-        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: Data(#"{"Id":""}"#.utf8), serverID: "", connectedAddress: "192.168.1.128"))
+        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: noId, serverID: "S", connectedAddress: "192.168.1.10"))
+        #expect(!ExtensionServerRoute.accepts(statusCode: 200, body: Data(#"{"Id":""}"#.utf8), serverID: "", connectedAddress: "192.168.1.10"))
     }
 
     /// All three return at once, without a request.
@@ -408,7 +408,7 @@ struct ExtensionServerRouteTests {
         #expect(await ExtensionServerRoute.dialURL(publicURL: pub, localURL: nil, serverID: "S", localPin: nil) == pub)
         #expect(await ExtensionServerRoute.dialURL(publicURL: pub, localURL: lan, serverID: nil, localPin: nil) == pub)
         // The LAN address is https only (amendment).
-        let http = URL(string: "http://192.168.1.128:8096")!
+        let http = URL(string: "http://192.168.1.10:8096")!
         #expect(await ExtensionServerRoute.dialURL(publicURL: pub, localURL: http, serverID: "S", localPin: nil) == pub)
     }
 
@@ -422,7 +422,7 @@ struct ExtensionServerRouteTests {
 
     @Test func extensionPinKeyIsTheLANHostPort() throws {
         let pin = try #require(ExtensionServerTrust.pin(serverURL: lan, fingerprint: "cd34"))
-        #expect(pin.trustKey == "192.168.1.128:8920")
+        #expect(pin.trustKey == "192.168.1.10:8920")
     }
 }
 
@@ -443,7 +443,7 @@ struct IntentRouteTests {
             accessToken: "t", userId: "u", localURL: localURL, serverID: serverID)
     }
 
-    private let lan = URL(string: "https://192.168.1.128:8920")!
+    private let lan = URL(string: "https://192.168.1.10:8920")!
 
     @Test func intentDialsLANWhenProbeMatches() async {
         let calls = Calls()
@@ -574,10 +574,10 @@ struct LocalAddressSavePolicyTests {
     }
 
     @Test func certificateChangeLogNamesOnlyTheClass() {
-        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "192.168.1.128:8920") == "local")
-        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "nas-raillard.local:8920") == "local")
+        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "192.168.1.10:8920") == "local")
+        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "nas.local:8920") == "local")
         #expect(ServerCertificateTrust.addressClass(ofTrustKey: "fd00::1:8920") == "local")
-        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "movies.nivadax.net:443") == "internet")
+        #expect(ServerCertificateTrust.addressClass(ofTrustKey: "media.example.com:443") == "internet")
         #expect(ServerCertificateTrust.addressClass(ofTrustKey: "8.8.8.8:443") == "internet")
     }
 }
@@ -624,7 +624,7 @@ struct LocalAddressToastTests {
                 #expect(value?.isEmpty == false, "\(lang) \(key)")
             }
             #expect(table["settings.server.route.local"]?.contains("%@") == true, "\(lang)")
-            #expect(table["servers.localAddress.placeholder"] == "192.168.1.128:8920", "\(lang)")
+            #expect(table["servers.localAddress.placeholder"] == "192.168.1.10:8920", "\(lang)")
         }
     }
 }
