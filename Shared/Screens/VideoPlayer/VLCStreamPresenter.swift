@@ -1259,6 +1259,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// `playback-failed` document.
     private func giveUpAfterSpentRecovery(_ net: String) {
         guard !isTearingDown, !reResolve.isNegotiating, pictureStall.recoveriesLeft == 0 else { return }
+        #if os(iOS)
+        // In the background (locked screen with audio, PiP) the picture counter
+        // proves nothing and an alert is unreachable: never pause the sound
+        // there — the pre-PL-01 behaviour (log + document) stands.
+        guard UIApplication.shared.applicationState != .background else { return }
+        #endif
         logger.error("\(net, privacy: .public) recovery budget spent — surfacing the failure")
         player.pause()
         handlePlaybackError(recoveryExhausted: true)
