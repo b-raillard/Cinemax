@@ -56,9 +56,7 @@ enum CinemaColor {
     static let onSurfaceMuted = Color.dynamic(light: 0x6B6E74, dark: 0x8E8D8D, season: .onSurfaceMuted)
 
     // Primary
-    static let primary          = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)
-    static let primaryContainer = Color.dynamic(light: 0xD0D1D4, dark: 0x454747)
-    static let onPrimary        = Color.dynamic(light: 0xFFFFFF, dark: 0x3F4041)
+    static let primary = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)
 
     // Secondary
     static let secondary          = Color.dynamic(light: 0x55585E, dark: 0x9D9E9E)
@@ -107,8 +105,6 @@ enum CinemaColor {
     /// Light and shade mixed into the accent for the metal's highlights.
     static let metalLight    = Color.dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
     static let metalShade    = Color.dynamic(light: 0x000000, dark: 0x000000)
-    /// Ink on a light metallic emblem.
-    static let onMetalEmblem = Color.dynamic(light: 0x111111, dark: 0x111111)
     /// Text on the dark titanium cards.
     static let onTitanium        = Color.dynamic(light: 0xF2F2F2, dark: 0xF2F2F2)
     static let onTitaniumVariant = Color.dynamic(light: 0xB9B8B6, dark: 0xB9B8B6)

@@ -12,7 +12,6 @@ import CinemaxKit
 /// three places (Réglages and the two pre-auth screens), none of which injects
 /// them.
 struct AccountUnlockSheet: View {
-    @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(\.dismiss) private var dismiss
 

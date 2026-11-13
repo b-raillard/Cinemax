@@ -103,7 +103,7 @@ struct AdminDashboardScreen: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, CinemaSpacing.spacing6)
             } else if let info = viewModel.systemInfo {
-                infoRow(loc.localized("admin.dashboard.serverName"), value: info.serverName ?? "—", isFirst: true)
+                infoRow(loc.localized("admin.dashboard.serverName"), value: info.serverName ?? "—")
                 iOSSettingsDivider
                 infoRow(loc.localized("admin.dashboard.serverVersion"), value: info.version ?? "—")
                 // RULE — no OS / architecture rows. Jellyfin 12.0 marks
@@ -133,7 +133,7 @@ struct AdminDashboardScreen: View {
     }
 
     @ViewBuilder
-    private func infoRow(_ label: String, value: String, isFirst: Bool = false) -> some View {
+    private func infoRow(_ label: String, value: String) -> some View {
         iOSSettingsRow {
             HStack {
                 Text(label)
