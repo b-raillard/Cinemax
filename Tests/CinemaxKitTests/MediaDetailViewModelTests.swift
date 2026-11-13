@@ -805,6 +805,19 @@ private final class DetailSeerrTransport: SeerrTransport, @unchecked Sendable {
         lock.withLock { sent }.filter { $0.url?.path.contains("/collection/") == true }.count
     }
 
+    /// `/tv/{id}` itself — the series, not one of its seasons.
+    var seriesDetailRequestCount: Int {
+        lock.withLock { sent }.filter {
+            let path = $0.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
+            return path.hasPrefix("/tv/") && Int(path.dropFirst("/tv/".count)) != nil
+        }.count
+    }
+
+    /// `GET /issue` — the open reports.
+    var openIssuesRequestCount: Int {
+        lock.withLock { sent }.filter { $0.url?.path.hasSuffix("/issue") == true && $0.httpMethod == "GET" }.count
+    }
+
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         lock.withLock { sent.append(request) }
         let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
@@ -1114,6 +1127,92 @@ struct MediaDetailMissingEpisodesTests {
         #expect(again.seerrEpisodes(for: session.snapshot()).map(\.episodeNumber) == [2, 4])
         #expect(!again.missingEpisodesHidden)
         #expect(defaults.array(forKey: SettingsKey.seerrHiddenMissingEpisodes) as? [Int] == [])
+    }
+
+    /// Two owned seasons, each with a gap, for an account that may report.
+    private func twoGappedSeasons(
+        gates: [Int: TestLatch] = [:]
+    ) async -> (AppState, SeerrSession, DetailSeerrTransport) {
+        let tv = #"{"id":1399,"name":"Série du banc","seasons":[{"seasonNumber":1,"episodeCount":8},"#
+            + #"{"seasonNumber":2,"episodeCount":8}],"mediaInfo":{"id":77,"status":4}}"#
+        let transport = DetailSeerrTransport(series: [1399: tv], gates: gates, permissions: 4_194_336)
+        transport.setSeason("/tv/1399/season/1", seasonOneBody)
+        transport.setSeason("/tv/1399/season/2", seasonOneBody)
+        transport.setOpenIssues(#"{"pageInfo":{"pages":1,"pageSize":100,"results":0,"page":1},"results":[]}"#)
+        let api = ownedSeriesAPI(owned: [1, 2])
+        api.getEpisodesHandler = { seasonId in
+            [1, 3].map { number in
+                var episode = makeEpisodeInSeason(id: "\(seasonId)-ep-\(number)", name: "Épisode \(number)", seasonId: seasonId)
+                episode.indexNumber = number
+                return episode
+            }
+        }
+        let (app, session) = await seerrBench(api: api, transport: transport)
+        return (app, session, transport)
+    }
+
+    @Test("the series and its open reports are read ONCE per fiche; a season change asks its season alone")
+    func seriesAndReportsReadOncePerFiche() async {
+        let (app, session, transport) = await twoGappedSeasons()
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+        await vm.seerrEpisodesTask?.value
+        #expect(vm.seerrEpisodes(for: session.snapshot()).map(\.episodeNumber) == [2, 4])
+        #expect(transport.seriesDetailRequestCount == 1)
+        #expect(transport.openIssuesRequestCount == 1)
+        #expect(transport.seasonRequestCount == 1)
+
+        await vm.selectSeason("season-2", seriesId: "series-1", using: app)
+        await vm.seerrEpisodesTask?.value
+        #expect(vm.seerrEpisodes(for: session.snapshot()).map(\.episodeNumber) == [2, 4])
+        #expect(vm.seerrEpisodes(for: session.snapshot()).allSatisfy { $0.seasonNumber == 2 })
+        #expect(transport.seriesDetailRequestCount == 1)
+        #expect(transport.openIssuesRequestCount == 1)
+        #expect(transport.seasonRequestCount == 2)
+
+        // A new pass of the fiche (Retry, an identify) reads them again.
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+        await vm.seerrEpisodesTask?.value
+        #expect(transport.seriesDetailRequestCount == 2)
+        #expect(transport.openIssuesRequestCount == 2)
+    }
+
+    @Test("the open reports are asked while the series is still on its way, not after it")
+    func reportsAskedBesideTheSeries() async {
+        let held = TestLatch()
+        let (app, session, transport) = await twoGappedSeasons(gates: [1399: held])
+        let vm = makeViewModel(session)
+
+        await vm.load(using: app, loc: loc)
+        await transport.tvArrived.wait()
+        let asked = await eventually { transport.openIssuesRequestCount == 1 }
+        held.open()
+        await vm.seerrSeasonsTask?.value
+        await vm.seerrEpisodesTask?.value
+
+        #expect(asked)
+        #expect(transport.seriesDetailRequestCount == 1)
+        #expect(vm.seerrEpisodes(for: session.snapshot()).map(\.episodeNumber) == [2, 4])
+    }
+
+    @Test("after a report, the next season read asks the open reports again")
+    func reportRefreshesTheOpenReports() async {
+        let (app, session, transport) = await twoGappedSeasons()
+        let vm = makeViewModel(session)
+        await vm.load(using: app, loc: loc)
+        await vm.seerrSeasonsTask?.value
+        await vm.seerrEpisodesTask?.value
+        let missing = vm.seerrEpisodes(for: session.snapshot())
+        #expect(await vm.reportMissingEpisodes(missing, message: "x"))
+        let reads = transport.openIssuesRequestCount
+
+        await vm.selectSeason("season-2", seriesId: "series-1", using: app)
+        await vm.seerrEpisodesTask?.value
+
+        #expect(transport.openIssuesRequestCount == reads + 1)
     }
 
     @Test("a title Seerr does not know cannot be reported")

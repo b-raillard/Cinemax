@@ -10,6 +10,16 @@ private let logger = Logger(subsystem: "com.cinemax", category: "MediaDetail")
 
 /// What one `/collection/{id}` answer brings the fiche: the saga's name and
 /// the films the library lacks.
+/// One Seerr read a fiche shares between its sections and seasons
+/// (`MediaDetailViewModel.seerrSeries` / `seerrOpenIssues`).
+private struct SeerrFicheRead<Value: Sendable> {
+    let snapshot: SeerrSession.Snapshot
+    /// The series read (`nil` for the open reports, which are the account's).
+    let tmdbId: Int?
+    let id: Int
+    let task: Task<Value, Error>
+}
+
 private struct SeerrSagaAnswer: Equatable, Sendable {
     let name: String
     let missing: [SeerrMissingTitle]
@@ -195,6 +205,57 @@ final class MediaDetailViewModel {
     @ObservationIgnored private var seerrEpisodesSnapshot: SeerrSession.Snapshot?
     /// « Today » for the aired test — injectable for the tests.
     @ObservationIgnored var seerrToday: @MainActor () -> String = { SeerrMissing.today() }
+    /// `/tv/{id}` and the open reports, read ONCE per `load()` and shared:
+    /// the missing seasons and the missing episodes of every season shown
+    /// reuse them (a season change asks its own season alone). Keyed on the
+    /// Seerr account they were read for; a failed read is dropped, so the
+    /// next season asks again.
+    @ObservationIgnored private var seerrSeriesRead: SeerrFicheRead<SeerrTVDetails>?
+    @ObservationIgnored private var seerrOpenIssuesRead: SeerrFicheRead<SeerrIssuePage>?
+    @ObservationIgnored private var seerrReadCount = 0
+
+    private func seerrSeries(
+        tmdbId: Int, snapshot: SeerrSession.Snapshot, _ client: SeerrClient, _ credential: SeerrCredential
+    ) async throws -> SeerrTVDetails {
+        let read: SeerrFicheRead<SeerrTVDetails>
+        if let cached = seerrSeriesRead, cached.snapshot == snapshot, cached.tmdbId == tmdbId {
+            read = cached
+        } else {
+            seerrReadCount += 1
+            read = SeerrFicheRead(snapshot: snapshot, tmdbId: tmdbId, id: seerrReadCount, task: Task {
+                try await client.tv(tmdbId: tmdbId, credential)
+            })
+            seerrSeriesRead = read
+        }
+        do {
+            return try await read.task.value
+        } catch {
+            if seerrSeriesRead?.id == read.id { seerrSeriesRead = nil }
+            throw error
+        }
+    }
+
+    private func seerrOpenIssues(
+        snapshot: SeerrSession.Snapshot, _ client: SeerrClient, _ credential: SeerrCredential
+    ) async throws -> SeerrIssuePage {
+        let read: SeerrFicheRead<SeerrIssuePage>
+        if let cached = seerrOpenIssuesRead, cached.snapshot == snapshot {
+            read = cached
+        } else {
+            seerrReadCount += 1
+            read = SeerrFicheRead(snapshot: snapshot, tmdbId: nil, id: seerrReadCount, task: Task {
+                try await client.issues(filter: .open, take: 100, skip: 0, credential)
+            })
+            seerrOpenIssuesRead = read
+        }
+        do {
+            return try await read.task.value
+        } catch {
+            if seerrOpenIssuesRead?.id == read.id { seerrOpenIssuesRead = nil }
+            throw error
+        }
+    }
+
     /// Where « Masquer pour cette série » is kept — injectable for the tests.
     @ObservationIgnored var defaults: UserDefaults = .standard
 
@@ -291,20 +352,23 @@ final class MediaDetailViewModel {
             // check — the series at TMDb and the whole library's numbering
             // (measured on the owner's NAS: 342 KB / 72 ms for 448 episodes).
             guard !missing.isEmpty else { return missing }
-            async let details = client.tv(tmdbId: tmdbId, credential)
+            // The series and the open reports are this fiche's, read once
+            // and side by side (`seerrSeries` / `seerrOpenIssues`).
+            async let details = self.seerrSeries(tmdbId: tmdbId, snapshot: snapshot, client, credential)
             async let library = numbering()
+            // What is already reported is never offered again — a second
+            // tap, a relaunch, another device (recette 2026-11-11: the same
+            // season reported twice). Without MANAGE_ISSUES Seerr lists only
+            // the caller's own reports; a failed read offers everything.
+            async let reports: SeerrIssuePage? = mayReport
+                ? (try? await self.seerrOpenIssues(snapshot: snapshot, client, credential))
+                : nil
             let tv = try await details
             let counts = Dictionary(tv.seasons.map { ($0.seasonNumber, $0.episodeCount) }, uniquingKeysWith: max)
             guard SeerrMissing.followsTMDbNumbering(
                 try await library, tmdbEpisodeCounts: counts, fileMinutes: fileMinutes, tmdbRunTimes: tv.episodeRunTime
             ) else { return [SeerrMissingEpisode]() }
-            // What is already reported is never offered again — a second
-            // tap, a relaunch, another device (recette 2026-11-11: the same
-            // season reported twice). Without MANAGE_ISSUES Seerr lists only
-            // the caller's own reports; a failed read offers everything.
-            guard mayReport, let open = try? await client.issues(filter: .open, take: 100, skip: 0, credential) else {
-                return missing
-            }
+            guard let open = await reports else { return missing }
             return SeerrMissing.markReported(missing, openIssues: open.results, seriesTmdbId: tmdbId, seasonNumber: seasonNumber)
         }
         guard !Task.isCancelled, selectedSeasonId == seasonId, let section else { return }
@@ -328,6 +392,9 @@ final class MediaDetailViewModel {
         } catch {
             return false
         }
+        // The open reports read for this fiche no longer hold: the next
+        // season asks them again.
+        seerrOpenIssuesRead = nil
         if case .loaded(let shown) = seerrEpisodes {
             let sent = Set(episodes.map(\.episodeNumber))
             seerrEpisodes = .loaded(SeerrMissing.markReported(shown, numbers: sent))
@@ -440,6 +507,8 @@ final class MediaDetailViewModel {
         sideTaskGeneration = generation
         setSeerrSeasons(.hidden, snapshot: nil)
         setSeerrSaga(.hidden, name: nil, snapshot: nil)
+        seerrSeriesRead = nil
+        seerrOpenIssuesRead = nil
 
         do {
             // The series' own item and its seasons / next-up / episodes need
@@ -1060,7 +1129,7 @@ final class MediaDetailViewModel {
         let includeSpecials = seerr.publicSettings?.enableSpecialEpisodes ?? false
         setSeerrSeasons(.loading, snapshot: snapshot)
         let section = await seerr.loadSection(deadline: seerrDeadline) { client, credential in
-            let details = try await client.tv(tmdbId: tmdbId, credential)
+            let details = try await self.seerrSeries(tmdbId: tmdbId, snapshot: snapshot, client, credential)
             return SeerrMissing.seasons(details, ownedSeasonNumbers: owned, includeSpecials: includeSpecials)
                 .sorted { $0.seasonNumber < $1.seasonNumber }
         }
