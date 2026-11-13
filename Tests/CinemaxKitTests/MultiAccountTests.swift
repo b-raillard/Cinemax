@@ -826,6 +826,67 @@ struct MultiAccountSignInTests {
         #expect(forgotten == ["S1|kid"])
         #expect(AccountSettingsStore.load(for: "S1|kid", defaults: defaults) == nil)
     }
+
+    /// Audit 2026-11-13, BUG-02, the finding's sequence: the child account has
+    /// NO snapshot (never left by an account switch — any one-account install),
+    /// the parent adds a server through the login screen, lifts his own cap,
+    /// then « Mes serveurs » goes back to the child's server.
+    @Test("Contrôle parental : un compte quitté par « Ajouter un serveur » garde sa limite à son retour")
+    func accountLeftThroughAddServerKeepsItsCap() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(12, forKey: SettingsKey.privacyMaxContentAge)
+        let (app, api) = makeApp(defaults: defaults, parentalLock: true, entry: maison, currentUser: "kid")
+        app.accessToken = "tokKid"
+
+        // Réglages → Serveurs → Ajouter un serveur.
+        app.beginAddServer()
+        // `ServerSetupViewModel.connect` (add mode): the new server is chosen.
+        app.serverURL = ServerURLNormalizer.normalize("https://chalet.local")!
+        app.hasServer = true
+        // `LoginViewModel.completeSession`: the parent signs in there.
+        let parent = UserSession(userID: "parent", username: "Parent", accessToken: "tokP", serverID: "srv2")
+        app.accessToken = parent.accessToken
+        app.currentUserId = parent.userID
+        app.upsertActiveEntry(session: parent)
+        app.isAuthenticated = true
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 12)   // inherited
+        // Confidentialité (behind the parental code): no limit for himself —
+        // the screen writes the global key (`@AppStorage`).
+        defaults.set(0, forKey: SettingsKey.privacyMaxContentAge)
+
+        // Réglages → Serveurs → Maison. More restricted than the parent, so no
+        // code is asked — by design.
+        let kidServer = try #require(app.servers.first { $0.id == "S1" })
+        #expect(await app.switchTo(kidServer) == .commit)
+
+        #expect(app.activeAccountKey == "S1|kid")
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 12)
+        #expect(api.appliedRatingLimits.last == 12)
+        // …and lifting it again (the parent's server) asks the parental code.
+        let parentServer = try #require(app.servers.first { $0.id != "S1" })
+        #expect(await app.switchTo(parentServer) == .locked)
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 12)
+    }
+
+    /// BUG-02, the variant: a stale snapshot from an earlier account round
+    /// trip, then the cap raised to 12, then the session expires.
+    @Test("Session expirée : la reconnexion retrouve la limite du compte, pas un ancien instantané")
+    func sessionExpiryKeepsCurrentCap() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 0, accentColor: "blue", darkMode: true),
+                                  for: "S1|kid", defaults: defaults)
+        defaults.set(12, forKey: SettingsKey.privacyMaxContentAge)
+        let (app, api) = makeApp(defaults: defaults, parentalLock: false, entry: maison, currentUser: "kid")
+
+        _ = await app.logout(reason: .sessionExpired)
+        let kid = UserSession(userID: "kid", username: "Enfants", accessToken: "tokKid2", serverID: "srv")
+        app.accessToken = kid.accessToken
+        app.currentUserId = kid.userID
+        app.upsertActiveEntry(session: kid)
+
+        #expect(defaults.integer(forKey: SettingsKey.privacyMaxContentAge) == 12)
+        #expect(api.appliedRatingLimits.last == 12)
+    }
 }
 
 // MARK: - Server switch parity (security review)

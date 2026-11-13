@@ -953,6 +953,7 @@ final class AppState {
         if pendingRollbackServer == nil, let current = currentActiveEntry, current.id != entry.id {
             pendingRollbackServer = current
         }
+        saveLeavingAccountSettings()
         serverURL = entry.url
         serverInfo = info
         hasServer = true
@@ -968,6 +969,7 @@ final class AppState {
     /// cancelled add, which `restorePreviousServer()` then replays.
     func beginAddServer() {
         serverTransitionGeneration &+= 1
+        saveLeavingAccountSettings()
         pendingRollbackServer = currentActiveEntry
         isAddingServer = true
         hasServer = false
@@ -1101,6 +1103,9 @@ final class AppState {
     @discardableResult
     func logout(reason: LogoutReason = .userInitiated) async -> LogoutOutcome {
         let active = currentActiveEntry
+        // An expired session comes back through the login screen: keep what
+        // followed it. (`.userInitiated` forgets the account below instead.)
+        if reason == .sessionExpired { saveLeavingAccountSettings() }
 
         if reason == .userInitiated, let active {
             revokeSessionInBackground(for: active)
@@ -1260,6 +1265,18 @@ final class AppState {
         guard AccountSettingsStore.isLessRestrictive(snapshot.maxContentAge, than: current) else { return }
         snapshot.maxContentAge = current
         AccountSettingsStore.save(snapshot, for: key, defaults: settingsDefaults)
+    }
+
+    /// Saves the ACTIVE account's settings (age cap, accent, light / dark) under
+    /// its key before an exit through the login screen (`beginAddServer`,
+    /// `beginReLogin`, `logout(.sessionExpired)`). `applyActiveServer` saves
+    /// the account it leaves through `swap`; the login-screen path cannot
+    /// (`upsertActiveEntry` swaps from `nil`, the account being already gone),
+    /// and an account never saved came back with whatever cap was current —
+    /// a child's lifted by the parent (audit 2026-11-13, BUG-02).
+    private func saveLeavingAccountSettings() {
+        guard let key = activeAccountKey else { return }
+        AccountSettingsStore.save(AccountSettingsStore.current(defaults: settingsDefaults), for: key, defaults: settingsDefaults)
     }
 
     /// Everything that followed an account leaving this device for good: its
