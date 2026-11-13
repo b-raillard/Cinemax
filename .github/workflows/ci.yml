@@ -254,6 +254,15 @@ jobs:
           swiftlint version
           swiftlint lint --strict --quiet --baseline .swiftlint-baseline.json
 
+      # A baseline entry nothing matches any more can absorb an identical NEW
+      # violation (entries match on file + rule + line text): fail on any.
+      # `--write-baseline` exits non-zero whenever violations exist (they
+      # always do — they are the baseline); a missing file still fails below.
+      - name: Check the SwiftLint baseline has no stale entry
+        run: |
+          swiftlint lint --quiet --write-baseline "$RUNNER_TEMP/fresh-baseline.json" > /dev/null || true
+          python3 scripts/check-swiftlint-baseline.py .swiftlint-baseline.json "$RUNNER_TEMP/fresh-baseline.json"
+
   # Dependency drift + SBOM (#187). Plain Python 3 on Linux: no Xcode, no
   # toolchain install. `check` fails when Package.resolved, the recorded list
   # in docs/dependencies/checksums.md, CinemaxKit's own Package.resolved, the
