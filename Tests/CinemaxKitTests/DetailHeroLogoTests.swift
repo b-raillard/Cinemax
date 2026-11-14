@@ -77,11 +77,14 @@ struct ScrollMotionTests {
         // The backdrop moves down by 45 % of the upward scroll, never on overscroll.
         #expect(ScrollMotion.parallaxOffset(minY: -100) == 45)
         #expect(ScrollMotion.parallaxOffset(minY: 30) == 0)
-        // The hero title fades over 90 pt of scroll.
-        #expect(ScrollMotion.heroTitleOpacity(scrolled: 0) == 1)
-        #expect(ScrollMotion.heroTitleOpacity(scrolled: 45) == 0.5)
-        #expect(ScrollMotion.heroTitleOpacity(scrolled: 200) == 0)
-        #expect(ScrollMotion.heroTitleOpacity(scrolled: -40) == 1)
+        // The hero text fades over the LAST 90 pt before the hero is gone, so
+        // the bar title takes over without a stretch with no title at all.
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: 0, heroHeight: 400) == 1)
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: 310, heroHeight: 400) == 1)
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: 355, heroHeight: 400) == 0.5)
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: 400, heroHeight: 400) == 0)
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: 500, heroHeight: 400) == 0)
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: -40, heroHeight: 400) == 1)
         // The bar title appears once the hero has scrolled away.
         #expect(!ScrollMotion.showsBarTitle(scrolled: 300, heroHeight: 400))
         #expect(ScrollMotion.showsBarTitle(scrolled: 420, heroHeight: 400))

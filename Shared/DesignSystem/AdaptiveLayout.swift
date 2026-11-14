@@ -275,9 +275,10 @@ enum ScrollMotion {
         minY < 0 ? -minY * factor : 0
     }
 
-    /// The hero title / logo fades out over the first `fadeDistance` points.
-    nonisolated static func heroTitleOpacity(scrolled: CGFloat, fadeDistance: CGFloat = 90) -> Double {
-        Double(max(0, min(1, 1 - scrolled / fadeDistance)))
+    /// The hero text fades out over the LAST `fadeDistance` points before the
+    /// hero is gone — the moment `showsBarTitle` takes over.
+    nonisolated static func heroTitleOpacity(scrolled: CGFloat, heroHeight: CGFloat, fadeDistance: CGFloat = 90) -> Double {
+        Double(max(0, min(1, (heroHeight - scrolled) / fadeDistance)))
     }
 
     /// The item's name shows in the navigation bar once the hero is gone.

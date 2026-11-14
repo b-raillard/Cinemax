@@ -60,8 +60,8 @@ You don't need to do anything if you use:
 - `ProgressBarView` — glides on every value change; with `fillsOnAppear: true` (the « Reprendre » `WideCard`) it fills from empty only inside the screen's skeleton reveal (`ContentRevealClock`), so a card re-created by scrolling never refills
 - `CinemaLazyImage` — fades in on arrival (`fadesIn`, default `true`); Nuke's memory-cache hits never fade. Opted out: `HeroBackdropImage`, the fiche backdrop
 - `ContentRow` (iOS) — edge cards recede (`ScrollMotion.edgeRecede`), on by default; `.edgeRecede(false)` on the cast, Seerr's missing titles and « En direct »
-- `.listSwapSlide(trigger:)` — keyframes on a trigger, never an `.id` swap (the fiche's episode lists, keyed on `MediaDetailViewModel.seasonSwapCount`)
-- The fiche hero (iOS) — parallax and text fade through `.visualEffect` (no per-frame state), the item's name in the bar past the hero (`ScrollMotion`)
+- `.listSwapSlide(trigger:)` — keyframes on a trigger, never an `.id` swap, and the SAME modifier with motion off (zero-amplitude keyframes — an `if motionEnabled` branch would change the stack's identity when Reduce Motion flips); the fiche's episode lists, keyed on `MediaDetailViewModel.seasonSwapCount` (a re-selected season does not count)
+- The fiche hero (iOS) — the IMAGE moves inside `heroBackdropBleed(…, parallax:)`'s clipped box (the gradient and the box edge stay put), the text fades over the last 90 pt before the hero is gone, then the item's name shows in the bar (`ScrollMotion`, `.scrollView` minY = 0 at rest, measured)
 - `.contentReveal(step:)` + `ContentRevealClock` (`SkeletonViews.swift`) — Home and the library: the first blocks rise in each time the skeleton leaves, never on an in-place change
 
 New components must consume `\.motionEffectsEnabled` or take an explicit `animated: Bool` parameter.
@@ -93,7 +93,8 @@ Added 2026-11-14 (spec `docs/superpowers/specs/2026-11-14-interface-animations-d
 | `contentReveal` + `revealStagger` | `.easeOut(duration: 0.45)`, 0.08 s | content rising in after a skeleton |
 | `numeric` | `.snappy(duration: 0.35)` | `.rollingNumber(_:)` — counts, remaining time |
 | `progressFill` | `.easeOut(duration: 0.7)` | `ProgressBarView` |
-| `listSwap` | `.easeOut(duration: 0.34)` | episodes on a season change |
+| `listSwapDistance` / `listSwapDuration` / `listSwapFadeDuration` | 24 pt, 0.34 s, 0.24 s | episodes on a season change (`.listSwapSlide`) |
+| `barTitleFade` | `.easeOut(duration: 0.2)` | the fiche's bar title |
 | `overlaySlide` / `overlaySlideOut` | 0.3 s / 0.2 s | UIKit player overlays |
 
 Don't invent new durations unless you have a specific reason. Match what's next to you on the screen.

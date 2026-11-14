@@ -144,6 +144,19 @@ struct MediaDetailViewModelTests {
         #expect(vm.seasonSwapCount == 1)
     }
 
+    @Test("re-selecting the season on screen does not bump the swap count")
+    func reselectingTheSameSeasonDoesNotBumpTheSwapCount() async {
+        let api = MockAPIClient()
+        api.getEpisodesHandler = { _ in [makeEpisode(id: "ep-1", name: "Pilot")] }
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        let appState = makeAppState(api: api)
+
+        await vm.selectSeason("season-A", seriesId: "series-1", using: appState)
+        await vm.selectSeason("season-A", seriesId: "series-1", using: appState)
+
+        #expect(vm.seasonSwapCount == 1)
+    }
+
     @Test("refreshing the same season does not bump the swap count")
     func refreshingTheSameSeasonDoesNotBumpTheSwapCount() async {
         let api = MockAPIClient()

@@ -1145,6 +1145,8 @@ final class MediaDetailViewModel {
 
     func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
+        // Re-selecting the season on screen reloads it but must not slide it.
+        let isSeasonChange = selectedSeasonId != seasonId
         selectedSeasonId = seasonId
         seasonGeneration += 1
         let expectedGeneration = seasonGeneration
@@ -1152,7 +1154,7 @@ final class MediaDetailViewModel {
             let newEpisodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
             guard seasonGeneration == expectedGeneration else { return }
             episodes = newEpisodes
-            seasonSwapCount += 1
+            if isSeasonChange { seasonSwapCount += 1 }
             rebuildNavigationMaps()
             reloadSeerrEpisodes(using: appState)
         } catch {

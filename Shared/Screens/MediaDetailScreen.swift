@@ -455,7 +455,7 @@ struct MediaDetailScreen: View {
                     .foregroundStyle(CinemaColor.onSurface)
                     .lineLimit(1)
                     .opacity(showsBarTitle ? 1 : 0)
-                    .animation(CinemaMotion.gated(.easeOut(duration: 0.2), enabled: motionEnabled), value: showsBarTitle)
+                    .animation(CinemaMotion.gated(CinemaMotion.barTitleFade, enabled: motionEnabled), value: showsBarTitle)
                     .accessibilityHidden(!showsBarTitle)
             }
         }
@@ -789,14 +789,9 @@ struct MediaDetailScreen: View {
                         BackdropFallbackView()
                     }
                 }
-                .heroBackdropBleed(topExtension: topBarInset)
-                #if os(iOS)
-                // Parallax: the backdrop scrolls slower than the page.
-                .visualEffect { [motionEnabled] content, proxy in
-                    content.offset(y: motionEnabled
-                        ? ScrollMotion.parallaxOffset(minY: proxy.frame(in: .scrollView).minY) : 0)
-                }
-                #endif
+                // Parallax (iOS): the IMAGE scrolls slower than the page, inside
+                // the clipped box — the gradient and the box's bottom edge stay put.
+                .heroBackdropBleed(topExtension: topBarInset, parallax: motionEnabled)
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: detailHeroSpacing) {
@@ -839,7 +834,8 @@ struct MediaDetailScreen: View {
                 // The hero text fades out as it leaves; the bar title takes over.
                 .visualEffect { [motionEnabled] content, proxy in
                     content.opacity(motionEnabled
-                        ? ScrollMotion.heroTitleOpacity(scrolled: -proxy.frame(in: .scrollView).minY) : 1)
+                        ? ScrollMotion.heroTitleOpacity(scrolled: -proxy.frame(in: .scrollView).minY,
+                                                        heroHeight: proxy.size.height) : 1)
                 }
                 #endif
             }
