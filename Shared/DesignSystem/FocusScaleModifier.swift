@@ -45,6 +45,8 @@ enum CinemaMotion {
     static let symbolPop: Animation = .bouncy(duration: 0.45)
     /// Artwork arriving from the network or the disk cache.
     static let imageFade: Animation = .easeOut(duration: 0.3)
+    /// A skeleton giving way to content (or to the error / empty state).
+    static let skeletonFade: Animation = .easeOut(duration: 0.25)
     /// Content rising in after a skeleton.
     static let contentReveal: Animation = .easeOut(duration: 0.45)
     /// Delay between two consecutive revealed blocks.
@@ -53,8 +55,13 @@ enum CinemaMotion {
     static let numeric: Animation = .snappy(duration: 0.35)
     /// Progress bar filling or gliding to a new position.
     static let progressFill: Animation = .easeOut(duration: 0.7)
-    /// A list replaced by another (season change).
-    static let listSwap: Animation = .easeOut(duration: 0.34)
+    /// A list replaced by another (season change): slide-in distance, slide
+    /// and fade durations.
+    static let listSwapDistance: CGFloat = 24
+    static let listSwapDuration: TimeInterval = 0.34
+    static let listSwapFadeDuration: TimeInterval = 0.24
+    /// The fiche's navigation-bar title appearing once the hero is gone.
+    static let barTitleFade: Animation = .easeOut(duration: 0.2)
     /// UIKit player overlays sliding in and out.
     static let overlaySlide: TimeInterval = 0.3
     static let overlaySlideOut: TimeInterval = 0.2
@@ -109,21 +116,22 @@ private struct ListSwapSlideModifier<Trigger: Equatable>: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        if motionEnabled {
-            content.keyframeAnimator(initialValue: Frame(), trigger: trigger) { view, frame in
-                view.offset(x: frame.offset).opacity(frame.opacity)
-            } keyframes: { _ in
-                KeyframeTrack(\.offset) {
-                    MoveKeyframe(24)
-                    CubicKeyframe(0, duration: 0.34)
-                }
-                KeyframeTrack(\.opacity) {
-                    MoveKeyframe(0)
-                    LinearKeyframe(1, duration: 0.24)
-                }
+        // ALWAYS the same modifier — motion off only zeroes the keyframes: an
+        // `if motionEnabled` branch would change the stack's identity the
+        // moment Reduce Motion flips, the very rebuild this avoids.
+        let distance = motionEnabled ? CinemaMotion.listSwapDistance : 0
+        let startOpacity: Double = motionEnabled ? 0 : 1
+        content.keyframeAnimator(initialValue: Frame(), trigger: trigger) { view, frame in
+            view.offset(x: frame.offset).opacity(frame.opacity)
+        } keyframes: { _ in
+            KeyframeTrack(\.offset) {
+                MoveKeyframe(distance)
+                CubicKeyframe(0, duration: CinemaMotion.listSwapDuration)
             }
-        } else {
-            content
+            KeyframeTrack(\.opacity) {
+                MoveKeyframe(startOpacity)
+                LinearKeyframe(1, duration: CinemaMotion.listSwapFadeDuration)
+            }
         }
     }
 }

@@ -53,8 +53,11 @@ extension View {
     /// Without the bleed the image stopped dead at the safe-area edge while the
     /// rails below slid under it: the iPhone Duo's right-hand column (status +
     /// vertical tab bar) and the notch side of any iPhone in landscape.
-    func heroBackdropBleed(topExtension: CGFloat = 0) -> some View {
-        modifier(HeroBackdropBleed(topExtension: topExtension))
+    /// `parallax` (iOS, the fiche): the image inside the box scrolls at 55 %
+    /// of the page (`ScrollMotion.parallaxOffset`); the box, its gradient and
+    /// its clip do not move.
+    func heroBackdropBleed(topExtension: CGFloat = 0, parallax: Bool = false) -> some View {
+        modifier(HeroBackdropBleed(topExtension: topExtension, parallax: parallax))
     }
 }
 
@@ -69,6 +72,7 @@ extension View {
 ///   the reported inset instead (negative padding) and draws past the frame.
 private struct HeroBackdropBleed: ViewModifier {
     let topExtension: CGFloat
+    var parallax: Bool = false
     #if os(iOS)
     @State private var reportedInsets = EdgeInsets()
     #endif
@@ -79,7 +83,14 @@ private struct HeroBackdropBleed: ViewModifier {
             .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { reportedInsets = $0 }
             .overlay {
                 Color.clear
-                    .overlay(alignment: .top) { content }
+                    .overlay(alignment: .top) {
+                        // The box starts `topExtension` above the hero, so the
+                        // hero's own top is the image's minY + topExtension.
+                        content.visualEffect { [parallax, topExtension] view, proxy in
+                            view.offset(y: parallax
+                                ? ScrollMotion.parallaxOffset(minY: proxy.frame(in: .scrollView).minY + topExtension) : 0)
+                        }
+                    }
                     .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
                     .ignoresSafeArea(edges: .horizontal)
                     .clipped()

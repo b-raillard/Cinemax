@@ -125,7 +125,7 @@ struct HomeScreen: View {
                     .environment(\.contentRevealClock, revealClock)
             }
         }
-        .animation(CinemaMotion.gated(.easeOut(duration: 0.25), enabled: motionEffects), value: skeleton)
+        .animation(CinemaMotion.gated(CinemaMotion.skeletonFade, enabled: motionEffects), value: skeleton)
         #if os(iOS)
         .navigationTitle(loc.localized("tab.home"))
         .navigationBarTitleDisplayMode(.inline)
