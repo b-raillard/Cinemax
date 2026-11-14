@@ -88,9 +88,8 @@ struct MediaLibraryScreen: View {
     }
 
     var body: some View {
-        let skeleton = viewModel.isLoading
         // Noted from body on purpose: see `ContentRevealClock`.
-        let _ = revealClock.noteSkeleton(visible: skeleton, motionEnabled: motionEnabled)
+        let skeleton = revealClock.noting(skeletonVisible: viewModel.isLoading, motionEnabled: motionEnabled)
         ZStack {
             SeasonalBackdrop().ignoresSafeArea()
 

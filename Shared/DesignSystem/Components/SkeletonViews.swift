@@ -224,11 +224,18 @@ final class ContentRevealClock {
             startedAt = motionEnabled ? now : nil
         }
     }
+
+    /// `noteSkeleton`, returning `skeletonVisible` — usable as a `let` in a
+    /// `body`, where a bare call is not a view.
+    func noting(skeletonVisible: Bool, motionEnabled: Bool) -> Bool {
+        noteSkeleton(visible: skeletonVisible, motionEnabled: motionEnabled)
+        return skeletonVisible
+    }
 }
 
 extension EnvironmentValues {
     /// The screen's reveal clock; `nil` outside a screen that reveals.
-    @Entry var contentRevealClock: ContentRevealClock? = nil
+    @Entry var contentRevealClock: ContentRevealClock?
 }
 
 private struct ContentRevealModifier: ViewModifier {

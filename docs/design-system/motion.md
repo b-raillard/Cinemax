@@ -58,6 +58,8 @@ You don't need to do anything if you use:
 - `cardZoomDestination(_:)` (`CardZoomTransition.swift`) — the iOS card → fiche zoom falls back to the default push when motion is off
 - `.symbolPop(on:)` and `.rollingNumber(_:)` (`FocusScaleModifier.swift`) — key `rollingNumber` on the NUMBER, not the formatted string, where the number is at hand
 - `ProgressBarView` — glides on every value change; `fillsOnAppear: true` only where few bars are on screen
+- `CinemaLazyImage` — fades in on arrival (`fadesIn`, default `true`); Nuke's memory-cache hits never fade. Opted out: `HeroBackdropImage`, the fiche backdrop
+- `.contentReveal(step:)` + `ContentRevealClock` (`SkeletonViews.swift`) — Home and the library: the first blocks rise in each time the skeleton leaves, never on an in-place change
 
 New components must consume `\.motionEffectsEnabled` or take an explicit `animated: Bool` parameter.
 
@@ -174,6 +176,7 @@ Across both platforms:
 
 ## Progress, loading, transitions
 
+- **Skeleton → content**: a screen that swaps a `MediaPageSkeleton` for content notes the skeleton on a `ContentRevealClock` FROM BODY (the stamp must exist before the rows' `onAppear`), injects it as `\.contentRevealClock`, and marks its first screenful `.contentReveal(step:)`. See `HomeScreen.body`.
 - **Loading**: always `LoadingStateView` (spinner, scaled 1.5×). Don't build ad-hoc `ProgressView()` screens.
 - **Empty**: `EmptyStateView` with a 56 pt semi-transparent SF Symbol, title (headline), optional subtitle, optional 200 pt ghost action button.
 - **Error**: `ErrorStateView` with 48 pt `exclamationmark.triangle` in `CinemaColor.error`, message, 160 pt ghost retry button.

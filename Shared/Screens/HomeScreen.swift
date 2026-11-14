@@ -16,15 +16,15 @@ struct HomeScreen: View {
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
-    #if os(iOS)
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    /// When the skeleton last gave way to content — drives `.contentReveal`.
+    @State private var revealClock = ContentRevealClock()
+    #if os(iOS)
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     /// Index of the hero currently shown in the rotating carousel (iOS only —
     /// tvOS keeps a single static hero; the focus engine + `.focusSection` rules
     /// make auto-advancing focusable chrome hazardous there).
     @State private var heroIndex = 0
-    /// When the skeleton last gave way to content — drives `.contentReveal`.
-    @State private var revealClock = ContentRevealClock()
     #endif
     #if os(tvOS)
     /// The hero's main button (« Lecture » / « Reprendre ici »). Down from the
@@ -105,10 +105,9 @@ struct HomeScreen: View {
     }
 
     var body: some View {
-        let skeleton = showsSkeleton
         // Noted from body on purpose: the stamp must exist before the revealed
         // rows' `onAppear` (see `ContentRevealClock`).
-        let _ = revealClock.noteSkeleton(visible: skeleton, motionEnabled: motionEffects)
+        let skeleton = revealClock.noting(skeletonVisible: showsSkeleton, motionEnabled: motionEffects)
         ZStack {
             SeasonalBackdrop().ignoresSafeArea()
 
