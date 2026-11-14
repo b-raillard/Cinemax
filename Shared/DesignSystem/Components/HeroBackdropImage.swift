@@ -22,7 +22,8 @@ struct HeroBackdropImage: View {
         fallbackBackground
             .overlay { DriftingBackdropRepresentable(url: url, drifting: motionEnabled) }
         #else
-        CinemaLazyImage(url: url, fallbackIcon: nil, fallbackBackground: fallbackBackground)
+        // No fade: the iOS Home hero crossfades between candidates itself.
+        CinemaLazyImage(url: url, fallbackIcon: nil, fallbackBackground: fallbackBackground, fadesIn: false)
         #endif
     }
 }

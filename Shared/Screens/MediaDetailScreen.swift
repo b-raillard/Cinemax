@@ -756,7 +756,9 @@ struct MediaDetailScreen: View {
                         CinemaLazyImage(
                             url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
                             fallbackIcon: nil,
-                            fallbackBackground: CinemaColor.surfaceContainerLow
+                            fallbackBackground: CinemaColor.surfaceContainerLow,
+                            // The card → fiche zoom owns this moment.
+                            fadesIn: false
                         )
                         .accessibilityHidden(true)
                     } else {
