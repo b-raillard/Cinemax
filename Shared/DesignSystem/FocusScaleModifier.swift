@@ -45,6 +45,8 @@ enum CinemaMotion {
     static let symbolPop: Animation = .bouncy(duration: 0.45)
     /// Artwork arriving from the network or the disk cache.
     static let imageFade: Animation = .easeOut(duration: 0.3)
+    /// A skeleton giving way to content (or to the error / empty state).
+    static let skeletonFade: Animation = .easeOut(duration: 0.25)
     /// Content rising in after a skeleton.
     static let contentReveal: Animation = .easeOut(duration: 0.45)
     /// Delay between two consecutive revealed blocks.
