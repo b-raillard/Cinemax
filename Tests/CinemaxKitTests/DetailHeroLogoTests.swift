@@ -67,3 +67,29 @@ struct DetailHeroLogoTests {
         #expect(height.map { abs($0 - 60) < 0.001 } == true)
     }
 }
+
+/// The scroll-linked effects of the fiche hero and of the media rows: pure
+/// math, so the views only read it (spec 2026-11-14, `parallaxe` / `rangee`).
+@Suite("Scroll motion")
+struct ScrollMotionTests {
+    @Test("parallax, hero title fade, bar title and row edge recede")
+    func scrollMotionMath() {
+        // The backdrop moves down by 45 % of the upward scroll, never on overscroll.
+        #expect(ScrollMotion.parallaxOffset(minY: -100) == 45)
+        #expect(ScrollMotion.parallaxOffset(minY: 30) == 0)
+        // The hero title fades over 90 pt of scroll.
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: 0) == 1)
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: 45) == 0.5)
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: 200) == 0)
+        #expect(ScrollMotion.heroTitleOpacity(scrolled: -40) == 1)
+        // The bar title appears once the hero has scrolled away.
+        #expect(!ScrollMotion.showsBarTitle(scrolled: 300, heroHeight: 400))
+        #expect(ScrollMotion.showsBarTitle(scrolled: 420, heroHeight: 400))
+        // A row's edge card recedes: full size at rest, 0.9 / 0.55 at the edge.
+        #expect(ScrollMotion.edgeRecede(phase: 0).scale == 1)
+        #expect(ScrollMotion.edgeRecede(phase: 0).opacity == 1)
+        #expect(abs(ScrollMotion.edgeRecede(phase: 1).scale - 0.9) < 0.0001)
+        #expect(abs(ScrollMotion.edgeRecede(phase: 1).opacity - 0.55) < 0.0001)
+        #expect(ScrollMotion.edgeRecede(phase: -1).scale == ScrollMotion.edgeRecede(phase: 1).scale)
+    }
+}

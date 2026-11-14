@@ -29,6 +29,18 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
     @ViewBuilder let itemView: (Data.Element) -> ItemView
     /// Replaces the title row when set; `title` is then unused.
     var header: Header?
+    /// iOS: cards entering or leaving at the row's edges shrink and fade a
+    /// little (`ScrollMotion.edgeRecede`). On for media-card rows; off for the
+    /// cast, Seerr's missing titles and « En direct » (`.edgeRecede(false)`).
+    var recedesAtEdges: Bool = true
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+
+    /// Turns the receding edge cards off for this row.
+    func edgeRecede(_ enabled: Bool) -> Self {
+        var copy = self
+        copy.recedesAtEdges = enabled
+        return copy
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
@@ -44,7 +56,17 @@ struct ContentRow<Data: RandomAccessCollection, ItemID: Hashable, ItemView: View
             // Scrollable content
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
+                    #if os(iOS)
+                    ForEach(data, id: id) { element in
+                        itemView(element)
+                            .scrollTransition(.interactive, axis: .horizontal) { [recede = recedesAtEdges && motionEnabled] content, phase in
+                                let r = ScrollMotion.edgeRecede(phase: recede ? phase.value : 0)
+                                return content.scaleEffect(r.scale).opacity(r.opacity)
+                            }
+                    }
+                    #else
                     ForEach(data, id: id, content: itemView)
+                    #endif
                     #if os(tvOS)
                     // « Tout voir » closes the row as a poster-shaped card:
                     // Right from the last card reaches it, however few cards

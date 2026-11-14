@@ -94,6 +94,7 @@ struct MediaDetailCastSection: View, Equatable {
             #endif
             .accessibilityLabel([person.name, person.role].compactMap { $0 }.joined(separator: ", "))
         }
+        .edgeRecede(false)
     }
 }
 

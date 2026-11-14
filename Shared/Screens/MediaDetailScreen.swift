@@ -188,6 +188,11 @@ struct MediaDetailScreen: View {
     /// screen (the hero, inside the scroll view, reports none): the backdrop
     /// runs up under them instead of leaving a dark band above the image.
     @State private var topBarInset: CGFloat = 0
+    /// iOS: the hero's height and whether it has scrolled away — the item's
+    /// name then takes over in the navigation bar (`ScrollMotion`).
+    @State private var heroHeight: CGFloat = 0
+    @State private var showsBarTitle = false
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
     /// The screen's width, for `useTwoColumnLayout` — 0 until measured.
     @State private var screenWidth: CGFloat = 0
 
@@ -436,6 +441,24 @@ struct MediaDetailScreen: View {
         }
         #if os(tvOS)
         .scrollClipDisabled()
+        #else
+        // Once the hero has scrolled away, the item's name shows in the bar.
+        .onScrollGeometryChange(for: Bool.self) { [heroHeight] geo in
+            ScrollMotion.showsBarTitle(scrolled: geo.contentOffset.y + geo.contentInsets.top, heroHeight: heroHeight)
+        } action: { _, shows in
+            showsBarTitle = shows
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(item.name ?? "")
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .lineLimit(1)
+                    .opacity(showsBarTitle ? 1 : 0)
+                    .animation(CinemaMotion.gated(.easeOut(duration: 0.2), enabled: motionEnabled), value: showsBarTitle)
+                    .accessibilityHidden(!showsBarTitle)
+            }
+        }
         #endif
     }
 
@@ -749,6 +772,7 @@ struct MediaDetailScreen: View {
             } action: { height in
                 heroLogoHeight = height
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { heroHeight = $0 }
             #endif
             .overlay {
                 Group {
@@ -766,6 +790,13 @@ struct MediaDetailScreen: View {
                     }
                 }
                 .heroBackdropBleed(topExtension: topBarInset)
+                #if os(iOS)
+                // Parallax: the backdrop scrolls slower than the page.
+                .visualEffect { [motionEnabled] content, proxy in
+                    content.offset(y: motionEnabled
+                        ? ScrollMotion.parallaxOffset(minY: proxy.frame(in: .scrollView).minY) : 0)
+                }
+                #endif
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: detailHeroSpacing) {
@@ -804,6 +835,13 @@ struct MediaDetailScreen: View {
                 // driver (`heroBackdropBleed`).
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .clipped()
+                #if os(iOS)
+                // The hero text fades out as it leaves; the bar title takes over.
+                .visualEffect { [motionEnabled] content, proxy in
+                    content.opacity(motionEnabled
+                        ? ScrollMotion.heroTitleOpacity(scrolled: -proxy.frame(in: .scrollView).minY) : 1)
+                }
+                #endif
             }
     }
 

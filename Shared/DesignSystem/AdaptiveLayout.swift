@@ -260,3 +260,35 @@ enum CinemaTVLayout {
     static let logoMaxWidth: CGFloat = 700
 }
 #endif
+
+// MARK: - Scroll-linked motion (iOS)
+
+/// The math of the scroll-linked effects (spec 2026-11-14): the fiche
+/// backdrop's parallax, its title fading out, the navigation-bar title that
+/// takes over, and the media rows' receding edge cards. Pure, so the views only
+/// read it and the numbers are locked by `ScrollMotionTests`.
+enum ScrollMotion {
+    /// Downward offset of the backdrop for a hero whose top sits at `minY` in
+    /// the scroll view: the image moves at (1 − factor) of the content's speed.
+    /// No movement while overscrolling at the top.
+    nonisolated static func parallaxOffset(minY: CGFloat, factor: CGFloat = 0.45) -> CGFloat {
+        minY < 0 ? -minY * factor : 0
+    }
+
+    /// The hero title / logo fades out over the first `fadeDistance` points.
+    nonisolated static func heroTitleOpacity(scrolled: CGFloat, fadeDistance: CGFloat = 90) -> Double {
+        Double(max(0, min(1, 1 - scrolled / fadeDistance)))
+    }
+
+    /// The item's name shows in the navigation bar once the hero is gone.
+    nonisolated static func showsBarTitle(scrolled: CGFloat, heroHeight: CGFloat) -> Bool {
+        heroHeight > 0 && scrolled >= heroHeight
+    }
+
+    /// A row card's scale and opacity for a scroll-transition phase (0 = fully
+    /// in view, ±1 = at the edge).
+    nonisolated static func edgeRecede(phase: Double) -> (scale: CGFloat, opacity: Double) {
+        let p = min(1, abs(phase))
+        return (1 - 0.1 * CGFloat(p), 1 - 0.45 * p)
+    }
+}

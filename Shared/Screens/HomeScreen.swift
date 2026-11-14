@@ -1103,6 +1103,7 @@ struct HomeScreen: View {
                 liveCard(entry)
                     .frame(width: wideCardWidth)
             }
+            .edgeRecede(false)
 
             // Said once, under the row, and only when a card's join is
             // actually blocked — a row holding only the viewer's own group (its

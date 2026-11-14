@@ -97,6 +97,7 @@ struct MissingTitlesRow<Element: Identifiable & Equatable & Sendable, Card: View
                     .focusable(false)
                     #endif
             }
+            .edgeRecede(false)
         case .loaded(let elements):
             if !elements.isEmpty {
                 ContentRow(data: rowItems(elements), id: \.id) {
@@ -109,6 +110,7 @@ struct MissingTitlesRow<Element: Identifiable & Equatable & Sendable, Card: View
                         MissingActionCard(action: action, width: cardWidth)
                     }
                 }
+                .edgeRecede(false)
             }
         }
     }
