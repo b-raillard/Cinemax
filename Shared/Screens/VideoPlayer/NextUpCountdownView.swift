@@ -204,7 +204,17 @@ final class NextUpCountdownView: UIView {
     }
 
     func update(secondsRemaining: Int) {
-        countdownLabel.text = String(format: countdownFormat, max(0, secondsRemaining))
+        let text = String(format: countdownFormat, max(0, secondsRemaining))
+        // The number rolls up as it changes (the « chiffres » animation).
+        if countdownLabel.text != nil, countdownLabel.text != text, MotionEffects.isEnabledNow {
+            let roll = CATransition()
+            roll.type = .push
+            roll.subtype = .fromTop
+            roll.duration = 0.25
+            roll.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            countdownLabel.layer.add(roll, forKey: "cinemax.countdown.roll")
+        }
+        countdownLabel.text = text
     }
 
     func show() {

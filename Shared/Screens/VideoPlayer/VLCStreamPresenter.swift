@@ -395,6 +395,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     #if os(iOS)
     private let closeButton = UIButton(type: .system)
     private let playPauseButton = UIButton(type: .system)
+    /// The glyph `setPlayPauseIcon` last drew (`true` = ⏸), `nil` before the first.
+    private var shownPlayPauseGlyph: Bool?
     private let audioButton = UIButton(type: .system)
     private let subtitleButton = UIButton(type: .system)
     private let skipBackButton = UIButton(type: .system)
@@ -599,6 +601,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// with the segments.
     private var autoSkippedSegmentKeys: Set<String> = []
     private let skipButton = UIButton(type: .system)
+    /// Bumped by every `setSkipButtonVisible`: an animated hide finishes only
+    /// if nothing changed the button since it started.
+    private var skipButtonGeneration = 0
 
     // P3: sleep timer
     private var sleepRemaining: TimeInterval = 0
@@ -1505,7 +1510,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         config.imagePadding = 8
         skipButton.configuration = config
         skipButton.translatesAutoresizingMaskIntoConstraints = false
-        skipButton.isHidden = true
+        setSkipButtonVisible(false, change: .setup)
         skipButton.addTarget(self, action: #selector(skipSegmentTapped), for: .primaryActionTriggered)
         view.addSubview(skipButton)
         let skipBottom = skipButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
@@ -1525,7 +1530,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         activeSegmentType = nil
         autoSkippedSegmentKeys = []
         autoSkip = AutoSkipPreferences.current()
-        skipButton.isHidden = true
+        setSkipButtonVisible(false, change: .itemReset)
         let client = apiClient
         let id = itemId
         segmentFetchTask = Task { [weak self] in
@@ -1537,7 +1542,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func updateSkipButton(currentTime: Double) {
         guard hasValidTime else {
-            if !skipButton.isHidden { skipButton.isHidden = true }
+            if !skipButton.isHidden { setSkipButtonVisible(false, change: .invalidTime) }
             nextUpCard?.hide()
             activeSegmentType = nil
             return
@@ -1570,7 +1575,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if action != .none {
                 autoSkippedSegmentKeys.insert(key)
                 activeSegmentType = nil
-                skipButton.isHidden = true
+                setSkipButtonVisible(false, change: .autoSkipped)
                 nextUpCard?.hide()
                 logger.notice("auto-skip type=\(segment.type?.rawValue ?? "?", privacy: .public) action=\(String(describing: action), privacy: .public) from=\(Int(currentTime), privacy: .public)s to=\(Int(end), privacy: .public)s")
                 switch action {
@@ -1600,7 +1605,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                                                     isEpisode: resolvedIsEpisode ?? true) {
                 if activeSegmentType != nil {
                     activeSegmentType = nil
-                    skipButton.isHidden = true
+                    setSkipButtonVisible(false, change: .handedToNextUpCard)
                 }
                 showNextUpCard(for: next)
                 nextUpCard?.update(secondsRemaining: Int(secondsRemaining.rounded()))
@@ -1612,7 +1617,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 activeSegmentType = segment.type
                 let key = segment.type == .intro ? "player.skipIntro" : "player.skipCredits"
                 skipButton.configuration?.title = loc.localized(key)
-                skipButton.isHidden = false
+                setSkipButtonVisible(true, change: .segmentEntered)
                 #if os(tvOS)
                 setNeedsFocusUpdate()
                 #endif
@@ -1621,9 +1626,51 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
         if activeSegmentType != nil {
             activeSegmentType = nil
-            skipButton.isHidden = true
+            setSkipButtonVisible(false, change: .segmentLeft)
         }
         nextUpCard?.hide()
+    }
+
+    /// The ONE writer of the skip button's visibility. Animated only when
+    /// `SkipButtonPresentation` says so; an animated hide sets `isHidden` in its
+    /// completion — so the tvOS focus engine never lands on an invisible
+    /// button — unless a later change superseded it (`skipButtonGeneration`).
+    private func setSkipButtonVisible(_ visible: Bool, change: SkipButtonChange) {
+        skipButtonGeneration += 1
+        let generation = skipButtonGeneration
+        let animated = SkipButtonPresentation.animates(change, motionEnabled: MotionEffects.isEnabledNow)
+        let offstage = CGAffineTransform(translationX: 26, y: 0)
+        skipButton.layer.removeAllAnimations()
+        guard animated else {
+            skipButton.isHidden = !visible
+            skipButton.alpha = 1
+            skipButton.transform = .identity
+            return
+        }
+        if visible {
+            if skipButton.isHidden {
+                skipButton.alpha = 0
+                skipButton.transform = offstage
+                skipButton.isHidden = false
+            }
+            UIView.animate(withDuration: CinemaMotion.overlaySlide, delay: 0,
+                           options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
+                self.skipButton.alpha = 1
+                self.skipButton.transform = .identity
+            }
+        } else {
+            guard !skipButton.isHidden else { return }
+            UIView.animate(withDuration: CinemaMotion.overlaySlideOut, delay: 0,
+                           options: [.curveEaseIn, .beginFromCurrentState]) {
+                self.skipButton.alpha = 0
+                self.skipButton.transform = offstage
+            } completion: { [weak self] _ in
+                guard let self, self.skipButtonGeneration == generation else { return }
+                self.skipButton.isHidden = true
+                self.skipButton.alpha = 1
+                self.skipButton.transform = .identity
+            }
+        }
     }
 
     /// Lazily builds the countdown card (it bakes in the next episode's title,
@@ -1686,7 +1733,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         for segment in segments where segment.type == activeSegmentType {
             let end = Int32(Double(segment.endTicks ?? 0) / 10_000_000 * 1000)
             userEngineSeek(ms: end)
-            skipButton.isHidden = true
+            setSkipButtonVisible(false, change: .userSkipped)
             activeSegmentType = nil
             refreshTimeUISoon()
             return
@@ -5253,7 +5300,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if layoutMode == .tabletop {
             config = TabletopHUDStyle.block(symbol: playing ? "pause.fill" : "play.fill", pointSize: 54, emphasized: true)
         }
-        playPauseButton.configuration = config
+        // A real glyph change crossfades; a re-dress (table mode) does not.
+        let glyphChanged = shownPlayPauseGlyph != nil && shownPlayPauseGlyph != playing
+        shownPlayPauseGlyph = playing
+        if glyphChanged && MotionEffects.isEnabledNow {
+            UIView.transition(with: playPauseButton, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+                self.playPauseButton.configuration = config
+            }
+        } else {
+            playPauseButton.configuration = config
+        }
         // The glyph shows what the press WILL do, and so must the label: a
         // button drawn as ⏸ is the one that pauses.
         playPauseButton.accessibilityLabel = playing ? hudA11y.pause : hudA11y.play

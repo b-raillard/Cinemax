@@ -62,6 +62,7 @@ You don't need to do anything if you use:
 - `ContentRow` (iOS) — edge cards recede (`ScrollMotion.edgeRecede`), on by default; `.edgeRecede(false)` on the cast, Seerr's missing titles and « En direct »
 - `.listSwapSlide(trigger:)` — keyframes on a trigger, never an `.id` swap (the fiche's episode lists, keyed on `MediaDetailViewModel.seasonSwapCount`)
 - The fiche hero (iOS) — parallax and text fade through `.visualEffect` (no per-frame state), the item's name in the bar past the hero (`ScrollMotion`)
+- Player (UIKit, `MotionEffects.isEnabledNow`): the skip button's slide (`setSkipButtonVisible`), the iOS play/pause crossfade, the countdown number's push — see `Shared/Screens/VideoPlayer/CLAUDE.md`
 - `.contentReveal(step:)` + `ContentRevealClock` (`SkeletonViews.swift`) — Home and the library: the first blocks rise in each time the skeleton leaves, never on an in-place change
 
 New components must consume `\.motionEffectsEnabled` or take an explicit `animated: Bool` parameter.
