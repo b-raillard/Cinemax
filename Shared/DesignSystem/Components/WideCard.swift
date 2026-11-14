@@ -37,7 +37,7 @@ struct WideCard: View {
                 }
                 .overlay(alignment: .bottom) {
                     if let progress, progress > 0 {
-                        ProgressBarView(progress: progress)
+                        ProgressBarView(progress: progress, fillsOnAppear: true)
                             .padding(.horizontal, 8)
                             .padding(.bottom, 8)
                     }

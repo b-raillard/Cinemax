@@ -2419,10 +2419,10 @@ private struct PlayActionButtonsSection: View, Equatable {
 
             if showResume {
                 #if os(iOS)
-                ProgressBarView(progress: progress)
+                ProgressBarView(progress: progress, fillsOnAppear: true)
                     .frame(maxWidth: .infinity)
                 #else
-                ProgressBarView(progress: progress)
+                ProgressBarView(progress: progress, fillsOnAppear: true)
                     .frame(width: playButtonWidth)
                 #endif
 
