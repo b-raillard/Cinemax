@@ -32,7 +32,7 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     /// Accessibility — a card held by the VoiceOver cursor.
     case accessibility
     /// The ephemeral « Nuit d'Halloween » theme — a full night scene, wide
-    /// rather than square (`isScene`).
+    /// rather than square.
     case halloweenNight
     /// The app in the device's language — two speech bubbles, the old one
     /// faded, the new one in the accent.
@@ -64,9 +64,6 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     case seerrRequests
     /// Missing episodes — the absent one in its place, reported (animated).
     case missingEpisodes
-
-    /// Drawn as a wide scene across the page, not a motif on the halo.
-    var isScene: Bool { self == .halloweenNight }
 }
 
 struct WhatsNewIllustrationView: View {

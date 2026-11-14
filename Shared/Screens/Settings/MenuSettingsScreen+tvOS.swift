@@ -268,7 +268,6 @@ extension MenuSettingsScreen {
 
             // Move up
             tvMoveButton(
-                id: entry.id,
                 key: upKey,
                 systemImage: "arrow.up",
                 accessibility: loc.localized("menu.entry.reorder.up"),
@@ -278,7 +277,6 @@ extension MenuSettingsScreen {
 
             // Move down
             tvMoveButton(
-                id: entry.id,
                 key: downKey,
                 systemImage: "arrow.down",
                 accessibility: loc.localized("menu.entry.reorder.down"),
@@ -297,7 +295,7 @@ extension MenuSettingsScreen {
     }
 
     @ViewBuilder
-    private func tvMoveButton(id: String, key: String, systemImage: String, accessibility: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+    private func tvMoveButton(key: String, systemImage: String, accessibility: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         let isFocused = focusedItem == .toggle(key)
         Button(action: action) {
             Image(systemName: systemImage)

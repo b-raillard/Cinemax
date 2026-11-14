@@ -256,7 +256,6 @@ enum SettingsKey {
         static let motionEffects = true
         static let render4K = true
         static let autoPlayNextEpisode = true
-        static let playerTabletopHUDLocked = false
         static let autoSkipIntro = false
         static let autoSkipCredits = false
         static let sleepTimerDefaultMinutes = 0
@@ -295,7 +294,6 @@ enum SettingsKey {
         static let debugShowSkipToEnd = false
         static let debugSimulateTabletop = false
         static let debugForcedSeason = ""
-        static let debugSimulatePro = false
 
         static let rainbowUnlocked = false
 

@@ -98,8 +98,6 @@ Neutral greys. **No button uses them**: the grey gradient « primary » button w
 | Token | Light | Dark | Use |
 | --- | --- | --- | --- |
 | `primary` | `#3A3B3D` | `#C6C6C7` | Neutral grey (no button) |
-| `primaryContainer` | `#D0D1D4` | `#454747` | Neutral grey (no button) |
-| `onPrimary` | `#FFFFFF` | `#3F4041` | Text on `primary` |
 | `secondary` | `#55585E` | `#9D9E9E` | Secondary label, rarely direct |
 
 ### Tertiary — **legacy, do not use for new code**

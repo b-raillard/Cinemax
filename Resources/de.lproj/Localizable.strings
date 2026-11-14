@@ -1191,7 +1191,6 @@
 
 "intent.play.title" = "Titel abspielen";
 "intent.play.description" = "Startet die Wiedergabe eines Films oder einer Serie aus deiner Mediathek.";
-"intent.play.shortTitle" = "Abspielen";
 "intent.playTitle.title" = "Auswählen, was du ansehen willst";
 "intent.playTitle.description" = "Siri fragt nach dem Titel und sucht ihn in deiner ganzen Mediathek.";
 "intent.playTitle.shortTitle" = "Was ansehen?";
