@@ -62,9 +62,15 @@ enum CinemaMotion {
     static let listSwapFadeDuration: TimeInterval = 0.24
     /// The fiche's navigation-bar title appearing once the hero is gone.
     static let barTitleFade: Animation = .easeOut(duration: 0.2)
-    /// UIKit player overlays sliding in and out.
+    /// UIKit player overlays sliding in and out, and how far they travel.
     static let overlaySlide: TimeInterval = 0.3
     static let overlaySlideOut: TimeInterval = 0.2
+    static let overlaySlideDistance: CGFloat = 26
+    /// The player's play/pause glyph crossfading into the other one.
+    static let glyphCrossfade: TimeInterval = 0.2
+    /// The next-up countdown's number changing (a crossfade: only the digits
+    /// differ, so the rest of the sentence does not visibly move).
+    static let countdownTick: TimeInterval = 0.25
 
     /// `animation` when motion is allowed, else `nil` (= apply instantly).
     nonisolated static func gated(_ animation: Animation, enabled: Bool) -> Animation? {

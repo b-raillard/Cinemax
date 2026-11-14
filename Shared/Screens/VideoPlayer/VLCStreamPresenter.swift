@@ -1639,9 +1639,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         skipButtonGeneration += 1
         let generation = skipButtonGeneration
         let animated = SkipButtonPresentation.animates(change, motionEnabled: MotionEffects.isEnabledNow)
-        let offstage = CGAffineTransform(translationX: 26, y: 0)
-        skipButton.layer.removeAllAnimations()
+        let offstage = CGAffineTransform(translationX: CinemaMotion.overlaySlideDistance, y: 0)
         guard animated else {
+            // Instant: snap, whatever was in flight.
+            skipButton.layer.removeAllAnimations()
             skipButton.isHidden = !visible
             skipButton.alpha = 1
             skipButton.transform = .identity
@@ -5304,7 +5305,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         let glyphChanged = shownPlayPauseGlyph != nil && shownPlayPauseGlyph != playing
         shownPlayPauseGlyph = playing
         if glyphChanged && MotionEffects.isEnabledNow {
-            UIView.transition(with: playPauseButton, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+            UIView.transition(with: playPauseButton, duration: CinemaMotion.glyphCrossfade, options: [.transitionCrossDissolve, .allowUserInteraction]) {
                 self.playPauseButton.configuration = config
             }
         } else {
