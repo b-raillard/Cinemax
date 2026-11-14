@@ -23,6 +23,8 @@ struct HomeScreen: View {
     /// tvOS keeps a single static hero; the focus engine + `.focusSection` rules
     /// make auto-advancing focusable chrome hazardous there).
     @State private var heroIndex = 0
+    /// When the skeleton last gave way to content — drives `.contentReveal`.
+    @State private var revealClock = ContentRevealClock()
     #endif
     #if os(tvOS)
     /// The hero's main button (« Lecture » / « Reprendre ici »). Down from the
@@ -94,16 +96,25 @@ struct HomeScreen: View {
     /// sits in several rails at once — see `CardZoom`.
     @Namespace private var zoomNamespace
 
+    /// Skeleton during phase-1, and kept up while a phase-1-empty result is
+    /// still filling later phases — the all-empty state must only appear once
+    /// the *entire* load finishes, never as a mid-load flash (genre rows
+    /// populate after the hero/rails).
+    private var showsSkeleton: Bool {
+        viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded)
+    }
+
     var body: some View {
+        let skeleton = showsSkeleton
+        // Noted from body on purpose: the stamp must exist before the revealed
+        // rows' `onAppear` (see `ContentRevealClock`).
+        let _ = revealClock.noteSkeleton(visible: skeleton, motionEnabled: motionEffects)
         ZStack {
             SeasonalBackdrop().ignoresSafeArea()
 
-            if viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded) {
-                // Skeleton during phase-1, and kept up while a phase-1-empty
-                // result is still filling later phases — the all-empty state
-                // must only appear once the *entire* load finishes, never as a
-                // mid-load flash (genre rows populate after the hero/rails).
+            if skeleton {
                 loadingSkeleton
+                    .transition(.opacity)
             } else if isHomeEmpty, let failure = viewModel.loadFailure {
                 // Every source failed: never « Votre bibliothèque est vide »,
                 // which told an offline user their content was gone.
@@ -112,8 +123,10 @@ struct HomeScreen: View {
                 homeEmptyState
             } else {
                 content
+                    .environment(\.contentRevealClock, revealClock)
             }
         }
+        .animation(CinemaMotion.gated(.easeOut(duration: 0.25), enabled: motionEffects), value: skeleton)
         #if os(iOS)
         .navigationTitle(loc.localized("tab.home"))
         .navigationBarTitleDisplayMode(.inline)
@@ -539,6 +552,7 @@ struct HomeScreen: View {
                         heroCarousel(heroCandidateList)
                             .id(scrollTopID)
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 0)
                     } else {
                         Color.clear.frame(height: 0).id(scrollTopID)
                     }
@@ -547,6 +561,7 @@ struct HomeScreen: View {
                         heroSection(hero)
                             .id(scrollTopID)
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 0)
                     } else {
                         // Keep a sentinel when there is no hero so the
                         // scroll proxy still has something to target.
@@ -564,12 +579,14 @@ struct HomeScreen: View {
                     if showWatchingNow, !viewModel.liveEntries.isEmpty {
                         watchingNowRow
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 1)
                     }
 
                     // Continue Watching
                     if showContinueWatching, !viewModel.resumeItems.isEmpty {
                         continueWatchingRow
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 2)
                     }
 
                     // The season's row (« Frissons d'Halloween ») — right under
@@ -577,18 +594,21 @@ struct HomeScreen: View {
                     if let row = seasonRow, !viewModel.seasonRowItems.isEmpty {
                         seasonalRow(title: loc.localized(row.titleKey), items: viewModel.seasonRowItems)
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 3)
                     }
 
                     // Next Up (next unwatched episode per in-progress series)
                     if showNextUp, !viewModel.nextUpItems.isEmpty {
                         nextUpRow
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 3)
                     }
 
                     // Recently Added
                     if showRecentlyAdded, !viewModel.latestItems.isEmpty {
                         recentlyAddedRow
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 3)
                     }
 
                     // Favorites

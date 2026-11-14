@@ -13,6 +13,9 @@ struct MediaLibraryScreen: View {
     #endif
     @State private var viewModel: MediaLibraryViewModel
     @State private var prefetcher = PosterPrefetcher()
+    /// When the skeleton last gave way to content — drives `.contentReveal`.
+    @State private var revealClock = ContentRevealClock()
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
     @State private var showSortFilter = false
     #if os(iOS)
     /// Lifted from `AdminItemMenu` so `navigationDestination(item:)` can
@@ -85,17 +88,23 @@ struct MediaLibraryScreen: View {
     }
 
     var body: some View {
+        let skeleton = viewModel.isLoading
+        // Noted from body on purpose: see `ContentRevealClock`.
+        let _ = revealClock.noteSkeleton(visible: skeleton, motionEnabled: motionEnabled)
         ZStack {
             SeasonalBackdrop().ignoresSafeArea()
 
-            if viewModel.isLoading {
+            if skeleton {
                 loadingView
+                    .transition(.opacity)
             } else if let error = viewModel.errorMessage {
                 errorView(error)
             } else {
                 mainContent
+                    .environment(\.contentRevealClock, revealClock)
             }
         }
+        .animation(CinemaMotion.gated(.easeOut(duration: 0.25), enabled: motionEnabled), value: skeleton)
         #if os(iOS)
         // Lifted out of `AdminItemMenu` so SwiftUI honors it — the menu's
         // host (`LibraryPosterCard`) lives inside `LazyVGrid`/`LazyHStack`,
@@ -327,6 +336,7 @@ struct MediaLibraryScreen: View {
             if let hero = viewModel.heroItem {
                 LibraryHeroSection(item: hero, itemType: displayKind, heroPlay: viewModel.heroPlay)
                     .padding(.bottom, CinemaSpacing.spacing6)
+                    .contentReveal(step: 0)
             }
 
             ForEach(viewModel.genres.prefix(viewModel.genreLoadLimit), id: \.self) { genre in
@@ -345,11 +355,13 @@ struct MediaLibraryScreen: View {
                     )
                     .cardZoomScope(zoomNamespace, surface: "library.genre.\(genre)")
                     .padding(.bottom, CinemaSpacing.spacing6)
+                    .contentReveal(step: 1)
                     #else
                     LibraryGenreRow(genre: genre, items: items, itemType: displayKind) {
                         viewModel.sortFilter.selectedGenres = [genre]
                     }
                     .padding(.bottom, CinemaSpacing.spacing6)
+                    .contentReveal(step: 1)
                     #endif
                 }
             }

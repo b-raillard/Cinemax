@@ -189,3 +189,74 @@ struct MediaPageSkeleton: View {
     .background(CinemaColor.surface)
 }
 #endif
+
+// MARK: - Content reveal after a skeleton
+
+/// The content that replaces a skeleton (Home, the library) fades in and rises
+/// a few points, block after block. It plays each time the skeleton leaves —
+/// first load and pull-to-refresh alike — and never when content changes in
+/// place: a row arriving later, a lazy row re-created by scrolling, a return to
+/// the tab. The screen notes its skeleton's visibility on a `ContentRevealClock`;
+/// a block animates only if it appears within `window` of the moment the
+/// skeleton left.
+enum ContentReveal {
+    nonisolated static func shouldAnimate(now: Date, revealStartedAt: Date?, window: TimeInterval = 1.0) -> Bool {
+        guard let revealStartedAt else { return false }
+        let elapsed = now.timeIntervalSince(revealStartedAt)
+        return elapsed >= 0 && elapsed < window
+    }
+}
+
+/// When a screen's skeleton last gave way to content. A REFERENCE noted from the
+/// screen's `body` (idempotent: only the visible → hidden edge stamps), so the
+/// stamp exists before any revealed block's `onAppear` runs — whatever order
+/// SwiftUI gives `onChange` and `onAppear` — and writing it re-renders nothing.
+@MainActor
+final class ContentRevealClock {
+    private(set) var startedAt: Date?
+    private var skeletonVisible = false
+
+    func noteSkeleton(visible: Bool, motionEnabled: Bool, now: Date = .now) {
+        if visible {
+            skeletonVisible = true
+        } else if skeletonVisible {
+            skeletonVisible = false
+            startedAt = motionEnabled ? now : nil
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// The screen's reveal clock; `nil` outside a screen that reveals.
+    @Entry var contentRevealClock: ContentRevealClock? = nil
+}
+
+private struct ContentRevealModifier: ViewModifier {
+    let step: Int
+    @Environment(\.contentRevealClock) private var clock
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+    @State private var hidden = false
+    @State private var decided = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(hidden ? 0 : 1)
+            .offset(y: hidden ? 10 : 0)
+            .onAppear {
+                guard !decided else { return }
+                decided = true
+                guard motionEnabled, ContentReveal.shouldAnimate(now: .now, revealStartedAt: clock?.startedAt) else { return }
+                hidden = true
+                let delay = Double(min(step, 3)) * CinemaMotion.revealStagger
+                withAnimation(CinemaMotion.contentReveal.delay(delay)) { hidden = false }
+            }
+    }
+}
+
+extension View {
+    /// Rise-in after a skeleton; `step` orders the stagger (0 = hero). Apply
+    /// to the first screenful only.
+    func contentReveal(step: Int) -> some View {
+        modifier(ContentRevealModifier(step: step))
+    }
+}
