@@ -59,6 +59,9 @@ You don't need to do anything if you use:
 - `.symbolPop(on:)` and `.rollingNumber(_:)` (`FocusScaleModifier.swift`) — key `rollingNumber` on the NUMBER, not the formatted string, where the number is at hand
 - `ProgressBarView` — glides on every value change; `fillsOnAppear: true` only where few bars are on screen
 - `CinemaLazyImage` — fades in on arrival (`fadesIn`, default `true`); Nuke's memory-cache hits never fade. Opted out: `HeroBackdropImage`, the fiche backdrop
+- `ContentRow` (iOS) — edge cards recede (`ScrollMotion.edgeRecede`), on by default; `.edgeRecede(false)` on the cast, Seerr's missing titles and « En direct »
+- `.listSwapSlide(trigger:)` — keyframes on a trigger, never an `.id` swap (the fiche's episode lists, keyed on `MediaDetailViewModel.seasonSwapCount`)
+- The fiche hero (iOS) — parallax and text fade through `.visualEffect` (no per-frame state), the item's name in the bar past the hero (`ScrollMotion`)
 - `.contentReveal(step:)` + `ContentRevealClock` (`SkeletonViews.swift`) — Home and the library: the first blocks rise in each time the skeleton leaves, never on an in-place change
 
 New components must consume `\.motionEffectsEnabled` or take an explicit `animated: Bool` parameter.
