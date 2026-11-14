@@ -57,7 +57,7 @@ You don't need to do anything if you use:
 - `ToastOverlay`
 - `cardZoomDestination(_:)` (`CardZoomTransition.swift`) — the iOS card → fiche zoom falls back to the default push when motion is off
 - `.symbolPop(on:)` and `.rollingNumber(_:)` (`FocusScaleModifier.swift`) — key `rollingNumber` on the NUMBER, not the formatted string, where the number is at hand
-- `ProgressBarView` — glides on every value change; `fillsOnAppear: true` only where few bars are on screen
+- `ProgressBarView` — glides on every value change; with `fillsOnAppear: true` (the « Reprendre » `WideCard`) it fills from empty only inside the screen's skeleton reveal (`ContentRevealClock`), so a card re-created by scrolling never refills
 - `CinemaLazyImage` — fades in on arrival (`fadesIn`, default `true`); Nuke's memory-cache hits never fade. Opted out: `HeroBackdropImage`, the fiche backdrop
 - `ContentRow` (iOS) — edge cards recede (`ScrollMotion.edgeRecede`), on by default; `.edgeRecede(false)` on the cast, Seerr's missing titles and « En direct »
 - `.listSwapSlide(trigger:)` — keyframes on a trigger, never an `.id` swap (the fiche's episode lists, keyed on `MediaDetailViewModel.seasonSwapCount`)
@@ -88,6 +88,7 @@ Added 2026-11-14 (spec `docs/superpowers/specs/2026-11-14-interface-animations-d
 | Token | Value | Used by |
 | --- | --- | --- |
 | `symbolPop` | `.bouncy(duration: 0.45)` | `.symbolPop(on:)` — fiche favourite / watched glyphs |
+| `skeletonFade` | `.easeOut(duration: 0.25)` | skeleton → content / error / empty |
 | `imageFade` | `.easeOut(duration: 0.3)` | artwork arriving |
 | `contentReveal` + `revealStagger` | `.easeOut(duration: 0.45)`, 0.08 s | content rising in after a skeleton |
 | `numeric` | `.snappy(duration: 0.35)` | `.rollingNumber(_:)` — counts, remaining time |

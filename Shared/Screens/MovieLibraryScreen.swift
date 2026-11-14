@@ -103,7 +103,7 @@ struct MediaLibraryScreen: View {
                     .environment(\.contentRevealClock, revealClock)
             }
         }
-        .animation(CinemaMotion.gated(.easeOut(duration: 0.25), enabled: motionEnabled), value: skeleton)
+        .animation(CinemaMotion.gated(CinemaMotion.skeletonFade, enabled: motionEnabled), value: skeleton)
         #if os(iOS)
         // Lifted out of `AdminItemMenu` so SwiftUI honors it — the menu's
         // host (`LibraryPosterCard`) lives inside `LazyVGrid`/`LazyHStack`,

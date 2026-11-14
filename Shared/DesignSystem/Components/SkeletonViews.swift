@@ -205,6 +205,12 @@ enum ContentReveal {
         let elapsed = now.timeIntervalSince(revealStartedAt)
         return elapsed >= 0 && elapsed < window
     }
+
+    /// Whether a block draws hidden. Decided from BODY, so the block's first
+    /// frame is already hidden and `onAppear` can animate a real change.
+    nonisolated static func startsHidden(revealed: Bool, motionEnabled: Bool, now: Date, revealStartedAt: Date?) -> Bool {
+        !revealed && motionEnabled && shouldAnimate(now: now, revealStartedAt: revealStartedAt)
+    }
 }
 
 /// When a screen's skeleton last gave way to content. A REFERENCE noted from the
@@ -242,20 +248,24 @@ private struct ContentRevealModifier: ViewModifier {
     let step: Int
     @Environment(\.contentRevealClock) private var clock
     @Environment(\.motionEffectsEnabled) private var motionEnabled
-    @State private var hidden = false
-    @State private var decided = false
+    @State private var revealed = false
 
     func body(content: Content) -> some View {
+        let hidden = ContentReveal.startsHidden(
+            revealed: revealed, motionEnabled: motionEnabled, now: .now, revealStartedAt: clock?.startedAt
+        )
         content
             .opacity(hidden ? 0 : 1)
             .offset(y: hidden ? 10 : 0)
             .onAppear {
-                guard !decided else { return }
-                decided = true
-                guard motionEnabled, ContentReveal.shouldAnimate(now: .now, revealStartedAt: clock?.startedAt) else { return }
-                hidden = true
-                let delay = Double(min(step, 3)) * CinemaMotion.revealStagger
-                withAnimation(CinemaMotion.contentReveal.delay(delay)) { hidden = false }
+                guard !revealed else { return }
+                if hidden {
+                    // A real false → true change, so SwiftUI animates it.
+                    let delay = Double(min(step, 3)) * CinemaMotion.revealStagger
+                    withAnimation(CinemaMotion.contentReveal.delay(delay)) { revealed = true }
+                } else {
+                    revealed = true
+                }
             }
     }
 }

@@ -1018,6 +1018,18 @@ struct ContentRevealTests {
         #expect(!ContentReveal.shouldAnimate(now: t.addingTimeInterval(1.5), revealStartedAt: t))
     }
 
+    /// The block's FIRST frame must already be hidden, from body: hiding it in
+    /// `onAppear` and un-hiding it in the same tick is a no-op SwiftUI never
+    /// animates (final review 2026-11-14).
+    @Test("a block starts hidden only until it has played, inside the window, motion on")
+    func revealStartsHiddenOnlyBeforeItHasPlayed() {
+        let t = Date(timeIntervalSinceReferenceDate: 1_000)
+        #expect(ContentReveal.startsHidden(revealed: false, motionEnabled: true, now: t.addingTimeInterval(0.1), revealStartedAt: t))
+        #expect(!ContentReveal.startsHidden(revealed: true, motionEnabled: true, now: t.addingTimeInterval(0.1), revealStartedAt: t))
+        #expect(!ContentReveal.startsHidden(revealed: false, motionEnabled: false, now: t.addingTimeInterval(0.1), revealStartedAt: t))
+        #expect(!ContentReveal.startsHidden(revealed: false, motionEnabled: true, now: t.addingTimeInterval(5), revealStartedAt: t))
+    }
+
     @Test("the clock stamps only the skeleton's visible → hidden edge")
     @MainActor
     func clockStampsOnlyTheLeavingEdge() {
