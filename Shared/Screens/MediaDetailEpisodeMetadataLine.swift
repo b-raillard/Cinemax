@@ -39,6 +39,7 @@ struct MediaDetailEpisodeMetadataLine: View {
             Text(parts.joined(separator: " • "))
                 .font(CinemaFont.label(.medium))
                 .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .rollingNumber(episode.userData?.playbackPositionTicks)
         }
 
         // The episode's picture (« 4K · Dolby Vision »), on its own line: a

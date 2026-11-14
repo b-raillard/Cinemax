@@ -108,6 +108,8 @@ struct TVAccessoryActionButton: View {
     /// visible label is the short noun ("Favorite").
     let accessibilityLabel: String
     var isActive: Bool = false
+    /// Favourite / watched: the glyph bounces when `isActive` flips.
+    var pops: Bool = false
     let action: () -> Void
 
     @Environment(ThemeManager.self) private var themeManager
@@ -115,8 +117,11 @@ struct TVAccessoryActionButton: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: CinemaSpacing.spacing1) {
-                Image(systemName: systemImage)
-                    .font(.system(size: CinemaScale.pt(22), weight: .bold))
+                if pops {
+                    glyph.symbolPop(on: isActive)
+                } else {
+                    glyph
+                }
                 Text(label)
                     .font(CinemaFont.label(.medium))
                     .lineLimit(1)
@@ -131,6 +136,11 @@ struct TVAccessoryActionButton: View {
         }
         .buttonStyle(CinemaTVButtonStyle(cinemaStyle: .ghost))
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var glyph: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: CinemaScale.pt(22), weight: .bold))
     }
 }
 #endif

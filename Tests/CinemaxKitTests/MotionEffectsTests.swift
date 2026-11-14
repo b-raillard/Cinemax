@@ -28,4 +28,10 @@ struct MotionEffectsTests {
     func bothOff() {
         #expect(!MotionEffects.isEnabled(appToggle: false, systemReduceMotion: true))
     }
+
+    @Test("CinemaMotion.gated drops the animation when motion is off")
+    func gatedReturnsNilWhenMotionIsOff() {
+        #expect(CinemaMotion.gated(.default, enabled: false) == nil)
+        #expect(CinemaMotion.gated(.default, enabled: true) == .default)
+    }
 }

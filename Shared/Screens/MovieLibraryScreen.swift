@@ -453,6 +453,7 @@ struct MediaLibraryScreen: View {
                     Text(filteredCountLabel)
                         .font(CinemaFont.label(.large))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .rollingNumber(viewModel.displayedTotalCount)
                         .padding(.horizontal, gridPadding)
                     #endif
 
@@ -578,6 +579,7 @@ struct MediaLibraryScreen: View {
                 Text(loc.counted("movies.titles", viewModel.sortFilter.isFiltered ? viewModel.filteredLoader.totalCount : viewModel.totalCount))
                     .font(CinemaFont.label(.large))
                     .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .rollingNumber(viewModel.sortFilter.isFiltered ? viewModel.filteredLoader.totalCount : viewModel.totalCount)
             }
 
             Spacer()
