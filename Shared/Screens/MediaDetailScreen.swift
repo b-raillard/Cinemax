@@ -1918,6 +1918,7 @@ struct MediaDetailScreen: View {
                     }
                 }
             }
+            .listSwapSlide(trigger: viewModel.seasonSwapCount)
             .padding(.horizontal, contentPadding)
             missingEpisodesBlock
             // One owned season: no pill row to append to, so the missing
@@ -1994,6 +1995,7 @@ struct MediaDetailScreen: View {
                     }
                 }
                 .scrollTargetLayout()
+                .listSwapSlide(trigger: viewModel.seasonSwapCount)
                 .padding(.horizontal, contentPadding)
             }
             .scrollTargetBehavior(.viewAligned)

@@ -95,7 +95,45 @@ private struct RollingNumberModifier<Value: Equatable>: ViewModifier {
     }
 }
 
+/// A list whose content was just replaced (a new season's episodes) slides in
+/// from the trailing side while fading in. Keyframes on a trigger, NOT an `.id`
+/// swap: rebuilding the fiche's episode stack by identity once left the whole
+/// tvOS page black with no focus (recettes 2026-11-11 / 12).
+private struct ListSwapSlideModifier<Trigger: Equatable>: ViewModifier {
+    let trigger: Trigger
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+
+    private struct Frame {
+        var offset: CGFloat = 0
+        var opacity: Double = 1
+    }
+
+    func body(content: Content) -> some View {
+        if motionEnabled {
+            content.keyframeAnimator(initialValue: Frame(), trigger: trigger) { view, frame in
+                view.offset(x: frame.offset).opacity(frame.opacity)
+            } keyframes: { _ in
+                KeyframeTrack(\.offset) {
+                    MoveKeyframe(24)
+                    CubicKeyframe(0, duration: 0.34)
+                }
+                KeyframeTrack(\.opacity) {
+                    MoveKeyframe(0)
+                    LinearKeyframe(1, duration: 0.24)
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
 extension View {
+    /// Slide-in of a replaced list, played each time `trigger` changes.
+    func listSwapSlide<Trigger: Equatable>(trigger: Trigger) -> some View {
+        modifier(ListSwapSlideModifier(trigger: trigger))
+    }
+
     /// Bounce + symbol replace when `value` changes (gated by Motion Effects).
     func symbolPop<Value: Equatable>(on value: Value) -> some View {
         modifier(SymbolPopModifier(value: value))
