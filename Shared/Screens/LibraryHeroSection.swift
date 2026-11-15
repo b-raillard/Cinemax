@@ -54,14 +54,14 @@ struct LibraryHeroSection: View {
             #endif
             .overlay {
                 Group {
-                    if item.hasBackdropImage, let id = item.id {
-                        HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
+                    if let url = backdropURL {
+                        HeroBackdropImage(url: url)
                         .accessibilityHidden(true)
                     } else {
                         BackdropFallbackView()
                     }
                 }
-                .heroBackdropBleed()
+                .heroBackdropBleed(clearInLightMode: true)
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroContentSpacing) {
@@ -71,7 +71,7 @@ struct LibraryHeroSection: View {
                         }
                         heroMetadataText
                     }
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .heroMetaStyle()
 
                     Text(item.name ?? "")
 
@@ -99,7 +99,15 @@ struct LibraryHeroSection: View {
                 // the backdrop clips itself, wider than it (`heroBackdropBleed`).
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .clipped()
+                .heroAdaptiveText(backdropURL: backdropURL)
             }
+    }
+
+    /// The hero's backdrop, or nil for the fallback — the one URL both the
+    /// image and its text's tone (`heroAdaptiveText`) read.
+    private var backdropURL: URL? {
+        guard item.hasBackdropImage, let id = item.id else { return nil }
+        return appState.imageBuilder.imageURL(itemId: id, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue)
     }
 
     @ViewBuilder
@@ -155,8 +163,7 @@ struct LibraryHeroSection: View {
                 .padding(.vertical, heroButtonVerticalPadding)
                 .padding(.horizontal, CinemaSpacing.spacing4)
                 #if os(iOS)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                .heroSecondaryButtonBackground()
                 #endif
             }
             #if os(tvOS)
