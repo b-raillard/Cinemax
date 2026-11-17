@@ -163,6 +163,7 @@ final class ServerSetupViewModel {
             return (try await appState.apiClient.connectToServer(url: url), url)
         } catch let httpsError {
             guard !schemeTyped,
+                  Self.allowsPlainHTTPFallback(for: url),
                   let httpURL = Self.plainHTTPFallback(for: url),
                   !Self.presentedCertificate(httpsError, url: url) else { throw httpsError }
             logger.info("https failed for a scheme-less address, retrying over http")
@@ -171,6 +172,20 @@ final class ServerSetupViewModel {
             } catch {
                 throw httpsError
             }
+        }
+    }
+
+    /// Whether a failed scheme-less address may be retried in cleartext: only a
+    /// home-network host — loopback, a private / link-local IP, a `.local`
+    /// name. A public hostname never is: on a hostile network, blocking 443
+    /// would otherwise downgrade the connection silently and send the password
+    /// unencrypted (security review of PR #369). Typing `http://` stays the
+    /// explicit way in. Internal so `ServerSetupViewModelTests` can lock it.
+    static func allowsPlainHTTPFallback(for url: URL) -> Bool {
+        guard let host = url.host(percentEncoded: false)?.lowercased() else { return false }
+        switch LocalNetworkAddress.kind(ofLiteral: host) {
+        case .loopbackIPv4, .loopbackIPv6: return true
+        default: return host == "localhost" || LocalNetworkAddress.isEligibleHost(host)
         }
     }
 

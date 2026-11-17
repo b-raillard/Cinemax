@@ -233,15 +233,15 @@ struct ServerSetupViewModelTests {
 
     @Test("A scheme-less host that PRESENTED a certificate is never retried in cleartext")
     func presentedCertificateNotDowngraded() async {
-        let key = "selfsigned-recette.test:443"
+        let key = "192.168.1.50:443"
         ServerTrustDelegate.shared.recordPending(ServerCertificateSummary(
-            trustKey: key, host: "selfsigned-recette.test", subject: "test", serialNumber: nil, fingerprint: "ab"
+            trustKey: key, host: "192.168.1.50", subject: "test", serialNumber: nil, fingerprint: "ab"
         ))
         defer { ServerTrustDelegate.shared.clearPending(forTrustKey: key) }
         let api = MockAPIClient()
         api.connectHandler = { _ in throw URLError(.serverCertificateUntrusted) }
         let vm = ServerSetupViewModel()
-        vm.serverURL = "selfsigned-recette.test"
+        vm.serverURL = "192.168.1.50"
 
         await vm.connect(using: makeAppState(api: api), loc: LocalizationManager())
 
@@ -254,5 +254,34 @@ struct ServerSetupViewModelTests {
         let https = ServerURLNormalizer.normalize("nas.local:8096/jellyfin")!
         #expect(ServerSetupViewModel.plainHTTPFallback(for: https)?.absoluteString == "http://nas.local:8096/jellyfin")
         #expect(ServerSetupViewModel.plainHTTPFallback(for: URL(string: "http://nas.local")!) == nil)
+    }
+
+    @Test("Only a home-network host may fall back to cleartext")
+    func cleartextFallbackIsHomeNetworkOnly() {
+        let allowed = ["localhost:8096", "127.0.0.1:8096", "[::1]:8096", "192.168.1.10:8096",
+                       "10.0.0.5", "172.20.1.2", "169.254.3.4", "[fd00::1]:8096", "nas.local:8096"]
+        let refused = ["movies.example.net", "jellyfin.example.com:8096", "8.8.8.8:8096",
+                       "100.64.1.1", "local", "example.local.net"]
+        for raw in allowed {
+            #expect(ServerSetupViewModel.allowsPlainHTTPFallback(for: ServerURLNormalizer.normalize(raw)!), "\(raw)")
+        }
+        for raw in refused {
+            #expect(!ServerSetupViewModel.allowsPlainHTTPFallback(for: ServerURLNormalizer.normalize(raw)!), "\(raw)")
+        }
+    }
+
+    @Test("A scheme-less PUBLIC host whose https fails is never retried in cleartext")
+    func publicHostNotDowngraded() async {
+        let api = MockAPIClient()
+        api.connectHandler = { _ in throw URLError(.cannotConnectToHost) }
+        let appState = makeAppState(api: api)
+        let vm = ServerSetupViewModel()
+        vm.serverURL = "movies.example.net"
+
+        await vm.connect(using: appState, loc: LocalizationManager())
+
+        #expect(api.connectedURLs.map(\.absoluteString) == ["https://movies.example.net"])
+        #expect(vm.errorMessage == LocalizationManager().localized("server.connectFailed"))
+        #expect(!appState.hasServer)
     }
 }
