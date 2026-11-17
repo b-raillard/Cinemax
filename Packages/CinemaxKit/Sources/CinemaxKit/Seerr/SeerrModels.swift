@@ -120,6 +120,9 @@ public struct SeerrPermissions: OptionSet, Sendable, Equatable, Hashable, Decoda
     }
 
     public var canManageRequests: Bool { allows(.manageRequests) }
+    /// May ask for at least films or series (Seerr 3.5.1's `MediaRequest`
+    /// checks `REQUEST` or the kind's own `REQUEST_MOVIE` / `REQUEST_TV`).
+    public var canRequest: Bool { allows(.request) || contains(.requestMovie) || contains(.requestTV) }
     /// May report a problem on a title (`POST /issue` asks for one of the two,
     /// read in Seerr 3.5.1's issue route).
     public var canReportIssues: Bool { allows(.createIssues) || contains(.manageIssues) }

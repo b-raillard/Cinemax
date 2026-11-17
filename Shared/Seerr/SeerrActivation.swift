@@ -97,6 +97,51 @@ enum SeerrIssueReportAccess: Equatable, Sendable {
     }
 }
 
+extension SeerrUserLineKind {
+    /// What « Synchroniser depuis Seerr » makes of the line (owner
+    /// 2026-11-17): on when Seerr lets the user request, off when it does not
+    /// (or does not know them and will not create them; a capped account is
+    /// never on), and `nil` — left as it is — when Seerr says nothing: it will
+    /// create the user at first sign-in with rights not known here, or the
+    /// lookup failed.
+    nonisolated var syncTarget: Bool? {
+        switch self {
+        case .linked(let user): user.permissions.canRequest
+        case .mustBeAdded, .ageCapped: false
+        case .willBeCreated, .unknown: nil
+        }
+    }
+}
+
+/// Who « Synchroniser depuis Seerr » switched on, off, left alone or could
+/// not write, by name.
+struct SeerrSyncOutcome: Equatable, Sendable {
+    var enabled: [String] = []
+    var disabled: [String] = []
+    var unchanged: [String] = []
+    var failed: [String] = []
+    /// The users or Seerr could not be read: nothing was written.
+    var unreachable = false
+
+    /// « Synchronisé avec Seerr : 2 activés, 1 désactivé. Inchangé pour Eve :
+    /// Seerr n'a pas donné ses droits. »
+    @MainActor
+    func summary(loc: LocalizationManager) -> String {
+        if unreachable { return loc.localized("seerr.sync.unreachable") }
+        var parts: [String] = []
+        var counts: [String] = []
+        if !enabled.isEmpty { counts.append(loc.counted("seerr.sync.enabled", enabled.count)) }
+        if !disabled.isEmpty { counts.append(loc.counted("seerr.sync.disabled", disabled.count)) }
+        parts.append(counts.isEmpty
+            ? loc.localized("seerr.sync.nothing")
+            : loc.localized("seerr.sync.done", counts.joined(separator: ", ")))
+        for (key, names) in [("seerr.sync.unchanged", unchanged), ("seerr.sync.failed", failed)] where !names.isEmpty {
+            parts.append(loc.localized(loc.pluralKey(key, names.count), names.joined(separator: ", ")))
+        }
+        return parts.joined(separator: " ")
+    }
+}
+
 struct SeerrUserLine: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
@@ -127,6 +172,9 @@ final class SeerrActivationModel {
     /// must not put it back on screen.
     @ObservationIgnored private var recordCount = 0
     @ObservationIgnored private var recordedAt: [String: Int] = [:]
+    /// Set by the admin's FIRST address: the next load that reads Seerr
+    /// switches on every profile Seerr already lets request (`load`).
+    @ObservationIgnored private var enablesRequestersOnNextLoad = false
 
     private enum Lookup: Sendable {
         case skipped
@@ -222,7 +270,33 @@ final class SeerrActivationModel {
             built[index].isEnabled = shown.isEnabled && built[index].kind != .ageCapped
         }
         lines = built
+        if enablesRequestersOnNextLoad, hasCredential {
+            enablesRequestersOnNextLoad = false
+            await enableRequesters(appState: appState)
+        }
         return true
+    }
+
+    /// The first connection (owner 2026-11-17): every profile Seerr already
+    /// lets request is switched on — the lines have just read Seerr with the
+    /// new address. Unknown to Seerr, without the right, or capped by age
+    /// (never `.linked`) ⇒ left off. A failed write leaves that line off; the
+    /// admin sees it there.
+    private func enableRequesters(appState: AppState) async {
+        guard let target = address else { return }
+        let scope = Scope(appState)
+        for line in lines where !line.isEnabled && line.kind.syncTarget == true {
+            do {
+                try await write(userId: line.id, appState: appState, scope: scope) { _ in
+                    SeerrUserConfig(isEnabled: true, url: target)
+                }
+                record(line.id, enabled: true)
+            } catch is CancellationError {
+                return
+            } catch {
+                logger.notice("Seerr ▸ first-connection activation write failed")
+            }
+        }
     }
 
     nonisolated private static func lookupAuth(_ credential: SeerrCredential) -> SeerrLookupAuth {
@@ -309,6 +383,44 @@ final class SeerrActivationModel {
         return nil
     }
 
+    /// « Synchroniser depuis Seerr » (owner 2026-11-17): the lines are read
+    /// again — Seerr's rights as they are now — then every switch Seerr has a
+    /// word on takes it (`SeerrUserLineKind.syncTarget`), overwriting what was
+    /// set here; the rest is left alone and named. No Seerr credential, or the
+    /// users unreadable ⇒ nothing is written.
+    func syncFromSeerr(appState: AppState, session: SeerrSession) async -> SeerrSyncOutcome {
+        guard session.credential() != nil,
+              await load(appState: appState, session: session) else { return SeerrSyncOutcome(unreachable: true) }
+        let scope = Scope(appState)
+        let target = address
+        var outcome = SeerrSyncOutcome()
+        for line in lines {
+            guard let on = line.kind.syncTarget else {
+                outcome.unchanged.append(line.name)
+                continue
+            }
+            guard on != line.isEnabled else { continue }
+            guard !on || target != nil else {
+                outcome.failed.append(line.name)
+                continue
+            }
+            do {
+                try await write(userId: line.id, appState: appState, scope: scope) { existing in
+                    // Off keeps the address already stored, as `setEnabled` does.
+                    SeerrUserConfig(isEnabled: on, url: on ? target : existing.url)
+                }
+                if appState.activeAccountKey == scope.account { record(line.id, enabled: on) }
+                if on { outcome.enabled.append(line.name) } else { outcome.disabled.append(line.name) }
+            } catch is CancellationError {
+                return outcome
+            } catch {
+                logger.notice("Seerr ▸ sync write failed")
+                outcome.failed.append(line.name)
+            }
+        }
+        return outcome
+    }
+
     /// Enables everyone who can be; returns the sentence summarising it.
     func enableAll(appState: AppState, loc: LocalizationManager) async -> String {
         let scope = Scope(appState)
@@ -350,9 +462,20 @@ final class SeerrActivationModel {
     /// The admin changed the Seerr address: the admin's own entity and every
     /// enabled user's carry it from now on. A disabled user is left alone. The
     /// remembered address only moves once the admin's own write succeeded.
+    ///
+    /// The FIRST address (the admin's entity held none) also switches the
+    /// admin's own « Peut demander » on — unless the server caps them by age —
+    /// and, at the next load, every profile Seerr lets request
+    /// (`enableRequesters`): connecting Seerr used to leave every profile off,
+    /// the admin who had just set it up included, who then saw nothing of it
+    /// (recette 2026-11-17). A later change of address switches nobody.
     func setAddress(_ url: URL, appState: AppState, loc: LocalizationManager) async -> String? {
         let scope = Scope(appState)
         let adminId = appState.currentUserId
+        // Unknown policy = capped (fail closed); only the SERVER cap, as the lines read it.
+        let adminPolicy = appState.currentUser?.id == adminId ? appState.currentUser?.policy : nil
+        let adminMayBeEnabled = adminPolicy.map { $0.maxParentalRating == nil } ?? false
+        var adminSwitchedOn = false
         var targets: [(id: String, name: String)] = []
         if let adminId {
             // The lines may not be loaded yet: the admin is the signed-in user.
@@ -363,10 +486,18 @@ final class SeerrActivationModel {
         var adminWritten = false
         for target in targets {
             do {
-                try await write(userId: target.id, appState: appState, scope: scope) {
-                    SeerrUserConfig(isEnabled: $0.isEnabled, url: url)
+                let isAdmin = target.id == adminId
+                var turnsOn = false
+                var firstAddress = false
+                try await write(userId: target.id, appState: appState, scope: scope) { existing in
+                    firstAddress = isAdmin && existing.url == nil
+                    turnsOn = firstAddress && adminMayBeEnabled && !existing.isEnabled
+                    return SeerrUserConfig(isEnabled: existing.isEnabled || turnsOn, url: url)
                 }
-                if target.id == adminId { adminWritten = true }
+                // Only once the write landed.
+                if turnsOn { adminSwitchedOn = true }
+                if isAdmin, firstAddress { enablesRequestersOnNextLoad = true }
+                if isAdmin { adminWritten = true }
             } catch is CancellationError {
                 return nil
             } catch {
@@ -375,6 +506,7 @@ final class SeerrActivationModel {
             }
         }
         if adminWritten { address = url }
+        if adminSwitchedOn, let adminId, appState.activeAccountKey == scope.account { record(adminId, enabled: true) }
         return Self.failureSentence("seerr.activation.summary.addressFailed", failed, loc)
     }
 

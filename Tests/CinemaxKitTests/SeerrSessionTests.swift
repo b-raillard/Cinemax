@@ -1897,14 +1897,15 @@ private struct ActivationWorld {
 private func activationWorld(
     users: [UserDto], enabled: Set<String> = [], lookups: [String: StubSeerrTransport.Reply] = [:],
     credentialed: Bool = true, publicSettings: StubSeerrTransport.Reply = settingsReply,
-    extraRoutes: [String: [StubSeerrTransport.Reply]] = [:]
+    extraRoutes: [String: [StubSeerrTransport.Reply]] = [:],
+    adminHasAddress: Bool = true
 ) async -> ActivationWorld {
     let api = MockAPIClient()
     api.stubbedUsers = users
     for user in users {
         guard let id = user.id else { continue }
         let on = enabled.contains(id)
-        if on || id == "ADMIN" {
+        if on || (id == "ADMIN" && adminHasAddress) {
             api.displayPreferences[prefsKey(for: id)] = SeerrUserConfig.merged(
                 SeerrUserConfig(isEnabled: on, url: seerrURL), into: nil)
         }
@@ -2051,6 +2052,146 @@ struct SeerrActivationTests {
         #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: true, url: otherSeerrURL))
         #expect(world.writes(for: "BOB").isEmpty)
         #expect(world.api.updateDisplayPreferencesCalls.count == 2)
+    }
+
+    /// Recette 2026-11-17 (a colleague's server): connecting Seerr left every
+    /// profile off, the admin's own included, so the admin who had just set
+    /// it up saw nothing of it. The FIRST address switches the admin on.
+    @Test("the admin's first address also switches the admin on")
+    func firstAddressEnablesTheAdmin() async {
+        let world = await activationWorld(
+            users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply],
+            adminHasAddress: false)
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+
+        #expect(message == nil)
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: true, url: otherSeerrURL))
+        #expect(world.model.lines.first { $0.id == "ADMIN" }?.isEnabled == true)
+        #expect(world.writes(for: "ANN").isEmpty)
+    }
+
+    /// Owner 2026-11-17: at the FIRST connection, every profile Seerr already
+    /// lets request is switched on with the admin. Unknown to Seerr, without
+    /// the right, or capped by age ⇒ left off. Done once the lines have read
+    /// Seerr with the new address (the load right after the save).
+    @Test("the first connection switches on whoever Seerr lets request")
+    func firstConnectionEnablesRequesters() async {
+        let cara = jellyfinUser("CARA", "Cara")
+        let movieOnly = #"{"id":11,"permissions":262144,"jellyfinUserId":"CARA","displayName":"Cara"}"#
+        let dan = jellyfinUser("DAN", "Dan")
+        let noRight = #"{"id":12,"permissions":0,"jellyfinUserId":"DAN","displayName":"Dan"}"#
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser, cara, dan, tom],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(), "BOB": notFoundReply,
+                      "CARA": userReply(movieOnly), "DAN": userReply(noRight), "TOM": userReply()],
+            adminHasAddress: false)
+
+        _ = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+        #expect(await world.model.load(appState: world.app, session: world.session))
+
+        for id in ["ADMIN", "ANN", "CARA"] {
+            #expect(world.stored(id) == SeerrUserConfig(isEnabled: true, url: otherSeerrURL), "\(id)")
+        }
+        for id in ["BOB", "DAN", "TOM"] { #expect(world.writes(for: id).isEmpty, "\(id)") }
+        #expect(world.model.lines.filter(\.isEnabled).map(\.id) == ["ADMIN", "ANN", "CARA"])
+
+        // Once only: a later load switches nobody back on.
+        _ = await world.model.setEnabled(false, userId: "ANN", appState: world.app, loc: world.loc)
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.stored("ANN").isEnabled == false)
+    }
+
+    @Test("a change of address switches no requester on")
+    func addressChangeEnablesNoRequester() async {
+        let world = await activationWorld(
+            users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()])
+
+        _ = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+        await world.model.load(appState: world.app, session: world.session)
+
+        #expect(world.writes(for: "ANN").isEmpty)
+        #expect(world.stored("ADMIN").isEnabled == false)
+    }
+
+    /// « Synchroniser depuis Seerr » (owner 2026-11-17): our switch takes
+    /// what Seerr says. Seerr says nothing for a user it will create at first
+    /// sign-in, or when the lookup failed: those are left as they are.
+    @Test("what Seerr says about each line: on, off, or nothing")
+    func syncTarget() {
+        let requester = SeerrUser(id: SeerrUserID(rawValue: 3), permissions: .request, jellyfinUserId: "X", displayName: "X")
+        let noRight = SeerrUser(id: SeerrUserID(rawValue: 4), permissions: SeerrPermissions(rawValue: 0), jellyfinUserId: "Y", displayName: "Y")
+        #expect(SeerrUserLineKind.linked(requester).syncTarget == true)
+        #expect(SeerrUserLineKind.linked(noRight).syncTarget == false)
+        #expect(SeerrUserLineKind.mustBeAdded.syncTarget == false)
+        #expect(SeerrUserLineKind.ageCapped.syncTarget == false)
+        #expect(SeerrUserLineKind.willBeCreated.syncTarget == nil)
+        #expect(SeerrUserLineKind.unknown.syncTarget == nil)
+    }
+
+    @Test("syncing from Seerr overwrites the switches with Seerr's rights, re-read first")
+    func syncFromSeerrOverwrites() async {
+        let cara = jellyfinUser("CARA", "Cara")
+        let eve = jellyfinUser("EVE", "Eve")
+        let noRight = #"{"id":12,"permissions":0,"jellyfinUserId":"ANN","displayName":"Ann"}"#
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser, cara, eve, tom], enabled: ["ANN", "CARA", "EVE"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(noRight), "BOB": userReply(bobJSON),
+                      "CARA": notFoundReply, "EVE": .failure(URLError(.timedOut))])
+
+        let outcome = await world.model.syncFromSeerr(appState: world.app, session: world.session)
+
+        #expect(outcome == SeerrSyncOutcome(enabled: ["Admin", "Bob"], disabled: ["Ann", "Cara"], unchanged: ["Eve"]))
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: true, url: seerrURL))
+        #expect(world.stored("BOB") == SeerrUserConfig(isEnabled: true, url: seerrURL))
+        #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+        #expect(world.stored("CARA") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+        #expect(world.writes(for: "EVE").isEmpty)
+        #expect(world.writes(for: "TOM").isEmpty)
+        #expect(world.model.lines.filter(\.isEnabled).map(\.id) == ["ADMIN", "BOB", "EVE"])
+    }
+
+    @Test("syncing when the users cannot be read changes nothing and says so")
+    func syncFromSeerrUnreadable() async {
+        let world = await activationWorld(users: [adminUser, ann], enabled: ["ANN"], lookups: ["ADMIN": userReply(adminJSON)])
+        world.api.getUsersError = URLError(.timedOut)
+
+        let outcome = await world.model.syncFromSeerr(appState: world.app, session: world.session)
+
+        #expect(outcome == SeerrSyncOutcome(unreachable: true))
+        #expect(world.api.updateDisplayPreferencesCalls.isEmpty)
+    }
+
+    @Test("the sync's summary names who moved and who was left alone")
+    func syncSummary() {
+        let loc = LocalizationManager()
+        let text = SeerrSyncOutcome(enabled: ["Bob"], disabled: ["Ann", "Cara"], unchanged: ["Eve"]).summary(loc: loc)
+        #expect(text.contains(loc.counted("seerr.sync.enabled", 1)))
+        #expect(text.contains(loc.counted("seerr.sync.disabled", 2)))
+        #expect(text.contains("Eve"))
+        #expect(SeerrSyncOutcome().summary(loc: loc) == loc.localized("seerr.sync.nothing"))
+        #expect(SeerrSyncOutcome(unreachable: true).summary(loc: loc) == loc.localized("seerr.sync.unreachable"))
+    }
+
+    @Test("may request: the general right, or films or series alone; an admin always")
+    func canRequest() {
+        #expect(SeerrPermissions(rawValue: 32).canRequest)
+        #expect(SeerrPermissions(rawValue: 262144).canRequest)
+        #expect(SeerrPermissions(rawValue: 524288).canRequest)
+        #expect(SeerrPermissions.admin.canRequest)
+        #expect(!SeerrPermissions(rawValue: 0).canRequest)
+        #expect(!SeerrPermissions.manageIssues.canRequest)
+    }
+
+    @Test("a server-capped admin is not switched on by the first address")
+    func firstAddressLeavesACappedAdminOff() async {
+        let world = await activationWorld(users: [adminUser], lookups: ["ADMIN": userReply(adminJSON)], adminHasAddress: false)
+        world.app.currentUser?.policy = policy(maxRating: 10)
+
+        _ = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: false, url: otherSeerrURL))
     }
 
     @Test("a load whose users did not answer says so, and the next one fills the lines")

@@ -79,6 +79,8 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
     @State private var isTesting = false
     @State private var isSigningIn = false
     @State private var isBulkUpdating = false
+    /// « Synchroniser depuis Seerr » is running: its row shows the spinner.
+    @State private var isSyncing = false
     @State private var isLoadingLines = false
     /// The account page open on top of the list (proposal B, 2026-11-08).
     /// iOS pushes it; tvOS draws it in place of the page, its user id held by
@@ -91,6 +93,7 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
     /// from the Keychain on appear and after each change, never per render.
     @State private var storedKeyOrigin: URL?
     @State private var showsDisableAllConfirm = false
+    @State private var showsSyncConfirm = false
     /// The pending request « Refuser » was pressed on, waiting for the
     /// confirmation (recette Q1): a refusal cannot be taken back here.
     @State private var declineCandidate: SeerrRequestRow?
@@ -670,6 +673,16 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
                 Button(loc.localized("action.cancel"), role: .cancel) {}
             } message: {
                 Text(loc.localized("seerr.settings.disableAll.confirm"))
+            }
+            .alert(loc.localized("seerr.settings.syncFromSeerr"),
+                   isPresented: Binding(get: { isActive && showsSyncConfirm },
+                                        set: { if !$0 { showsSyncConfirm = false } })) {
+                Button(loc.localized("seerr.settings.syncFromSeerr.action")) {
+                    Task { await syncFromSeerr() }
+                }
+                Button(loc.localized("action.cancel"), role: .cancel) {}
+            } message: {
+                Text(loc.localized("seerr.settings.syncFromSeerr.confirm"))
             }
             .alert(declineCandidate.map { loc.localized("seerr.pending.decline.confirm", requestTitle($0)) } ?? "",
                    isPresented: Binding(get: { isActive && declineCandidate != nil },
@@ -1469,6 +1482,14 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
                     showsDisableAllConfirm = true
                 }
                 .disabled(busy(isBulkUpdating) || activation.enabledCount == 0)
+                divider
+                // Seerr's rights overwrite the switches: asked first.
+                actionRow(id: "seerr.syncFromSeerr", icon: "arrow.triangle.2.circlepath",
+                          label: loc.localized("seerr.settings.syncFromSeerr"), isBusy: isSyncing) {
+                    guard !isBulkUpdating else { return }
+                    showsSyncConfirm = true
+                }
+                .disabled(busy(isBulkUpdating) || seerr.credential() == nil)
             }
         }
 
@@ -1783,6 +1804,26 @@ struct RequestsSettingsScreen: View, SeerrSettingsChrome {
         let summary = await activation.enableAll(appState: appState, loc: loc)
         let everyoneOn = activation.lines.allSatisfy(\.isEnabled)
         if everyoneOn { toasts.success(summary) } else { toasts.info(summary) }
+        await seerr.reload(appState: appState)
+    }
+
+    private func syncFromSeerr() async {
+        guard !isBulkUpdating else { return }
+        isBulkUpdating = true
+        isSyncing = true
+        defer {
+            isBulkUpdating = false
+            isSyncing = false
+        }
+        let outcome = await activation.syncFromSeerr(appState: appState, session: seerr)
+        let summary = outcome.summary(loc: loc)
+        if outcome.unreachable || !outcome.failed.isEmpty {
+            toasts.error(summary)
+        } else if outcome.unchanged.isEmpty {
+            toasts.success(summary)
+        } else {
+            toasts.info(summary)
+        }
         await seerr.reload(appState: appState)
     }
 
