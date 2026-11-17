@@ -198,25 +198,36 @@ extension View {
     /// phones — a closed Duo in portrait (regular height) kept a column that
     /// could not scroll under the keyboard (M3-17) — and switched the view's
     /// IDENTITY on rotation, destroying the fields' `@FocusState` (M3-07).
-    func preAuthScroll(isShort: Bool) -> some View {
-        modifier(PreAuthScroll(isShort: isShort))
+    ///
+    /// `revealing` names a child `.id` to scroll to the middle of the visible
+    /// area whenever it becomes non-nil — the focused field, so a keyboard
+    /// that is already up never hides the one being typed into.
+    func preAuthScroll(isShort: Bool, revealing target: String? = nil) -> some View {
+        modifier(PreAuthScroll(isShort: isShort, revealing: target))
     }
 }
 
 private struct PreAuthScroll: ViewModifier {
     let isShort: Bool
+    let revealing: String?
     @State private var viewportHeight: CGFloat = 0
 
     func body(content: Content) -> some View {
-        ScrollView {
-            content
-                .padding(.top, isShort ? CinemaSpacing.spacing3 : 0)
-                .frame(maxWidth: .infinity, minHeight: viewportHeight)
+        ScrollViewReader { proxy in
+            ScrollView {
+                content
+                    .padding(.top, isShort ? CinemaSpacing.spacing3 : 0)
+                    .frame(maxWidth: .infinity, minHeight: viewportHeight)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            #if os(iOS)
+            .scrollDismissesKeyboard(.interactively)
+            #endif
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+            .onChange(of: revealing) { _, target in
+                guard let target else { return }
+                withAnimation { proxy.scrollTo(target, anchor: .center) }
+            }
         }
-        .scrollBounceBehavior(.basedOnSize)
-        #if os(iOS)
-        .scrollDismissesKeyboard(.interactively)
-        #endif
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
     }
 }
