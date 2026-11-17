@@ -35,6 +35,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>JGCompilationConditions</key>
+	<string>$(SWIFT_ACTIVE_COMPILATION_CONDITIONS)</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsForMedia</key>
@@ -45,7 +47,7 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>Cinemax can use Face ID to unlock the parental controls instead of typing your PIN.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Cinemax uses your local network to automatically discover Jellyfin servers running on your Wi-Fi.</string>
+	<string>JellyGlass uses your local network to find Jellyfin servers on your Wi-Fi and connect to them directly at home.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Cinemax uses the microphone for voice search.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

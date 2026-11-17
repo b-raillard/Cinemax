@@ -15,6 +15,12 @@ struct MainTabView: View {
     @Environment(SeasonalThemeController.self) private var seasonal
     @Environment(EntitlementStore.self) private var entitlements
     @Environment(EarlyAdopterService.self) private var earlyAdopter
+    /// The root-hosted flows the deep-link modal hosts itself while it is up
+    /// (`deepLinkDetail`, `PresentationHost`).
+    @Environment(AddToPlaylistPresenter.self) private var playlists
+    @Environment(SeerrRequestPresenter.self) private var seerrRequests
+    @Environment(SeerrSession.self) private var seerr
+    @Environment(ToastCenter.self) private var toasts
     @State private var selectedTabID: String = "home"
     /// Deep-link item to present modally from the tab root when the user's
     /// custom menu has no Home tab to route through (see the deep-link
@@ -56,7 +62,6 @@ struct MainTabView: View {
     @State private var topBarHasFocus = false
     @State private var showWhoIsWatching = false
     @Environment(\.motionEffectsEnabled) private var motionEffects
-    @Environment(ToastCenter.self) private var toasts
     @Environment(AccountLockStore.self) private var accountLocks
     @Environment(ParentalLockController.self) private var parentalLock
     @Environment(ProStore.self) private var proStore
@@ -127,6 +132,14 @@ struct MainTabView: View {
             iOSTabLayout(tabs: menuConfig.resolvedTabs)
             #endif
         }
+        // The bubble's identity came back (online again, signed in, Pro or
+        // the age cap lifted): its count was forgotten with it — read it now,
+        // not at the next return to the foreground.
+        // Either half: a manager of reports who manages no request has a
+        // bubble too.
+        .task(id: seerr.badgeEligibility) {
+            if seerr.badgeEligibility.contains(true) { await seerr.refreshBadgeCounts() }
+        }
         // **RULE — an item deep link has ONE route, and it is this modal.**
         // Widget poster, Top Shelf selection, App Intent, inbound « Lire sur… »,
         // Watch Together join: every one of them presents `MediaDetailScreen`
@@ -189,6 +202,13 @@ struct MainTabView: View {
             deepLinkDetail(target)
         }
         #endif
+        // The root-hosted flows stand down while the modal is up, told by
+        // ASSIGNMENT from the one source of truth (`initial`: a remount never
+        // inherits a modal that is gone) — see `deepLinkDetail`.
+        .onChange(of: deepLinkFallback, initial: true) { _, target in
+            playlists.modalChanged(isUp: target != nil)
+            seerrRequests.modalChanged(isUp: target != nil)
+        }
         #if os(tvOS)
         .onAppear {
             // Initial seed — without this the bar is empty for one frame.
@@ -240,6 +260,13 @@ struct MainTabView: View {
     /// `NavigationStack` so cast / episode pushes work; the tvOS coordinator
     /// environment is re-injected because the cover renders outside the tab
     /// content that carries it.
+    ///
+    /// The playlist sheet and the Seerr request are hosted at the app's root,
+    /// which cannot present over this modal: on tvOS the root's dialog tore
+    /// this fiche down and came up over Accueil. While the modal is up it
+    /// hosts both itself (`host: .modal`) and the root stands down
+    /// (`PresentationHost`, told from `deepLinkFallback`) — one presentation
+    /// context at a time, one presenter.
     @ViewBuilder
     private func deepLinkDetail(_ target: DeepLinkFallback) -> some View {
         NavigationStack {
@@ -260,6 +287,12 @@ struct MainTabView: View {
                 }
             #endif
         }
+        .modifier(AddToPlaylistPresentation(
+            presenter: playlists, appState: appState, themeManager: themeManager, loc: loc, toast: toasts,
+            host: .modal))
+        .modifier(SeerrRequestPresentation(
+            presenter: seerrRequests, session: seerr, appState: appState, themeManager: themeManager,
+            loc: loc, toasts: toasts, host: .modal))
         #if os(tvOS)
         .environment(playerCoordinator)
         .onExitCommand { deepLinkFallback = nil }
@@ -295,7 +328,7 @@ struct MainTabView: View {
                     // right tab.
                     .environment(\.tvTabID, tab.id)
                 } label: {
-                    Label(tab.displayTitle(loc), systemImage: tab.icon)
+                    Label(tvTabTitle(tab), systemImage: tab.icon)
                         // The tab bar sets no font of its own, so it is
                         // the one surface that really collapses at the
                         // largest sizes — see `CinemaDynamicType`.
@@ -303,6 +336,11 @@ struct MainTabView: View {
                 }
             }
         }
+        // tvOS has no SwiftUI `.badge`: the value goes on the bar's item.
+        .background(TabBarBadgeTint(color: UIColor(themeManager.accentContainer),
+                                    ink: UIColor(themeManager.onAccentContainer),
+                                    label: settingsBadge,
+                                    itemIndex: tabs.firstIndex { $0.destination == .settings }))
         // Multi-account: the account avatar left of the bar (TV-10). Always
         // shown (recette 2026-10-21), but focusable only while focus is in the
         // bar: a left press from the first tab reaches it, and a page never
@@ -344,6 +382,14 @@ struct MainTabView: View {
     /// like iOS: a pushed page (a fiche) hides the tab bar, so the avatar was
     /// drawn there with nothing that could reach it (user, 2026-10-25) — Menu
     /// goes back to the root, where it is.
+    /// The tvOS bar draws its badge OVER the end of the title (measured on
+    /// the tvOS 27.2 simulator: « Réglage① »); trailing spaces make room for it.
+    private func tvTabTitle(_ tab: ResolvedTab) -> String {
+        let title = tab.displayTitle(loc)
+        guard tab.destination == .settings, let settingsBadge else { return title }
+        return title + String(repeating: "\u{2002}", count: settingsBadge.count + 1)
+    }
+
     private var showsTVAccountAvatar: Bool {
         appState.isAuthenticated && !tvBack.canGoBack(in: selectedTabID)
     }
@@ -385,13 +431,29 @@ struct MainTabView: View {
                         // largest sizes — see `CinemaDynamicType`.
                         .layoutBoundDynamicType()
                 }
+                .badge(badge(for: tab))
             }
         }
+        .background(TabBarBadgeTint(color: UIColor(themeManager.accentContainer),
+                                    ink: UIColor(themeManager.onAccentContainer),
+                                    label: settingsBadge))
         .tabViewStyle(.sidebarAdaptable)
         .tint(themeManager.accentContainer)
         .sensoryFeedback(.selection, trigger: selectedTabID)
     }
     #endif
+
+    // MARK: - Requests waiting + reports open (Seerr managers)
+
+    /// « 3 », « 99+ », or nothing — the Réglages tab's bubble.
+    private var settingsBadge: String? {
+        SeerrPendingModel.badgeLabel(seerr.settingsBadgeCount)
+    }
+
+    private func badge(for tab: ResolvedTab) -> Text? {
+        guard tab.destination == .settings, let settingsBadge else { return nil }
+        return Text(settingsBadge)
+    }
 
     // MARK: - Destination dispatch
 
@@ -423,4 +485,88 @@ struct MainTabView: View {
             LibraryFolderBrowseScreen(source: isPlaylist ? .playlists : .parent(id), title: name, isPlaylist: isPlaylist)
         }
     }
+}
+
+// MARK: - Tab badge colour
+
+/// Paints the tab bar's badges in the accent instead of the system red. SwiftUI
+/// offers no colour for `.badge`, and `UITabBarItem.appearance()` is ignored by
+/// the iOS 27 bar (measured on the simulator, 2026-11-08): the colour has to be
+/// set on the bar's own items, found from the window. Re-applied whenever the
+/// colour or the label changes.
+private struct TabBarBadgeTint: UIViewRepresentable {
+    let color: UIColor
+    let ink: UIColor
+    let label: String?
+    /// tvOS only: the item that carries `label` itself (no SwiftUI `.badge`
+    /// there). `nil` on iOS, where `.badge` sets the value.
+    var itemIndex: Int?
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        view.isHidden = true
+        return view
+    }
+
+    func updateUIView(_ view: UIView, context: Context) {
+        let color = color, ink = ink, label = label, itemIndex = itemIndex
+        // After SwiftUI has pushed this pass's badge values to the items.
+        DispatchQueue.main.async {
+            guard let root = view.window?.rootViewController else { return }
+            #if os(iOS)
+            if let window = view.window { Self.paintFloatingBadges(in: window, color: color, ink: ink) }
+            #endif
+            for controller in Self.tabBarControllers(from: root) {
+                if let itemIndex, let items = controller.tabBar.items, items.indices.contains(itemIndex) {
+                    for (index, item) in items.enumerated() {
+                        item.badgeValue = index == itemIndex ? label : nil
+                    }
+                    controller.tabBar.setNeedsLayout()
+                    controller.tabBar.layoutIfNeeded()
+                }
+                Self.paint(controller, color: color, ink: ink)
+            }
+        }
+    }
+
+    private static func tabBarControllers(from root: UIViewController) -> [UITabBarController] {
+        var found: [UITabBarController] = []
+        var stack = [root]
+        while let next = stack.popLast() {
+            if let tabs = next as? UITabBarController { found.append(tabs) }
+            stack.append(contentsOf: next.children)
+            if let presented = next.presentedViewController { stack.append(presented) }
+        }
+        return found
+    }
+
+    private static func paint(_ controller: UITabBarController, color: UIColor, ink: UIColor) {
+        let items = (controller.tabBar.items ?? []) + (controller.viewControllers ?? []).map(\.tabBarItem)
+        for item in items {
+            item.badgeColor = color
+            item.setBadgeTextAttributes([.foregroundColor: ink], for: .normal)
+        }
+    }
+
+    #if os(iOS)
+    /// The iPad's floating tab bar (iPadOS 18+) draws its badge as a view of
+    /// its own, painted system red, that reads neither the item's colour nor
+    /// the bar's appearance (measured on the iPadOS 27.2 simulator: a
+    /// `_UIBarBadgeView` inside `_UIFloatingTabBarItemView`). Found by class
+    /// name and given the colour through public `UIView` properties only; if
+    /// UIKit renames it, the badge simply stays red.
+    private static func paintFloatingBadges(in root: UIView, color: UIColor, ink: UIColor) {
+        var stack = [root]
+        while let next = stack.popLast() {
+            if String(describing: type(of: next)).contains("BarBadgeView"),
+               let parent = next.superview, String(describing: type(of: parent)).contains("FloatingTabBar") {
+                next.backgroundColor = color
+                for case let label as UILabel in next.subviews { label.textColor = ink }
+            }
+            stack.append(contentsOf: next.subviews)
+        }
+    }
+
+    #endif
 }

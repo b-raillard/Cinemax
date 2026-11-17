@@ -30,6 +30,10 @@ import Foundation
 /// - `ApiKey%3D` / `api_key%3D` / `token%3D` — the same query items once
 ///   percent-encoded inside another URL (a redirect target, a `url=` parameter);
 ///   `%` ends such a value, a token never containing one (audit 2026-09-22, S11).
+/// - `X-Api-Key:` / `connect.sid=` / `connect.sid%3D` / `secret=` / `secret%3D` —
+///   Seerr: its API key header, its session cookie, the Quick Connect secret.
+///   A cookie is `s%3A<sid>.<signature>`, the `%` INSIDE the value, so for the
+///   `connect.sid` markers (`percentTolerantMarkers`) a `%` does not end it.
 ///
 /// A value opening with a quote runs to the matching quote (`Token="abc"` →
 /// `Token="***"`); otherwise it runs to the first `valueTerminators` character.
@@ -57,10 +61,11 @@ enum LogScrubber {
             result += "***"
             let value = rest[valueStart...]
             let end: Substring.Index
+            let tolerant = percentTolerantMarkers.contains { rest[found].caseInsensitiveCompare($0) == .orderedSame }
             if let quote = closingQuote {
                 end = value.firstIndex { $0 == quote || $0 == "\n" || $0 == "\r" } ?? value.endIndex
             } else {
-                end = value.firstIndex { valueTerminators.contains($0) } ?? value.endIndex
+                end = value.firstIndex { valueTerminators.contains($0) && !(tolerant && $0 == "%") } ?? value.endIndex
             }
             rest = value[end...]
             marker = nextMarker(in: rest)
@@ -73,7 +78,14 @@ enum LogScrubber {
         "ApiKey=", "api_key=", "token=", "X-Emby-Token:", "X-MediaBrowser-Token:",
         "token\":", "apikey\":", "api_key\":",
         "ApiKey%3D", "api_key%3D", "token%3D",
+        // Seerr: the API key header, the session cookie, the Quick Connect secret.
+        "X-Api-Key:", "connect.sid=", "secret=", "connect.sid%3D", "secret%3D"
     ]
+
+    /// A Seerr session cookie is `s%3A<sid>.<signature>`: the `%` is INSIDE the
+    /// value, so for these markers it must not end it (swallowing too much is
+    /// the safe direction, see `valueTerminators`).
+    private static let percentTolerantMarkers: Set<String> = ["connect.sid=", "connect.sid%3D"]
 
     /// The earliest token marker in `text`, whichever spelling it uses.
     private static func nextMarker(in text: Substring) -> Range<Substring.Index>? {

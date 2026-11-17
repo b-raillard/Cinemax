@@ -18,7 +18,14 @@ enum JellyfinLite {
         let maxContentAge: Int?
         /// The approved certificate of a self-signed server, or `nil`. Optional
         /// for the same reason — keep in sync with `ExtensionSessionBridge.Session`.
+        /// In a session returned by `dialing(_:)`, the pin of the address dialled.
         let pinnedCertificateSHA256: String?
+        /// The server's LAN address, its Jellyfin `Id` and the LAN certificate's
+        /// pin — what `dialing(_:)` probes. Optional for the same reason; keep
+        /// the three names in sync with `ExtensionSessionBridge.Session`.
+        let localServerURL: URL?
+        let serverID: String?
+        let localPinnedCertificateSHA256: String?
     }
 
     struct ResumeItem: Identifiable {
@@ -48,13 +55,52 @@ enum JellyfinLite {
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.timeoutIntervalForRequest = 10
         config.waitsForConnectivity = false
-        // Honours the certificate the user approved in the app for a
-        // self-signed server — read from the session blob at challenge time.
-        let trust = ExtensionServerTrust {
-            readSession().flatMap { ExtensionServerTrust.pin(serverURL: $0.serverURL, fingerprint: $0.pinnedCertificateSHA256) }
-        }
-        return URLSession(configuration: config, delegate: trust, delegateQueue: nil)
+        // No session delegate: every request carries its own `ExtensionServerTrust`
+        // through `send(_:session:)`, built from the pin of the session it
+        // serves (see there).
+        return URLSession(configuration: config)
     }()
+
+    /// Every request goes through here: the task delegate honours the
+    /// certificate the user approved in the app for THIS session's address —
+    /// the LAN pin on the LAN host:port once `dialing(_:)` chose the LAN, the
+    /// public pin otherwise. Bound per request rather than read from shared
+    /// state, so two timelines dialling different roads can never cross pins
+    /// (a per-task delegate receives the server-trust challenge — checked).
+    private static func send(_ request: URLRequest, session: Session) async throws -> (Data, URLResponse) {
+        let pin = ExtensionServerTrust.pin(serverURL: session.serverURL, fingerprint: session.pinnedCertificateSHA256)
+        return try await Self.session.data(for: request, delegate: ExtensionServerTrust { pin })
+    }
+
+    /// A copy of `stored` whose `serverURL` is the address to dial — the LAN
+    /// one when `ExtensionServerRoute`'s probe proves it is this server over a
+    /// local connection, the public one otherwise — with the pin that goes
+    /// with it. Every fetch derives from `session.serverURL`, so resolving
+    /// once per timeline routes them all.
+    static func dialing(_ stored: Session) async -> Session {
+        let dial = await ExtensionServerRoute.dialURL(
+            publicURL: stored.serverURL,
+            localURL: stored.localServerURL,
+            serverID: stored.serverID,
+            localPin: stored.localPinnedCertificateSHA256
+        )
+        let endpoint = ExtensionServerRoute.endpoint(
+            publicURL: stored.serverURL,
+            publicPin: stored.pinnedCertificateSHA256,
+            dialURL: dial,
+            localPin: stored.localPinnedCertificateSHA256
+        )
+        return Session(
+            serverURL: endpoint.serverURL,
+            accessToken: stored.accessToken,
+            userId: stored.userId,
+            maxContentAge: stored.maxContentAge,
+            pinnedCertificateSHA256: endpoint.pinnedCertificateSHA256,
+            localServerURL: stored.localServerURL,
+            serverID: stored.serverID,
+            localPinnedCertificateSHA256: stored.localPinnedCertificateSHA256
+        )
+    }
 
     /// Sole store: the shared, device-only Keychain group the app publishes
     /// to. The legacy plaintext App Group fallback is gone — the app has
@@ -185,7 +231,7 @@ enum JellyfinLite {
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
         request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await Self.session.data(for: request),
+        guard let (data, resp) = try? await Self.send(request, session: session),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode([Item].self, from: data) else { return nil }
         return passingCap(decoded, session).map(makeResumeItem)
@@ -214,7 +260,7 @@ enum JellyfinLite {
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
         request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await Self.session.data(for: request),
+        guard let (data, resp) = try? await Self.send(request, session: session),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode([Item].self, from: data) else { return nil }
         return passingCap(decoded.filter { $0.type == "Series" }, session).map(makeResumeItem)
@@ -224,7 +270,7 @@ enum JellyfinLite {
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
         request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await Self.session.data(for: request),
+        guard let (data, resp) = try? await Self.send(request, session: session),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return nil }
         return passingCap(decoded.items, session).map(makeResumeItem)
@@ -265,11 +311,11 @@ enum JellyfinLite {
         return comps.url
     }
 
-    static func fetchImage(_ url: URL?, token: String) async -> Data? {
+    static func fetchImage(_ url: URL?, session: Session) async -> Data? {
         guard let url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
-        request.setValue("MediaBrowser Token=\(token)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await Self.session.data(for: request),
+        request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await Self.send(request, session: session),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               !data.isEmpty else { return nil }
         return data

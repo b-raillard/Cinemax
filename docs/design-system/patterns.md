@@ -239,7 +239,7 @@ ServerSetup and Login share a mobile template so users experience the two as one
 │   │    …                      │   │
 │   └───────────────────────────┘   │
 │                                   │
-│   [     PRIMARY BUTTON        ]   │  CinemaButton(style: .primary),
+│   [     ACCENT BUTTON         ]   │  CinemaButton(style: .accent),
 │                                   │  maxWidth: 350
 │      Helper link (bottom)         │
 └───────────────────────────────────┘

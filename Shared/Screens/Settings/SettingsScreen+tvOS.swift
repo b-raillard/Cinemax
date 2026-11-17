@@ -69,6 +69,8 @@ extension SettingsScreen {
                 if newValue == nil {
                     selectedInterfaceSub = nil
                     showsAppIconPage = false
+                    settingsNav.requestsUserId = nil
+                    settingsNav.requestsPage = nil
                     tierChipFocusable = false
                     proxy.scrollTo("settings.top", anchor: .top)
                 }
@@ -275,18 +277,25 @@ extension SettingsScreen {
         // `onMoveCommand` sends Right to the first pill instead.
     }
 
-    /// The landing's category pills, top to bottom — admin entries are
-    /// iOS-only. `isAdmin: false` is safe because the filter short-circuits
-    /// on `isTVOS: true` regardless of the admin flag.
+    /// The landing's category pills, top to bottom — the Administration
+    /// category is iOS-only. `isAdmin: false` is safe for it because the
+    /// filter short-circuits on `isTVOS: true` regardless of the admin flag.
+    /// « Demandes » is the deliberate exception: it reads the REAL admin flag
+    /// (`showsRequestsCategory`), its admin rows living inside the page.
     var tvLandingCategories: [SettingsCategory] {
-        SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsDebug: showsDebugCategory)
+        SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsDebug: showsDebugCategory,
+                                      showsRequests: showsRequestsCategory)
     }
 
     @ViewBuilder
     func tvCategoryButton(_ category: SettingsCategory) -> some View {
         let isFocused = focusedItem == .category(category.rawValue)
+        // A Pro category (Demandes) a free user still sees, badged: the press
+        // opens the Pro sheet instead of the page, as on iOS.
+        let isLocked = category.proFeature.map { proAccess?.allows($0) == false } ?? false
 
         Button {
+            if let feature = category.proFeature, proAccess?.admit(feature) == false { return }
             selectedCategory = category
         } label: {
             HStack(spacing: CinemaSpacing.spacing4) {
@@ -331,7 +340,13 @@ extension SettingsScreen {
                     .layoutPriority(0.5)
                 }
 
-                if isFocused {
+                if !isLocked, category == .requests, let pending = pendingBadgeLabel {
+                    SettingsCountBadge(label: pending, onAccent: isFocused)
+                }
+
+                if isLocked {
+                    ProBadge(ink: isFocused ? themeManager.onAccentContainer : nil)
+                } else if isFocused {
                     Image(systemName: "chevron.right")
                         .font(.system(size: CinemaScale.pt(20), weight: .semibold))
                         .foregroundStyle(themeManager.onAccentContainer.opacity(0.8))
@@ -343,6 +358,8 @@ extension SettingsScreen {
         .focusEffectDisabled()
         .hoverEffectDisabled()
         .focused($focusedItem, equals: .category(category.rawValue))
+        .accessibilityValue(category == .requests ? pendingBadgeValue : "")
+        .accessibilityHint(isLocked ? loc.localized("pro.locked.hint") : "")
     }
 
     /// « Noter JellyGlass » — its own block under the category pills, wearing
@@ -428,7 +445,15 @@ extension SettingsScreen {
                 // Back button
                 let backFocused = focusedItem == .back
                 Button {
-                    selectedCategory = nil
+                    // Demandes → a user's page, then a page: closed first,
+                    // newest first.
+                    if category == .requests, settingsNav.requestsUserId != nil {
+                        settingsNav.requestsUserId = nil
+                    } else if category == .requests, settingsNav.requestsPage != nil {
+                        settingsNav.requestsPage = nil
+                    } else {
+                        selectedCategory = nil
+                    }
                 } label: {
                     HStack(spacing: CinemaSpacing.spacing2) {
                         Image(systemName: "chevron.left")
@@ -478,6 +503,8 @@ extension SettingsScreen {
                     tvPlaybackDetail
                 case .debug:
                     tvDebugDetail
+                case .requests:
+                    RequestsSettingsScreen()
                 case .administration:
                     // Never selected on tvOS — the admin category is filtered
                     // out of the landing pill list. Render nothing as a
@@ -632,6 +659,8 @@ extension SettingsScreen {
                             .foregroundStyle(CinemaColor.onSurfaceVariant)
                             .lineLimit(1)
                             .truncationMode(.middle)
+                        // The road being dialled: « Local · 192.168.1.10:8920 » / « Internet ».
+                        ServerRouteLine(font: .system(size: CinemaScale.pt(15), weight: .regular))
                     }
 
                     Spacer()

@@ -94,12 +94,14 @@ struct MediaDetailCastSection: View, Equatable {
             #endif
             .accessibilityLabel([person.name, person.role].compactMap { $0 }.joined(separator: ", "))
         }
+        .edgeRecede(false)
     }
 }
 
 #if os(tvOS)
-/// `.focused` only when a binding is given — the first card of the row.
-private struct FirstCardFocus: ViewModifier {
+/// `.focused` only when a binding is given — the first card of the row, the
+/// fiche's « Lecture ».
+struct FirstCardFocus: ViewModifier {
     let binding: FocusState<Bool>.Binding?
 
     func body(content: Content) -> some View {

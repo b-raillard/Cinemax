@@ -23,6 +23,9 @@ struct VideoPlayerView: View {
     /// Version override from the detail screen's version row. `nil` ⇒ let
     /// `MediaSourceQuality` rank the item's sources and pick.
     var mediaSourceId: String? = nil
+    /// Handed to the presenter: runs once, when playback has really started
+    /// here (`PlayLink.onStart`, « Reprendre ici »).
+    var onPlaybackStarted: (@MainActor () -> Void)?
 
     #if os(iOS)
     @State private var presenter: NativeVideoPresenter?
@@ -142,6 +145,7 @@ struct VideoPlayerView: View {
                     imageBuilder: appState.imageBuilder, loc: loc,
                     onDismiss: { reviewPrompt?.playerDidClose(); dismiss() }
                 )
+                v.onPlaybackStarted = onPlaybackStarted
                 vlcStreamPresenter = v
                 didPresent = true
                 v.present(info: vlcInfo)
@@ -167,6 +171,7 @@ struct VideoPlayerView: View {
                 imageBuilder: appState.imageBuilder,
                 onDismiss: { reviewPrompt?.playerDidClose(); dismiss() }
             )
+            p.onPlaybackStarted = onPlaybackStarted
             presenter = p
             didPresent = true
             p.present(info: info)
@@ -192,7 +197,10 @@ struct VideoPlayerView: View {
             itemId: itemId, explicitSourceId: mediaSourceId, startTime: startTime
         )
         return try await Task {
-            try await api.getPlaybackInfo(
+            // A LAN probe in flight decides the base the client dials (bounded
+            // by its own timeout): never negotiate on a route about to change.
+            await ServerRouteController.shared.awaitPendingProbe()
+            return try await api.getPlaybackInfo(
                 itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine,
                 mediaSourceId: mediaSourceId
             )

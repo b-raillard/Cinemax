@@ -6,6 +6,43 @@ import CinemaxKit
 
 final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
+    // MARK: - UserPreferencesAPI
+
+    /// Keyed `"\(userId ?? "me")|\(id)|\(client)"`.
+    var displayPreferences: [String: DisplayPreferencesDto] = [:]
+    private(set) var updateDisplayPreferencesCalls: [(id: String, client: String, userId: String?, prefs: DisplayPreferencesDto)] = []
+
+    private func displayPreferencesKey(_ id: String, _ client: String, _ userId: String?) -> String {
+        "\(userId ?? "me")|\(id)|\(client)"
+    }
+
+    /// Runs inside every `getDisplayPreferences` before it answers, so a test
+    /// can hold a read open with a `TestLatch` (the Seerr session's generations).
+    var onGetDisplayPreferences: (@Sendable () async -> Void)?
+
+    func getDisplayPreferences(id: String, client: String, userId: String?) async throws -> DisplayPreferencesDto {
+        if let hook = recordLock.withLock({ onGetDisplayPreferences }) { await hook() }
+        return recordLock.withLock { displayPreferences[displayPreferencesKey(id, client, userId)] }
+            ?? DisplayPreferencesDto(client: client, id: id)
+    }
+
+    /// Runs at the head of every `updateDisplayPreferences` (with the user id),
+    /// so a test can hold a write open.
+    var onUpdateDisplayPreferences: (@Sendable (String?) async -> Void)?
+    /// Users whose `updateDisplayPreferences` throws.
+    var failingUpdateUserIds: Set<String> = []
+
+    func updateDisplayPreferences(_ prefs: DisplayPreferencesDto, id: String, client: String, userId: String?) async throws {
+        if let hook = recordLock.withLock({ onUpdateDisplayPreferences }) { await hook(userId) }
+        if let userId, recordLock.withLock({ failingUpdateUserIds.contains(userId) }) {
+            throw URLError(.cannotConnectToHost)
+        }
+        recordLock.withLock {
+            displayPreferences[displayPreferencesKey(id, client, userId)] = prefs
+            updateDisplayPreferencesCalls.append((id, client, userId, prefs))
+        }
+    }
+
     // MARK: - Call tracking
 
     /// Serializes every mutation of the call-recording state below. View
@@ -62,9 +99,36 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     // MARK: - APIClientProtocol
 
+    /// Holds `connectToServer` open (the handshake of `beginReLogin`) until
+    /// opened — the race window, never a sleep.
+    var connectGate: TestLatch?
+
+    /// One `connectToServer(url:dialURL:)` call: the identity and the route dialled.
+    struct ConnectCall: Equatable {
+        let url: URL
+        let dialURL: URL?
+    }
+
+    /// Every `connectToServer(url:dialURL:)` the code performed, in order.
+    private(set) var connectCalls: [ConnectCall] = []
+
+    func connectToServer(url: URL, dialURL: URL?) async throws -> ServerInfo {
+        recordLock.withLock { connectCalls.append(ConnectCall(url: url, dialURL: dialURL)) }
+        // Gate, throw and identity reset stay in the one-argument handshake.
+        let info = try await connectToServer(url: url)
+        recordLock.withLock { self.dialURL = dialURL }
+        return info
+    }
+
     func connectToServer(url: URL) async throws -> ServerInfo {
         recordLock.withLock { connectCalled = true }
+        await connectGate?.wait()
         if shouldThrow { throw stubbedError }
+        // The real client's contract: the identity moves, the dial resets.
+        recordLock.withLock {
+            identityURL = url
+            dialURL = nil
+        }
         return stubbedServerInfo
     }
 
@@ -83,8 +147,44 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var learnedVersion: ServerVersion?
     func knownServerVersion() -> ServerVersion? { recordLock.withLock { learnedVersion } }
 
+    /// Every `setDialURL` the code performed, in order (`nil` = back to the
+    /// identity).
+    private(set) var dialURLs: [URL?] = []
+    /// The dial URL in force: the last `setDialURL`, reset by `reconnect` —
+    /// the real client's contract.
+    private var dialURL: URL?
+
+    func setDialURL(_ dialURL: URL?) {
+        recordLock.withLock {
+            dialURLs.append(dialURL)
+            self.dialURL = dialURL
+        }
+    }
+
+    func currentDialURL() -> URL? { recordLock.withLock { dialURL } }
+
+    /// The server the "client" is on: the last `reconnect` / `connectToServer`.
+    private(set) var identityURL: URL?
+    /// Every identity-bound dial the client REFUSED (another server, or no
+    /// connection) — the real client's `setDialURL(_:forIdentity:)` contract.
+    private(set) var refusedDialURLs: [URL?] = []
+
+    func setDialURL(_ dialURL: URL?, forIdentity identity: URL) {
+        recordLock.withLock {
+            guard let current = identityURL,
+                  ServerURLNormalizer.dedupKey(current) == ServerURLNormalizer.dedupKey(identity) else {
+                refusedDialURLs.append(dialURL)
+                return
+            }
+            dialURLs.append(dialURL)
+            self.dialURL = dialURL
+        }
+    }
+
     func reconnect(url: URL, accessToken: String) {
         recordLock.withLock {
+            dialURL = nil
+            identityURL = url
             if reconnectedURLs.last != url { learnedVersion = nil }
             reconnectCalled = true
             reconnectedURLs.append(url)
@@ -109,7 +209,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedValidity
     }
 
-    func isQuickConnectEnabled() async throws -> Bool { false }
+    var stubbedQuickConnectEnabled = false
+    /// Thrown by `isQuickConnectEnabled` when set: the probe did not get through.
+    var quickConnectEnabledError: (any Error)?
+    func isQuickConnectEnabled() async throws -> Bool {
+        if let quickConnectEnabledError { throw quickConnectEnabledError }
+        return stubbedQuickConnectEnabled
+    }
     func initiateQuickConnect() async throws -> QuickConnectRequest {
         if shouldThrow { throw stubbedError }
         return QuickConnectRequest(code: "123456", secret: "secret")
@@ -146,7 +252,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func getPublicUsers() async throws -> [UserDto] { [] }
-    func getUsers() async throws -> [UserDto] { [] }
+    /// The administrator's user list (`getUsers`).
+    var stubbedUsers: [UserDto] = []
+    var getUsersError: (any Error)?
+    func getUsers() async throws -> [UserDto] {
+        if let error = recordLock.withLock({ getUsersError }) { throw error }
+        return recordLock.withLock { stubbedUsers }
+    }
     var stubbedActiveSessions: [SessionInfoDto] = []
     /// Every `getActiveSessions` call's `controllableByUserId`, in order —
     /// `nil` entries are the unfiltered (admin) shape.
@@ -210,8 +322,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var stubbedActivityLogTotal: Int = 0
     var stubbedSystemInfo: SystemInfo = SystemInfo()
 
+    /// Called by `getUserByID(id:)` when set, with the id asked for, so a test
+    /// can answer per account and hold one answer open (a late refresh).
+    /// Falls back to `stubbedUserByID`.
+    var getUserByIDHandler: (@Sendable (String) async throws -> UserDto)?
+
     func getUserByID(id: String) async throws -> UserDto {
         if shouldThrow { throw stubbedError }
+        if let getUserByIDHandler { return try await getUserByIDHandler(id) }
         return stubbedUserByID
     }
     func createUserByName(name: String, password: String?) async throws -> UserDto {
@@ -447,6 +565,8 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
     /// `enableTotalRecordCount` of every `searchItems` call, in order.
     private(set) var searchCountFlags: [Bool] = []
+    /// `includeProviderIds` of every `searchItems` call, in order.
+    private(set) var searchProviderIdFlags: [Bool] = []
 
     /// Holds `getResumeItems` open until opened — keeps Home's phase 1 in
     /// flight so a test can observe what is on screen meanwhile.
@@ -666,8 +786,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return stubbedSimilarItems
     }
 
-    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, enableTotalRecordCount: Bool) async throws -> [BaseItemDto] {
-        recordLock.withLock { searchCountFlags.append(enableTotalRecordCount) }
+    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, extras: SearchItemsExtras) async throws -> [BaseItemDto] {
+        recordLock.withLock {
+            searchCountFlags.append(extras.contains(.totalRecordCount))
+            searchProviderIdFlags.append(extras.contains(.providerIds))
+        }
         if let handler = searchItemsHandler {
             return try await handler(searchTerm)
         }
@@ -711,6 +834,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// Season id → refs. Falls back to mapping `getEpisodesHandler`'s answer so
     /// existing fixtures keep working without being rewritten.
     var getEpisodeRefsHandler: (@Sendable (String) async throws -> [EpisodeReference])?
+
+    var stubbedEpisodeNumbering: [EpisodeNumbering] = []
+    private(set) var getEpisodeNumberingCallCount = 0
+    func getEpisodeNumbering(seriesId: String, userId: String) async throws -> [EpisodeNumbering] {
+        recordLock.withLock { getEpisodeNumberingCallCount += 1 }
+        return stubbedEpisodeNumbering
+    }
 
     func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference] {
         recordLock.withLock { getEpisodeRefsCallCount += 1 }
@@ -766,8 +896,23 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     func markItemUnplayed(itemId: String, userId: String) async throws { recordLock.withLock { markUnplayedCalls.append(itemId) } }
     func markItemPlayed(itemId: String, userId: String) async throws { recordLock.withLock { markPlayedCalls.append(itemId) } }
     func setFavorite(itemId: String, userId: String, favorite: Bool) async throws {}
-    func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto] { [] }
-    func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] { [] }
+    /// `includeProviderIds` / `limit` of every `getPersonItems` call, in order.
+    private(set) var personItemsProviderIdFlags: [Bool] = []
+    private(set) var personItemsLimits: [Int] = []
+    func getPersonItems(personId: String, userId: String, limit: Int, includeProviderIds: Bool) async throws -> [BaseItemDto] {
+        recordLock.withLock {
+            personItemsProviderIdFlags.append(includeProviderIds)
+            personItemsLimits.append(limit)
+        }
+        return []
+    }
+    /// Answers `getCollections` when set (a movie's « Fait partie de »): the
+    /// BoxSets containing `containingItemId`. Unset ⇒ none.
+    var getCollectionsHandler: (@Sendable (_ itemId: String, _ tmdbCollectionId: String?) async throws -> [BaseItemDto])?
+    func getCollections(containingItemId: String, tmdbCollectionId: String?, userId: String) async throws -> [BaseItemDto] {
+        guard let handler = getCollectionsHandler else { return [] }
+        return try await handler(containingItemId, tmdbCollectionId)
+    }
 
     /// Stub + capture for the library browse layout's « Collections » row.
     /// The real client answers `[]` below 12.0 without a request; the mock
@@ -813,7 +958,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
 
 // MARK: - Mock Keychain
 
-final class MockKeychain: SecureStorageProtocol, @unchecked Sendable {
+final class MockKeychain: SecureStorageProtocol, SeerrSecretStorage, @unchecked Sendable {
+    private var storedSeerrSessions: [String: SeerrBoundSecret] = [:]
+    private var storedSeerrAPIKeys: [String: SeerrBoundSecret] = [:]
+    func seerrSessions() -> [String: SeerrBoundSecret] { storedSeerrSessions }
+    func saveSeerrSessions(_ s: [String: SeerrBoundSecret]) { storedSeerrSessions = s }
+    func seerrAPIKeys() -> [String: SeerrBoundSecret] { storedSeerrAPIKeys }
+    func saveSeerrAPIKeys(_ k: [String: SeerrBoundSecret]) { storedSeerrAPIKeys = k }
+
     var savedAccessToken: String?
     var savedServerURL: URL?
     var savedSession: UserSession?

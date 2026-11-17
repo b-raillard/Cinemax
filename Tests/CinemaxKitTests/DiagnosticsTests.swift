@@ -66,6 +66,22 @@ struct LogScrubberExportMarkerTests {
         #expect(LogScrubber.scrubbed("api_key=\"abc\"&x=1") == "api_key=\"***\"&x=1")
     }
 
+    @Test("Seerr secrets: X-Api-Key, connect.sid cookie (percent-encoded value), Quick Connect secret")
+    func scrubsSeerrSecrets() {
+        let key = LogScrubber.scrubbed("X-Api-Key: abc")
+        #expect(!key.contains("abc"))
+        let cookie = LogScrubber.scrubbed("Cookie: connect.sid=s%3AsessXYZ.sigABC")
+        #expect(!cookie.contains("sessXYZ"))
+        #expect(!cookie.contains("sigABC"))
+        let encoded = LogScrubber.scrubbed("redirect?c=connect.sid%3Ds%3AsessXYZ.sigABC&x=1")
+        #expect(!encoded.contains("sessXYZ"))
+        #expect(!encoded.contains("sigABC"))
+        #expect(encoded.hasSuffix("&x=1"))
+        let secret = LogScrubber.scrubbed("check?secret=deadbeef")
+        #expect(!secret.contains("deadbeef"))
+        #expect(!LogScrubber.scrubbed("check?secret%3Ddeadbeef").contains("deadbeef"))
+    }
+
     @Test("text that merely mentions tokens is left alone")
     func mentionsAreUntouched() {
         let message = "session tokens are refreshed on foreground"
@@ -210,6 +226,22 @@ struct DiagnosticsReportTests {
             "log_window: last 30 min of this launch, subsystem com.cinemax, 412 entries",
             "metrickit: 1 diagnostic payload(s) (crashes 2, hangs 1), 3 metric payload(s)",
         ])
+    }
+
+    @Test("the route class is the last header line, never an address")
+    func headerCarriesServerRoute() {
+        let withRoute = DiagnosticsFacts(
+            generatedAt: utcDate(2026, 9, 11, 10, 15, 0),
+            appVersion: "2.0.0", appBuild: "42",
+            deviceModel: "iPhone17,1", osDescription: "iOS Version 26.5 (Build 23F77)",
+            serverVersion: "12.0.0.0", engine: "vlc", lastPlayback: nil,
+            logWindowMinutes: 30, logEntryCount: 412, metricKit: nil,
+            network: "wifi", serverRoute: "local"
+        )
+        let header = DiagnosticsReport.header(withRoute)
+        #expect(header.last == "server_route: local")
+        #expect(header.dropLast().last == "network: wifi")
+        #expect(!DiagnosticsReport.header(facts()).contains { $0.hasPrefix("server_route:") })
     }
 
     @Test("unknown server, no playback, no MetricKit read as such — never as blanks")

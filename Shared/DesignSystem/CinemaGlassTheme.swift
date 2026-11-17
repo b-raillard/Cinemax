@@ -56,9 +56,7 @@ enum CinemaColor {
     static let onSurfaceMuted = Color.dynamic(light: 0x6B6E74, dark: 0x8E8D8D, season: .onSurfaceMuted)
 
     // Primary
-    static let primary          = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)
-    static let primaryContainer = Color.dynamic(light: 0xD0D1D4, dark: 0x454747)
-    static let onPrimary        = Color.dynamic(light: 0xFFFFFF, dark: 0x3F4041)
+    static let primary = Color.dynamic(light: 0x3A3B3D, dark: 0xC6C6C7)
 
     // Secondary
     static let secondary          = Color.dynamic(light: 0x55585E, dark: 0x9D9E9E)
@@ -72,8 +70,17 @@ enum CinemaColor {
     static let errorContainer   = Color.dynamic(light: 0xFADBD8, dark: 0x7F2927)
     static let onErrorContainer = Color.dynamic(light: 0x7B1A12, dark: 0xFF9993)
 
-    // Success
-    static let success = Color.dynamic(light: 0x1F9D45, dark: 0x34C759)
+    // Success — TEXT as well as a dot (« Arrivée dans ta bibliothèque »,
+    // « Cet appareil », the server badge). Clears 4.5:1 on `surface` …
+    // `surfaceContainerHigh` and on the badge's own 12 % tint over them, in
+    // both modes (light was #1F9D45, 2.72:1 on `surfaceContainerHigh` —
+    // audit 2026-11-13, UX-02).
+    static let success = Color.dynamic(light: 0x14672D, dark: 0x34C759)
+
+    // Warning — amber TEXT for something to look into (a report's problem
+    // line, Réglages → Seerr → Signalements). Clears 4.5:1 on `surface` and
+    // `surfaceContainerHigh` in both modes (light 5.8 / 4.8, dark 10.7 / 9.0).
+    static let warning = Color.dynamic(light: 0x8F5300, dark: 0xF5B54A)
 
     // Founder « gold » — the founder tier's material (Settings logo ring and
     // medal, membership card, « Votre niveau » chip). A foil, so the card
@@ -102,8 +109,6 @@ enum CinemaColor {
     /// Light and shade mixed into the accent for the metal's highlights.
     static let metalLight    = Color.dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
     static let metalShade    = Color.dynamic(light: 0x000000, dark: 0x000000)
-    /// Ink on a light metallic emblem.
-    static let onMetalEmblem = Color.dynamic(light: 0x111111, dark: 0x111111)
     /// Text on the dark titanium cards.
     static let onTitanium        = Color.dynamic(light: 0xF2F2F2, dark: 0xF2F2F2)
     static let onTitaniumVariant = Color.dynamic(light: 0xB9B8B6, dark: 0xB9B8B6)
@@ -285,12 +290,6 @@ enum CinemaBloom {
 // MARK: - Gradients
 
 enum CinemaGradient {
-    static let primaryButton = LinearGradient(
-        colors: [CinemaColor.primary, CinemaColor.primaryContainer],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-
     static let heroOverlay = LinearGradient(
         colors: [
             CinemaColor.surface.opacity(0.4),

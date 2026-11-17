@@ -82,12 +82,6 @@ final class AccountLockStore {
         return verdict
     }
 
-    /// Seconds left in `key`'s back-off window, `0` when it may be tried.
-    func throttleRemaining(_ key: String) -> TimeInterval {
-        guard let credential = credential(for: key) else { return 0 }
-        return ParentalLockPolicy.backoffRemaining(credential, at: .now()).remaining
-    }
-
     func setBiometricsEnabled(_ enabled: Bool, key: String) {
         guard var credential = credential(for: key) else { return }
         let effective = enabled && Self.biometricsAvailable

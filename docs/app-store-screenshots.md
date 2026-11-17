@@ -59,7 +59,7 @@ Mêmes 13 planches, mêmes cadrages, titres traduits, dans `~/Desktop/JellyGlass
 - **iPad en paysage** : la rotation se fait à la main ; ensuite les coordonnées de toucher restent celles du PORTRAIT (`x_portrait = y_paysage`, `y_portrait = 1376 − x_paysage`).
 - **Apple TV** : Xcode 27 n'a plus de quoi simuler la télécommande. Une cible `bundle.ui-testing` TEMPORAIRE (jamais commitée, dans un worktree jetable) pilote `XCUIRemote` et enregistre `XCUIScreen.main.screenshot()` ; le même procédé côté iOS a approuvé le code Quick Connect de l'Apple TV. Arguments utiles : `-appLanguage en`, `-appearance.seasonalTheme off`.
 - **Le simulateur Apple TV `35C18366` porte le compte PERSONNEL de l'utilisateur** (bibliothèque réelle) : ne jamais y capturer. Le compte de démonstration est sur `D8FA6F76`.
-- **Adresse du serveur** : `nas-raillard.local` n'est joignable que depuis le réseau local ; les simulateurs ont été rebranchés sur `https://movies.nivadax.net`.
+- **Adresse du serveur** : `nas.local` n'est joignable que depuis le réseau local ; les simulateurs ont été rebranchés sur `https://media.example.com`.
 
 ## 2 ter. La série iPhone Duo (2026-10-08)
 

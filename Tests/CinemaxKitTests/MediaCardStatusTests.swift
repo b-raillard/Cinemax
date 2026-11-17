@@ -13,6 +13,30 @@ struct MediaCardStatusTests {
 
     private let hour = 36_000_000_000  // one hour in Jellyfin ticks
 
+    @Test("a progress bar fills from zero only when asked, and clamps")
+    func progressBarFillsFromZeroOnlyWhenAsked() {
+        #expect(ProgressBarView.displayedFraction(progress: 0.7, fillsOnAppear: true, hasAppeared: false) == 0)
+        #expect(ProgressBarView.displayedFraction(progress: 0.7, fillsOnAppear: true, hasAppeared: true) == 0.7)
+        #expect(ProgressBarView.displayedFraction(progress: 0.7, fillsOnAppear: false, hasAppeared: false) == 0.7)
+        #expect(ProgressBarView.displayedFraction(progress: 1.4, fillsOnAppear: false, hasAppeared: true) == 1)
+        #expect(ProgressBarView.displayedFraction(progress: -0.2, fillsOnAppear: false, hasAppeared: true) == 0)
+    }
+
+    @Test("a bar fills from zero only inside a skeleton reveal, never when a recycled cell comes back")
+    func progressBarFillsOnlyDuringAReveal() {
+        let t = Date(timeIntervalSinceReferenceDate: 1_000)
+        // Home's « Reprendre » right after the skeleton left: fill.
+        #expect(ProgressBarView.fillsFromZero(fillsOnAppear: true, motionEnabled: true, hasAppeared: false, now: t.addingTimeInterval(0.3), revealStartedAt: t))
+        // The same card re-created by scrolling, minutes later: no refill.
+        #expect(!ProgressBarView.fillsFromZero(fillsOnAppear: true, motionEnabled: true, hasAppeared: false, now: t.addingTimeInterval(90), revealStartedAt: t))
+        // No reveal on this screen (the fiche), motion off, or not asked: never.
+        #expect(!ProgressBarView.fillsFromZero(fillsOnAppear: true, motionEnabled: true, hasAppeared: false, now: t, revealStartedAt: nil))
+        #expect(!ProgressBarView.fillsFromZero(fillsOnAppear: true, motionEnabled: false, hasAppeared: false, now: t.addingTimeInterval(0.3), revealStartedAt: t))
+        #expect(!ProgressBarView.fillsFromZero(fillsOnAppear: false, motionEnabled: true, hasAppeared: false, now: t.addingTimeInterval(0.3), revealStartedAt: t))
+        // Once it has appeared it shows its value.
+        #expect(!ProgressBarView.fillsFromZero(fillsOnAppear: true, motionEnabled: true, hasAppeared: true, now: t.addingTimeInterval(0.3), revealStartedAt: t))
+    }
+
     @Test("an untouched item shows nothing")
     func untouched() {
         #expect(MediaCardStatus.make(positionTicks: 0, runtimeTicks: hour, isPlayed: false) == .none)

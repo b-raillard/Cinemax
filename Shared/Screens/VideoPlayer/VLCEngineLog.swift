@@ -51,6 +51,15 @@ enum VLCEngineLog {
                     }
                     continue
                 }
+                // Debug / TestFlight builds only: libVLC's HTTP/2 control
+                // frames on the DIRECT route — who sent the GOAWAY or the
+                // RST_STREAM that cut a stream, and whether the edge answered
+                // a request at all (`HEADERS`). Bulk frames are filtered out.
+                if VerboseDiagnostics.isEnabled, let frame = VerboseDiagnostics.libVLCFrameLine(entry.message) {
+                    let message = LogScrubber.scrubbed(frame)
+                    logger.notice("libVLC h2 ▸ \(message, privacy: .public)")
+                    continue
+                }
                 // Debug/notice tier: the input's end, then module selection.
                 if isInputEndOfStream(message: entry.message) {
                     logger.notice("libVLC input ▸ end of stream")

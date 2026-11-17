@@ -37,7 +37,7 @@ final class VLCStreamPresenter: NSObject {
     private let title: String
     private let startTime: Double?
     private let loc: LocalizationManager
-    private let apiClient: any PlaybackAPI & LibraryAPI
+    private let apiClient: any PlaybackAPI & LibraryAPI & ServerAPI
     private let userId: String
     private let autoPlayNext: Bool
     private let previousEpisode: EpisodeRef?
@@ -51,6 +51,11 @@ final class VLCStreamPresenter: NSObject {
     /// to the API's 40 Mbps default and a >40 Mbps 4K remux that DirectPlayed on
     /// launch would get force-transcoded on resume.
     private let maxBitrate: Int
+    /// Runs ONCE, when the first media actually opens here (the first
+    /// `noteMediaOpened()`) — « Reprendre ici » stops the other device then,
+    /// never before: a failed negotiation, a refused open or a close during the
+    /// spinner must leave the other device playing. Set before `present`.
+    var onPlaybackStarted: (@MainActor () -> Void)?
 
     /// Stream init — online playback negotiated through Jellyfin's PlaybackInfo
     /// flow with VLC's broad DirectPlay profile.
@@ -61,7 +66,7 @@ final class VLCStreamPresenter: NSObject {
         previousEpisode: EpisodeRef?,
         nextEpisode: EpisodeRef?,
         episodeNavigator: EpisodeNavigator?,
-        apiClient: any PlaybackAPI & LibraryAPI,
+        apiClient: any PlaybackAPI & LibraryAPI & ServerAPI,
         userId: String,
         autoPlayNext: Bool,
         maxBitrate: Int,
@@ -113,6 +118,7 @@ final class VLCStreamPresenter: NSObject {
             autoPlayNext: autoPlayNext, maxBitrate: maxBitrate,
             imageBuilder: imageBuilder, loc: loc, onDismiss: onDismiss
         )
+        vc.onPlaybackStarted = onPlaybackStarted
         vc.modalPresentationStyle = .overFullScreen
         vc.modalTransitionStyle = .crossDissolve
         topVC.present(vc, animated: true)
@@ -147,6 +153,17 @@ final class VLCStreamPresenter: NSObject {
             let name = item.name.lowercased()
             return name == "apikey" || name == "api_key"
         }
+    }
+
+    /// Whether the stream `target` is on a host:port whose (self-signed)
+    /// certificate the user pinned. libVLC has no per-connection trust hook,
+    /// so such a stream opened DIRECT always fails; the loopback proxy's
+    /// URLSession honours `ServerTrustDelegate`. Only an `https` target can
+    /// carry a pin. Pure, so the decision is testable (`VLCPinnedHostProxyTests`).
+    nonisolated static func targetIsPinned(_ target: URL, isPinned: (String) -> Bool) -> Bool {
+        guard target.scheme?.lowercased() == "https",
+              let key = ServerCertificateTrust.trustKey(for: target) else { return false }
+        return isPinned(key)
     }
 
     /// The URL a stream open hands on — to libVLC directly, or to the loopback
@@ -208,7 +225,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private let titleText: String
     private let episodeNavigator: EpisodeNavigator?
-    private let apiClient: any PlaybackAPI & LibraryAPI
+    private let apiClient: any PlaybackAPI & LibraryAPI & ServerAPI
     private let userId: String
     private let autoPlayNext: Bool
     /// The `render4K`-derived bitrate ceiling the negotiation uses — reused on
@@ -217,6 +234,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private let imageBuilder: ImageURLBuilder
     private let loc: LocalizationManager
     private let onDismiss: (() -> Void)?
+    /// See `VLCStreamPresenter.onPlaybackStarted`. One-shot: cleared when it
+    /// fires, because `noteMediaOpened()` runs again on every retry, rebuild
+    /// and episode swap.
+    var onPlaybackStarted: (@MainActor () -> Void)?
 
     // SwiftVLC engine (libVLC 4.0). `videoView` stays a plain UIView so the
     // existing gesture / HUD layout is untouched; the SwiftVLC rendering
@@ -374,6 +395,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     #if os(iOS)
     private let closeButton = UIButton(type: .system)
     private let playPauseButton = UIButton(type: .system)
+    /// The glyph `setPlayPauseIcon` last drew (`true` = ⏸), `nil` before the first.
+    private var shownPlayPauseGlyph: Bool?
     private let audioButton = UIButton(type: .system)
     private let subtitleButton = UIButton(type: .system)
     private let skipBackButton = UIButton(type: .system)
@@ -508,6 +531,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Watches the INPUT, which dies ~20 s before the picture does when the
     /// origin cancels a direct stream. See `FeedStallPolicy`.
     private var feedStall = FeedStallPolicy()
+    /// `logVerboseFeedSample`'s cadence and its previous byte count (Debug /
+    /// TestFlight builds only).
+    private var verboseFeedTicks = 0
+    private var verboseFeedLastReadBytes: UInt64?
     /// The follow-up that escalates a re-anchor to a full rebuild if the byte
     /// count has not moved since. Without it a re-anchor onto a genuinely dead
     /// link would hold its own seek-settle window (30 s backstop) with both
@@ -574,6 +601,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// with the segments.
     private var autoSkippedSegmentKeys: Set<String> = []
     private let skipButton = UIButton(type: .system)
+    /// Bumped by every `setSkipButtonVisible`: an animated hide finishes only
+    /// if nothing changed the button since it started.
+    private var skipButtonGeneration = 0
 
     // P3: sleep timer
     private var sleepRemaining: TimeInterval = 0
@@ -686,7 +716,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     init(
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
-        episodeNavigator: EpisodeNavigator?, apiClient: any PlaybackAPI & LibraryAPI,
+        episodeNavigator: EpisodeNavigator?, apiClient: any PlaybackAPI & LibraryAPI & ServerAPI,
         userId: String, autoPlayNext: Bool, maxBitrate: Int, imageBuilder: ImageURLBuilder,
         loc: LocalizationManager, onDismiss: (() -> Void)?
     ) {
@@ -1147,6 +1177,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         refreshTimeUI()
         checkFeedStall()
         checkPictureStall()
+        logVerboseFeedSample()
         #if os(iOS)
         // The film bar's thumbnail, retaken every 10 s while the deck shows:
         // the one taken on entry predates the first picture (black), and a
@@ -1191,6 +1222,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         guard pictureStall.recoveriesLeft > 0 else {
             logger.error("seek-stranded no recovery left target=\(targetMs, privacy: .public)")
             DiagnosticsUploader.send(reason: "seek-stranded-exhausted", engine: "vlc")
+            giveUpAfterSpentRecovery("seek-stranded")
             return false
         }
         logger.notice("""
@@ -1220,6 +1252,29 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         return true
     }
 
+    /// A net wanted a rebuild and the shared budget is spent: « Lecture
+    /// impossible », once, instead of a frozen picture under a HUD that says
+    /// « playing » (audit 2026-11-13, PL-01). Only for THAT refusal — a rebuild
+    /// already negotiating owns the recovery, a closing player needs nothing.
+    /// The engine is paused first: a wedged decoder keeps its clock and its
+    /// sound running, and its ticks would otherwise go on behind the alert
+    /// (progress reports climbing, audio playing). `recoveryExhausted` makes
+    /// the retry policy give up without spending a retry the next open would
+    /// re-arm; the error path then releases the server session and uploads its
+    /// `playback-failed` document.
+    private func giveUpAfterSpentRecovery(_ net: String) {
+        guard !isTearingDown, !reResolve.isNegotiating, pictureStall.recoveriesLeft == 0 else { return }
+        #if os(iOS)
+        // In the background (locked screen with audio, PiP) the picture counter
+        // proves nothing and an alert is unreachable: never pause the sound
+        // there — the pre-PL-01 behaviour (log + document) stands.
+        guard UIApplication.shared.applicationState != .background else { return }
+        #endif
+        logger.error("\(net, privacy: .public) recovery budget spent — surfacing the failure")
+        player.pause()
+        handlePlaybackError(recoveryExhausted: true)
+    }
+
     /// The one guard that watches the PICTURE instead of the clock, the engine
     /// state or an error — the state and the errors say nothing when the video
     /// decoder wedges or the pipeline stalls, and the clock may or may not move.
@@ -1235,13 +1290,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             seekSettling: seeks.isSettling || reResolve.isNegotiating,
             mediaConfirmedOpen: mediaConfirmedOpen
         ) {
-        case .healthy:
+        case .healthy, .stalling:
             break
-        case .stalling(let seconds):
-            // Logged once per episode of stalling, at the threshold: past it the
-            // budget is spent and the counter keeps climbing, which must not
-            // become one log line per second for the rest of the film.
-            guard seconds == PictureStallPolicy.stallSeconds else { return }
+        case .exhausted:
+            // Once per run of frozen samples, at the threshold: the budget is
+            // spent, so the app gives up rather than leave the frozen picture
+            // on screen with nothing said (PL-01).
             let clockMoved = pictureStall.stallClockMoved
             logger.notice("""
                 picture-stall no recovery left pos=\(Int(self.currentMs / 1000), privacy: .public)s \
@@ -1254,6 +1308,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 reason: clockMoved ? "picture-stall-exhausted" : "playback-freeze-exhausted",
                 engine: "vlc"
             )
+            giveUpAfterSpentRecovery("picture-stall")
         case .recover:
             // Everything worth knowing about WHY, in one line: the picture
             // counters, the demuxer's own complaints, and the module chain
@@ -1282,6 +1337,31 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // under an endless spinner, with no alert (M6-07).
             _ = reResolveAndResume(from: currentMs, surfacingFailure: true)
         }
+    }
+
+    /// Debug / TestFlight builds only (`VerboseDiagnostics`): one
+    /// `CINEMAX-FEED` line every `feedSampleSeconds` — position, engine state,
+    /// route, bytes read since the previous line, pictures. A stall document
+    /// shows the moment of the fault; this shows whether the feed was already
+    /// thinning before it, and whether the relay actually fed after it.
+    /// Rides the existing heartbeat, never a timer of its own.
+    private func logVerboseFeedSample() {
+        guard VerboseDiagnostics.isEnabled else { return }
+        verboseFeedTicks += 1
+        guard verboseFeedTicks % VerboseDiagnostics.feedSampleSeconds == 0 else { return }
+        let stats = player.statistics
+        let line = VerboseDiagnostics.FeedSample(
+            positionSeconds: Int(currentMs / 1000),
+            state: player.state.description,
+            route: isAdaptiveStream ? "hls" : (usingProxy ? "relay" : "direct"),
+            readBytes: stats?.readBytes,
+            previousReadBytes: verboseFeedLastReadBytes,
+            inputBitrate: stats.map { Double($0.inputBitrate) },
+            displayedPictures: stats?.displayedPictures,
+            lostPictures: stats?.lostPictures
+        ).line
+        verboseFeedLastReadBytes = stats?.readBytes
+        logger.notice("\(line, privacy: .public)")
     }
 
     /// The guard that watches the INPUT instead of the picture — the origin
@@ -1346,6 +1426,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         StreamTransportPolicy.shared.noteDirectPlaybackFailed()
         if !rebuildSpendingRecovery(from: currentMs) {
             logger.error("feed-stall relay failover refused (no recovery left, or a rebuild is running)")
+            giveUpAfterSpentRecovery("feed-stall-relay")
         }
     }
 
@@ -1400,6 +1481,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 """)
             if !self.rebuildSpendingRecovery(from: self.currentMs) {
                 logger.error("feed-stall escalation refused (no recovery left, or a rebuild is running)")
+                self.giveUpAfterSpentRecovery("feed-stall-escalation")
             }
         }
         feedReanchorWatchdog = work
@@ -1428,7 +1510,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         config.imagePadding = 8
         skipButton.configuration = config
         skipButton.translatesAutoresizingMaskIntoConstraints = false
-        skipButton.isHidden = true
+        setSkipButtonVisible(false, change: .setup)
         skipButton.addTarget(self, action: #selector(skipSegmentTapped), for: .primaryActionTriggered)
         view.addSubview(skipButton)
         let skipBottom = skipButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -64)
@@ -1448,7 +1530,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         activeSegmentType = nil
         autoSkippedSegmentKeys = []
         autoSkip = AutoSkipPreferences.current()
-        skipButton.isHidden = true
+        setSkipButtonVisible(false, change: .itemReset)
         let client = apiClient
         let id = itemId
         segmentFetchTask = Task { [weak self] in
@@ -1460,7 +1542,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private func updateSkipButton(currentTime: Double) {
         guard hasValidTime else {
-            if !skipButton.isHidden { skipButton.isHidden = true }
+            if !skipButton.isHidden { setSkipButtonVisible(false, change: .invalidTime) }
             nextUpCard?.hide()
             activeSegmentType = nil
             return
@@ -1476,6 +1558,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // echo of a target the engine has not reached yet.
             let canHandOff = autoPlayNext && nextEpisode != nil && episodeNavigator != nil
                 && !nextUpCancelledForThisItem
+            // What remains of the MEDIA, not of the segment: the hand-off obeys
+            // the countdown card's cap (see `AutoSkipPolicy`).
+            let secondsRemaining = Double(lengthMs) / 1000 - currentTime
             let key = AutoSkipPolicy.key(type: segment.type, startTicks: segment.startTicks)
             let action = AutoSkipPolicy.decide(
                 segmentType: segment.type,
@@ -1483,12 +1568,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 alreadySkipped: autoSkippedSegmentKeys.contains(key),
                 isPlaying: enginePlaying && !seeks.isSettling,
                 inSyncPlayGroup: syncPlay.isInGroup,
-                canHandOffToNext: canHandOff
+                handOff: canHandOff
+                    ? .init(secondsRemaining: secondsRemaining, isEpisode: resolvedIsEpisode ?? true)
+                    : nil
             )
             if action != .none {
                 autoSkippedSegmentKeys.insert(key)
                 activeSegmentType = nil
-                skipButton.isHidden = true
+                setSkipButtonVisible(false, change: .autoSkipped)
                 nextUpCard?.hide()
                 logger.notice("auto-skip type=\(segment.type?.rawValue ?? "?", privacy: .public) action=\(String(describing: action), privacy: .public) from=\(Int(currentTime), privacy: .public)s to=\(Int(end), privacy: .public)s")
                 switch action {
@@ -1512,14 +1599,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // screen (measured on device 2026-09-04). Until the policy admits
             // the card, the segment is an ordinary one and the skip button
             // stands, exactly as it does when auto-play is off.
-            let secondsRemaining = Double(lengthMs) / 1000 - currentTime
             if segment.type == .outro, autoPlayNext, let next = nextEpisode,
                episodeNavigator != nil, !nextUpCancelledForThisItem,
                NextUpCountdownPolicy.shouldShowCard(secondsRemaining: secondsRemaining,
                                                     isEpisode: resolvedIsEpisode ?? true) {
                 if activeSegmentType != nil {
                     activeSegmentType = nil
-                    skipButton.isHidden = true
+                    setSkipButtonVisible(false, change: .handedToNextUpCard)
                 }
                 showNextUpCard(for: next)
                 nextUpCard?.update(secondsRemaining: Int(secondsRemaining.rounded()))
@@ -1531,7 +1617,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 activeSegmentType = segment.type
                 let key = segment.type == .intro ? "player.skipIntro" : "player.skipCredits"
                 skipButton.configuration?.title = loc.localized(key)
-                skipButton.isHidden = false
+                setSkipButtonVisible(true, change: .segmentEntered)
                 #if os(tvOS)
                 setNeedsFocusUpdate()
                 #endif
@@ -1540,9 +1626,52 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
         if activeSegmentType != nil {
             activeSegmentType = nil
-            skipButton.isHidden = true
+            setSkipButtonVisible(false, change: .segmentLeft)
         }
         nextUpCard?.hide()
+    }
+
+    /// The ONE writer of the skip button's visibility. Animated only when
+    /// `SkipButtonPresentation` says so; an animated hide sets `isHidden` in its
+    /// completion — so the tvOS focus engine never lands on an invisible
+    /// button — unless a later change superseded it (`skipButtonGeneration`).
+    private func setSkipButtonVisible(_ visible: Bool, change: SkipButtonChange) {
+        skipButtonGeneration += 1
+        let generation = skipButtonGeneration
+        let animated = SkipButtonPresentation.animates(change, motionEnabled: MotionEffects.isEnabledNow)
+        let offstage = CGAffineTransform(translationX: CinemaMotion.overlaySlideDistance, y: 0)
+        guard animated else {
+            // Instant: snap, whatever was in flight.
+            skipButton.layer.removeAllAnimations()
+            skipButton.isHidden = !visible
+            skipButton.alpha = 1
+            skipButton.transform = .identity
+            return
+        }
+        if visible {
+            if skipButton.isHidden {
+                skipButton.alpha = 0
+                skipButton.transform = offstage
+                skipButton.isHidden = false
+            }
+            UIView.animate(withDuration: CinemaMotion.overlaySlide, delay: 0,
+                           options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]) {
+                self.skipButton.alpha = 1
+                self.skipButton.transform = .identity
+            }
+        } else {
+            guard !skipButton.isHidden else { return }
+            UIView.animate(withDuration: CinemaMotion.overlaySlideOut, delay: 0,
+                           options: [.curveEaseIn, .beginFromCurrentState]) {
+                self.skipButton.alpha = 0
+                self.skipButton.transform = offstage
+            } completion: { [weak self] _ in
+                guard let self, self.skipButtonGeneration == generation else { return }
+                self.skipButton.isHidden = true
+                self.skipButton.alpha = 1
+                self.skipButton.transform = .identity
+            }
+        }
     }
 
     /// Lazily builds the countdown card (it bakes in the next episode's title,
@@ -1605,7 +1734,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         for segment in segments where segment.type == activeSegmentType {
             let end = Int32(Double(segment.endTicks ?? 0) / 10_000_000 * 1000)
             userEngineSeek(ms: end)
-            skipButton.isHidden = true
+            setSkipButtonVisible(false, change: .userSkipped)
             activeSegmentType = nil
             refreshTimeUISoon()
             return
@@ -4206,8 +4335,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     /// Single decision point for opening a *fresh* stream through the proxy:
-    /// a probed black-hole, a prior direct failure this session, or a
-    /// seek-heavy container that would otherwise flood the server.
+    /// a probed black-hole, a prior direct failure this session, a
+    /// seek-heavy container that would otherwise flood the server, or a
+    /// pinned host:port (the LAN address, a self-signed public server) that
+    /// libVLC cannot open direct. The pin is NOT sticky: it is re-read per
+    /// open, so the give-up's `noteProxiedPlaybackFailed()` is unaffected.
     private var shouldRouteThroughProxy: Bool {
         #if DEBUG
         // Lets the proxy path be exercised on a network where the direct path
@@ -4217,6 +4349,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if ProcessInfo.processInfo.environment["CINEMAX_FORCE_PROXY"] != nil { return true }
         #endif
         return StreamTransportPolicy.shared.shouldStartOnProxy || sourceNeedsProxy
+            || VLCStreamPresenter.targetIsPinned(info.url, isPinned: ServerTrustDelegate.shared.isPinned(trustKey:))
     }
 
     /// The ONE way this presenter obtains a loopback URL. Kept as a single choke
@@ -4389,7 +4522,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func noteMediaOpened() {
         let wasOpen = mediaConfirmedOpen
         cancelOpenWatchdog()
-        recoverFromErrorIfNeeded()
+        // Only an OPEN takes a stale alert down (a stalled handshake that
+        // recovered after the watchdog surfaced it). This runs on every time
+        // tick: a give-up on a media that is still open — a rebuild net with
+        // its budget spent (`giveUpAfterSpentRecovery`) — must not be dismissed
+        // by the next tick of a clock that kept running.
+        if !wasOpen { recoverFromErrorIfNeeded() }
         didRetry = false
         // Releases the spinner gate — see `clearLoadingIfOpen()`. The engine
         // state that follows (`.playing` / a time tick) does the actual hiding.
@@ -4408,6 +4546,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // silent; its own settle reports.
         if !wasOpen {
             announceSyncPlayReadyIfPositionIsReal(isPlaying: player.state == .playing)
+            if let started = onPlaybackStarted {
+                onPlaybackStarted = nil
+                started()
+            }
         }
     }
 
@@ -5159,7 +5301,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if layoutMode == .tabletop {
             config = TabletopHUDStyle.block(symbol: playing ? "pause.fill" : "play.fill", pointSize: 54, emphasized: true)
         }
-        playPauseButton.configuration = config
+        // A real glyph change crossfades; a re-dress (table mode) does not.
+        let glyphChanged = shownPlayPauseGlyph != nil && shownPlayPauseGlyph != playing
+        shownPlayPauseGlyph = playing
+        if glyphChanged && MotionEffects.isEnabledNow {
+            UIView.transition(with: playPauseButton, duration: CinemaMotion.glyphCrossfade, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+                self.playPauseButton.configuration = config
+            }
+        } else {
+            playPauseButton.configuration = config
+        }
         // The glyph shows what the press WILL do, and so must the label: a
         // button drawn as ⏸ is the one that pauses.
         playPauseButton.accessibilityLabel = playing ? hudA11y.pause : hudA11y.play
@@ -5529,7 +5680,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
     #endif
 
-    private func handlePlaybackError() {
+    /// `recoveryExhausted`: called by `giveUpAfterSpentRecovery` — a rebuild
+    /// net found the shared budget spent, so this gives up without a retry.
+    private func handlePlaybackError(recoveryExhausted: Bool = false) {
         cancelOpenWatchdog()
         seeks.endSettle() // the media is being reloaded (or given up on)
         // The decision is pure and unit-tested (`PlaybackRetryPolicy`); this
@@ -5538,10 +5691,36 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             didRetry: didRetry,
             errorAlertShowing: errorAlert != nil,
             retryPending: pendingRetryToken != nil,
-            usingProxy: usingProxy
+            usingProxy: usingProxy,
+            routeChanged: PlaybackRetryPolicy.routeChanged(
+                negotiated: info.url, currentDial: apiClient.currentDialURL()
+            ),
+            recoveryExhausted: recoveryExhausted
         )
         let releaseStickyProxy: Bool
         switch decision {
+        case .rebuildOnCurrentRoute:
+            // The stream was negotiated on a route that is no longer dialled
+            // (LAN ⇄ public): a retry would reopen the dead host. A refused
+            // rebuild (budget spent, closing, or this IS a rebuild's own failed
+            // negotiation surfacing — `reResolve` still begun) gives up below.
+            // Spent BEFORE the rebuild: only `noteMediaOpened()` renews it (a
+            // successful rebuild re-arms it for its own open), and the shared
+            // rebuild budget bounds the rest.
+            didRetry = true
+            logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — route changed (now \(ServerRouteController.shared.route.rawValue, privacy: .public)), re-negotiating")
+            // Armed now, as the retry does: the failed attempt's trailing
+            // `.stopped` lands during the negotiation and must be ignored.
+            beginOpenLoading()
+            let fromMs = PlaybackRetryPolicy.rebuildFromMs(
+                lastKnownPositionMs: lastKnownPositionMs, startTime: startTime
+            )
+            if rebuildSpendingRecovery(from: fromMs) { return }
+            // Refused because the player is closing: nothing to surface — the
+            // old `.retry` did nothing on teardown either (no alert, no
+            // session release, no diagnostics upload on a closing player).
+            guard !isTearingDown else { return }
+            releaseStickyProxy = usingProxy
         case .retry(let noteDirectFailure):
             didRetry = true
             logger.error("VLC error for \(self.itemId, privacy: .public) at \(self.elapsedSincePlay(), privacy: .public) — retrying once")
@@ -5824,13 +6003,34 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         Task { [weak self] in
             guard let self else { return }
             defer { self.reResolve.end() }
+            // A route probe in flight decides which base the client dials: never
+            // re-negotiate on a route about to be abandoned.
+            await ServerRouteController.shared.awaitPendingProbe()
             // Routes through `notifyIfUnauthorized`: a genuinely revoked token
             // triggers the confirm-before-logout cycle in AppState. A transient
             // failure just returns nil → leave the watchdog / error path to it.
-            guard let fresh = try? await self.apiClient.getPlaybackInfo(
+            let dialAtStart = self.apiClient.currentDialURL()
+            var negotiated = try? await self.apiClient.getPlaybackInfo(
                 itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate,
                 engine: .vlc, mediaSourceId: keptSourceId
-            ) else {
+            )
+            if negotiated == nil, !self.isTearingDown, gen == self.navGeneration {
+                // The route moved UNDER the negotiation (leaving home on a
+                // fading Wi-Fi: the request left for the LAN address, then the
+                // path flipped): ask once more, on the route now dialled,
+                // rather than give up without ever trying the public one.
+                await ServerRouteController.shared.awaitPendingProbe()
+                if ReResolveGate.renegotiatesAfterFailure(
+                    dialAtStart: dialAtStart, dialNow: self.apiClient.currentDialURL()
+                ) {
+                    logger.notice("VLC re-resolve: route changed during the negotiation, asking again")
+                    negotiated = try? await self.apiClient.getPlaybackInfo(
+                        itemId: resumeItemId, userId: self.userId, maxBitrate: self.maxBitrate,
+                        engine: .vlc, mediaSourceId: keptSourceId
+                    )
+                }
+            }
+            guard let fresh = negotiated else {
                 logger.error("VLC re-resolve negotiation failed after \(Self.secondsSince(negotiationStart), privacy: .public)")
                 // …and make sure there IS one: this re-resolve may have superseded
                 // an error retry (its token was cleared above), which had already

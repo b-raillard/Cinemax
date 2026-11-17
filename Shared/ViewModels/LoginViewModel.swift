@@ -89,8 +89,12 @@ final class LoginViewModel {
                     consecutiveFailures = 0
                     guard authorized else { continue }
 
-                    let session = try await appState.apiClient.authenticateWithQuickConnect(secret: request.secret)
-                    await self.completeSession(session, using: appState)
+                    // Held: a route change must not rebuild the client under
+                    // the exchange (it would fail with `CancellationError`).
+                    try await appState.withSignInHold {
+                        let session = try await appState.apiClient.authenticateWithQuickConnect(secret: request.secret)
+                        await self.completeSession(session, using: appState)
+                    }
                     return
                 }
             } catch is CancellationError {
@@ -169,6 +173,11 @@ final class LoginViewModel {
 
         isAuthenticating = true
         errorMessage = nil
+        // Held until the session is complete: a route change must not rebuild
+        // the client under the exchange. The release runs one route
+        // evaluation, which routes the session just established (LAN first).
+        appState.beginSignIn()
+        defer { appState.endSignIn() }
 
         do {
             let session = try await appState.apiClient.authenticate(

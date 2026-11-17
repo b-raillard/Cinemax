@@ -204,7 +204,17 @@ final class NextUpCountdownView: UIView {
     }
 
     func update(secondsRemaining: Int) {
-        countdownLabel.text = String(format: countdownFormat, max(0, secondsRemaining))
+        let text = String(format: countdownFormat, max(0, secondsRemaining))
+        // The number changes softly. A crossfade, not a push: the label holds
+        // the whole sentence, and a push moved all of it every second; faded,
+        // only the digits that differ visibly change.
+        if countdownLabel.text != nil, countdownLabel.text != text, MotionEffects.isEnabledNow {
+            let tick = CATransition()
+            tick.type = .fade
+            tick.duration = CinemaMotion.countdownTick
+            countdownLabel.layer.add(tick, forKey: "cinemax.countdown.tick")
+        }
+        countdownLabel.text = text
     }
 
     func show() {

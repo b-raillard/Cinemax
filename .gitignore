@@ -32,3 +32,6 @@ design/network-logos/_originals/
 
 # Vidéos de présentation générées par le plugin brag
 brag-output/
+
+# Simulators Claude may drive on this machine (one UDID per line) — see scripts/claude-hooks/simulator-guard.sh
+.claude/simulators.local

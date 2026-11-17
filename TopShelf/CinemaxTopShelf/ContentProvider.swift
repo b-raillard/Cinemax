@@ -35,7 +35,14 @@ final class ContentProvider: TVTopShelfContentProvider {
         let maxContentAge: Int?
         /// The approved certificate of a self-signed server, or `nil`. Optional
         /// for the same reason — keep in sync with `ExtensionSessionBridge.Session`.
+        /// In a session returned by `dialing(_:)`, the pin of the address dialled.
         let pinnedCertificateSHA256: String?
+        /// The server's LAN address, its Jellyfin `Id` and the LAN certificate's
+        /// pin — what `dialing(_:)` probes. Optional for the same reason; keep
+        /// the three names in sync with `ExtensionSessionBridge.Session`.
+        let localServerURL: URL?
+        let serverID: String?
+        let localPinnedCertificateSHA256: String?
     }
 
     private struct ItemsResponse: Decodable, Sendable {
@@ -92,9 +99,46 @@ final class ContentProvider: TVTopShelfContentProvider {
             return
         }
         logger.info("TopShelf ▸ session ok host=\(session.serverURL.host() ?? "?", privacy: .public)")
-        let items = await fetchResumeItems(session: session, limit: 8)
+        // « At home, the LAN first » for the resume fetch. The shelf IMAGES keep
+        // the public URL (`session`): the system fetches them from
+        // `setImageURL`, which no delegate reaches, so a self-signed LAN
+        // certificate would blank artwork the public address serves today.
+        let dialed = await dialing(session)
+        logger.info("TopShelf ▸ route \(ExtensionServerRoute.routeClass(publicURL: session.serverURL, dialURL: dialed.serverURL), privacy: .public)")
+        let items = await fetchResumeItems(session: dialed, limit: 8)
         logger.info("TopShelf ▸ resume fetch → \(items.map { String($0.count) } ?? "FAILED", privacy: .public)")
         deliver(items: items, session: session, handler: handler)
+    }
+
+    /// A copy of `stored` whose `serverURL` is the address to dial — the LAN
+    /// one when `ExtensionServerRoute`'s probe proves it is this server over a
+    /// local connection, the public one otherwise — with the pin that goes
+    /// with it (bound to each request by `send(_:session:)`). Same as the widget's
+    /// `JellyfinLite.dialing(_:)`.
+    private static func dialing(_ stored: Session) async -> Session {
+        let dial = await ExtensionServerRoute.dialURL(
+            publicURL: stored.serverURL,
+            localURL: stored.localServerURL,
+            serverID: stored.serverID,
+            localPin: stored.localPinnedCertificateSHA256
+        )
+        let endpoint = ExtensionServerRoute.endpoint(
+            publicURL: stored.serverURL,
+            publicPin: stored.pinnedCertificateSHA256,
+            dialURL: dial,
+            localPin: stored.localPinnedCertificateSHA256
+        )
+        let dialed = Session(
+            serverURL: endpoint.serverURL,
+            accessToken: stored.accessToken,
+            userId: stored.userId,
+            maxContentAge: stored.maxContentAge,
+            pinnedCertificateSHA256: endpoint.pinnedCertificateSHA256,
+            localServerURL: stored.localServerURL,
+            serverID: stored.serverID,
+            localPinnedCertificateSHA256: stored.localPinnedCertificateSHA256
+        )
+        return dialed
     }
 
     /// Synchronous tail: builds the (non-Sendable) shelf content and hands it
@@ -205,15 +249,21 @@ final class ContentProvider: TVTopShelfContentProvider {
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.timeoutIntervalForRequest = 10
         config.waitsForConnectivity = false
-        // Honours the certificate the user approved in the app for a
-        // self-signed server. The shelf IMAGES are fetched by the system
-        // (`setImageURL`), which no delegate reaches: on such a server the
-        // shelf lists its items but its artwork stays blank.
-        let trust = ExtensionServerTrust {
-            readSession().flatMap { ExtensionServerTrust.pin(serverURL: $0.serverURL, fingerprint: $0.pinnedCertificateSHA256) }
-        }
-        return URLSession(configuration: config, delegate: trust, delegateQueue: nil)
+        // No session delegate: each request carries its own
+        // `ExtensionServerTrust` (`send(_:session:)`). The shelf IMAGES are
+        // fetched by the system (`setImageURL`), which no delegate reaches: on
+        // such a server the shelf lists its items but its artwork stays blank.
+        return URLSession(configuration: config)
     }()
+
+    /// The task delegate honours the certificate the user approved in the app
+    /// for THIS session's address — the LAN pin on the LAN host:port once
+    /// `dialing(_:)` chose the LAN, the public pin otherwise. Bound per
+    /// request, never read from shared state.
+    private static func send(_ request: URLRequest, session: Session) async throws -> (Data, URLResponse) {
+        let pin = ExtensionServerTrust.pin(serverURL: session.serverURL, fingerprint: session.pinnedCertificateSHA256)
+        return try await httpSession.data(for: request, delegate: ExtensionServerTrust { pin })
+    }
 
     /// nil = the request failed (network / auth); empty = nothing in progress.
     private static func fetchResumeItems(session: Session, limit: Int) async -> [Item]? {
@@ -235,7 +285,7 @@ final class ContentProvider: TVTopShelfContentProvider {
         guard let url = comps.url else { return nil }
         var request = URLRequest(url: url, timeoutInterval: 10)
         request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
-        guard let (data, resp) = try? await httpSession.data(for: request),
+        guard let (data, resp) = try? await send(request, session: session),
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               let decoded = try? JSONDecoder().decode(ItemsResponse.self, from: data) else { return nil }
         // The Apple TV shelf is the family screen: without this, a title rated
@@ -252,6 +302,10 @@ final class ContentProvider: TVTopShelfContentProvider {
     /// with no auth at all. The `ApiKey` this used to append bought nothing and
     /// put a non-expiring token in PineBoard's cache and in every reverse-proxy
     /// access log on each shelf refresh (audit 2026-09-22, S5).
+    ///
+    /// Built on the PUBLIC URL even at home (`run` passes the undialled
+    /// session): no delegate reaches the system's fetch, so a self-signed LAN
+    /// certificate would blank artwork the public address serves.
     private static func imageURL(session: Session, itemId: String, type: String, maxWidth: Int) -> URL? {
         guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
         comps.path = endpointPath("/Items/\(itemId)/Images/\(type)", serverURL: session.serverURL)

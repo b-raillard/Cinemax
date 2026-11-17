@@ -108,7 +108,9 @@ final class StreamTransportPolicy {
             let prefer = await Self.shouldPreferProxy(host: host, port: port, useTLS: useTLS)
             guard !Task.isCancelled else { return }
             self?.preferProxy = prefer
-            proxyLog.log("StreamTransport ▸ host=\(host, privacy: .public) preferProxy=\(prefer)")
+            // Never a LAN address in a log (it reaches the diagnostics export).
+            let shown = LocalNetworkAddress.isEligibleHost(host) ? "local" : host
+            proxyLog.log("StreamTransport ▸ host=\(shown, privacy: .public) preferProxy=\(prefer)")
         }
     }
 
@@ -974,6 +976,33 @@ private final class UpstreamHandler: NSObject, URLSessionDataDelegate, @unchecke
         if bytesDelivered - bytesAtLastReconnect >= Self.progressRenewBytes {
             reconnectsLeft = Self.maxReconnects
         }
+    }
+
+    /// Debug / TestFlight builds only (`VerboseDiagnostics`): what the system
+    /// measured for this upstream request — protocol, edge and LOCAL addresses
+    /// (Wi-Fi or carrier), reuse, time to first byte, bytes received. Delivered
+    /// before `didCompleteWithError`, once per task (a reconnect is its own).
+    func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
+        guard VerboseDiagnostics.isEnabled, let transaction = metrics.transactionMetrics.last else { return }
+        func ms(_ from: Date?, _ to: Date?) -> Int? {
+            guard let from, let to else { return nil }
+            return Int(to.timeIntervalSince(from) * 1000)
+        }
+        let line = VerboseDiagnostics.UpstreamTransaction(
+            status: (transaction.response as? HTTPURLResponse)?.statusCode,
+            protocolName: transaction.networkProtocolName,
+            remote: transaction.remoteAddress.map { "\($0):\(transaction.remotePort.map(String.init) ?? "?")" },
+            local: VerboseDiagnostics.localAddressClass(transaction.localAddress),
+            isReused: transaction.isReusedConnection,
+            isCellular: transaction.isCellular,
+            isExpensive: transaction.isExpensive,
+            isConstrained: transaction.isConstrained,
+            timeToFirstByteMs: ms(transaction.requestStartDate, transaction.responseStartDate),
+            durationMs: Int(metrics.taskInterval.duration * 1000),
+            bodyBytes: transaction.countOfResponseBodyBytesReceived,
+            error: (task.error as? URLError).map { "\($0.code.rawValue)" }
+        ).line
+        proxyLog.notice("StreamProxy ▸ \(self.label, privacy: .public) \(line, privacy: .public)")
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

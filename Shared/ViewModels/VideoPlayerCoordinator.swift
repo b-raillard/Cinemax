@@ -51,6 +51,9 @@ final class VideoPlayerCoordinator {
         /// Version override from the detail screen's version row. `nil` ⇒ let
         /// `MediaSourceQuality` rank the item's sources and pick.
         mediaSourceId: String? = nil,
+        /// Runs once, when playback has really started (the presenter's first
+        /// confirmed open) — « Reprendre ici » stops the other device then.
+        onPlaybackStarted: (@MainActor () -> Void)? = nil,
         using appState: AppState
     ) {
         guard let loc = localizationManager else {
@@ -75,6 +78,9 @@ final class VideoPlayerCoordinator {
                 return
             }
             do {
+                // Never negotiate on a route about to be abandoned: a LAN probe
+                // in flight (bounded by its own timeout) decides the base.
+                await ServerRouteController.shared.awaitPendingProbe()
                 let info = try await apiClient.getPlaybackInfo(
                     itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine,
                     mediaSourceId: CardPlayTargetResolver.sourceToOpen(
@@ -99,6 +105,7 @@ final class VideoPlayerCoordinator {
                         }
                     )
                     guard self.currentGeneration == generation else { return }
+                    v.onPlaybackStarted = onPlaybackStarted
                     self.vlcPresenter = v
                     v.present(info: info)
                     return
@@ -118,6 +125,7 @@ final class VideoPlayerCoordinator {
                     }
                 )
                 guard self.currentGeneration == generation else { return }
+                p.onPlaybackStarted = onPlaybackStarted
                 self.presenter = p
                 p.present(info: info)
             } catch {

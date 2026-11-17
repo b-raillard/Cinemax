@@ -19,6 +19,9 @@ struct WhatsNewPage: Identifiable, Equatable, Sendable {
     /// The page reads `whatsNew.<id>.other.*` on a device that is not an
     /// iPhone Duo: the same feature, announced to somebody about to switch.
     var hasDuoVariant = false
+    /// A line under the page, above the dots: the title carries « * » and this
+    /// key says what it refers to (« * Nécessite un serveur Seerr »).
+    var footnoteKey: String?
 
     /// The localization key's middle part: `whatsNew.<textKey>.title`.
     func textKey(onDuo: Bool) -> String {
@@ -74,6 +77,12 @@ enum WhatsNewCatalogue {
     static let maxPages = 6
 
     static let releases: [WhatsNewRelease] = [
+        WhatsNewRelease(version: ServerVersion(2, 6, 0), pages: [
+            WhatsNewPage(id: "localAddress", illustration: .localAddress),
+            WhatsNewPage(id: "episodeQuality", illustration: .episodeQuality),
+            WhatsNewPage(id: "seerrRequests", illustration: .seerrRequests, footnoteKey: "whatsNew.footnote.seerr"),
+            WhatsNewPage(id: "missingEpisodes", illustration: .missingEpisodes, footnoteKey: "whatsNew.footnote.seerr")
+        ]),
         WhatsNewRelease(version: ServerVersion(2, 5, 0), pages: [
             WhatsNewPage(id: "accounts", illustration: .accounts),
             WhatsNewPage(id: "resumeHere", illustration: .resumeHere),

@@ -1,4 +1,5 @@
 import Foundation
+import CinemaxKit
 
 /// What a `.stopped` engine event means.
 ///
@@ -141,6 +142,12 @@ enum PlaybackRetryDecision: Equatable {
     /// proxy — the next playback must try direct again rather than stay
     /// pinned to a path that just failed (`noteProxiedPlaybackFailed`).
     case giveUp(releaseStickyProxy: Bool)
+    /// First failure of an open negotiated on a route that is no longer the
+    /// one dialled (LAN ⇄ public): retrying would reopen the dead host, so the
+    /// presenter re-negotiates on the current route — through the shared
+    /// rebuild budget (`rebuildSpendingRecovery`), never `reResolveAndResume`
+    /// directly, and with `didRetry` spent first.
+    case rebuildOnCurrentRoute
 }
 
 enum PlaybackRetryPolicy {
@@ -151,13 +158,24 @@ enum PlaybackRetryPolicy {
     ///   - retryPending: a retry token is outstanding (the retry is awaiting the
     ///     proxy and has not reached its own `play()` yet).
     ///   - usingProxy: the attempt that just failed went through the proxy.
+    ///   - routeChanged: the stream was negotiated on another route than the
+    ///     one dialled now (`routeChanged(negotiated:currentDial:)`).
+    ///   - recoveryExhausted: a rebuild net (frozen picture, cut feed, stranded
+    ///     seek) wanted to rebuild and the shared budget is spent
+    ///     (`PictureStallPolicy.recoveriesLeft == 0`). That IS the bound: a
+    ///     retry here would be one more re-negotiation outside it, and the
+    ///     next successful open would re-arm it — so it gives up whatever
+    ///     `didRetry` says, once (a second signal is `.ignore`).
     static func decide(
         didRetry: Bool,
         errorAlertShowing: Bool,
         retryPending: Bool,
-        usingProxy: Bool
+        usingProxy: Bool,
+        routeChanged: Bool = false,
+        recoveryExhausted: Bool = false
     ) -> PlaybackRetryDecision {
-        if !didRetry {
+        if !didRetry, !recoveryExhausted {
+            if routeChanged { return .rebuildOnCurrentRoute }
             return .retry(noteDirectFailure: !usingProxy)
         }
         if errorAlertShowing || retryPending {
@@ -174,6 +192,26 @@ enum PlaybackRetryPolicy {
     static func resumeSeconds(lastKnownPositionMs: Int32) -> Double? {
         guard lastKnownPositionMs > 1000 else { return nil }
         return Double(lastKnownPositionMs) / 1000
+    }
+
+    /// Whether `negotiated` (the stream URL the failed open used) is on another
+    /// origin than the base the client dials now. `false` when no dial is known
+    /// (`currentDial == nil` — a mock, or no connection): that is never read as
+    /// « the public route ».
+    static func routeChanged(negotiated: URL, currentDial: URL?) -> Bool {
+        guard let currentDial else { return false }
+        return !ServerRoutePolicy.isSameOrigin(negotiated, currentDial)
+    }
+
+    /// Where a route rebuild reopens, in ms: where playback dropped, else the
+    /// open's own resume point (`startTime`, seconds) — a fresh open that
+    /// failed before its first second must not lose a resume for a 0.
+    static func rebuildFromMs(lastKnownPositionMs: Int32, startTime: Double?) -> Int32 {
+        if let resume = resumeSeconds(lastKnownPositionMs: lastKnownPositionMs) {
+            return Int32((resume * 1000).rounded())
+        }
+        guard let startTime, startTime.isFinite, startTime > 0 else { return 0 }
+        return Int32(min((startTime * 1000).rounded(), Double(Int32.max)))
     }
 }
 
@@ -227,6 +265,13 @@ struct ReResolveGate {
     ///   - surfacingFailure: a stranded seek's rebuild.
     ///   - engineStopped: the old engine is stopped, stopping, idle or in
     ///     error — including an error this gate kept from the error path.
+    /// A negotiation that FAILED is asked once more when the base the client
+    /// dials is no longer the one it started on: the request went to a route
+    /// that was being abandoned. Same route ⇒ the failure is the answer.
+    static func renegotiatesAfterFailure(dialAtStart: URL?, dialNow: URL?) -> Bool {
+        dialAtStart != dialNow
+    }
+
     static func onNegotiationFailed(
         supersededRetry: Bool,
         surfacingFailure: Bool,

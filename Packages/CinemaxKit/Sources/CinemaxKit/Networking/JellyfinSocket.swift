@@ -377,7 +377,7 @@ public actor JellyfinSocketHub {
     }
 
     private var socket: JellyfinSocket?
-    private var activeEndpoint: RealtimeSocketEndpoint?
+    private(set) var activeEndpoint: RealtimeSocketEndpoint?
     private var pump: Task<Void, Never>?
     private var subscribers: [UUID: AsyncStream<JellyfinSocketMessage>.Continuation] = [:]
 
@@ -398,6 +398,20 @@ public actor JellyfinSocketHub {
     public func unsubscribe(_ id: UUID) {
         subscribers.removeValue(forKey: id)?.finish()
         if subscribers.isEmpty { teardown() }
+    }
+
+    /// Test seam: identity of the live socket instance (nil when none).
+    var activeSocketIdentity: ObjectIdentifier? { socket.map(ObjectIdentifier.init) }
+
+    /// Moves the live socket onto a new dial endpoint — the route changed (LAN
+    /// <-> public) but the session did not, so the subscribers stay. A no-op with
+    /// no subscriber or no socket (the next `subscribe` builds on the endpoint it
+    /// is handed) and when the endpoint is the one already in use. Synchronous on
+    /// the actor, so it cannot interleave with `subscribe` / `unsubscribe`.
+    public func repoint(endpoint: RealtimeSocketEndpoint) {
+        guard !subscribers.isEmpty, socket != nil, let activeEndpoint,
+              !activeEndpoint.isSameConnection(as: endpoint) else { return }
+        ensureSocket(endpoint: endpoint)
     }
 
     // MARK: - Private

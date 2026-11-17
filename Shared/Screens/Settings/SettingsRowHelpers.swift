@@ -56,6 +56,38 @@ func serverStatusBadge(label: String, fontSize: Double, dotSize: CGFloat = 6) ->
 // Shared layout helpers used by SettingsScreen and IOSAppearanceDetailView on iOS.
 // Extracted to avoid duplication between the main screen and pushed detail views.
 
+/// The bubble beside « Seerr » — requests waiting plus reports open, for a
+/// Seerr manager (`SeerrSession.settingsBadgeCount`), in the accent like the
+/// Réglages tab's; also a summary row's own count. `onAccent`: drawn on an
+/// accent-filled pill (the focused tvOS pill), where it turns inside out to
+/// stay visible. Decoration for VoiceOver: the row reads the count as its
+/// value (`SettingsScreen.badgeValue`).
+struct SettingsCountBadge: View {
+    @Environment(ThemeManager.self) private var themeManager
+    /// Read so a text-size change re-renders the bubble: its font is a point
+    /// size computed in `body` (measured: it kept the old size until relaunch).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let label: String
+    var onAccent = false
+
+    var body: some View {
+        Text(label)
+            #if os(tvOS)
+            .font(.system(size: CinemaScale.pt(20), weight: .bold))
+            #else
+            .font(CinemaFont.dynamicSystem(13, weight: .bold, relativeTo: .caption1))
+            #endif
+            .monospacedDigit()
+            .lineLimit(1)
+            .fixedSize()
+            .foregroundStyle(onAccent ? themeManager.accentContainer : themeManager.onAccentContainer)
+            .padding(.horizontal, CinemaSpacing.spacing2 * 0.6)
+            .padding(.vertical, CinemaSpacing.spacing1 * 0.5)
+            .background(Capsule().fill(onAccent ? themeManager.onAccentContainer : themeManager.accentContainer))
+            .accessibilityHidden(true)
+    }
+}
+
 #if os(iOS)
 
 /// Standard padded row container for settings cells.
@@ -232,3 +264,69 @@ func iOSToggleRowsJoined(_ rows: [SettingsToggleRow], accent: Color, animated: B
 }
 
 #endif
+
+// MARK: - Réglages → Demandes chrome
+
+/// The row furniture `RequestsSettingsScreen` and `SeerrAccountPage` share —
+/// one definition, so the two pages cannot drift apart.
+@MainActor
+protocol SeerrSettingsChrome {}
+
+extension SeerrSettingsChrome {
+    var rowLabelFont: Font {
+        #if os(tvOS)
+        .system(size: CinemaScale.pt(20), weight: .medium)
+        #else
+        CinemaFont.dynamicLabel(.large)
+        #endif
+    }
+
+    var rowDetailFont: Font {
+        #if os(tvOS)
+        .system(size: CinemaScale.pt(16), weight: .regular)
+        #else
+        CinemaFont.dynamicLabel(.medium)
+        #endif
+    }
+
+    @ViewBuilder
+    func sectionHeader(_ title: String) -> some View {
+        #if os(tvOS)
+        Text(title.uppercased())
+            .font(.system(size: CinemaScale.pt(17), weight: .bold))
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+            .tracking(1.5)
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(.isHeader)
+        #else
+        iOSSettingsSectionHeader(title)
+        #endif
+    }
+
+    /// iOS: one glass panel, rows split by dividers. tvOS: separate focusable
+    /// rows, each with its own opaque background (`tvSettingsFocusable`).
+    @ViewBuilder
+    func panel<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        #if os(tvOS)
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) { content() }
+        #else
+        VStack(spacing: 0) { content() }
+            .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+        #endif
+    }
+
+    @ViewBuilder
+    var divider: some View {
+        #if os(iOS)
+        iOSSettingsDivider
+        #endif
+    }
+
+    func noteText(_ text: String) -> some View {
+        Text(text)
+            .font(rowDetailFont)
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, CinemaSpacing.spacing2)
+    }
+}

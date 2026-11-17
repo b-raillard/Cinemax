@@ -206,7 +206,7 @@ struct UserSwitchSheet: View {
     /// on tvOS (the top-leading pick, see `Shared/DesignSystem/CLAUDE.md`).
     @ViewBuilder
     private var proReconnectHint: some View {
-        if showsProReconnectHint, let entitlements, let earlyAdopter, let proStore {
+        if showsProReconnectHint, entitlements != nil, earlyAdopter != nil, proStore != nil {
             textActionButton(loc.localized("pro.reconnect.hint"), color: themeManager.accent) {
                 showUpsell = true
             }
@@ -492,6 +492,10 @@ struct UserSwitchSheet: View {
         isAuthenticating = true
         authError = nil
         defer { isAuthenticating = false }
+        // Held: a route change must not rebuild the shared client under the
+        // exchange (it would fail with `CancellationError`).
+        appState.beginSignIn()
+        defer { appState.endSignIn() }
         do {
             let session = try await appState.apiClient.authenticate(
                 username: trimmed, password: password

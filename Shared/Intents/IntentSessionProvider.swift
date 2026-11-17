@@ -12,6 +12,11 @@ struct IntentSessionContext: Sendable, Equatable {
     let serverURL: URL
     let accessToken: String
     let userId: String
+    /// The entry's optional LAN address and Jellyfin's own server `Id`, which
+    /// the route probe must find there (`dialURL(for:probe:)`). `serverURL`
+    /// stays the identity.
+    let localURL: URL?
+    let serverID: String?
 }
 
 /// A configured, ready-to-use client plus the context it was built from.
@@ -63,7 +68,9 @@ enum IntentSessionProvider {
             serverId: entry.id,
             serverURL: entry.url,
             accessToken: token,
-            userId: userId
+            userId: userId,
+            localURL: entry.localURL,
+            serverID: entry.serverID
         )
     }
 
@@ -88,10 +95,16 @@ enum IntentSessionProvider {
         defaults.string(forKey: SettingsKey.appLanguage) ?? SettingsKey.Default.appLanguage
     }
 
+    /// « At home, the LAN first », for the headless client: after
+    /// `reconnect`, the client dials the LAN when the app's own probe and
+    /// policy say so (`LocalRouteProbe` at the launch timeout +
+    /// `ServerRoutePolicy.decide`). The intent knows no `NetworkMonitor`, so
+    /// the reach is `.lanCapable`: the probe session never uses cellular,
+    /// which is what keeps a 4G intent on the public road.
     static func makeSession(
         keychain: some SecureStorageProtocol = KeychainService(),
         defaults: UserDefaults = .standard
-    ) -> IntentSession? {
+    ) async -> IntentSession? {
         guard let context = resolveContext(keychain: keychain) else {
             logger.debug("No usable session for an intent — refusing to resolve.")
             return nil
@@ -102,6 +115,29 @@ enum IntentSessionProvider {
         api.setPreferredLanguage(preferredLanguage(defaults: defaults))
         api.reconnect(url: context.serverURL, accessToken: context.accessToken)
         api.applyContentRatingLimit(maxAge: contentRatingLimit(defaults: defaults))
+        let dial = await dialURL(for: context) { url, timeout in
+            await LocalRouteProbe.probe(url, timeout: timeout)
+        }
+        // Bound to the identity it was decided for (the only form the app uses).
+        if let dial { api.setDialURL(dial, forIdentity: context.serverURL) }
+        logger.debug("Intent route: \(dial == nil ? "internet" : "local", privacy: .public)")
         return IntentSession(context: context, api: api)
+    }
+
+    /// The LAN URL to dial, or `nil` for the public one. No LAN address ⇒ no
+    /// probe at all.
+    static func dialURL(
+        for context: IntentSessionContext,
+        probe: @Sendable (URL, TimeInterval) async -> LocalProbeOutcome
+    ) async -> URL? {
+        guard ServerRoutePolicy.shouldProbe(localURL: context.localURL, reach: .lanCapable),
+              let localURL = context.localURL else { return nil }
+        let outcome = await probe(localURL, LocalRouteProbe.launchTimeout)
+        return ServerRoutePolicy.decide(
+            localURL: localURL,
+            reach: .lanCapable,
+            expectedServerID: context.serverID,
+            probe: outcome
+        )
     }
 }

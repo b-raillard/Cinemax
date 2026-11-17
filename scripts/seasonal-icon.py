@@ -8,7 +8,8 @@ L'icône principale est celle de l'App Store et de tout le monde : elle change
 avec une VERSION, jamais depuis l'app (spec 2026-09-28, §10). Sources :
 design/logo-variantes/declinaisons/<variante>/ (produites par recolor.py) ; un
 fichier qu'une variante ne change pas vient de la variante « classique ».
-L'icône teintée ne change jamais ; app_logo.png reçoit l'icône claire.
+L'icône teintée ne change jamais ; le logo des Réglages iOS (AppLogo.imageset,
+112 pt) reçoit l'icône claire réduite à 112 / 224 / 336 px (audit DC-12).
 """
 import shutil
 import sys
@@ -39,7 +40,15 @@ FILES = [
     "AppIconPreview.imageset/app_icon_preview.png",
     "AppIconPreview.imageset/app_icon_preview_tv.png",
 ]
-LOGO = "AppLogo.imageset/app_logo.png"
+LOGO = "AppLogo.imageset"
+# Réglages iOS show the logo at 112 pt at most (SettingsScreen+iOS.swift): 1x / 2x / 3x.
+LOGO_SIZES = {"app_logo.png": 112, "app_logo@2x.png": 224, "app_logo@3x.png": 336}
+
+
+def write_logo(icon):
+    img = Image.open(icon).convert("RGB")
+    for name, side in LOGO_SIZES.items():
+        img.resize((side, side), Image.LANCZOS).save(ASSETS / LOGO / name, optimize=True)
 
 
 def main():
@@ -58,8 +67,8 @@ def main():
             sys.exit(f"{rel}: {a.size} {a.mode} != {b.size} {b.mode}")
         shutil.copyfile(src, dst)
         print(f"{sys.argv[1]:>10}  {rel}")
-    shutil.copyfile(ASSETS / FILES[0], ASSETS / LOGO)
-    print(f"{sys.argv[1]:>10}  {LOGO}")
+    write_logo(ASSETS / FILES[0])
+    print(f"{sys.argv[1]:>10}  {LOGO} ({', '.join(LOGO_SIZES)})")
 
 
 if __name__ == "__main__":

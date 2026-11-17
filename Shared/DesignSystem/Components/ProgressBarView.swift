@@ -7,10 +7,26 @@ struct ProgressBarView: View {
     let progress: Double
     var height: CGFloat = 4
     var trackColor: Color = CinemaColor.surfaceContainerHighest
+    /// Fill from zero when the bar appears AS PART OF a skeleton reveal (the
+    /// screen's `ContentRevealClock`, so Home's « Reprendre »), never when a
+    /// lazy row re-creates the card later by scrolling. Every bar glides on a
+    /// value change.
+    var fillsOnAppear: Bool = false
 
     @Environment(ThemeManager.self) private var themeManager
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+    @Environment(\.contentRevealClock) private var revealClock
+    @State private var hasAppeared = false
 
     var body: some View {
+        let fraction = Self.displayedFraction(
+            progress: progress,
+            fillsOnAppear: Self.fillsFromZero(
+                fillsOnAppear: fillsOnAppear, motionEnabled: motionEnabled, hasAppeared: hasAppeared,
+                now: .now, revealStartedAt: revealClock?.startedAt
+            ),
+            hasAppeared: hasAppeared
+        )
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule()
@@ -18,12 +34,33 @@ struct ProgressBarView: View {
                     .frame(height: height)
                 Capsule()
                     .fill(themeManager.accent)
-                    .frame(width: geo.size.width * max(0, min(1, progress)), height: height)
+                    .frame(width: geo.size.width * fraction, height: height)
             }
             .frame(maxHeight: .infinity, alignment: .center)
+            .animation(CinemaMotion.gated(CinemaMotion.progressFill, enabled: motionEnabled), value: fraction)
         }
         .frame(height: height)
         .accessibilityHidden(true)
+        .onAppear {
+            // No state write unless asked: grid cells pay nothing.
+            if fillsOnAppear && !hasAppeared { hasAppeared = true }
+        }
+    }
+
+    /// Whether this bar should start from empty: asked for, motion on, not yet
+    /// shown, and inside the screen's reveal window.
+    nonisolated static func fillsFromZero(
+        fillsOnAppear: Bool, motionEnabled: Bool, hasAppeared: Bool, now: Date, revealStartedAt: Date?
+    ) -> Bool {
+        fillsOnAppear && motionEnabled && !hasAppeared
+            && ContentReveal.shouldAnimate(now: now, revealStartedAt: revealStartedAt)
+    }
+
+    /// The width actually drawn, 0…1. Zero until the bar has appeared when it
+    /// fills on appear, so the first frame animates from empty.
+    nonisolated static func displayedFraction(progress: Double, fillsOnAppear: Bool, hasAppeared: Bool) -> Double {
+        if fillsOnAppear && !hasAppeared { return 0 }
+        return max(0, min(1, progress))
     }
 }
 

@@ -16,8 +16,10 @@ struct HomeScreen: View {
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
-    #if os(iOS)
     @Environment(\.motionEffectsEnabled) private var motionEffects
+    /// When the skeleton last gave way to content — drives `.contentReveal`.
+    @State private var revealClock = ContentRevealClock()
+    #if os(iOS)
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     /// Index of the hero currently shown in the rotating carousel (iOS only —
     /// tvOS keeps a single static hero; the focus engine + `.focusSection` rules
@@ -94,16 +96,24 @@ struct HomeScreen: View {
     /// sits in several rails at once — see `CardZoom`.
     @Namespace private var zoomNamespace
 
+    /// Skeleton during phase-1, and kept up while a phase-1-empty result is
+    /// still filling later phases — the all-empty state must only appear once
+    /// the *entire* load finishes, never as a mid-load flash (genre rows
+    /// populate after the hero/rails).
+    private var showsSkeleton: Bool {
+        viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded)
+    }
+
     var body: some View {
+        // Noted from body on purpose: the stamp must exist before the revealed
+        // rows' `onAppear` (see `ContentRevealClock`).
+        let skeleton = revealClock.noting(skeletonVisible: showsSkeleton, motionEnabled: motionEffects)
         ZStack {
             SeasonalBackdrop().ignoresSafeArea()
 
-            if viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded) {
-                // Skeleton during phase-1, and kept up while a phase-1-empty
-                // result is still filling later phases — the all-empty state
-                // must only appear once the *entire* load finishes, never as a
-                // mid-load flash (genre rows populate after the hero/rails).
+            if skeleton {
                 loadingSkeleton
+                    .transition(.opacity)
             } else if isHomeEmpty, let failure = viewModel.loadFailure {
                 // Every source failed: never « Votre bibliothèque est vide »,
                 // which told an offline user their content was gone.
@@ -112,8 +122,10 @@ struct HomeScreen: View {
                 homeEmptyState
             } else {
                 content
+                    .environment(\.contentRevealClock, revealClock)
             }
         }
+        .animation(CinemaMotion.gated(CinemaMotion.skeletonFade, enabled: motionEffects), value: skeleton)
         #if os(iOS)
         .navigationTitle(loc.localized("tab.home"))
         .navigationBarTitleDisplayMode(.inline)
@@ -158,7 +170,11 @@ struct HomeScreen: View {
                 }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { note in
+            // The route owner's launch refresh: only when Home's load went out
+            // on another dial — at home it waited for the route already.
+            if note.object is ServerRouteController,
+               !viewModel.needsRouteReload(currentDial: appState.apiClient.currentDialURL()) { return }
             // Tier-1: full reload while visible, otherwise defer to next appear.
             if isVisible { performFullReload() } else { pendingFullReload = true }
         }
@@ -535,6 +551,7 @@ struct HomeScreen: View {
                         heroCarousel(heroCandidateList)
                             .id(scrollTopID)
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 0)
                     } else {
                         Color.clear.frame(height: 0).id(scrollTopID)
                     }
@@ -543,6 +560,7 @@ struct HomeScreen: View {
                         heroSection(hero)
                             .id(scrollTopID)
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 0)
                     } else {
                         // Keep a sentinel when there is no hero so the
                         // scroll proxy still has something to target.
@@ -560,12 +578,14 @@ struct HomeScreen: View {
                     if showWatchingNow, !viewModel.liveEntries.isEmpty {
                         watchingNowRow
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 1)
                     }
 
                     // Continue Watching
                     if showContinueWatching, !viewModel.resumeItems.isEmpty {
                         continueWatchingRow
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 2)
                     }
 
                     // The season's row (« Frissons d'Halloween ») — right under
@@ -573,18 +593,21 @@ struct HomeScreen: View {
                     if let row = seasonRow, !viewModel.seasonRowItems.isEmpty {
                         seasonalRow(title: loc.localized(row.titleKey), items: viewModel.seasonRowItems)
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 3)
                     }
 
                     // Next Up (next unwatched episode per in-progress series)
                     if showNextUp, !viewModel.nextUpItems.isEmpty {
                         nextUpRow
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 3)
                     }
 
                     // Recently Added
                     if showRecentlyAdded, !viewModel.latestItems.isEmpty {
                         recentlyAddedRow
                             .padding(.bottom, CinemaSpacing.spacing6)
+                            .contentReveal(step: 3)
                     }
 
                     // Favorites
@@ -891,14 +914,14 @@ struct HomeScreen: View {
             #endif
             .overlay {
                 Group {
-                    if item.hasBackdropImage, let backdropId = item.backdropItemID {
-                        HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
+                    if let url = heroBackdropURL(item) {
+                        HeroBackdropImage(url: url)
                         .accessibilityHidden(true)
                     } else {
                         BackdropFallbackView()
                     }
                 }
-                .heroBackdropBleed()
+                .heroBackdropBleed(clearInLightMode: true)
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
@@ -917,7 +940,7 @@ struct HomeScreen: View {
 
                         metadataText(for: item)
                     }
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .heroMetaStyle()
 
                     Text(item.name ?? "")
 
@@ -953,7 +976,7 @@ struct HomeScreen: View {
                             let heroStart = elsewhere?.startSeconds ?? CardPlayTargetResolver.resumeSeconds(
                                 positionTicks: item.userData?.playbackPositionTicks ?? 0
                             )
-                            let playTitle = elsewhere.map(resumeHereTitle) ?? loc.localized("action.play")
+                            let playTitle = elsewhere == nil ? loc.localized("action.play") : loc.localized("elsewhere.resumeHere")
                             PlayLink(
                                 itemId: id, title: item.name ?? "",
                                 startTime: heroStart,
@@ -1017,8 +1040,7 @@ struct HomeScreen: View {
                                 .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
                                 .padding(.horizontal, CinemaSpacing.spacing4)
                                 #if os(iOS)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                                .heroSecondaryButtonBackground()
                                 #endif
                             }
                             #if os(tvOS)
@@ -1054,7 +1076,15 @@ struct HomeScreen: View {
                 // the backdrop clips itself, wider than it (`heroBackdropBleed`).
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .clipped()
+                .heroAdaptiveText(backdropURL: heroBackdropURL(item))
             }
+    }
+
+    /// The hero's backdrop, or nil for the fallback — the one URL both the
+    /// image and its text's tone (`heroAdaptiveText`) read.
+    private func heroBackdropURL(_ item: BaseItemDto) -> URL? {
+        guard item.hasBackdropImage, let backdropId = item.backdropItemID else { return nil }
+        return appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue)
     }
 
     // MARK: - Continue Watching
@@ -1080,6 +1110,7 @@ struct HomeScreen: View {
                 liveCard(entry)
                     .frame(width: wideCardWidth)
             }
+            .edgeRecede(false)
 
             // Said once, under the row, and only when a card's join is
             // actually blocked — a row holding only the viewer's own group (its
@@ -1483,10 +1514,6 @@ struct HomeScreen: View {
         let state = loc.localized(entry.isPaused ? "elsewhere.paused" : "elsewhere.playing", elsewhereDeviceName(entry))
         guard entry.isPaused, let seconds = entry.startSeconds else { return state }
         return "\(state) · \(PlayerTimeFormat.ms(Int32(clamping: Int(seconds) * 1000)))"
-    }
-
-    private func resumeHereTitle(_ entry: ElsewherePlayback) -> String {
-        loc.localized("elsewhere.resumeHere")
     }
 
     /// « SUR APPLE TV » — same chrome as the « En direct » pill, in the accent.

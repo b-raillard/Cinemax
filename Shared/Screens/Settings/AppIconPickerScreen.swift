@@ -17,7 +17,6 @@ struct AppIconPickerScreen: View {
     /// Optional like the Settings screens': a host without it leaves every icon open.
     @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @Environment(\.motionEffectsEnabled) private var motionEffects
 
     /// `UIApplication.alternateIconName` is not observable: a copy, read on
     /// appear and after each apply.

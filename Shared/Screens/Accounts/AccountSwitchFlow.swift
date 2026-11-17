@@ -34,6 +34,16 @@ final class AccountSwitchFlow {
         after != nil && after != before
     }
 
+    /// Whether launch opens on « Qui regarde ? » (tvOS only): signed in, the
+    /// household asked for it, remembered accounts allowed (Pro), and at least
+    /// two of them to choose from. Read once, right after `restoreSession`, by
+    /// `AppNavigation` — which also holds Seerr's arrival message on it.
+    nonisolated static func showsLaunchPicker(
+        isTVOS: Bool, isAuthenticated: Bool, askOnLaunch: Bool, memorizedAccountsAllowed: Bool, accountCount: Int
+    ) -> Bool {
+        isTVOS && isAuthenticated && askOnLaunch && memorizedAccountsAllowed && accountCount >= 2
+    }
+
     /// Tries to open `account`. `true` = switched (the caller dismisses).
     func select(
         _ account: SavedAccount,

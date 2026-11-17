@@ -37,6 +37,28 @@ final class AddToPlaylistPresenter {
         guard let itemId, !itemId.isEmpty else { return }
         request = AddToPlaylistRequest(itemId: itemId, title: title ?? "")
     }
+
+    /// The request as `host` should present it: while the deep-link modal is
+    /// up it is the one presenter (the root cannot present over it).
+    func request(for host: PresentationHost) -> AddToPlaylistRequest? {
+        host == .modal || !modalIsUp ? request : nil
+    }
+
+    /// Whether the deep-link modal fiche is up — assigned by `MainTabView`
+    /// from `deepLinkFallback`, as `SeerrRequestPresenter.modalIsUp`.
+    private(set) var modalIsUp = false
+    /// The modal came, went or was replaced: the open request goes with it.
+    func modalChanged(isUp: Bool) {
+        modalIsUp = isUp
+        request = nil
+    }
+}
+
+/// Who presents a root-hosted flow (the playlist sheet, the Seerr request)
+/// raised from a screen: the app's root, or the deep-link modal fiche
+/// (`MainTabView.deepLinkDetail`), over which the root cannot present.
+enum PresentationHost {
+    case root, modal
 }
 
 /// Sheet-scoped model. Nothing outlives the sheet.
@@ -320,17 +342,26 @@ struct AddToPlaylistSheet: View {
 /// `@Environment` reads resolve regardless of automatic propagation — same shape
 /// as `RemotePlayPresentation`.
 struct AddToPlaylistPresentation: ViewModifier {
-    @Binding var request: AddToPlaylistRequest?
+    let presenter: AddToPlaylistPresenter
     let appState: AppState
     let themeManager: ThemeManager
     let loc: LocalizationManager
     let toast: ToastCenter
+    /// `.modal`: hosted inside the deep-link fiche (`MainTabView`), which
+    /// then presents instead of the root — see `PresentationHost`.
+    var host: PresentationHost = .root
 
     func body(content: Content) -> some View {
+        presented(content)
+    }
+
+    @ViewBuilder
+    private func presented(_ content: Content) -> some View {
+        let request = Binding(get: { presenter.request(for: host) }, set: { presenter.request = $0 })
         #if os(tvOS)
-        content.fullScreenCover(item: $request) { request in sheetView(request) }
+        content.fullScreenCover(item: request) { request in sheetView(request) }
         #else
-        content.sheet(item: $request) { request in sheetView(request) }
+        content.sheet(item: request) { request in sheetView(request) }
         #endif
     }
 

@@ -182,8 +182,12 @@ struct ProNoticeCard: View {
 struct ProBadge: View {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ThemeManager.self) private var themeManager
+    /// The ink when the badge sits ON `accentContainer` (a focused tvOS
+    /// Settings pill): `onAccentContainer`, per the design-system U4 RULE.
+    var ink: Color?
 
     var body: some View {
+        let color = ink ?? themeManager.accent
         HStack(spacing: 4) {
             Image(systemName: "lock.fill")
                 .font(.system(size: CinemaScale.pt(10), weight: .bold))
@@ -191,10 +195,10 @@ struct ProBadge: View {
             Text(loc.localized("pro.badge"))
                 .font(.system(size: CinemaScale.pt(12), weight: .heavy))
         }
-        .foregroundStyle(themeManager.accent)
+        .foregroundStyle(color)
         .padding(.horizontal, CinemaSpacing.spacing2)
         .padding(.vertical, 3)
-        .background(themeManager.accent.opacity(0.16))
+        .background(color.opacity(0.16))
         .clipShape(Capsule())
     }
 }

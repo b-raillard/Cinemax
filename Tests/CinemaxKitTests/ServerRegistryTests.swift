@@ -361,6 +361,39 @@ struct ServerRegistryTests {
     /// every upgraded install holds in its Keychain. If it failed to decode,
     /// `KeychainService.getServers()` would answer `[]` — every server gone.
     /// The payload is the exact key set the previous `ServerEntry` encoded.
+    @Test("Upsert keeps the stored local address over an incoming nil")
+    func upsertKeepsLocalURL() {
+        var existing = entry("NAS", "https://host/jellyfin", daysAgo: 5)
+        existing.localURL = URL(string: "http://192.168.1.10:8899")
+        let incoming = entry("NAS", "https://host/jellyfin")
+
+        let result = ServerRegistry.upsert(incoming, into: [existing])
+
+        #expect(result.count == 1)
+        #expect(result[0].localURL == URL(string: "http://192.168.1.10:8899"))
+    }
+
+    @Test("A registry stored before the local address still decodes")
+    func legacyRegistryDecodesWithoutLocalURL() throws {
+        let json = """
+        [{"id":"4F0C2B9E-1111-2222-3333-444455556666","name":"NAS","url":"https://host/jellyfin",
+          "serverID":"srv1","accessToken":"tok","userId":"user1","username":"Alice",
+          "serverVersion":"10.11.11","lastUsedAt":770000000}]
+        """
+        let entries = try JSONDecoder().decode([ServerEntry].self, from: Data(json.utf8))
+        #expect(entries.count == 1)
+        #expect(entries[0].localURL == nil)
+    }
+
+    @Test("The local address round-trips through JSON")
+    func localURLRoundTrips() throws {
+        var original = entry("A", "https://host/jellyfin")
+        original.localURL = URL(string: "http://nas.local:8096")
+        let decoded = try JSONDecoder().decode(ServerEntry.self, from: JSONEncoder().encode(original))
+        #expect(decoded.localURL == original.localURL)
+        #expect(decoded == original)
+    }
+
     @Test("A registry stored before rename/reorder still decodes")
     func legacyRegistryDecodes() throws {
         let json = """
@@ -767,6 +800,40 @@ struct MultiServerAppStateTests {
         #expect(app.activeServerNameOverride == "Salon")
     }
 
+    @Test("setLocalURL persists to the keychain")
+    func setLocalURLPersists() {
+        let kc = MockKeychain()
+        let a = entry("NAS", "https://a.example.com")
+        let app = makeState(keychain: kc, servers: [a], activeId: a.id)
+        let local = URL(string: "http://192.168.1.10:8899")!
+
+        let result = app.setLocalURL(id: a.id, to: local)
+
+        #expect(result?.localURL == local)
+        #expect(app.servers.first?.localURL == local)
+        #expect(kc.getServers().first?.localURL == local)
+        app.setLocalURL(id: a.id, to: nil)
+        #expect(kc.getServers().first?.localURL == nil)
+        #expect(app.setLocalURL(id: "ghost", to: local) == nil)
+    }
+
+    @Test("adoptServerID fills a missing id and never overwrites one")
+    func adoptServerIDDoesNotOverwrite() {
+        let kc = MockKeychain()
+        var a = entry("A", "https://a.example.com")
+        a.serverID = "A"
+        var b = entry("B", "https://b.example.com")
+        b.serverID = nil
+        let app = makeState(keychain: kc, servers: [a, b], activeId: a.id)
+
+        app.adoptServerID(id: a.id, serverID: "B")
+        app.adoptServerID(id: b.id, serverID: "B")
+
+        #expect(app.servers.first { $0.id == a.id }?.serverID == "A")
+        #expect(app.servers.first { $0.id == b.id }?.serverID == "B")
+        #expect(kc.getServers().first { $0.id == b.id }?.serverID == "B")
+    }
+
     /// The Settings server card read `serverInfo`, which a switch nils and
     /// only a background fetch refills — so it named the placeholder, and on
     /// the pushed iOS page kept the PREVIOUS server's name.
@@ -866,6 +933,399 @@ struct MultiServerAppStateTests {
         #expect(app.servers[0].userId == "user9")
         #expect(kc.savedActiveServerId == a.id)
     }
+
+    // MARK: Route of switches and re-login (local server address)
+
+    /// Not the owner LAN key: these tests write the real pin store.
+    private let lan = URL(string: "https://10.0.0.5:8920")!
+
+    @Test("A switch validates the target's token on the target's route")
+    func switchValidatesOnRoute() async {
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local", userId: "user2")
+        let app = makeState(servers: [a, b], activeId: a.id)
+        let log = RouteLog()
+        let lan = self.lan
+        app.routeURL = { _ in lan }
+        app.sessionValidator = { url, _ in
+            log.urls.append(url)
+            return .valid
+        }
+
+        let decision = await app.switchTo(b)
+
+        #expect(decision == .commit)
+        #expect(log.urls == [lan])
+    }
+
+    @Test("A re-login handshakes on the entry's route, the identity unchanged")
+    func reLoginConnectsOnRoute() async {
+        let api = MockAPIClient()
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local", userId: "user2")
+        let app = makeState(api: api, servers: [a, b], activeId: a.id)
+        let lan = self.lan
+        app.routeURL = { _ in lan }
+
+        await app.beginReLogin(for: b)
+
+        #expect(api.connectCalls == [MockAPIClient.ConnectCall(url: b.url, dialURL: lan)])
+        #expect(app.serverURL == b.url)
+    }
+
+    /// Audit 2026-11-13, BUG-01: `connectToServer` installs the new client only
+    /// once the server answered, so a failed handshake leaves the shared client
+    /// on A with A's token — B's login screen would then post B's password to A.
+    @Test("A re-login whose handshake fails stays on the current server, never on B's login screen")
+    func reLoginHandshakeFailureStaysOnCurrentServer() async {
+        let api = MockAPIClient()
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local", token: nil, userId: nil)
+        let app = makeState(api: api, servers: [a, b], activeId: a.id)
+        app.settingsDefaults = .isolatedForTesting()
+        await app.applyActiveServer(a)
+        api.shouldThrow = true
+        api.stubbedError = URLError(.cannotConnectToHost)
+
+        let decision = await app.switchTo(b)
+
+        #expect(decision == .unreachable)
+        #expect(app.serverURL == a.url)
+        #expect(app.isAuthenticated)
+        #expect(app.currentUserId == "user1")
+        #expect(app.accessToken == "tok")
+        #expect(app.activeServerId == a.id)
+        #expect(app.pendingRollbackServer == nil)
+        #expect(api.identityURL == a.url)
+    }
+
+    @Test("A re-login whose route is the identity passes no dial URL")
+    func reLoginOnIdentityPassesNoDial() async {
+        let api = MockAPIClient()
+        let a = entry("A", "https://a.local")
+        let b = entry("B", "https://b.local", userId: "user2")
+        let app = makeState(api: api, servers: [a, b], activeId: a.id)
+
+        await app.beginReLogin(for: b)
+
+        #expect(api.connectCalls == [MockAPIClient.ConnectCall(url: b.url, dialURL: nil)])
+    }
+
+    // MARK: setLocalAddress
+
+    private func localState(_ entry: ServerEntry, active: Bool = true) -> AppState {
+        let app = makeState(servers: [entry], activeId: active ? entry.id : nil)
+        app.publicPing = { _ in .offline }
+        app.localProbe = { _, _ in .failed(localNetworkDenied: false) }
+        app.localNetworkDenied = { _ in false }
+        app.localCertificateState = { _ in .trusted }
+        return app
+    }
+
+    @Test("Public URL down, LAN answers: the LAN Id is adopted and the address saved")
+    func setLocalAddressAdoptsLocalIdWhenPublicDown() async {
+        let server = ServerEntry(name: "A", url: ServerURLNormalizer.normalize("https://movies.example.net")!,
+                                 serverID: nil, accessToken: "tok", userId: "user1", username: "U")
+        let app = localState(server)
+        app.localProbe = { _, _ in .answered(serverID: "S", connectedAddressIsLocal: true) }
+        let changes = RouteLog()
+        app.onLocalAddressChanged = { changes.count += 1 }
+
+        let outcome = await app.setLocalAddress(id: server.id, raw: "10.0.0.5:8920")
+
+        #expect(outcome == .reachable)
+        let stored = app.servers.first { $0.id == server.id }
+        #expect(stored?.serverID == "S")
+        #expect(stored?.localURL == lan)
+        #expect(changes.count == 1)
+    }
+
+    @Test("Another server answering on the LAN address saves nothing")
+    func setLocalAddressOtherServerSavesNothing() async {
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        app.localProbe = { _, _ in .answered(serverID: "OTHER", connectedAddressIsLocal: true) }
+        let changes = RouteLog()
+        app.onLocalAddressChanged = { changes.count += 1 }
+
+        let outcome = await app.setLocalAddress(id: server.id, raw: "10.0.0.5:8920")
+
+        #expect(outcome == .refusedOtherServer)
+        #expect(app.servers.first { $0.id == server.id }?.localURL == nil)
+        #expect(changes.count == 0)
+    }
+
+    @Test("A blank field removes the local address")
+    func setLocalAddressBlankRemoves() async {
+        var server = entry("A", "https://movies.example.net")
+        server.localURL = lan
+        let app = localState(server)
+
+        let outcome = await app.setLocalAddress(id: server.id, raw: "   ")
+
+        #expect(outcome == .removed)
+        #expect(app.servers.first { $0.id == server.id }?.localURL == nil)
+    }
+
+    @Test("An unpinned LAN certificate offers its approval and saves nothing")
+    func saveOffersCertificateApproval() async {
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        app.localCertificateState = { _ in .pendingApproval }
+
+        let outcome = await app.setLocalAddress(id: server.id, raw: "10.0.0.5:8920")
+
+        #expect(outcome == .needsCertificateApproval)
+        #expect(app.servers.first { $0.id == server.id }?.localURL == nil)
+    }
+
+    @Test("Saved away from home with no pin: saved, approval still owed")
+    func savedAwayNeedsApproval() async {
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        app.localCertificateState = { _ in .unknown }
+
+        let outcome = await app.setLocalAddress(id: server.id, raw: "10.0.0.5:8920")
+
+        #expect(outcome == .savedNeedsApproval)
+        #expect(app.servers.first { $0.id == server.id }?.localURL == lan)
+    }
+
+    @Test("http:// typed is refused before any probe")
+    func httpTypedIsRefused() async {
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        let log = RouteLog()
+        app.localProbe = { url, _ in
+            await MainActor.run { log.urls.append(url) }
+            return .answered(serverID: "S", connectedAddressIsLocal: true)
+        }
+
+        let outcome = await app.setLocalAddress(id: server.id, raw: "http://192.168.1.10:8899")
+
+        #expect(outcome == .refusedNotHTTPS)
+        #expect(log.urls.isEmpty)
+        #expect(app.servers.first { $0.id == server.id }?.localURL == nil)
+    }
+
+    @Test("Changing the local address forgets the old LAN pin")
+    func changingAddressForgetsOldPin() async {
+        let oldKey = "10.0.0.5:8920"
+        let newKey = "10.0.0.6:8920"
+        let snapshots = [PinSnapshot(oldKey), PinSnapshot(newKey)]
+        defer { snapshots.forEach { $0.restore() } }
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        server.localURL = lan
+        let app = localState(server)
+        app.localProbe = { _, _ in .answered(serverID: "S", connectedAddressIsLocal: true) }
+        ServerTrustDelegate.shared.trust(fingerprint: "ab", forTrustKey: oldKey)
+        #expect(ServerTrustDelegate.shared.isPinned(trustKey: oldKey))
+
+        let outcome = await app.setLocalAddress(id: server.id, raw: "https://10.0.0.6:8920")
+
+        #expect(outcome == .reachable)
+        #expect(app.servers.first { $0.id == server.id }?.localURL == URL(string: "https://10.0.0.6:8920"))
+        #expect(!ServerTrustDelegate.shared.isPinned(trustKey: oldKey))
+    }
+
+    @Test("The old LAN pin stays while another entry still uses that host:port")
+    func sharedPinSurvivesAddressChange() async {
+        let oldKey = "10.0.0.5:8920"
+        let snapshot = PinSnapshot(oldKey)
+        defer { snapshot.restore() }
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        server.localURL = lan
+        let other = entry("B", "https://10.0.0.5:8920")
+        let app = makeState(servers: [server, other], activeId: server.id)
+        app.publicPing = { _ in .offline }
+        app.localProbe = { _, _ in .answered(serverID: "S", connectedAddressIsLocal: true) }
+        app.localNetworkDenied = { _ in false }
+        ServerTrustDelegate.shared.trust(fingerprint: "ab", forTrustKey: oldKey)
+
+        let outcome = await app.setLocalAddress(id: server.id, raw: "")
+
+        #expect(outcome == .removed)
+        #expect(ServerTrustDelegate.shared.isPinned(trustKey: oldKey))
+    }
+
+    @Test("Removing a server forgets its LAN pin")
+    func removeServerForgetsLANPin() async {
+        let key = "10.0.0.5:8920"
+        let snapshot = PinSnapshot(key)
+        defer { snapshot.restore() }
+        let a = entry("A", "https://a.example.net")
+        var b = entry("B", "https://b.example.net")
+        b.localURL = lan
+        let app = makeState(servers: [a, b], activeId: a.id)
+        ServerTrustDelegate.shared.trust(fingerprint: "ab", forTrustKey: key)
+
+        await app.removeServer(b)
+
+        #expect(!ServerTrustDelegate.shared.isPinned(trustKey: key))
+    }
+
+    @Test("An approval the re-save then refuses leaves no pin behind")
+    func refusedReSaveForgetsFreshPin() async {
+        let key = "10.0.0.5:8920"
+        let snapshot = PinSnapshot(key)
+        defer { snapshot.restore() }
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        app.localProbe = { _, _ in .answered(serverID: "OTHER", connectedAddressIsLocal: true) }
+        ServerTrustDelegate.shared.recordPending(Self.summary(key, fingerprint: "ab"))
+
+        let outcome = await app.trustLocalCertificate(id: server.id, raw: "10.0.0.5:8920", fingerprint: "ab")
+
+        #expect(outcome == .refusedOtherServer)
+        #expect(!ServerTrustDelegate.shared.isPinned(trustKey: key))
+        #expect(app.servers.first { $0.id == server.id }?.localURL == nil)
+    }
+
+    @Test("An approval the re-save stores keeps its pin")
+    func approvedReSaveKeepsPin() async {
+        let key = "10.0.0.5:8920"
+        let snapshot = PinSnapshot(key)
+        defer { snapshot.restore() }
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        app.localProbe = { _, _ in .answered(serverID: "S", connectedAddressIsLocal: true) }
+        ServerTrustDelegate.shared.recordPending(Self.summary(key, fingerprint: "ab"))
+
+        let outcome = await app.trustLocalCertificate(id: server.id, raw: "10.0.0.5:8920", fingerprint: "ab")
+
+        #expect(outcome == .reachable)
+        #expect(ServerTrustDelegate.shared.isPinned(trustKey: key))
+        #expect(app.servers.first { $0.id == server.id }?.localURL == lan)
+    }
+
+    @Test("Approving a changed certificate that the save then refuses puts the genuine pin back")
+    func refusedChangedCertificateRestoresTheGenuinePin() async {
+        let key = "10.0.0.7:8920"
+        let snapshot = PinSnapshot(key)
+        defer { snapshot.restore() }
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        server.localURL = URL(string: "https://10.0.0.7:8920")   // already saved, and pinned
+        let app = localState(server)
+        ServerTrustDelegate.shared.trust(fingerprint: "aa", forTrustKey: key)
+        // Away from home, another machine answers on that address with its own leaf.
+        app.localProbe = { _, _ in .answered(serverID: "OTHER", connectedAddressIsLocal: true) }
+        ServerTrustDelegate.shared.recordPending(Self.summary(key, fingerprint: "bb"))
+
+        let outcome = await app.trustLocalCertificate(id: server.id, raw: "10.0.0.7:8920", fingerprint: "bb")
+
+        #expect(outcome == .refusedOtherServer)
+        #expect(ServerTrustDelegate.shared.pinnedFingerprint(for: URL(string: "https://10.0.0.7:8920")!) == "aa")
+        #expect(app.servers.first { $0.id == server.id }?.localURL == URL(string: "https://10.0.0.7:8920"))
+    }
+
+    @Test("An approval the server never confirmed is not kept: the address is saved, awaiting approval")
+    func unconfirmedApprovalIsNotKept() async {
+        let key = "10.0.0.8:8920"
+        let snapshot = PinSnapshot(key)
+        defer { snapshot.restore() }
+        ServerTrustDelegate.shared.forget(trustKey: key)
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        app.localCertificateState = { AppState.certificateState(ofLocalURL: $0) }
+        // The re-run's probe does not answer (the network went away).
+        app.localProbe = { _, _ in .failed(localNetworkDenied: false) }
+        ServerTrustDelegate.shared.recordPending(Self.summary(key, fingerprint: "ab"))
+
+        let outcome = await app.trustLocalCertificate(id: server.id, raw: "10.0.0.8:8920", fingerprint: "ab")
+
+        #expect(outcome == .savedNeedsApproval)
+        #expect(!ServerTrustDelegate.shared.isPinned(trustKey: key))
+        #expect(app.servers.first { $0.id == server.id }?.localURL == URL(string: "https://10.0.0.8:8920"))
+    }
+
+    @Test("A fingerprint other than the pending one pins nothing and asks again")
+    func mismatchingFingerprintPinsNothing() async {
+        let key = "10.0.0.5:8920"
+        let snapshot = PinSnapshot(key)
+        defer { snapshot.restore() }
+        ServerTrustDelegate.shared.forget(trustKey: key)
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        app.localCertificateState = { AppState.certificateState(ofLocalURL: $0) }
+        // The re-run's probe meets a TLS challenge again: the delegate records
+        // the leaf it presented (here, a new one).
+        app.localProbe = { _, _ in
+            ServerTrustDelegate.shared.recordPending(Self.summary(key, fingerprint: "cd"))
+            return .failed(localNetworkDenied: false)
+        }
+        ServerTrustDelegate.shared.recordPending(Self.summary(key, fingerprint: "ab"))
+
+        let outcome = await app.trustLocalCertificate(id: server.id, raw: "10.0.0.5:8920", fingerprint: "zz")
+
+        #expect(outcome == .needsCertificateApproval)
+        #expect(!ServerTrustDelegate.shared.isPinned(trustKey: key))
+        #expect(app.pendingLocalCertificate(raw: "10.0.0.5:8920")?.fingerprint == "cd")
+    }
+
+    @Test("A pending approval left by an earlier attempt is not offered again")
+    func stalePendingIsNotOffered() async {
+        let key = "10.0.0.5:8920"
+        let snapshot = PinSnapshot(key)
+        defer { snapshot.restore() }
+        ServerTrustDelegate.shared.forget(trustKey: key)
+        var server = entry("A", "https://movies.example.net")
+        server.serverID = "S"
+        let app = localState(server)
+        app.localCertificateState = { AppState.certificateState(ofLocalURL: $0) }
+        // Simulated: a summary recorded by an earlier probe, then this save's
+        // probe times out without any TLS challenge (the seam records nothing).
+        ServerTrustDelegate.shared.recordPending(Self.summary(key, fingerprint: "ab"))
+        app.localProbe = { _, _ in .failed(localNetworkDenied: false) }
+
+        let outcome = await app.setLocalAddress(id: server.id, raw: "10.0.0.5:8920")
+
+        #expect(outcome == .savedNeedsApproval)
+        #expect(app.pendingLocalCertificate(raw: "10.0.0.5:8920") == nil)
+    }
+
+    nonisolated private static func summary(_ key: String, fingerprint: String) -> ServerCertificateSummary {
+        let host = String(key[..<(key.lastIndex(of: ":") ?? key.endIndex)])
+        return ServerCertificateSummary(trustKey: key, host: host, subject: "test", serialNumber: nil, fingerprint: fingerprint)
+    }
+}
+
+/// A host's pin as it stood before a test, put back afterwards (the test host
+/// is the app: its real pin store), its pending approval dropped.
+private struct PinSnapshot {
+    let key: String
+    let fingerprint: String?
+
+    init(_ key: String) {
+        self.key = key
+        fingerprint = URL(string: "https://\(key)").flatMap(ServerTrustDelegate.shared.pinnedFingerprint(for:))
+    }
+
+    func restore() {
+        if let fingerprint {
+            ServerTrustDelegate.shared.trust(fingerprint: fingerprint, forTrustKey: key)
+        } else {
+            ServerTrustDelegate.shared.forget(trustKey: key)
+        }
+        ServerTrustDelegate.shared.clearPending(forTrustKey: key)
+    }
+}
+
+/// Records the URLs a seam was handed (main actor).
+@MainActor
+private final class RouteLog {
+    var urls: [URL] = []
+    var count = 0
 }
 
 // MARK: - Standalone switch validation (audit 2026-09-22, B10)
@@ -875,7 +1335,7 @@ struct MultiServerAppStateTests {
 /// user rather than trusting a status.
 @Suite("ServerSessionValidator")
 struct ServerSessionValidatorTests {
-    private let user = Data(#"{"Name":"bastien","Id":"4b1c0e8f2a3d4e5f8a9b0c1d2e3f4a5b"}"#.utf8)
+    private let user = Data(#"{"Name":"alex","Id":"fedcba9876543210fedcba9876543210"}"#.utf8)
 
     @Test("a 2xx carrying a user is valid, anything else on a 2xx proves nothing")
     func twoHundredNeedsAUser() {

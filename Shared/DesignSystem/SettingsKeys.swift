@@ -110,6 +110,30 @@ enum SettingsKey {
         "search.recentQueriesAccountMigratedTo.\(serverId)"
     }
 
+    /// Prefix of `seerr.searchPromptDismissed.<accountKey>` — `true` once that
+    /// account answered « Plus tard » to the search screen's invitation to
+    /// sign in to Seerr: hidden from search for it on this device (Réglages →
+    /// Demandes still offers the sign-in). Built by
+    /// `seerrSearchPromptDismissed(accountKey:)`.
+    static let seerrSearchPromptDismissedPrefix = "seerr.searchPromptDismissed."
+    static func seerrSearchPromptDismissed(accountKey: String) -> String {
+        seerrSearchPromptDismissedPrefix + accountKey
+    }
+    /// Prefix of `seerr.arrivals.seen.<accountKey>` — a plain `[Int]`, the
+    /// ids of that account's requests already found AVAILABLE on this device
+    /// (the arrival message announces only the others). Absent = never
+    /// checked here: the first check seeds it without a toast. Read and
+    /// written by `SeerrArrivalWatcher` only.
+    static let seerrArrivalsSeenPrefix = "seerr.arrivals.seen."
+    /// `[Int]` — the TMDb ids of the series whose missing EPISODES the user
+    /// hid on this device (« Masquer pour cette série »: a numbering the
+    /// automatic check cannot see through). Read and written by
+    /// `MediaDetailViewModel` only.
+    static let seerrHiddenMissingEpisodes = "seerr.missingEpisodes.hidden"
+    static func seerrArrivalsSeen(accountKey: String) -> String {
+        seerrArrivalsSeenPrefix + accountKey
+    }
+
     // Library landing (iOS + tvOS)
     /// `"browse"` (default) shows the cinematic hero + genre rows ("By genre");
     /// `"grid"` shows a flat poster grid using the default sort ("Show all").
@@ -232,7 +256,6 @@ enum SettingsKey {
         static let motionEffects = true
         static let render4K = true
         static let autoPlayNextEpisode = true
-        static let playerTabletopHUDLocked = false
         static let autoSkipIntro = false
         static let autoSkipCredits = false
         static let sleepTimerDefaultMinutes = 0
@@ -271,7 +294,6 @@ enum SettingsKey {
         static let debugShowSkipToEnd = false
         static let debugSimulateTabletop = false
         static let debugForcedSeason = ""
-        static let debugSimulatePro = false
 
         static let rainbowUnlocked = false
 

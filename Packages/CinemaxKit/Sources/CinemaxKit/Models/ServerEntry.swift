@@ -59,6 +59,11 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
     /// `ServerRegistry.accounts(of:)`, which merges in the active triple. `nil`
     /// on every entry written before multi-account.
     public var savedAccounts: [SavedAccount]?
+    /// Optional LAN address of this server (`ServerURLNormalizer.normalizeLocal`),
+    /// tried before `url` when the device is on the local network. User-owned,
+    /// like `displayNameOverride`: written only by `AppState.setLocalURL`, and
+    /// carried over by `ServerRegistry.upsert`. `nil` ⇒ none.
+    public var localURL: URL?
 
     public init(
         id: String = UUID().uuidString,
@@ -72,7 +77,8 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
         lastUsedAt: Date = Date(),
         displayNameOverride: String? = nil,
         sortIndex: Int? = nil,
-        savedAccounts: [SavedAccount]? = nil
+        savedAccounts: [SavedAccount]? = nil,
+        localURL: URL? = nil
     ) {
         self.id = id
         self.name = name
@@ -86,6 +92,7 @@ public struct ServerEntry: Codable, Sendable, Equatable, Identifiable {
         self.displayNameOverride = displayNameOverride
         self.sortIndex = sortIndex
         self.savedAccounts = savedAccounts
+        self.localURL = localURL
     }
 
     /// What every surface prints for this server: the user's label when they

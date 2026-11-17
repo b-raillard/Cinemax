@@ -35,6 +35,16 @@ enum SearchScope: String, CaseIterable, Identifiable, Sendable {
         case .series: "search.filter.series"
         }
     }
+
+    /// What the Seerr section may list under this chip — people and
+    /// collections are already dropped by the decoder.
+    var seerrKinds: Set<SeerrMediaKind> {
+        switch self {
+        case .all:    [.movie, .tv]
+        case .movies: [.movie]
+        case .series: [.tv]
+        }
+    }
 }
 
 enum VoiceSearchPermissionError: Sendable {
@@ -310,6 +320,40 @@ final class SearchViewModel {
     /// debounced search instead of sleeping past the debounce.
     private(set) var searchTask: Task<Void, Never>?
 
+    // MARK: Seerr — « Pas encore dans ta bibliothèque »
+
+    /// The active account's Seerr, set by the screen. `nil` ⇒ no section.
+    @ObservationIgnored var seerr: SeerrSession?
+    /// Whether the Seerr section may load — `SeerrSession.isVisible` with the
+    /// screen's Pro and network inputs, set by the screen. Read before the
+    /// library fetch (TMDb ids are asked for only then) AND again once the
+    /// results are written. Unwired, it answers `false`: fail closed.
+    @ObservationIgnored var allowsSeerr: @MainActor () -> Bool = { false }
+    /// `SeerrSession.loadSection`'s deadline — injectable for the tests.
+    @ObservationIgnored var seerrDeadline: @Sendable () async throws -> Void = { try await Task.sleep(for: .seconds(6)) }
+    /// Below the library results, never above: `.loading` only once they are
+    /// written. Read through `seerrSection(for:)`, which hides another
+    /// account's section.
+    private(set) var seerrSection: MissingSection<SeerrMissingTitle> = .hidden
+    /// The Seerr account and generation `seerrSection` was loaded for.
+    @ObservationIgnored private var seerrSnapshot: SeerrSession.Snapshot?
+
+    /// The section to draw for the account Seerr serves right now
+    /// (`SeerrSession.snapshot()`): another profile's never shows, even once
+    /// that profile's own Seerr is connected.
+    func seerrSection(for current: SeerrSession.Snapshot?) -> MissingSection<SeerrMissingTitle> {
+        // Read FIRST, whatever the guard says: the view must observe the
+        // section, or it never re-renders once the section changes.
+        let section = seerrSection
+        guard let current, current == seerrSnapshot else { return .hidden }
+        return section
+    }
+
+    private func setSeerrSection(_ section: MissingSection<SeerrMissingTitle>, snapshot: SeerrSession.Snapshot?) {
+        seerrSnapshot = snapshot
+        if seerrSection != section { seerrSection = section }
+    }
+
     #if os(iOS)
     private let speechHelper = SpeechRecognitionHelper()
     private var hasBoundSpeechCallbacks = false
@@ -396,11 +440,13 @@ final class SearchViewModel {
             personResults = []
             hasSearched = false
             searchFailed = false
+            setSeerrSection(.hidden, snapshot: nil)
             return
         }
 
         let api = appState.apiClient
         let includeItemTypes = scope.includeItemTypes
+        let seerrKinds = scope.seerrKinds
         // The person row belongs to the unfiltered scope only — a type filter
         // that surfaces something other than the requested type isn't a filter.
         // Narrowed scopes don't even spend the request.
@@ -414,37 +460,121 @@ final class SearchViewModel {
             try? await Task.sleep(for: .milliseconds(400))
             guard !Task.isCancelled else { return }
 
-            guard let userId = appState.currentUserId else { return }
-            self?.isSearching = true
-            // `defer` guarantees `isSearching` flips back to false even when an
-            // early `return` fires after cancellation mid-await — otherwise the
-            // UI can remain stuck on the spinner after a quick text change.
-            defer { self?.isSearching = false }
+            guard let userId = appState.currentUserId, let self else { return }
+            // The field moved on without telling us: SwiftUI's `onChange` can
+            // skip a value when several land in one burst (tvOS, four letters
+            // in 25 ms: `search()` saw « dun », the field read « dune », and
+            // the screen kept « dun »'s answer — recette 2026-11-10). The
+            // debounce is over, so what the field holds NOW is the query.
+            guard LibrarySearchRanker.sanitize(self.searchText) == query else {
+                self.search(using: appState)
+                return
+            }
+            // The TMDb ids cost bytes on every keystroke: asked for only when
+            // the Seerr section is going to load.
+            let withProviderIds = self.allowsSeerr()
+            let seerr = withProviderIds ? self.seerr : nil
+            let seerrSnapshot = seerr?.snapshot()
+            let deadline = self.seerrDeadline
+            self.isSearching = true
 
             // Two independent fetches, run concurrently. A failing person search
             // must never degrade the main result, so `searchFailed` — which
             // drives the retryable error screen — stays driven by the titles
             // alone; `rankPersons` swallows its own error into an empty array.
-            async let titles = LibrarySearchRanker.rank(query: query, userId: userId, includeItemTypes: includeItemTypes, api: api)
+            async let titles = LibrarySearchRanker.rank(
+                query: query, userId: userId, includeItemTypes: includeItemTypes,
+                includeProviderIds: withProviderIds, api: api)
             async let persons: [BaseItemDto] = includePersons
                 ? LibrarySearchRanker.rankPersons(query: query, userId: userId, api: api)
                 : []
 
+            // Seerr is asked at the same time as the library — only the
+            // SUBTRACTION needs the library's answer — so its section lands
+            // at max(library, Seerr), not library + Seerr. Still drawn only
+            // once the results are written (`showSeerrSection`).
+            async let candidates: MissingSection<SeerrSearchPage>? = Self.seerrCandidates(
+                query: query, seerr: seerrSnapshot == nil ? nil : seerr, deadline: deadline)
+
             let outcome = await titles
             let people = await persons
+            // Off on every path, a cancelled one included (or the spinner
+            // stays stuck after a quick text change) — and BEFORE the Seerr
+            // phase: `isSearching` replaces the whole grid, so the section's
+            // skeleton would never show under the results.
+            self.isSearching = false
             guard !Task.isCancelled else { return }
-            self?.results = outcome.items
-            self?.personResults = people
-            self?.searchFailed = outcome.failed
-            self?.hasSearched = true
+            self.results = outcome.items
+            self.personResults = people
+            self.searchFailed = outcome.failed
+            self.hasSearched = true
             // Only remember queries that produced something — a typo midway
             // through "missio" shouldn't pollute the history, and the debounce
             // already collapses keystroke noise into the final query. A failed
             // fetch never records (the query may be perfectly valid).
             if !outcome.failed && !outcome.items.isEmpty {
-                self?.recordRecentSearch(query, serverId: historyServer)
+                self.recordRecentSearch(query, serverId: historyServer)
+            }
+            // Without the TMDb ids nothing tells an owned title from a missing one.
+            guard withProviderIds, !outcome.failed, self.allowsSeerr(), let seerr, let seerrSnapshot,
+                  seerr.isCurrent(seerrSnapshot) else {
+                self.setSeerrSection(.hidden, snapshot: nil)
+                return
+            }
+            self.setSeerrSection(.loading, snapshot: seerrSnapshot)
+            let answer = await candidates
+            // A newer search owns the section now.
+            guard !Task.isCancelled else { return }
+            await self.showSeerrSection(
+                answer, query: query, owned: SeerrMissing.ownedTmdbIds(outcome.items), kinds: seerrKinds,
+                snapshot: seerrSnapshot)
+        }
+    }
+
+    /// Seerr's first page of matches for `query`, unfiltered (one element:
+    /// `loadSection` hands back a list). `nil` session ⇒ nothing asked.
+    private static func seerrCandidates(
+        query: String, seerr: SeerrSession?, deadline: @escaping @Sendable () async throws -> Void
+    ) async -> MissingSection<SeerrSearchPage>? {
+        guard let seerr else { return nil }
+        return await seerr.loadSection(deadline: deadline) { client, credential in
+            [try await client.searchPage(query, page: 1, credential)]
+        }
+    }
+
+    /// The Seerr matches the library lacks, under the library results.
+    /// Silent: an error or the deadline hides the section, nothing says why
+    /// (only Settings names Seerr). `nil` = the account moved: nothing of the
+    /// answer is written, and the skeleton goes rather than wait for the next
+    /// profile.
+    ///
+    /// Seerr pages by 20: when the library owns EVERYTHING the first page
+    /// offers and there is a second, that one is asked too — once, never
+    /// further — so a well-stocked library still gets a proposal (owner,
+    /// 2026-11-10). The skeleton stays meanwhile.
+    private func showSeerrSection(
+        _ answer: MissingSection<SeerrSearchPage>?, query: String, owned: Set<SeerrOwnedKey>,
+        kinds: Set<SeerrMediaKind>, snapshot: SeerrSession.Snapshot
+    ) async {
+        guard case .loaded(let pages) = answer, let first = pages.first else {
+            setSeerrSection(.hidden, snapshot: answer == nil ? nil : snapshot)
+            return
+        }
+        var missing = SeerrMissing.titles(first.results.filter { kinds.contains($0.kind) }, owned: owned)
+        if missing.isEmpty, first.totalPages > 1, let seerr {
+            let more: MissingSection<SeerrTitle>? = await seerr.loadSection(deadline: seerrDeadline) { client, credential in
+                try await client.searchPage(query, page: 2, credential).results
+            }
+            guard !Task.isCancelled else { return }
+            guard let more else {
+                setSeerrSection(.hidden, snapshot: nil)
+                return
+            }
+            if case .loaded(let found) = more {
+                missing = SeerrMissing.titles(found.filter { kinds.contains($0.kind) }, owned: owned)
             }
         }
+        setSeerrSection(.loaded(missing), snapshot: snapshot)
     }
 
     // MARK: Recent searches

@@ -41,6 +41,7 @@ struct MediaDetailScreen: View {
     #endif
     @State var viewModel: MediaDetailViewModel
     @State private var episodeOverview: EpisodeOverviewItem?
+    @State private var episodeReport: SeerrEpisodeReportDraft?
     /// Drives the "mark whole season watched" confirmation dialog (F10).
     @State private var showMarkSeasonWatchedConfirm = false
     @Environment(NetworkMonitor.self) private var network
@@ -67,6 +68,10 @@ struct MediaDetailScreen: View {
     /// The Pro gate of the admin menu (lot B): a free admin's per-item admin
     /// shortcuts are hidden, the Settings row being the one door.
     @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
+    /// Seerr's missing seasons (series). Optional for the same reason as
+    /// `playlists`: a host without them loses the row, never crashes.
+    @Environment(SeerrSession.self) private var seerr: SeerrSession?
+    @Environment(SeerrRequestPresenter.self) private var seerrRequests: SeerrRequestPresenter?
     /// Read through `@AppStorage`, not `SyncPlayController.isEngineSupported`,
     /// so flipping « Lecteur natif » re-renders the action row.
     @AppStorage(SettingsKey.forceNativeAVPlayer) private var forceNativeAVPlayer: Bool = SettingsKey.Default.forceNativeAVPlayer
@@ -130,6 +135,23 @@ struct MediaDetailScreen: View {
     /// The first cast card: entering the section under the action row lands
     /// on it (`defaultFocus`), not on whichever card tvOS finds nearest.
     @FocusState private var belowActionsFocused: Bool
+    /// « Lecture »: where the fiche opens (`defaultFocus` on the whole column).
+    @FocusState private var lectureFocused: Bool
+    private var lectureFocusBinding: FocusState<Bool>.Binding? { $lectureFocused }
+    /// « Masquer » of the missing episodes: « Afficher » hands it the focus
+    /// once the block is back (`refocusHideOnShow`), else the vanished line
+    /// left the fiche jumping up to « Lecture » (recette 2026-11-12).
+    @FocusState private var missingHideFocused: Bool
+    @State private var refocusHideOnShow = false
+    private var missingHideFocusBinding: FocusState<Bool>.Binding? { $missingHideFocused }
+    /// The reverse: « Masquer » hands the focus to « Afficher » — left alone,
+    /// the vanished block left NO focus and a black page (recette 2026-11-12).
+    @FocusState private var missingShowFocused: Bool
+    private var missingShowFocusBinding: FocusState<Bool>.Binding? { $missingShowFocused }
+    #else
+    private var lectureFocusBinding: FocusState<Bool>.Binding? { nil }
+    private var missingHideFocusBinding: FocusState<Bool>.Binding? { nil }
+    private var missingShowFocusBinding: FocusState<Bool>.Binding? { nil }
     #endif
 
     /// Mirrors the ceiling the players hand `getPlaybackInfo`, so the version
@@ -166,6 +188,11 @@ struct MediaDetailScreen: View {
     /// screen (the hero, inside the scroll view, reports none): the backdrop
     /// runs up under them instead of leaving a dark band above the image.
     @State private var topBarInset: CGFloat = 0
+    /// iOS: the hero's height and whether it has scrolled away — the item's
+    /// name then takes over in the navigation bar (`ScrollMotion`).
+    @State private var heroHeight: CGFloat = 0
+    @State private var showsBarTitle = false
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
     /// The screen's width, for `useTwoColumnLayout` — 0 until measured.
     @State private var screenWidth: CGFloat = 0
 
@@ -212,6 +239,12 @@ struct MediaDetailScreen: View {
         }
         #endif
         .task {
+            // Before the load, whose side task reads them (same wiring as the
+            // search): wired after, the first load would run with Seerr off.
+            viewModel.seerr = seerr
+            viewModel.allowsSeerr = { [seerr, proAccess, network] in
+                seerr?.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline) ?? false
+            }
             await viewModel.loadInitial(using: appState, loc: loc, cardActions: cardActions)
             // After the load, so the series → next-up resolution and the resume
             // position the request needs are already in place. Runs on BOTH
@@ -408,6 +441,24 @@ struct MediaDetailScreen: View {
         }
         #if os(tvOS)
         .scrollClipDisabled()
+        #else
+        // Once the hero has scrolled away, the item's name shows in the bar.
+        .onScrollGeometryChange(for: Bool.self) { [heroHeight] geo in
+            ScrollMotion.showsBarTitle(scrolled: geo.contentOffset.y + geo.contentInsets.top, heroHeight: heroHeight)
+        } action: { _, shows in
+            showsBarTitle = shows
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(item.name ?? "")
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .lineLimit(1)
+                    .opacity(showsBarTitle ? 1 : 0)
+                    .animation(CinemaMotion.gated(CinemaMotion.barTitleFade, enabled: motionEnabled), value: showsBarTitle)
+                    .accessibilityHidden(!showsBarTitle)
+            }
+        }
         #endif
     }
 
@@ -472,6 +523,21 @@ struct MediaDetailScreen: View {
             Spacer(minLength: 80)
         }
         .padding(.top, CinemaSpacing.spacing4)
+        #if os(tvOS)
+        // Entering the fiche lands on « Lecture ». Opened right after a press
+        // (Réglages → Seerr → Signalements → « Voir la fiche »), the engine
+        // treats the first pick as user-initiated, and the section's own
+        // default above won it: the fiche opened scrolled to the cast
+        // (recette 2026-11-11). This outer default answers first.
+        .defaultFocus($lectureFocused, true, priority: .userInitiated)
+        // « Afficher » pressed: the line goes once the block is drawn, and
+        // its « Masquer » takes the focus — next turn, once it exists.
+        .onChange(of: viewModel.missingEpisodesHidden) { _, hidden in
+            guard !hidden, refocusHideOnShow else { return }
+            refocusHideOnShow = false
+            Task { @MainActor in missingHideFocused = true }
+        }
+        #endif
     }
 
     /// Metadata sections: action buttons, admin menu (iOS), quality badges,
@@ -509,7 +575,7 @@ struct MediaDetailScreen: View {
         // Quality badges — described for the version that will actually play,
         // not `mediaSources.first`, so the row and the picker never disagree.
         if showQualityBadges {
-            MediaQualityBadges(item: item, source: selectedSource(item))
+            MediaQualityBadges(item: versionTarget(item), source: selectedSource(item), prefix: episodeCode(item))
                 .padding(.horizontal, contentPadding)
         }
 
@@ -548,7 +614,8 @@ struct MediaDetailScreen: View {
             seasonsSection(item)
         }
 
-        // Collection ("Part of: …") — movies that share a BoxSet
+        // Collection ("Part of: …") — movies that share a BoxSet. The saga's
+        // missing films go at its END: no owned card moves when Seerr answers.
         if !viewModel.collectionItems.isEmpty {
             MediaDetailSimilarSection(
                 items: viewModel.collectionItems,
@@ -556,7 +623,10 @@ struct MediaDetailScreen: View {
                 titleOverride: String(
                     format: loc.localized("detail.partOf"),
                     viewModel.collectionName ?? ""
-                )
+                ),
+                trailing: viewModel.sagaPlacement == .appendedToPartOfRow ? missingSaga : .hidden,
+                onRequestMissing: requestSagaFilm,
+                onRequestAllMissing: requestAllSagaFilms
             ).equatable()
             .cardZoomScope(zoomNamespace, surface: "detail.partOf")
         }
@@ -574,10 +644,23 @@ struct MediaDetailScreen: View {
             .cardZoomScope(zoomNamespace, surface: "detail.contents")
         }
 
+        // The films of the saga the collection lacks: right after what it
+        // contains, never above it.
+        if viewModel.sagaPlacement == .afterCollectionContents {
+            missingSagaRow(title: loc.localized("seerr.saga.title"))
+        }
+
         // Similar items
         if !viewModel.similarItems.isEmpty {
             MediaDetailSimilarSection(items: viewModel.similarItems, cardWidth: similarCardWidth).equatable()
                 .cardZoomScope(zoomNamespace, surface: "detail.similar")
+        }
+
+        // A film with no « Fait partie de » row but a TMDb collection: its
+        // saga's films at the very END of the fiche, so nothing above moves.
+        if viewModel.sagaPlacement == .endOfFiche {
+            missingSagaRow(title: viewModel.sagaName.map { loc.localized("seerr.saga.titleNamed", $0) }
+                ?? loc.localized("seerr.saga.title"))
         }
     }
 
@@ -689,6 +772,7 @@ struct MediaDetailScreen: View {
             } action: { height in
                 heroLogoHeight = height
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { heroHeight = $0 }
             #endif
             .overlay {
                 Group {
@@ -696,14 +780,18 @@ struct MediaDetailScreen: View {
                         CinemaLazyImage(
                             url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
                             fallbackIcon: nil,
-                            fallbackBackground: CinemaColor.surfaceContainerLow
+                            fallbackBackground: CinemaColor.surfaceContainerLow,
+                            // The card → fiche zoom owns this moment.
+                            fadesIn: false
                         )
                         .accessibilityHidden(true)
                     } else {
                         BackdropFallbackView()
                     }
                 }
-                .heroBackdropBleed(topExtension: topBarInset)
+                // Parallax (iOS): the IMAGE scrolls slower than the page, inside
+                // the clipped box — the gradient and the box's bottom edge stay put.
+                .heroBackdropBleed(topExtension: topBarInset, parallax: motionEnabled)
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: detailHeroSpacing) {
@@ -742,6 +830,14 @@ struct MediaDetailScreen: View {
                 // driver (`heroBackdropBleed`).
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .clipped()
+                #if os(iOS)
+                // The hero text fades out as it leaves; the bar title takes over.
+                .visualEffect { [motionEnabled] content, proxy in
+                    content.opacity(motionEnabled
+                        ? ScrollMotion.heroTitleOpacity(scrolled: -proxy.frame(in: .scrollView).minY,
+                                                        heroHeight: proxy.size.height) : 1)
+                }
+                #endif
             }
     }
 
@@ -929,12 +1025,18 @@ struct MediaDetailScreen: View {
     /// not the full `episodeLabel`: the title is drawn uppercase in a small
     /// label and an episode name wraps it onto two lines.
     private func versionRowTitle(_ item: BaseItemDto) -> String {
+        guard let code = episodeCode(item) else { return loc.localized("detail.version") }
+        return "\(loc.localized("detail.version")) · " + code
+    }
+
+    /// « S01:E01 » when what will play is an episode other than the fiche's
+    /// own item — a series' version row and quality badges both describe that
+    /// episode, and say so. `nil` on a film, or on an episode's own fiche.
+    private func episodeCode(_ item: BaseItemDto) -> String? {
         let target = versionTarget(item)
         guard target.id != item.id, target.type == .episode,
-              let season = target.parentIndexNumber, let episode = target.indexNumber else {
-            return loc.localized("detail.version")
-        }
-        return "\(loc.localized("detail.version")) · " + String(format: "S%02d:E%02d", season, episode)
+              let season = target.parentIndexNumber, let episode = target.indexNumber else { return nil }
+        return String(format: "S%02d:E%02d", season, episode)
     }
 
     /// Mirrors the ceiling the players pass to `getPlaybackInfo`, so the row
@@ -1369,7 +1471,8 @@ struct MediaDetailScreen: View {
             buttonFontSize: buttonFontSize,
             buttonVerticalPadding: buttonVerticalPadding,
             playButtonWidth: playButtonWidth,
-            contentPadding: 0
+            contentPadding: 0,
+            lectureFocus: lectureFocusBinding
         )
         .equatable()
 
@@ -1435,7 +1538,8 @@ struct MediaDetailScreen: View {
             systemImage: viewModel.isFavorite ? "heart.fill" : "heart",
             label: loc.localized("detail.action.favorite"),
             accessibilityLabel: loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"),
-            isActive: viewModel.isFavorite
+            isActive: viewModel.isFavorite,
+            pops: true
         ) {
             Task { await viewModel.toggleFavorite(using: appState) }
         }
@@ -1447,7 +1551,8 @@ struct MediaDetailScreen: View {
             systemImage: viewModel.isPlayed ? "checkmark.circle.fill" : "checkmark.circle",
             label: loc.localized("detail.action.watched"),
             accessibilityLabel: loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"),
-            isActive: viewModel.isPlayed
+            isActive: viewModel.isPlayed,
+            pops: true
         ) {
             Task { await viewModel.togglePlayed(using: appState) }
         }
@@ -1550,7 +1655,8 @@ struct MediaDetailScreen: View {
                 systemImage: viewModel.isFavorite ? "heart.fill" : "heart",
                 active: viewModel.isFavorite,
                 accessibility: loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"),
-                trigger: viewModel.isFavorite
+                trigger: viewModel.isFavorite,
+                pops: true
             ) {
                 Task { await viewModel.toggleFavorite(using: appState) }
             }
@@ -1559,7 +1665,8 @@ struct MediaDetailScreen: View {
                 systemImage: viewModel.isPlayed ? "checkmark.circle.fill" : "checkmark.circle",
                 active: viewModel.isPlayed,
                 accessibility: loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"),
-                trigger: viewModel.isPlayed
+                trigger: viewModel.isPlayed,
+                pops: true
             ) {
                 Task { await viewModel.togglePlayed(using: appState) }
             }
@@ -1618,6 +1725,12 @@ struct MediaDetailScreen: View {
         }
     }
 
+    private func actionGlyph(_ systemImage: String, active: Bool) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: CinemaScale.pt(22), weight: .semibold))
+            .foregroundStyle(active ? themeManager.accent : CinemaColor.onSurface)
+    }
+
     /// One secondary action: a tappable 44pt glass icon chip. `active` paints
     /// the icon in the accent (toggled-on state); `trigger` drives the haptic.
     private func secondaryActionCell(
@@ -1625,6 +1738,7 @@ struct MediaDetailScreen: View {
         active: Bool,
         accessibility: String,
         trigger: Bool,
+        pops: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -1632,9 +1746,12 @@ struct MediaDetailScreen: View {
                 Circle()
                     .fill(.ultraThinMaterial)
                     .frame(width: 44, height: 44)
-                Image(systemName: systemImage)
-                    .font(.system(size: CinemaScale.pt(22), weight: .semibold))
-                    .foregroundStyle(active ? themeManager.accent : CinemaColor.onSurface)
+                if pops {
+                    actionGlyph(systemImage, active: active)
+                        .symbolPop(on: trigger)
+                } else {
+                    actionGlyph(systemImage, active: active)
+                }
             }
         }
         .buttonStyle(.plain)
@@ -1709,7 +1826,7 @@ struct MediaDetailScreen: View {
             // tvOS: horizontal scroll of season pills (hidden when only one season)
             if showSeasonPicker {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: CinemaTVLayout.seasonPillSpacing) {
                         ForEach(viewModel.seasons, id: \.id) { season in
                             let isSelected = season.id == viewModel.selectedSeasonId
                             Button {
@@ -1721,7 +1838,7 @@ struct MediaDetailScreen: View {
                                     .font(.system(size: seasonTabFontSize, weight: isSelected ? .bold : .medium))
                                     .foregroundStyle(isSelected ? themeManager.onAccentContainer : CinemaColor.onSurfaceVariant)
                                     .padding(.horizontal, CinemaSpacing.spacing3)
-                                    .padding(.vertical, 8)
+                                    .padding(.vertical, CinemaTVLayout.seasonPillVerticalPadding)
                                     .background(
                                         isSelected
                                             ? Capsule().fill(themeManager.accentContainer)
@@ -1733,6 +1850,16 @@ struct MediaDetailScreen: View {
                             .focusEffectDisabled()
                             .hoverEffectDisabled()
                             .accessibilityAddTraits(isSelected ? .isSelected : [])
+                        }
+                        // Seerr's missing seasons: APPENDED after the owned
+                        // pills, so nothing moves when it answers.
+                        if !missingSeasons.drawsNothing {
+                            MediaDetailMissingSeasonPills(
+                                section: missingSeasons,
+                                fontSize: seasonTabFontSize,
+                                onRequest: requestMissingSeason
+                            )
+                            .equatable()
                         }
                     }
                     .padding(.horizontal, contentPadding)
@@ -1756,22 +1883,45 @@ struct MediaDetailScreen: View {
             .focusSection()
             // tvOS: vertical list of unified episode rows. `LazyVStack` so a
             // 20+ episode season doesn't render every row up-front.
-            LazyVStack(spacing: 12) {
-                ForEach(viewModel.episodes, id: \.id) { episode in
-                    let nav = episodeNavigation(for: episode.id ?? "")
-                    MediaDetailEpisodeRow(
-                        episode: episode,
-                        epPrev: nav.previous,
-                        epNext: nav.next,
-                        epNavigator: nav.navigator,
-                        episodeThumbnailWidth: episodeThumbnailWidth,
-                        episodeTitleFontSize: episodeTitleFontSize,
-                        onSelectOverview: { episodeOverview = $0 }
-                    )
-                    .equatable()
+            // A plain `VStack`: one season's rows. Shrunk in place by
+            // « Masquer » (10 rows → 3), the lazy stack first left the owned
+            // rows undrawn (a black gap), then — rebuilt with `.id` — left the
+            // whole page black with no focus at all (recettes 2026-11-11 and
+            // 12). Thumbnails still load lazily (`CinemaLazyImage`).
+            VStack(spacing: 12) {
+                ForEach(episodeSlots) { slot in
+                    switch slot {
+                    case .owned(let episode):
+                        let nav = episodeNavigation(for: episode.id ?? "")
+                        MediaDetailEpisodeRow(
+                            episode: episode,
+                            epPrev: nav.previous,
+                            epNext: nav.next,
+                            epNavigator: nav.navigator,
+                            episodeThumbnailWidth: episodeThumbnailWidth,
+                            episodeTitleFontSize: episodeTitleFontSize,
+                            onSelectOverview: { episodeOverview = $0 }
+                        )
+                        .equatable()
+                    case .missing(let episode):
+                        MediaDetailMissingEpisodeRow(
+                            episode: episode,
+                            stillURL: seerr?.posterURL(episode.stillPath),
+                            episodeThumbnailWidth: episodeThumbnailWidth,
+                            episodeTitleFontSize: episodeTitleFontSize,
+                            onReport: canReportEpisodes && !episode.isReported ? { openEpisodeReport() } : nil
+                        )
+                    }
                 }
             }
+            .listSwapSlide(trigger: viewModel.seasonSwapCount)
             .padding(.horizontal, contentPadding)
+            missingEpisodesBlock
+            // One owned season: no pill row to append to, so the missing
+            // seasons take the iPhone's row, after the episodes.
+            if !showSeasonPicker {
+                missingSeasonsRow
+            }
             #else
             // iOS: dropdown Menu for season selection (hidden when only one
             // season), paired with the season bulk "mark watched" button (F10).
@@ -1811,27 +1961,44 @@ struct MediaDetailScreen: View {
             // iOS: horizontal scroll of episode cards
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 16) {
-                    ForEach(viewModel.episodes, id: \.id) { episode in
-                        let nav = episodeNavigation(for: episode.id ?? "")
-                        MediaDetailEpisodeCard(
-                            episode: episode,
-                            epPrev: nav.previous,
-                            epNext: nav.next,
-                            epNavigator: nav.navigator,
-                            episodeTitleFontSize: episodeTitleFontSize,
-                            onSelectOverview: { episodeOverview = $0 },
-                            onToggleWatched: { ep in
-                                Task { await viewModel.toggleEpisodeWatched(ep, using: appState) }
+                    ForEach(episodeSlots) { slot in
+                        Group {
+                            switch slot {
+                            case .owned(let episode):
+                                let nav = episodeNavigation(for: episode.id ?? "")
+                                MediaDetailEpisodeCard(
+                                    episode: episode,
+                                    epPrev: nav.previous,
+                                    epNext: nav.next,
+                                    epNavigator: nav.navigator,
+                                    episodeTitleFontSize: episodeTitleFontSize,
+                                    onSelectOverview: { episodeOverview = $0 },
+                                    onToggleWatched: { ep in
+                                        Task { await viewModel.toggleEpisodeWatched(ep, using: appState) }
+                                    }
+                                )
+                                .equatable()
+                            case .missing(let episode):
+                                MediaDetailMissingEpisodeCard(
+                                    episode: episode,
+                                    stillURL: seerr?.posterURL(episode.stillPath),
+                                    episodeTitleFontSize: episodeTitleFontSize,
+                                    onReport: canReportEpisodes && !episode.isReported ? { openEpisodeReport() } : nil
+                                )
                             }
-                        )
-                        .equatable()
+                        }
                         .containerRelativeFrame(.horizontal) { w, _ in w - contentPadding * 2 - 32 }
                     }
                 }
                 .scrollTargetLayout()
+                .listSwapSlide(trigger: viewModel.seasonSwapCount)
                 .padding(.horizontal, contentPadding)
             }
             .scrollTargetBehavior(.viewAligned)
+            // AFTER the episodes, never above: the season Menu lists the owned
+            // seasons only, and nothing on screen moves when Seerr answers.
+            missingEpisodesBlock
+            missingSeasonsRow
             #endif
         }
         .confirmationDialog(
@@ -1853,6 +2020,182 @@ struct MediaDetailScreen: View {
         } message: {
             Text(loc.localized("detail.season.markWatched.message"))
         }
+    }
+
+    // MARK: - Missing episodes of the season on screen (Seerr)
+
+    /// The aired episodes the selected season lacks, re-read at render like
+    /// `missingSeasons` (Pro, age cap, network, the Seerr account).
+    private var missingEpisodes: [SeerrMissingEpisode] {
+        guard let seerr else { return viewModel.seerrEpisodes(for: nil) }
+        let visible = seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+        return viewModel.seerrEpisodes(for: visible ? seerr.snapshot() : nil)
+    }
+
+    /// Only an account that may report a problem gets the button
+    /// (CREATE_ISSUES / MANAGE_ISSUES); the others see the lines alone.
+    private var canReportEpisodes: Bool {
+        guard let seerr, case .connected(let user) = seerr.connection else { return false }
+        return user.permissions.canReportIssues
+    }
+
+    /// Whether the missing episodes could show at all for this account right
+    /// now — Seerr visible and a request-capable account — so the « masqués »
+    /// line never appears where the block itself never would.
+    private var missingEpisodesApply: Bool {
+        guard let seerr, seerrRequests != nil else { return false }
+        return seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+    }
+
+    /// The season's episodes with its missing ones in place (mockup A).
+    private var episodeSlots: [MediaDetailEpisodeSlot] {
+        MediaDetailEpisodeSlot.interleave(owned: viewModel.episodes, missing: missingEpisodes)
+    }
+
+    /// « Masquer pour cette série ». No « Annuler » in the toast: the block
+    /// is replaced in place by « Épisodes manquants masqués · Afficher »,
+    /// which undoes it at any time (owner 2026-11-11 — the toast with an
+    /// action wrapped onto three loose rows).
+    private func hideMissingEpisodes() {
+        viewModel.hideMissingEpisodes()
+        toast.info(loc.localized("seerr.episodes.hiddenLine"))
+        #if os(tvOS)
+        Task { @MainActor in missingShowFocused = true }
+        #endif
+    }
+
+    /// The report offers only what no open report names yet; nothing left ⇒
+    /// nothing opens (a second report of the same episodes, recette 2026-11-11).
+    private func openEpisodeReport() {
+        let unreported = missingEpisodes.filter { !$0.isReported }
+        guard !unreported.isEmpty else { return }
+        episodeReport = SeerrEpisodeReportDraft(episodes: unreported)
+    }
+
+    @ViewBuilder
+    private var missingEpisodesBlock: some View {
+        let missing = missingEpisodes
+        if viewModel.missingEpisodesHidden, missingEpisodesApply {
+            MediaDetailHiddenMissingEpisodesLine(onShow: {
+                #if os(tvOS)
+                refocusHideOnShow = true
+                #endif
+                viewModel.unhideMissingEpisodes(using: appState)
+            }, showFocus: missingShowFocusBinding)
+            .padding(.horizontal, contentPadding)
+            .padding(.top, CinemaSpacing.spacing2)
+        } else if !missing.isEmpty {
+            MediaDetailMissingEpisodesBlock(
+                episodes: missing,
+                canReport: canReportEpisodes,
+                onReport: { openEpisodeReport() },
+                onHide: { hideMissingEpisodes() },
+                hideFocus: missingHideFocusBinding
+            )
+            .equatable()
+            .padding(.horizontal, contentPadding)
+            .padding(.top, CinemaSpacing.spacing2)
+            .modifier(episodeReportPresentation)
+        }
+    }
+
+    /// iOS: the sheet (tick, a word, send). tvOS: a confirmation — nothing to
+    /// tick or type with a remote, the whole list is reported.
+    private var episodeReportPresentation: some ViewModifier {
+        SeerrEpisodeReportPresentation(draft: $episodeReport, loc: loc) { episodes, note in
+            await sendEpisodeReport(episodes, note: note)
+        }
+    }
+
+    private func sendEpisodeReport(_ episodes: [SeerrMissingEpisode], note: String) async {
+        let message = SeerrEpisodeReportDraft.message(numbers: episodes.map(\.episodeNumber), note: note, loc: loc)
+        if await viewModel.reportMissingEpisodes(episodes, message: message) {
+            toast.success(loc.localized("seerr.episodes.report.sent"))
+        } else {
+            toast.error(loc.localized("seerr.episodes.report.failed"))
+        }
+    }
+
+    // MARK: - Missing seasons (Seerr)
+
+    /// The missing seasons as this account may see them right now — Pro, age
+    /// cap, network and the Seerr account re-read at render, so a late answer
+    /// never paints where Seerr no longer applies.
+    private var missingSeasons: MissingSection<SeerrMissingSeason> {
+        guard let seerr, seerrRequests != nil, viewModel.seerrSeriesTitle != nil else {
+            return viewModel.seerrSeasons(for: nil)
+        }
+        let visible = seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+        return viewModel.seerrSeasons(for: visible ? seerr.snapshot() : nil)
+    }
+
+    @ViewBuilder
+    private var missingSeasonsRow: some View {
+        let section = missingSeasons
+        if !section.drawsNothing {
+            MediaDetailMissingSeasonsRow(
+                section: section,
+                cardWidth: similarCardWidth,
+                onRequest: requestMissingSeason,
+                onRequestAll: requestAllMissingSeasons
+            )
+            .equatable()
+            .padding(.top, CinemaSpacing.spacing2)
+        }
+    }
+
+    /// A missing season's card or pill: the picker with that season ticked
+    /// (iOS) / the confirmation (tvOS) — or « Déjà demandé ».
+    private func requestMissingSeason(_ season: SeerrMissingSeason) {
+        guard let seerrRequests, let series = viewModel.seerrSeriesTitle,
+              case .loaded(let missing) = viewModel.seerrSeasons else { return }
+        seerrRequests.request(season: season, among: missing, of: series, loc: loc, toasts: toast)
+    }
+
+    /// « Demander les N »: every requestable season ticked.
+    private func requestAllMissingSeasons() {
+        guard let seerrRequests, let series = viewModel.seerrSeriesTitle,
+              case .loaded(let missing) = viewModel.seerrSeasons else { return }
+        seerrRequests.requestAll(missing, of: series, loc: loc, toasts: toast)
+    }
+
+    // MARK: - Missing films of the saga (Seerr)
+
+    /// The saga's missing films as this account may see them right now — the
+    /// same render-time re-read as `missingSeasons`.
+    private var missingSaga: MissingSection<SeerrMissingTitle> {
+        guard let seerr, seerrRequests != nil else { return viewModel.seerrSaga(for: nil) }
+        let visible = seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+        return viewModel.seerrSaga(for: visible ? seerr.snapshot() : nil)
+    }
+
+    /// The BoxSet's section / the film's end row — a header of their own.
+    @ViewBuilder
+    private func missingSagaRow(title: String) -> some View {
+        let section = missingSaga
+        if !section.drawsNothing {
+            MediaDetailSagaRow(
+                title: title,
+                section: section,
+                cardWidth: similarCardWidth,
+                onRequest: requestSagaFilm,
+                onRequestAll: requestAllSagaFilms
+            )
+            .equatable()
+        }
+    }
+
+    /// A missing film's card: the request (« Demander ce film ») — or
+    /// « Déjà demandé ».
+    private func requestSagaFilm(_ film: SeerrMissingTitle) {
+        guard let seerr, let seerrRequests else { return }
+        Task { await seerrRequests.request(film, session: seerr, loc: loc, toasts: toast) }
+    }
+
+    /// « Demander les N »: every requestable film, all ticked.
+    private func requestAllSagaFilms() {
+        guard let seerrRequests, case .loaded(let missing) = viewModel.seerrSaga else { return }
+        seerrRequests.requestAll(films: missing, loc: loc, toasts: toast)
     }
 
     /// Season bulk "mark watched" affordance (F10). Opens a confirmation
@@ -2074,6 +2417,9 @@ private struct PlayActionButtonsSection: View, Equatable {
     let buttonVerticalPadding: CGFloat
     let playButtonWidth: CGFloat
     let contentPadding: CGFloat
+    /// tvOS: the screen's « Lecture » focus, where the fiche opens. Not
+    /// compared — the binding is the same for the life of the screen.
+    var lectureFocus: FocusState<Bool>.Binding?
 
     @Environment(ThemeManager.self) private var themeManager
 
@@ -2122,6 +2468,7 @@ private struct PlayActionButtonsSection: View, Equatable {
                     Text(remainingText)
                         .font(CinemaFont.label(.medium))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .rollingNumber(remainingText)
                 }
             }
 
@@ -2161,6 +2508,7 @@ private struct PlayActionButtonsSection: View, Equatable {
                 // fixed width is what produced the ellipsis.
                 HStack(spacing: CinemaSpacing.spacing3) {
                     lectureButton
+                        .modifier(FirstCardFocus(binding: lectureFocus))
                         .frame(width: playButtonWidth, height: CinemaTVLayout.actionRowHeight)
                         // Exposes this row's center to the parent HStack so the
                         // heart / watched accessories center on the Play button

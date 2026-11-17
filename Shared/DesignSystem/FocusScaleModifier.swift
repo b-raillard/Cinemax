@@ -34,6 +34,132 @@ enum MotionEffects {
     }
 }
 
+// MARK: - Motion tokens
+
+/// The timings of the app's state-change animations (see
+/// `docs/design-system/motion.md`). A new animation takes its curve from here
+/// and goes through `gated`, so Motion Effects / Reduce Motion turn it off by
+/// passing `nil` — never a zero-duration animation.
+enum CinemaMotion {
+    /// Favourite / watched glyph bounce.
+    static let symbolPop: Animation = .bouncy(duration: 0.45)
+    /// Artwork arriving from the network or the disk cache.
+    static let imageFade: Animation = .easeOut(duration: 0.3)
+    /// A skeleton giving way to content (or to the error / empty state).
+    static let skeletonFade: Animation = .easeOut(duration: 0.25)
+    /// Content rising in after a skeleton.
+    static let contentReveal: Animation = .easeOut(duration: 0.45)
+    /// Delay between two consecutive revealed blocks.
+    static let revealStagger: Double = 0.08
+    /// Digits rolling inside a label.
+    static let numeric: Animation = .snappy(duration: 0.35)
+    /// Progress bar filling or gliding to a new position.
+    static let progressFill: Animation = .easeOut(duration: 0.7)
+    /// A list replaced by another (season change): slide-in distance, slide
+    /// and fade durations.
+    static let listSwapDistance: CGFloat = 24
+    static let listSwapDuration: TimeInterval = 0.34
+    static let listSwapFadeDuration: TimeInterval = 0.24
+    /// The fiche's navigation-bar title appearing once the hero is gone.
+    static let barTitleFade: Animation = .easeOut(duration: 0.2)
+    /// UIKit player overlays sliding in and out, and how far they travel.
+    static let overlaySlide: TimeInterval = 0.3
+    static let overlaySlideOut: TimeInterval = 0.2
+    static let overlaySlideDistance: CGFloat = 26
+    /// The player's play/pause glyph crossfading into the other one.
+    static let glyphCrossfade: TimeInterval = 0.2
+    /// The next-up countdown's number changing (a crossfade: only the digits
+    /// differ, so the rest of the sentence does not visibly move).
+    static let countdownTick: TimeInterval = 0.25
+
+    /// `animation` when motion is allowed, else `nil` (= apply instantly).
+    nonisolated static func gated(_ animation: Animation, enabled: Bool) -> Animation? {
+        enabled ? animation : nil
+    }
+}
+
+/// A toggled SF Symbol (favourite, watched) bounces once and morphs into its
+/// new variant instead of swapping in one frame.
+private struct SymbolPopModifier<Value: Equatable>: ViewModifier {
+    let value: Value
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+
+    func body(content: Content) -> some View {
+        if motionEnabled {
+            content
+                .contentTransition(.symbolEffect(.replace))
+                .symbolEffect(.bounce, value: value)
+                .animation(CinemaMotion.symbolPop, value: value)
+        } else {
+            content
+        }
+    }
+}
+
+/// A number inside a label rolls: only the digits that change slide.
+private struct RollingNumberModifier<Value: Equatable>: ViewModifier {
+    let value: Value
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+
+    func body(content: Content) -> some View {
+        content
+            .contentTransition(motionEnabled ? .numericText() : .identity)
+            .animation(CinemaMotion.gated(CinemaMotion.numeric, enabled: motionEnabled), value: value)
+    }
+}
+
+/// A list whose content was just replaced (a new season's episodes) slides in
+/// from the trailing side while fading in. Keyframes on a trigger, NOT an `.id`
+/// swap: rebuilding the fiche's episode stack by identity once left the whole
+/// tvOS page black with no focus (recettes 2026-11-11 / 12).
+private struct ListSwapSlideModifier<Trigger: Equatable>: ViewModifier {
+    let trigger: Trigger
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
+
+    private struct Frame {
+        var offset: CGFloat = 0
+        var opacity: Double = 1
+    }
+
+    func body(content: Content) -> some View {
+        // ALWAYS the same modifier — motion off only zeroes the keyframes: an
+        // `if motionEnabled` branch would change the stack's identity the
+        // moment Reduce Motion flips, the very rebuild this avoids.
+        let distance = motionEnabled ? CinemaMotion.listSwapDistance : 0
+        let startOpacity: Double = motionEnabled ? 0 : 1
+        content.keyframeAnimator(initialValue: Frame(), trigger: trigger) { view, frame in
+            view.offset(x: frame.offset).opacity(frame.opacity)
+        } keyframes: { _ in
+            KeyframeTrack(\.offset) {
+                MoveKeyframe(distance)
+                CubicKeyframe(0, duration: CinemaMotion.listSwapDuration)
+            }
+            KeyframeTrack(\.opacity) {
+                MoveKeyframe(startOpacity)
+                LinearKeyframe(1, duration: CinemaMotion.listSwapFadeDuration)
+            }
+        }
+    }
+}
+
+extension View {
+    /// Slide-in of a replaced list, played each time `trigger` changes.
+    func listSwapSlide<Trigger: Equatable>(trigger: Trigger) -> some View {
+        modifier(ListSwapSlideModifier(trigger: trigger))
+    }
+
+    /// Bounce + symbol replace when `value` changes (gated by Motion Effects).
+    func symbolPop<Value: Equatable>(on value: Value) -> some View {
+        modifier(SymbolPopModifier(value: value))
+    }
+
+    /// Rolling digits when `value` changes. Key it on the NUMBER, never on the
+    /// formatted string, so a language change does not roll.
+    func rollingNumber<Value: Equatable>(_ value: Value) -> some View {
+        modifier(RollingNumberModifier(value: value))
+    }
+}
+
 // MARK: - Cinema Focus Modifier
 
 struct CinemaFocusModifier: ViewModifier {

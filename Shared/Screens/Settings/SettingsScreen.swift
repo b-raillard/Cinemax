@@ -27,6 +27,12 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     case interface
     case playback
     case account
+    // Seerr requests (spec 2026-11-06), right after Compte, both platforms.
+    // Listed for a Jellyfin admin always (to set it up) and for anyone else
+    // once enabled — never for an age-capped account; the caller computes
+    // that (`SeerrAccess.showsSettingsCategory`) and passes `showsRequests`.
+    // Its admin rows (configuration, device key) are gated INSIDE the page.
+    case requests
     case server
     // Admin-only — gated by `AppState.isAdministrator` at the render site so
     // non-admins never see this row. Server still enforces authorization on
@@ -49,6 +55,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .interface:      "tv"
         case .playback:       "play.rectangle"
         case .account:        "person"
+        case .requests:       "tray.and.arrow.down"
         case .server:         "server.rack"
         case .administration: "shield.lefthalf.filled"
         case .debug:          "ladybug"
@@ -62,6 +69,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .interface:      loc.localized("settings.interface")
         case .playback:       loc.localized("settings.playback")
         case .account:        loc.localized("settings.account")
+        case .requests:       loc.localized("settings.requests")
         case .server:         loc.localized("settings.server")
         case .administration: loc.localized("admin.landing.title")
         case .debug:          loc.localized("settings.debug")
@@ -89,18 +97,22 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     }
 
     /// The Pro feature behind this category, if any (lot B): Administration
-    /// stays LISTED for a free admin, with a PRO badge, and its tap opens the
-    /// Pro sheet (`ProFeatureAccess.admit`) instead of the page.
+    /// and Demandes stay LISTED for a free user, with a PRO badge, and the tap
+    /// opens the Pro sheet (`ProFeatureAccess.admit`) instead of the page.
     var proFeature: ProFeatureID? {
         switch self {
         case .administration: .administration
+        case .requests: .requests
         default: nil
         }
     }
 
     /// Whether this category is admin-gated. Used by the iOS landing to hide
-    /// admin rows for non-admin users. tvOS never renders admin entries at
-    /// all (admin workflows are mobile-only by product decision).
+    /// admin rows for non-admin users. tvOS never renders these categories
+    /// (the admin workflows are mobile-only by product decision). One
+    /// deliberate exception: « Demandes » is NOT admin-only — its admin rows
+    /// (the Seerr configuration, the device key) are gated inside the page
+    /// and DO render on tvOS, where the living-room Apple TV gets set up.
     var isAdminOnly: Bool {
         switch self {
         case .administration: true
@@ -130,13 +142,15 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         #endif
     }
 
-    /// Filters `allCases` by admin visibility, platform and the Debug
-    /// decision. Use this instead of raw `allCases` in rendering code — keeps
+    /// Filters `allCases` by admin visibility, platform, the Debug decision and
+    /// the Requests one (`SeerrAccess.showsSettingsCategory`, computed by the
+    /// caller). Use this instead of raw `allCases` in rendering code — keeps
     /// gating in one place.
-    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool, showsDebug: Bool) -> [Self] {
+    @MainActor static func visibleCases(isAdmin: Bool, isTVOS: Bool, showsDebug: Bool, showsRequests: Bool) -> [Self] {
         allCases.filter { category in
             if category == .pro { return false }
             if category == .debug { return showsDebug }
+            if category == .requests { return showsRequests }
             if isTVOS && category.isAdminOnly { return false }
             if category.isAdminOnly && !isAdmin { return false }
             return true
@@ -239,6 +253,9 @@ struct SettingsScreen: View {
     /// The Pro gate of the Administration row (lot B). Optional like the
     /// presenters above: absent ⇒ ungated.
     @Environment(ProFeatureAccess.self) var proAccess: ProFeatureAccess?
+    /// Whether « Demandes » is listed (both platforms) — read at render, so the
+    /// row follows the account's Seerr configuration and age cap.
+    @Environment(SeerrSession.self) var seerr
     @State var showLogOutAlert = false
     @State var showLicenses = false
     @State var showUserSwitch = false
@@ -251,6 +268,34 @@ struct SettingsScreen: View {
     var showsDebugCategory: Bool {
         SettingsCategory.showsDebug(environment: earlyAdopter.transaction?.environment,
                                     isDebugBuild: SettingsCategory.isDebugBuild)
+    }
+
+    /// « Demandes »: a Jellyfin admin always (to set Seerr up), anyone else
+    /// once enabled, never an age-capped account (spec, § Age-capped).
+    var showsRequestsCategory: Bool {
+        SeerrAccess.showsSettingsCategory(ageCapped: seerr.isAgeCapped, isAdmin: appState.isAdministrator,
+                                          config: seerr.config)
+    }
+
+    /// The « Seerr » entry's bubble: « 3 », « 99+ », or nothing
+    /// (`SeerrSession.settingsBadgeCount` — requests waiting for a manager of
+    /// requests, plus reports open for a manager of reports).
+    var pendingBadgeLabel: String? {
+        SeerrPendingModel.badgeLabel(seerr.settingsBadgeCount)
+    }
+
+    /// What VoiceOver reads after « Seerr »: « 3 demandes à valider »,
+    /// « 2 signalements à traiter », or both, each half only when not 0.
+    var pendingBadgeValue: String {
+        guard pendingBadgeLabel != nil else { return "" }
+        return Self.badgeValue(pending: seerr.pendingBadgeCount, issues: seerr.issueBadgeCount, loc: loc)
+    }
+
+    static func badgeValue(pending: Int?, issues: Int?, loc: LocalizationManager) -> String {
+        var parts: [String] = []
+        if let pending, pending > 0 { parts.append(loc.counted("seerr.settings.pendingBubble", pending)) }
+        if let issues, issues > 0 { parts.append(loc.counted("seerr.settings.issuesBubble", issues)) }
+        return parts.joined(separator: ", ")
     }
 
     var headerTierLook: ProTierLook? {
@@ -315,6 +360,12 @@ struct SettingsScreen: View {
     #if os(iOS)
     /// A landscape iPhone shrinks the landing header (`iOSHeader`).
     @Environment(\.verticalSizeClass) var verticalSizeClass
+    /// Never read: declaring it makes the landing redraw when the text size
+    /// changes. Its row titles (`CinemaFont.dynamic*`) are point sizes computed
+    /// while the body runs, so without it they kept the old size while the
+    /// « Demandes » bubble — which reads it — took the new one (recette
+    /// 2026-11-08: big titles + small bubble, or the reverse).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #endif
     @AppStorage(SettingsKey.render4K) var render4K: Bool = SettingsKey.Default.render4K
     @AppStorage(SettingsKey.autoPlayNextEpisode) var autoPlayNextEpisode: Bool = SettingsKey.Default.autoPlayNextEpisode

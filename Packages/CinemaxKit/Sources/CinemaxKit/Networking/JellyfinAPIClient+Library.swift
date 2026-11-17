@@ -221,7 +221,11 @@ extension JellyfinAPIClient {
             params.isFavorite = isFavorite
             params.tags = tags
             params.nameStartsWithOrGreater = nameStartsWithOrGreater
-            params.fields = fieldSet == .card ? [.childCount] : [.overview, .genres, .childCount]
+            switch fieldSet {
+            case .detail: params.fields = [.overview, .genres, .childCount]
+            case .card: params.fields = [.childCount]
+            case .cardWithProviderIds: params.fields = [.childCount, .providerIDs]
+            }
             params.enableUserData = true
             params.enableImageTypes = [.primary, .backdrop, .thumb]
             params.imageTypeLimit = 1
@@ -382,9 +386,9 @@ extension JellyfinAPIClient {
     public func searchItems(
         userId: String,
         searchTerm: String,
-        includeItemTypes: [BaseItemKind] = [.movie, .series, .episode],
-        limit: Int = 20,
-        enableTotalRecordCount: Bool = true
+        includeItemTypes: [BaseItemKind],
+        limit: Int,
+        extras: SearchItemsExtras
     ) async throws -> [BaseItemDto] {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
@@ -397,9 +401,12 @@ extension JellyfinAPIClient {
                 searchTerm: searchTerm,
                 includeItemTypes: includeItemTypes
             )
-            params.enableTotalRecordCount = enableTotalRecordCount
+            params.enableTotalRecordCount = extras.contains(.totalRecordCount)
             params.enableImageTypes = [.primary]
             params.imageTypeLimit = 1
+            // The TMDb id, only while the search screen's Seerr section is
+            // visible: what tells an owned title from a missing one.
+            if extras.contains(.providerIds) { params.fields = [.providerIDs] }
             let response = try await client.send(Paths.getItems(parameters: params))
             // Defense in depth on top of `maxOfficialRating`: search feeds Siri
             // as well as the screen, and — unlike the paginated grids, whose
@@ -479,6 +486,33 @@ extension JellyfinAPIClient {
     /// contiguous — a hole punched in the middle of a season by a rating cap
     /// would make "next" skip an episode rather than refuse to show it.
     /// `getPlaybackInfo` remains the authority on what may actually be played.
+    /// The whole series' numbering in ONE light request (`/Shows/{id}/Episodes`
+    /// without a season, no fields, no userData, no images) — what the
+    /// missing-episodes check needs to tell a library that follows TMDb's
+    /// numbering from one that does not. Same cache discipline as
+    /// `getEpisodeRefs`: no userData, so outside the userData sweep, 300 s.
+    public func getEpisodeNumbering(seriesId: String, userId: String) async throws -> [EpisodeNumbering] {
+        let cacheKey = "episodenumbering-\(seriesId)-\(userId)"
+        let cacheStamp = cache.stamp()
+        if let cached: [EpisodeNumbering] = cache.get(cacheKey) { return cached }
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        var params = Paths.GetEpisodesParameters(userID: userId, fields: [], enableUserData: false)
+        params.enableImages = false
+        do {
+            let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
+            let numbering = (response.value.items ?? []).compactMap { item -> EpisodeNumbering? in
+                guard item.locationType != .virtual,
+                      let season = item.parentIndexNumber, let first = item.indexNumber else { return nil }
+                return EpisodeNumbering(season: season, first: first, last: item.indexNumberEnd)
+            }
+            cache.set(cacheKey, value: numbering, ttl: 300, stamp: cacheStamp)
+            return numbering
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     public func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference] {
         let cacheKey = "episoderefs-\(seasonId)-\(userId)"
         let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
@@ -665,7 +699,9 @@ extension JellyfinAPIClient {
 
     // MARK: - Persons
 
-    public func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
+    public func getPersonItems(
+        personId: String, userId: String, limit: Int = 60, includeProviderIds: Bool = false
+    ) async throws -> [BaseItemDto] {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let maxOfficialRating = ContentRatingClassifier.maxOfficialRatingCode(forAge: getMaxContentAge())
@@ -682,6 +718,9 @@ extension JellyfinAPIClient {
             // Returns items only — no caller can read a count, so there is no
             // reason to make the server run the COUNT query for one.
             params.enableTotalRecordCount = false
+            // The TMDb id, only while the actor page's Seerr section may show:
+            // what tells an owned title from a missing one.
+            if includeProviderIds { params.fields = [.providerIDs] }
             let response = try await client.send(Paths.getItems(parameters: params))
             return applyRatingFilter(response.value.items ?? [])
         } catch {

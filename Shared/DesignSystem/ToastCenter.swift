@@ -31,6 +31,27 @@ struct Toast: Identifiable, Equatable {
     let title: String
     let message: String?
     let duration: TimeInterval
+    /// One button inside the pill (« Regarder », « Voir »), iOS only: the
+    /// toast window takes no input on tvOS, where the toast just informs.
+    let action: ToastAction?
+
+    init(level: Level, title: String, message: String?, duration: TimeInterval, action: ToastAction? = nil) {
+        self.level = level
+        self.title = title
+        self.message = message
+        self.duration = duration
+        self.action = action
+    }
+
+    /// The same toast is the same id: a closure cannot be compared, and every
+    /// other field is a `let` set once with it.
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
+}
+
+/// What a toast's button does. Performed on tap, then the toast is dismissed.
+struct ToastAction {
+    let title: String
+    let perform: @MainActor () -> Void
 }
 
 /// Central queue for user-facing feedback toasts. Injected via `.environment`.
@@ -58,7 +79,7 @@ final class ToastCenter {
         if voiceOver {
             UIAccessibility.post(notification: .announcement, argument: Self.announcement(for: toast))
         }
-        let duration = Self.effectiveDuration(toast.duration, voiceOverRunning: voiceOver)
+        let duration = Self.effectiveDuration(toast.duration, voiceOverRunning: voiceOver, hasAction: toast.action != nil)
         dismissTask = Task { [weak self, id = toast.id, duration] in
             try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
             guard !Task.isCancelled else { return }
@@ -79,8 +100,8 @@ final class ToastCenter {
         show(Toast(level: .error, title: title, message: message, duration: duration))
     }
 
-    func info(_ title: String, message: String? = nil, duration: TimeInterval = 2.5) {
-        show(Toast(level: .info, title: title, message: message, duration: duration))
+    func info(_ title: String, message: String? = nil, duration: TimeInterval = 2.5, action: ToastAction? = nil) {
+        show(Toast(level: .info, title: title, message: message, duration: duration, action: action))
     }
 
     func dismiss() {
@@ -96,7 +117,11 @@ final class ToastCenter {
 
     /// A toast read by VoiceOver must outlive the announcement and leave time
     /// to reach it: never under 6 s, and twice the sighted duration beyond that.
-    nonisolated static func effectiveDuration(_ duration: TimeInterval, voiceOverRunning: Bool) -> TimeInterval {
-        voiceOverRunning ? max(duration * 2, 6) : duration
+    /// A toast with a button stays at least 5 s, so it can still be pressed.
+    nonisolated static func effectiveDuration(
+        _ duration: TimeInterval, voiceOverRunning: Bool, hasAction: Bool = false
+    ) -> TimeInterval {
+        let sighted = hasAction ? max(duration, 5) : duration
+        return voiceOverRunning ? max(sighted * 2, 6) : sighted
     }
 }

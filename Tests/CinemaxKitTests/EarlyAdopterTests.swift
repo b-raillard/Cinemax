@@ -334,7 +334,11 @@ struct EarlyAdopterCrossPlatformTests {
     ) -> EarlyAdopterService {
         EarlyAdopterService(
             source: source, cache: InMemoryEarlyAdopterCache(), configuration: configuration,
-            defaults: .isolatedForTesting(), cloud: cloud, platform: platform
+            defaults: .isolatedForTesting(), cloud: cloud, platform: platform,
+            // The App Store signature is not the subject here — see
+            // « Signature App Store des miroirs iCloud » and
+            // `unsignedFounderFactsAreIgnored` for the real verifier.
+            verifyPublished: { published, _ in published }
         )
     }
 
@@ -388,6 +392,23 @@ struct EarlyAdopterCrossPlatformTests {
         let tv = service(.tvOS, source: StubTransactionSource(.failure(StubTransactionError())), cloud: cloud)
         #expect(tv.status == .unknown)
         #expect(tv.isEarlyAdopter)
+    }
+
+    @Test("Founder facts published without a valid App Store signature count for nothing (audit SEC-02)")
+    func unsignedFounderFactsAreIgnored() throws {
+        let cloud = InMemoryCloudKeyValueStore()
+        var forged = transaction("2.3.2")
+        forged.signedTransaction = "eyJhbGciOiJFUzI1NiJ9.payload.signature"
+        cloud.set(try mirrored(forged), forKey: EarlyAdopterPlatform.iOS.mirrorKey)
+        cloud.set(try mirrored(transaction("2.0.0")), forKey: EarlyAdopterPlatform.tvOS.mirrorKey)
+        // The REAL verifier (Apple Root CA - G3): neither record is signed by it.
+        let tv = EarlyAdopterService(
+            source: StubTransactionSource(.failure(StubTransactionError())), cache: InMemoryEarlyAdopterCache(),
+            configuration: configuration, defaults: .isolatedForTesting(), cloud: cloud, platform: .tvOS
+        )
+        #expect(tv.otherPlatformStatus == .unknown)
+        #expect(tv.otherPlatformTransaction == nil)
+        #expect(!tv.isEarlyAdopter)
     }
 
     @Test("A sandbox / TestFlight answer is never published, and a mirrored one never grants")

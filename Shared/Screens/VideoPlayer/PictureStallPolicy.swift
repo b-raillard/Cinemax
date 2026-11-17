@@ -71,11 +71,17 @@ struct PictureStallPolicy {
     enum Outcome: Equatable {
         case healthy
         /// Stalling for this many consecutive seconds, with no recovery spent —
-        /// either below the threshold, or the budget is exhausted. The caller
-        /// logs the single sample where `seconds == stallSeconds`.
+        /// below the threshold, or past it with the budget exhausted (after
+        /// `.exhausted` was returned once at the threshold).
         case stalling(seconds: Int)
         /// Rebuild the player at the current position.
         case recover
+        /// The threshold is reached and no recovery is left: give up —
+        /// « Lecture impossible » — rather than leave a frozen picture under a
+        /// HUD that says « playing », with no spinner and no alert (audit
+        /// 2026-11-13, PL-01). Returned ONCE per run of frozen samples, at the
+        /// threshold sample only.
+        case exhausted
     }
 
     private var lastPictures: UInt64?
@@ -197,6 +203,7 @@ struct PictureStallPolicy {
             stalledSeconds = 0
             return .recover
         }
+        if stalledSeconds == Self.stallSeconds { return .exhausted }
         return .stalling(seconds: stalledSeconds)
     }
 }

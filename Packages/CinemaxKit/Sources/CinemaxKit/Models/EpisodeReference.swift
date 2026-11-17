@@ -29,3 +29,19 @@ public struct EpisodeReference: Sendable, Equatable, Identifiable {
         self.name = name
     }
 }
+
+/// Where one episode file sits in its series' numbering: season, first and
+/// last episode number (a file covering two episodes carries both). What the
+/// missing-episodes check reads to decide whether the library follows TMDb's
+/// numbering at all — nothing else of the episode.
+public struct EpisodeNumbering: Sendable, Equatable {
+    public let season: Int
+    public let first: Int
+    public let last: Int
+
+    public init(season: Int, first: Int, last: Int? = nil) {
+        self.season = season
+        self.first = first
+        self.last = max(first, last ?? first)
+    }
+}

@@ -60,6 +60,14 @@ struct DiagnosticsFacts: Sendable, Equatable {
     /// the manual export, where the user IS the reason — and that is what keeps
     /// the existing header shape (which tests lock) byte-identical.
     var reason: String?
+    /// Debug / TestFlight uploads only (`VerboseDiagnostics`): the build's
+    /// test environment and the network path at the time of the report. `nil`
+    /// everywhere else, and printed LAST, so no existing header line moves.
+    var buildEnvironment: String?
+    var network: String?
+    /// The active server's route class (`local` / `internet`) — a class,
+    /// never an address. Printed LAST, after `network`, when set.
+    var serverRoute: String?
 
     /// The app-state half, with the device facts every report carries.
     static func current(
@@ -111,6 +119,9 @@ enum DiagnosticsReport {
             "log_window: last \(facts.logWindowMinutes) min of this launch, subsystem \(DiagnosticsLogCollector.subsystem), \(facts.logEntryCount) entries",
             "metrickit: \(describe(facts.metricKit))",
         ])
+        if let environment = facts.buildEnvironment { lines.append("build_environment: \(environment)") }
+        if let network = facts.network { lines.append("network: \(network)") }
+        if let route = facts.serverRoute { lines.append("server_route: \(route)") }
         return lines
     }
 

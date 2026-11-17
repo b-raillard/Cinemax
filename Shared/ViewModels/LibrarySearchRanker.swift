@@ -130,10 +130,15 @@ enum LibrarySearchRanker {
     ///
     /// `failed` distinguishes "couldn't reach the server" from a legitimate
     /// zero-match, which callers need in order to say the right thing.
+    ///
+    /// `includeProviderIds` is passed through untouched to `searchItems` (the
+    /// search screen's Seerr section needs the TMDb ids); nothing Seerr is
+    /// decided here — the App Intents query passes `false`.
     static func rank(
         query: String,
         userId: String,
         includeItemTypes: [BaseItemKind],
+        includeProviderIds: Bool = false,
         api: any LibraryAPI
     ) async -> (items: [BaseItemDto], failed: Bool) {
         let normalizedQuery = normalize(query)
@@ -162,7 +167,8 @@ enum LibrarySearchRanker {
                     try? await api.searchItems(
                         userId: userId, searchTerm: term,
                         includeItemTypes: includeItemTypes, limit: 30,
-                        enableTotalRecordCount: false
+                        enableTotalRecordCount: false,
+                        includeProviderIds: includeProviderIds
                     )
                 }
             }

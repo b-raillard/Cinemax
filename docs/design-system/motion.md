@@ -56,6 +56,14 @@ You don't need to do anything if you use:
 - `CinemaToggleIndicator` (takes an explicit `animated` parameter passed at call site)
 - `ToastOverlay`
 - `cardZoomDestination(_:)` (`CardZoomTransition.swift`) — the iOS card → fiche zoom falls back to the default push when motion is off
+- `.symbolPop(on:)` and `.rollingNumber(_:)` (`FocusScaleModifier.swift`) — key `rollingNumber` on the NUMBER, not the formatted string, where the number is at hand
+- `ProgressBarView` — glides on every value change; with `fillsOnAppear: true` (the « Reprendre » `WideCard`) it fills from empty only inside the screen's skeleton reveal (`ContentRevealClock`), so a card re-created by scrolling never refills
+- `CinemaLazyImage` — fades in on arrival (`fadesIn`, default `true`); Nuke's memory-cache hits never fade. Opted out: `HeroBackdropImage`, the fiche backdrop
+- `ContentRow` (iOS) — edge cards recede (`ScrollMotion.edgeRecede`), on by default; `.edgeRecede(false)` on the cast, Seerr's missing titles and « En direct »
+- `.listSwapSlide(trigger:)` — keyframes on a trigger, never an `.id` swap, and the SAME modifier with motion off (zero-amplitude keyframes — an `if motionEnabled` branch would change the stack's identity when Reduce Motion flips); the fiche's episode lists, keyed on `MediaDetailViewModel.seasonSwapCount` (a re-selected season does not count)
+- The fiche hero (iOS) — the IMAGE moves inside `heroBackdropBleed(…, parallax:)`'s clipped box (the gradient and the box edge stay put), the text fades over the last 90 pt before the hero is gone, then the item's name shows in the bar (`ScrollMotion`, `.scrollView` minY = 0 at rest, measured)
+- Player (UIKit, `MotionEffects.isEnabledNow`): the skip button's slide (`setSkipButtonVisible`), the iOS play/pause crossfade, the countdown number's crossfade — see `Shared/Screens/VideoPlayer/CLAUDE.md`
+- `.contentReveal(step:)` + `ContentRevealClock` (`SkeletonViews.swift`) — Home and the library: the first blocks rise in each time the skeleton leaves, never on an in-place change
 
 New components must consume `\.motionEffectsEnabled` or take an explicit `animated: Bool` parameter.
 
@@ -73,7 +81,24 @@ Where they appear in the codebase, for consistency:
 | tvOS settings-row focus border | 0.15 s | `.easeOut` |
 | Toast enter/exit | spring | default spring |
 | Rainbow easter egg tick | 33 ms (30 fps) | linear (hue increment) |
-| `CinemaMotion.standard` | 0.3 s | used when "standard" feels right |
+
+### State-change tokens — `CinemaMotion` (`FocusScaleModifier.swift`)
+
+Added 2026-11-14 (spec `docs/superpowers/specs/2026-11-14-interface-animations-design.md`). A new state-change animation takes its curve from here and goes through `CinemaMotion.gated(_:enabled:)`, which returns `nil` when motion is off.
+
+| Token | Value | Used by |
+| --- | --- | --- |
+| `symbolPop` | `.bouncy(duration: 0.45)` | `.symbolPop(on:)` — fiche favourite / watched glyphs |
+| `skeletonFade` | `.easeOut(duration: 0.25)` | skeleton → content / error / empty |
+| `imageFade` | `.easeOut(duration: 0.3)` | artwork arriving |
+| `contentReveal` + `revealStagger` | `.easeOut(duration: 0.45)`, 0.08 s | content rising in after a skeleton |
+| `numeric` | `.snappy(duration: 0.35)` | `.rollingNumber(_:)` — counts, remaining time |
+| `progressFill` | `.easeOut(duration: 0.7)` | `ProgressBarView` |
+| `listSwapDistance` / `listSwapDuration` / `listSwapFadeDuration` | 24 pt, 0.34 s, 0.24 s | episodes on a season change (`.listSwapSlide`) |
+| `barTitleFade` | `.easeOut(duration: 0.2)` | the fiche's bar title |
+| `overlaySlide` / `overlaySlideOut` / `overlaySlideDistance` | 0.3 s / 0.2 s / 26 pt | the player's skip button |
+| `glyphCrossfade` | 0.2 s | iOS HUD play/pause |
+| `countdownTick` | 0.25 s | next-up countdown number |
 
 Don't invent new durations unless you have a specific reason. Match what's next to you on the screen.
 
@@ -104,7 +129,6 @@ What it does:
 
 | Surface | Apply |
 | --- | --- |
-| Primary action button | `Button { } label: { … }.buttonStyle(CinemaTVButtonStyle(cinemaStyle: .primary))` — handled by `CinemaButton(style: .primary)` |
 | Accent button | `CinemaButton(style: .accent)` |
 | Ghost button | `CinemaButton(style: .ghost)` |
 | Destructive button | `CinemaButton(style: .destructive)` — rings and haloes in `error`, since a white ring vanishes on light mode's pale `errorContainer` |
@@ -160,6 +184,7 @@ Across both platforms:
 
 ## Progress, loading, transitions
 
+- **Skeleton → content**: a screen that swaps a `MediaPageSkeleton` for content notes the skeleton on a `ContentRevealClock` FROM BODY (the stamp must exist before the rows' `onAppear`), injects it as `\.contentRevealClock`, and marks its first screenful `.contentReveal(step:)`. See `HomeScreen.body`.
 - **Loading**: always `LoadingStateView` (spinner, scaled 1.5×). Don't build ad-hoc `ProgressView()` screens.
 - **Empty**: `EmptyStateView` with a 56 pt semi-transparent SF Symbol, title (headline), optional subtitle, optional 200 pt ghost action button.
 - **Error**: `ErrorStateView` with 48 pt `exclamationmark.triangle` in `CinemaColor.error`, message, 160 pt ghost retry button.

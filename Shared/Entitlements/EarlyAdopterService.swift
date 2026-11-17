@@ -110,6 +110,9 @@ final class EarlyAdopterService {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let cloud: any CloudKeyValueStore
     @ObservationIgnored private let platform: EarlyAdopterPlatform
+    /// The other app's published facts, rebuilt from their verified App Store
+    /// signature — `nil` when it does not verify (audit SEC-02).
+    @ObservationIgnored private let verifyPublished: @Sendable (AppTransactionSnapshot, _ expectedBundleID: String) -> AppTransactionSnapshot?
     @ObservationIgnored private var externalChangesTask: Task<Void, Never>?
     /// Set once StoreKit has answered in this process: the launch evaluation
     /// is done, a later network return asks nothing.
@@ -127,7 +130,10 @@ final class EarlyAdopterService {
         configuration: EarlyAdopterConfiguration = .production,
         defaults: UserDefaults = .standard,
         cloud: any CloudKeyValueStore = UbiquitousCloudKeyValueStore(),
-        platform: EarlyAdopterPlatform = .current
+        platform: EarlyAdopterPlatform = .current,
+        verifyPublished: @escaping @Sendable (AppTransactionSnapshot, _ expectedBundleID: String) -> AppTransactionSnapshot? = {
+            AppStoreSignature.appStore.verifiedFounderFacts($0, expectedBundleID: $1)
+        }
     ) {
         self.source = source
         self.cache = cache
@@ -135,6 +141,7 @@ final class EarlyAdopterService {
         self.defaults = defaults
         self.cloud = cloud
         self.platform = platform
+        self.verifyPublished = verifyPublished
         #if DEBUG
         debugOverride = defaults.string(forKey: SettingsKey.debugEarlyAdopterOverride)
             .flatMap(EarlyAdopterDebugOverride.init(rawValue:)) ?? .automatic
@@ -213,8 +220,11 @@ final class EarlyAdopterService {
     }
 
     private func readOtherPlatform() {
+        // The store is user-writable: only what the App Store signed counts,
+        // rebuilt from the signed payload, never from the record's own fields.
         let other = cloud.data(forKey: platform.other.mirrorKey)
-            .flatMap(EarlyAdopterCacheRecord.decode)?.transaction
+            .flatMap(EarlyAdopterCacheRecord.decode)
+            .flatMap { verifyPublished($0.transaction, platform.other.bundleID) }
         if other != otherPlatformTransaction { otherPlatformTransaction = other }
         let resolved = other.map { EarlyAdopterPolicy.evaluate($0, configuration: configuration) } ?? .unknown
         if resolved != otherPlatformStatus { otherPlatformStatus = resolved }

@@ -9,6 +9,10 @@ struct SearchScreen: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toasts
+    @Environment(SeerrSession.self) private var seerr
+    @Environment(SeerrRequestPresenter.self) private var seerrRequests
+    @Environment(ProFeatureAccess.self) private var proAccess: ProFeatureAccess?
+    @Environment(NetworkMonitor.self) private var network
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -35,6 +39,11 @@ struct SearchScreen: View {
     /// Card → fiche zoom (iOS). Owned by the screen, handed to the result
     /// cards through `cardZoomScope` — see `CardZoom`.
     @Namespace private var zoomNamespace
+    /// « Se connecter à Seerr » of the invitation card, in flight.
+    @State private var isSigningInToSeerr = false
+    /// Accounts that answered « Plus tard » this session — the stored key
+    /// (`SettingsKey.seerrSearchPromptDismissed`) is not observed.
+    @State private var dismissedSeerrPrompts: Set<String> = []
 
     private struct SurpriseDestination: Identifiable, Hashable {
         let id: String
@@ -93,7 +102,14 @@ struct SearchScreen: View {
             // Spotlight, and keyboard. Voice search is exposed as a leading
             // toolbar button. The body renders results / empty / listening states.
             VStack(spacing: 0) {
-                filterChips
+                // Above the results only where nothing scrolls: in the grid
+                // they ride INSIDE its ScrollView (`SearchResultsGrid.chips`).
+                // A row pinned above a scroll view stayed put while the large
+                // title and the search field followed the scroll, and the two
+                // overlapped (owner's iPhone, 2026-11-11).
+                if !showsResultsGrid {
+                    filterChips
+                }
                 resultContent
             }
             #endif
@@ -107,7 +123,14 @@ struct SearchScreen: View {
         // An App Intent can raise a term either before this screen exists (the
         // tab is switched to afterwards) or while it's already on screen, so
         // both arrival orders are covered.
-        .task { consumeIntentSearchRequest() }
+        .task {
+            // Before the intent's query, which may start the first search.
+            viewModel.seerr = seerr
+            viewModel.allowsSeerr = { [seerr, proAccess, network] in
+                seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+            }
+            consumeIntentSearchRequest()
+        }
         .onChange(of: appState.pendingIntentSearchQuery) { _, _ in
             consumeIntentSearchRequest()
         }
@@ -338,6 +361,21 @@ struct SearchScreen: View {
 
     // MARK: - Results
 
+    /// Whether `resultContent` draws the scrolling results grid — the branch
+    /// order below, read once.
+    private var showsResultsGrid: Bool {
+        !(viewModel.isSearching
+          || (viewModel.searchFailed && viewModel.hasSearched)
+          || (hasNoMatches && viewModel.hasSearched && !seerrFollowsResults)
+          || (hasNoMatches && !viewModel.hasSearched))
+    }
+
+    /// What the chips show, for the grid's `==`: the selected scope and the
+    /// count beside them.
+    private var chipsKey: String {
+        "\(viewModel.scope)-\(viewModel.results.count)-\(viewModel.hasSearched)"
+    }
+
     @ViewBuilder
     private var resultContent: some View {
         if viewModel.isSearching {
@@ -358,8 +396,9 @@ struct SearchScreen: View {
             Spacer()
         // Person matches alone are a result: typing an actor's name that matches
         // no title is the primary use case for the row, so both collections have
-        // to be empty before this reads as "nothing found".
-        } else if viewModel.results.isEmpty && viewModel.personResults.isEmpty && viewModel.hasSearched {
+        // to be empty before this reads as "nothing found". With a Seerr part to
+        // follow, the grid draws the same empty state above it (scrollable).
+        } else if hasNoMatches && viewModel.hasSearched && !seerrFollowsResults {
             Spacer()
             EmptyStateView(
                 systemImage: "magnifyingglass",
@@ -367,7 +406,7 @@ struct SearchScreen: View {
                 title: loc.localized("search.noResults")
             )
             Spacer()
-        } else if viewModel.results.isEmpty && viewModel.personResults.isEmpty {
+        } else if hasNoMatches && !viewModel.hasSearched {
             #if os(iOS)
             // Scrolls on iOS, centred while it fits: with search history shown,
             // the stacked « surprise » pills of a long language (German) went
@@ -393,7 +432,20 @@ struct SearchScreen: View {
                 gridSpacing: gridSpacing,
                 headerTitle: loc.localized("search.topMatches"),
                 peopleTitle: loc.localized("search.people"),
-                onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
+                noResultsTitle: hasNoMatches ? loc.localized("search.noResults") : nil,
+                seerrSection: viewModel.seerrSection(for: seerrVisible ? seerr.snapshot() : nil),
+                missingTitle: loc.localized("seerr.missing.title"),
+                missingCardWidth: missingCardWidth,
+                showsSeerrPrompt: seerrPromptVisible,
+                isSigningInToSeerr: isSigningInToSeerr,
+                onGoToSeries: { seriesDestination = SeriesDestination(id: $0) },
+                onRequest: { missing in
+                    Task { await seerrRequests.request(missing, session: seerr, loc: loc, toasts: toasts) }
+                },
+                onSeerrSignIn: { Task { await signInToSeerr() } },
+                onSeerrLater: dismissSeerrPrompt,
+                chipsKey: chipsKey,
+                chips: chipsInGrid
             )
             // Without this the `Equatable` conformance is inert — SwiftUI only
             // consults a custom `==` when the view is wrapped in `.equatable()`.
@@ -402,6 +454,16 @@ struct SearchScreen: View {
             // one surface is enough here.
             .cardZoomScope(zoomNamespace, surface: "search.results")
         }
+    }
+
+    /// iOS: the chips inside the grid's ScrollView. tvOS keeps them in its own
+    /// page ScrollView, above `resultContent`.
+    private var chipsInGrid: AnyView {
+        #if os(iOS)
+        AnyView(filterChips)
+        #else
+        AnyView(EmptyView())
+        #endif
     }
 
     /// Nothing typed yet: the invitation, past queries, the « surprise » pills.
@@ -420,6 +482,69 @@ struct SearchScreen: View {
             // "Not sure what to watch?" → two pills for a random movie or series.
             surpriseMePills
         }
+    }
+
+    // MARK: - Seerr (« Pas encore dans ta bibliothèque »)
+
+    private var hasNoMatches: Bool {
+        viewModel.results.isEmpty && viewModel.personResults.isEmpty
+    }
+
+    /// Re-read at render, every input (account, Pro, cap, configuration,
+    /// network, connection): a late answer never paints where Seerr no longer
+    /// applies.
+    private var seerrVisible: Bool {
+        seerr.isVisible(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+    }
+
+    /// The invitation to sign in, in place of the section — account mode, not
+    /// connected, and not put off (« Plus tard ») by this account.
+    private var seerrPromptVisible: Bool {
+        guard viewModel.hasSearched, let account = appState.activeAccountKey,
+              seerr.showsConnectPrompt(proAllows: proAccess?.allows(.requests) ?? false, isOnline: network.isOnline)
+        else { return false }
+        return !dismissedSeerrPrompts.contains(account)
+            && !UserDefaults.standard.bool(forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: account))
+    }
+
+    /// A Seerr part may come under the results: decided by the gates, not by
+    /// the section's state, so the empty state does not jump when Seerr answers.
+    private var seerrFollowsResults: Bool {
+        seerrVisible || seerrPromptVisible
+    }
+
+    private var missingCardWidth: CGFloat {
+        #if os(tvOS)
+        CinemaTVLayout.posterCardWidth
+        #else
+        AdaptiveLayout.posterCardWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass))
+        #endif
+    }
+
+    /// The invitation's « Se connecter à Seerr »: what the connection test
+    /// would say on failure; on success the section loads for the query on
+    /// screen.
+    private func signInToSeerr() async {
+        guard !isSigningInToSeerr else { return }
+        isSigningInToSeerr = true
+        defer { isSigningInToSeerr = false }
+        if let failure = await seerr.signInToSavedAddress(appState: appState) {
+            let title = if case .tooOld(let version) = failure {
+                loc.localized(failure.titleKey, version)
+            } else {
+                loc.localized(failure.titleKey)
+            }
+            toasts.error(title, message: loc.localized(failure.fixKey))
+        } else if seerrVisible {
+            viewModel.search(using: appState)
+        }
+    }
+
+    /// « Plus tard »: hidden from search for this account on this device.
+    private func dismissSeerrPrompt() {
+        guard let account = appState.activeAccountKey else { return }
+        UserDefaults.standard.set(true, forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: account))
+        dismissedSeerrPrompts.insert(account)
     }
 
     // MARK: - Recent Searches
@@ -722,7 +847,16 @@ private struct SearchResultsGrid: View, Equatable {
                   lhs.gridSpacing == rhs.gridSpacing,
                   lhs.headerTitle == rhs.headerTitle,
                   lhs.peopleTitle == rhs.peopleTitle,
+                  // The Seerr part: every stored value joins, or the section
+                  // never re-renders behind `.equatable()`.
+                  lhs.noResultsTitle == rhs.noResultsTitle,
+                  lhs.seerrSection == rhs.seerrSection,
+                  lhs.missingTitle == rhs.missingTitle,
+                  lhs.missingCardWidth == rhs.missingCardWidth,
+                  lhs.showsSeerrPrompt == rhs.showsSeerrPrompt,
+                  lhs.isSigningInToSeerr == rhs.isSigningInToSeerr,
                   lhs.results.count == rhs.results.count,
+                  lhs.chipsKey == rhs.chipsKey,
                   lhs.people.count == rhs.people.count else { return false }
             // Must be at least as fine-grained as `SearchResultCard.==`. The grid
             // is the OUTER `.equatable()`: if it compares equal its body is
@@ -753,14 +887,45 @@ private struct SearchResultsGrid: View, Equatable {
     let gridSpacing: CGFloat
     let headerTitle: String
     let peopleTitle: String
+    /// « Aucun résultat » drawn at the top when nothing matched and a Seerr
+    /// part follows (`nil` otherwise — the screen's own empty state applies).
+    let noResultsTitle: String?
+    /// Already gated by the screen (`.hidden` where Seerr does not apply).
+    let seerrSection: MissingSection<SeerrMissingTitle>
+    let missingTitle: String
+    let missingCardWidth: CGFloat
+    /// The invitation to sign in to Seerr, in place of the section.
+    let showsSeerrPrompt: Bool
+    let isSigningInToSeerr: Bool
     /// Passed down to `SearchResultCard`, which invokes it to bubble the
     /// event up to `SearchScreen`'s screen-level destination — see the
     /// "Go to series" state above.
     let onGoToSeries: (String) -> Void
+    let onRequest: (SeerrMissingTitle) -> Void
+    let onSeerrSignIn: () -> Void
+    let onSeerrLater: () -> Void
+    /// The scope chips, first in the ScrollView so they scroll with the large
+    /// title (iOS); `chipsKey` is what `==` compares for them.
+    let chipsKey: String
+    let chips: AnyView
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+            // A plain VStack: it holds a handful of children, and a lazy stack
+            // around the lazy grid and rows is what blanked a tab for good
+            // (root CLAUDE.md, lazy-container RULE).
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+                chips
+                if let noResultsTitle {
+                    EmptyStateView(
+                        systemImage: "magnifyingglass",
+                        illustration: .noResults,
+                        title: noResultsTitle
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, CinemaSpacing.spacing6)
+                }
+
                 // Inside the grid's own ScrollView, so the row scrolls away with
                 // the results instead of staying pinned above them.
                 if !people.isEmpty {
@@ -790,9 +955,78 @@ private struct SearchResultsGrid: View, Equatable {
                     .padding(.horizontal, gridPadding)
                 }
 
+                // AFTER everything the library owns, never above it: nothing
+                // already on screen moves when Seerr answers.
+                if showsSeerrPrompt {
+                    SeerrSearchPromptCard(
+                        isSigningIn: isSigningInToSeerr, onSignIn: onSeerrSignIn, onLater: onSeerrLater)
+                        .padding(.horizontal, gridPadding)
+                        .padding(.top, CinemaSpacing.spacing2)
+                } else {
+                    MissingTitlesRow(
+                        title: missingTitle, count: nil, section: seerrSection,
+                        headerAction: nil, cardWidth: missingCardWidth
+                    ) { missing in
+                        MissingTitleButton(missing: missing, onRequest: onRequest)
+                    }
+                    .padding(.top, CinemaSpacing.spacing2)
+                }
+
                 Spacer(minLength: 80)
             }
         }
+    }
+}
+
+/// « Il te manque un titre ? » — the one browse place allowed to name Seerr
+/// (spec, Naming Seerr). tvOS: the two buttons are one focus row.
+private struct SeerrSearchPromptCard: View {
+    let isSigningIn: Bool
+    let onSignIn: () -> Void
+    let onLater: () -> Void
+
+    @Environment(LocalizationManager.self) private var loc
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
+            Text(loc.localized("seerr.searchPrompt.title"))
+                .font(CinemaFont.headline(.small))
+                .foregroundStyle(CinemaColor.onSurface)
+                .accessibilityAddTraits(.isHeader)
+            Text(loc.localized("seerr.searchPrompt.body"))
+                .font(CinemaFont.dynamicBody)
+                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: CinemaSpacing.spacing3) {
+                CinemaButton(title: loc.localized("seerr.settings.signIn"), style: .accent, isLoading: isSigningIn) {
+                    onSignIn()
+                }
+                .disabled(isSigningIn)
+                CinemaButton(title: loc.localized("seerr.searchPrompt.later"), style: .ghost) {
+                    onLater()
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            #if os(tvOS)
+            .focusSection()
+            #endif
+        }
+        .padding(CinemaSpacing.spacing4)
+        .frame(maxWidth: maxWidth, alignment: .leading)
+        .glassPanel()
+    }
+
+    /// The prose measure: capped on a wide iPad and on tvOS, the full
+    /// column on an iPhone.
+    private var maxWidth: CGFloat {
+        #if os(tvOS)
+        CinemaTVLayout.readingMaxWidth
+        #else
+        AdaptiveLayout.readingMaxWidth(for: AdaptiveLayout.form(horizontalSizeClass: sizeClass)) ?? .infinity
+        #endif
     }
 }
 

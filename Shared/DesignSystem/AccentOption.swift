@@ -36,6 +36,9 @@ enum AccentOption: String, CaseIterable, Identifiable {
     }
 
     struct Palette {
+        /// Light-mode `accent` — small TEXT too, so ≥ 4.5:1 on `surface` and
+        /// `surfaceContainerHigh` (audit 2026-11-13, UX-03: orange, cyan,
+        /// green and blue were darkened for it; `SmallTextContrastTests`).
         let accentLight: UInt
         let accentDark: UInt
         let containerLight: UInt
@@ -52,7 +55,7 @@ enum AccentOption: String, CaseIterable, Identifiable {
                               containerLight: 0xE53935, containerDark: 0xE53935,
                               dimLight: 0x8C1C20, dimDark: 0xCC2C30,
                               onAccentLight: 0xFFFFFF, onAccentDark: 0x3D0000)
-        case .orange: Palette(accentLight: 0xCC5A0A, accentDark: 0xFF8C42,
+        case .orange: Palette(accentLight: 0xA44808, accentDark: 0xFF8C42,
                               containerLight: 0xE06A1A, containerDark: 0xE06A1A,
                               dimLight: 0xA84508, dimDark: 0xCC5500,
                               onAccentLight: 0xFFFFFF, onAccentDark: 0x3D1500)
@@ -60,15 +63,15 @@ enum AccentOption: String, CaseIterable, Identifiable {
                               containerLight: 0xD19500, containerDark: 0xD19500,
                               dimLight: 0x6B4500, dimDark: 0xB37B00,
                               onAccentLight: 0xFFFFFF, onAccentDark: 0x2B1F00)
-        case .green:  Palette(accentLight: 0x1F7A50, accentDark: 0x4CAF82,
+        case .green:  Palette(accentLight: 0x1D714A, accentDark: 0x4CAF82,
                               containerLight: 0x2E8A5E, containerDark: 0x2E8A5E,
                               dimLight: 0x155F3E, dimDark: 0x1F7A50,
                               onAccentLight: 0xFFFFFF, onAccentDark: 0x001A0D)
-        case .cyan:   Palette(accentLight: 0x0E8F84, accentDark: 0x2DD4BF,
+        case .cyan:   Palette(accentLight: 0x0B6F67, accentDark: 0x2DD4BF,
                               containerLight: 0x0BAEA0, containerDark: 0x0BAEA0,
                               dimLight: 0x08756B, dimDark: 0x009A8C,
                               onAccentLight: 0xFFFFFF, onAccentDark: 0x001A18)
-        case .blue:   Palette(accentLight: 0x0060D6, accentDark: 0x679CFF,
+        case .blue:   Palette(accentLight: 0x005ED1, accentDark: 0x679CFF,
                               containerLight: 0x007AFF, containerDark: 0x007AFF,
                               dimLight: 0x0050B8, dimDark: 0x0070EB,
                               onAccentLight: 0xFFFFFF, onAccentDark: 0x001F4A)

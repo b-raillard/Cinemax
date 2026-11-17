@@ -692,27 +692,42 @@ struct SettingsCategoryTests {
     @Test("le landing non-admin résout les 5 catégories canoniques puis Debug, dans l'ordre, sur les deux plateformes")
     @MainActor func nonAdminOrder() {
         let expected: [SettingsCategory] = [.appearance, .interface, .playback, .account, .server, .debug]
-        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: false, showsDebug: true) == expected)
-        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsDebug: true) == expected)
+        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: false, showsDebug: true, showsRequests: false) == expected)
+        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsDebug: true, showsRequests: false) == expected)
+        // « Demandes » (Seerr) sits right after « Compte », on BOTH platforms.
+        let withRequests: [SettingsCategory] = [.appearance, .interface, .playback, .account, .requests, .server, .debug]
+        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: false, showsDebug: true, showsRequests: true) == withRequests)
+        #expect(SettingsCategory.visibleCases(isAdmin: false, isTVOS: true, showsDebug: true, showsRequests: true) == withRequests)
     }
 
-    @Test("l'admin iOS ajoute UNE catégorie Administration, avant Debug ; tvOS ne la montre jamais")
+    @Test("l'admin iOS ajoute UNE catégorie Administration, avant Debug ; tvOS ne la montre jamais, mais garde « Demandes »")
     @MainActor func adminGating() {
-        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: false, showsDebug: true)
+        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: false, showsDebug: true, showsRequests: false)
                 == [.appearance, .interface, .playback, .account, .server, .administration, .debug])
-        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: true, showsDebug: true)
+        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: true, showsDebug: true, showsRequests: false)
                 == [.appearance, .interface, .playback, .account, .server, .debug])
+        // The Requests category carries admin rows on tvOS too (its
+        // configuration) — a deliberate exception to « no admin on tvOS ».
+        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: false, showsDebug: true, showsRequests: true)
+                == [.appearance, .interface, .playback, .account, .requests, .server, .administration, .debug])
+        #expect(SettingsCategory.visibleCases(isAdmin: true, isTVOS: true, showsDebug: true, showsRequests: true)
+                == [.appearance, .interface, .playback, .account, .requests, .server, .debug])
     }
 
     @Test("Debug est la DERNIÈRE ligne quand elle est montrée, et absente sinon, quels que soient admin et plateforme")
     @MainActor func debugLastOrAbsent() {
         for isTVOS in [false, true] {
             for isAdmin in [false, true] {
-                let shown = SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS, showsDebug: true)
-                #expect(shown.last == .debug)
-                let hidden = SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS, showsDebug: false)
-                #expect(!hidden.contains(.debug))
-                #expect(hidden == shown.filter { $0 != .debug })
+                for showsRequests in [false, true] {
+                    let shown = SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS, showsDebug: true,
+                                                              showsRequests: showsRequests)
+                    #expect(shown.last == .debug)
+                    let hidden = SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS, showsDebug: false,
+                                                               showsRequests: showsRequests)
+                    #expect(!hidden.contains(.debug))
+                    #expect(hidden == shown.filter { $0 != .debug })
+                    #expect(shown.contains(.requests) == showsRequests)
+                }
             }
         }
     }
@@ -745,7 +760,8 @@ struct SettingsCategoryTests {
         for isTVOS in [false, true] {
             for isAdmin in [false, true] {
                 for showsDebug in [false, true] {
-                    #expect(!SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS, showsDebug: showsDebug).contains(.pro))
+                    #expect(!SettingsCategory.visibleCases(isAdmin: isAdmin, isTVOS: isTVOS, showsDebug: showsDebug,
+                                                           showsRequests: true).contains(.pro))
                 }
             }
         }
@@ -760,13 +776,22 @@ struct SettingsCategoryTests {
         }
     }
 
-    /// Lot B: the Administration row is the one Settings entry behind the Pro
-    /// gate — shown to a free admin with a lock, its tap opening the Pro sheet.
-    @Test("Seule la catégorie Administration est une fonction Pro")
-    func administrationIsTheProCategory() {
+    /// Lot B: the Administration row is a Settings entry behind the Pro gate —
+    /// shown to a free admin with a lock, its tap opening the Pro sheet. Seerr
+    /// (2026-11-07): « Demandes » is the second, same shape.
+    @Test("Seules les catégories Administration et Demandes sont des fonctions Pro")
+    func onlyAdministrationAndRequestsArePro() {
+        let expected: [SettingsCategory: ProFeatureID] = [.administration: .administration, .requests: .requests]
         for category in SettingsCategory.allCases {
-            #expect(category.proFeature == (category == .administration ? .administration : nil), "\(category)")
+            #expect(category.proFeature == expected[category], "\(category)")
         }
+    }
+
+    /// Admin-only rows of « Demandes » are gated INSIDE the page: the
+    /// category itself must not be `isAdminOnly`, which would drop it on tvOS.
+    @Test("« Demandes » n'est pas une catégorie réservée aux admins")
+    func requestsIsNotAdminOnly() {
+        #expect(!SettingsCategory.requests.isAdminOnly)
     }
 
     @Test("le hub Interface expose exactement les quatre sous-pages écran, dans l'ordre")

@@ -39,7 +39,7 @@ struct EarlyAdopterStoreKitTests {
     /// « 1.0 » is the sandbox's value, not Xcode's.
     @Test("Real local StoreKit never makes an early adopter, verified or not")
     func realTransactionNeverGrants() async throws {
-        await localStoreKitColdStartTolerant {
+        try await localStoreKitColdStartTolerant {
             let session = try await session()
             defer { _ = session }
             let source = StoreKitAppTransactionSource()
@@ -50,6 +50,18 @@ struct EarlyAdopterStoreKitTests {
                 // Refused, as it must be — not a test failure.
                 print("Local AppTransaction unverified and refused: \(error)")
             }
+
+            // The app-transaction JWS StoreKit really emits carries what
+            // `AppStoreSignature` reads (audit SEC-02).
+            let jws = try await AppTransaction.shared.jwsRepresentation
+            let fields = try #require(storeKitJWSFields(jws))
+            #expect(fields.header["alg"] as? String == "ES256")
+            // No `signedDate` in an app transaction: its signing date is
+            // `receiptCreationDate`, which the verifier falls back on.
+            #expect(fields.payload["receiptCreationDate"] is NSNumber)
+            let app = try JSONDecoder().decode(SignedAppTransactionPayload.self, from: JSONSerialization.data(withJSONObject: fields.payload))
+            #expect(app.bundleId == Bundle.main.bundleIdentifier)
+            #expect(app.receiptType == "Xcode")
 
             let service = EarlyAdopterService(
                 source: source,

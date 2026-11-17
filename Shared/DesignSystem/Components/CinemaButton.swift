@@ -1,7 +1,6 @@
 import SwiftUI
 
 enum CinemaButtonStyle {
-    case primary
     case ghost
     case accent
     /// Irreversible actions only — the confirm button of
@@ -18,7 +17,9 @@ enum CinemaButtonStyle {
 struct CinemaButton: View {
     @Environment(ThemeManager.self) private var themeManager
     let title: String
-    var style: CinemaButtonStyle = .primary
+    /// No default: every call site names its style, and there is no grey
+    /// « primary » style — it was never part of the design (removed 2026-11-13).
+    let style: CinemaButtonStyle
     var icon: String? = nil
     var isLoading: Bool = false
     /// Opt-in: a sentence-long title wraps (centred) instead of shrinking
@@ -74,14 +75,14 @@ struct CinemaButton: View {
     }
 
     #if os(iOS)
-    /// Accent CTAs (Play, Login, Save) get a meatier impact; primary/ghost get
+    /// Accent CTAs (Play, Login, Save) get a meatier impact; ghost gets
     /// a light selection tap. Skip when isLoading so multi-tap during async
     /// work doesn't fire repeated haptics.
     private var hapticForStyle: SensoryFeedback {
         if isLoading { return .selection }
         switch style {
         case .accent, .destructive: return .impact(weight: .medium)
-        case .primary, .ghost:      return .selection
+        case .ghost:                return .selection
         }
     }
     #endif
@@ -89,8 +90,6 @@ struct CinemaButton: View {
     @ViewBuilder
     var background: some View {
         switch style {
-        case .primary:
-            CinemaGradient.primaryButton
         case .ghost:
             RoundedRectangle(cornerRadius: CinemaRadius.large)
                 .fill(.ultraThinMaterial)
@@ -107,7 +106,6 @@ struct CinemaButton: View {
 
     private var textColor: Color {
         switch style {
-        case .primary: CinemaColor.onPrimary
         case .ghost: CinemaColor.onSurface
         case .accent: themeManager.onAccentContainer
         case .destructive: CinemaColor.onErrorContainer
@@ -173,8 +171,6 @@ struct CinemaTVButtonStyle: ButtonStyle {
     @ViewBuilder
     private func backgroundView(pressed: Bool, focused: Bool) -> some View {
         switch cinemaStyle {
-        case .primary:
-            CinemaGradient.primaryButton
         case .ghost:
             // Ghost fill brightens on focus so secondary actions (Retry, "From
             // the start", audio/subtitle) read clearly as selected.
@@ -196,7 +192,7 @@ struct CinemaTVButtonStyle: ButtonStyle {
     private var focusRingColor: Color {
         switch cinemaStyle {
         case .accent:          Color.white.opacity(0.65)
-        case .ghost, .primary: themeManager.accent
+        case .ghost:           themeManager.accent
         // A white ring vanishes on the pale `errorContainer` of light mode,
         // so the destructive style rings in `error` itself.
         case .destructive:     CinemaColor.error
@@ -204,10 +200,9 @@ struct CinemaTVButtonStyle: ButtonStyle {
     }
 
     /// Focus halo colour. Ghost buttons glow accent (their idle shadow is grey);
-    /// the accent button keeps its container tint; primary stays neutral.
+    /// the accent button keeps its container tint.
     private var focusHaloColor: Color {
         switch cinemaStyle {
-        case .primary:     CinemaColor.primary
         case .ghost:       themeManager.accent
         case .accent:      themeManager.accentContainer
         case .destructive: CinemaColor.error
@@ -220,7 +215,6 @@ struct CinemaTVButtonStyle: ButtonStyle {
 #Preview("CinemaButton styles") {
     VStack(spacing: CinemaSpacing.spacing3) {
         CinemaButton(title: "Play", style: .accent, icon: "play.fill") {}
-        CinemaButton(title: "Cancel", style: .primary) {}
         CinemaButton(title: "Retry", style: .ghost, icon: "arrow.clockwise") {}
         CinemaButton(title: "Loading", style: .accent, isLoading: true) {}
     }

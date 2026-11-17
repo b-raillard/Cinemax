@@ -571,6 +571,10 @@ final class MenuConfigStore {
         isLoadingViews = true
         lastFetchError = nil
         defer { if gen == refreshGeneration { isLoadingViews = false } }
+        // At launch the views are asked right after the session is restored:
+        // on the route the launch probe decides (LAN first), not on the
+        // identity ahead of it. Returns at once when nothing is pending.
+        await ServerRouteController.shared.awaitPendingProbe()
 
         do {
             let dtos = try await api.getUserViews(userId: userId)

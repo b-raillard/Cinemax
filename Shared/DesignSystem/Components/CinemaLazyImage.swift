@@ -12,19 +12,31 @@ import NukeUI
 ///   backdrops, stills — the default, and what every card relies on). `.fit`
 ///   for artwork whose own shape matters, such as a title logo, which must not
 ///   be cropped and whose aspect ratio varies from one title to the next.
+/// - `fadesIn`: the image fades in when it arrives from the network or the
+///   disk cache (`CinemaMotion.imageFade`, gated by Motion Effects). An image
+///   already in Nuke's MEMORY cache is set synchronously, outside the
+///   transaction, so scrolling back through a grid never re-fades. Pass `false`
+///   where another animation owns the moment (the heroes' crossfade, the fiche
+///   backdrop under the card → fiche zoom).
 struct CinemaLazyImage: View {
     let url: URL?
     var fallbackIcon: String? = "photo"
     var fallbackBackground: Color = CinemaColor.surfaceContainerHigh
     var showLoadingIndicator: Bool = false
     var contentMode: ContentMode = .fill
+    var fadesIn: Bool = true
+
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
 
     var body: some View {
-        LazyImage(url: url) { state in
+        LazyImage(url: url, transaction: Transaction(animation: fadesIn
+            ? CinemaMotion.gated(CinemaMotion.imageFade, enabled: motionEnabled)
+            : nil)) { state in
             if let image = state.image {
                 image
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
+                    .transition(.opacity)
             } else if showLoadingIndicator && state.isLoading {
                 fallbackBackground
                     .overlay {

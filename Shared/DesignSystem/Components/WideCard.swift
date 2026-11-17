@@ -37,7 +37,7 @@ struct WideCard: View {
                 }
                 .overlay(alignment: .bottom) {
                     if let progress, progress > 0 {
-                        ProgressBarView(progress: progress)
+                        ProgressBarView(progress: progress, fillsOnAppear: true)
                             .padding(.horizontal, 8)
                             .padding(.bottom, 8)
                     }
@@ -60,6 +60,8 @@ struct WideCard: View {
             // Both lines are text, so a text token — `outline` / `outlineVariant`
             // are stroke colours (the detail line read ~1.4:1 in light mode).
             textLine(subtitle, font: CinemaFont.label(.medium), color: CinemaColor.onSurfaceMuted)
+                // « 12 min restantes » rolls when the card comes back from the player.
+                .rollingNumber(subtitle)
             textLine(detail, font: CinemaFont.label(.small), color: CinemaColor.onSurfaceMuted)
         }
     }

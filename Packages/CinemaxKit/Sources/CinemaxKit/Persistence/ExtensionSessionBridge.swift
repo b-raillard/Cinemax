@@ -51,40 +51,63 @@ public enum ExtensionSessionBridge {
         /// the app uses read as « not connected » in the widget and the Top
         /// Shelf. Optional for the same backward-compatibility reason as the cap.
         public let pinnedCertificateSHA256: String?
+        /// The server's optional LAN address (`ServerEntry.localURL`), which the
+        /// extensions try first « at home » (`ExtensionServerRoute`). `serverURL`
+        /// stays the server's identity; this is only a faster road to it.
+        /// Optional for the same backward-compatibility reason as the cap.
+        public let localServerURL: URL?
+        /// Jellyfin's own server `Id` (`ServerEntry.serverID`): the LAN probe
+        /// dials the LAN only when `/System/Info/Public` answers this exact id.
+        public let serverID: String?
+        /// SHA-256 of the LAN address's approved certificate (its own
+        /// `host:port` pin — the LAN address is https only), or `nil`.
+        public let localPinnedCertificateSHA256: String?
 
-        /// `maxContentAge` / `pinnedCertificateSHA256` default here — unlike on
-        /// `publish`, which must never let a call site forget them. Only
-        /// `publish` builds one in production; the defaults exist so a test can
-        /// state just the fields it cares about.
+        /// Every field after `userId` defaults here — unlike on `publish`,
+        /// which must never let a call site forget them. Only `publish` builds
+        /// one in production; the defaults exist so a test can state just the
+        /// fields it cares about.
         public init(
             serverURL: URL,
             accessToken: String,
             userId: String,
             maxContentAge: Int? = nil,
-            pinnedCertificateSHA256: String? = nil
+            pinnedCertificateSHA256: String? = nil,
+            localServerURL: URL? = nil,
+            serverID: String? = nil,
+            localPinnedCertificateSHA256: String? = nil
         ) {
             self.serverURL = serverURL
             self.accessToken = accessToken
             self.userId = userId
             self.maxContentAge = maxContentAge
             self.pinnedCertificateSHA256 = pinnedCertificateSHA256
+            self.localServerURL = localServerURL
+            self.serverID = serverID
+            self.localPinnedCertificateSHA256 = localPinnedCertificateSHA256
         }
     }
 
     /// Publishes the current session, or clears it when any part is nil
     /// (logout / disconnect).
     ///
-    /// `maxContentAge` and `pinnedCertificateSHA256` carry **no default value**, deliberately: a defaulted
+    /// Every parameter after `userId` carries **no default value**, deliberately: a defaulted
     /// `nil` would let a future publish site forget the parental cap and ship a
     /// widget that silently ignores it — exactly the defect #230 exists to
     /// close. A new call site gets a compile error instead, the same discipline
-    /// as `MediaCardContextMenu`'s required `artwork:`.
-    public static func publish(
+    /// as `MediaCardContextMenu`'s required `artwork:`. The LAN address, the
+    /// server id and the LAN pin follow it: a forgotten one silently sends the
+    /// extensions back to the public road at home. (Eight parameters, all
+    /// required on purpose — hence the lint exemption.)
+    public static func publish( // swiftlint:disable:this function_parameter_count
         serverURL: URL?,
         accessToken: String?,
         userId: String?,
         maxContentAge: Int?,
-        pinnedCertificateSHA256: String?
+        pinnedCertificateSHA256: String?,
+        localServerURL: URL?,
+        serverID: String?,
+        localPinnedCertificateSHA256: String?
     ) {
         // Runs on BOTH paths (publish + clear) and *before* the skip
         // early-return below, so an upgraded install's leftover plaintext copy
@@ -99,7 +122,10 @@ public enum ExtensionSessionBridge {
                 accessToken: accessToken,
                 userId: userId,
                 maxContentAge: maxContentAge,
-                pinnedCertificateSHA256: pinnedCertificateSHA256
+                pinnedCertificateSHA256: pinnedCertificateSHA256,
+                localServerURL: localServerURL,
+                serverID: serverID,
+                localPinnedCertificateSHA256: localPinnedCertificateSHA256
             )
         }()
 
@@ -222,7 +248,10 @@ public enum ExtensionSessionBridge {
         let pending = _clearFailed
         memoLock.unlock()
         guard pending else { return }
-        publish(serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil)
+        publish(
+            serverURL: nil, accessToken: nil, userId: nil, maxContentAge: nil, pinnedCertificateSHA256: nil,
+            localServerURL: nil, serverID: nil, localPinnedCertificateSHA256: nil
+        )
     }
 
     private static var lastPublishedInProcess: PublishedMemo? {

@@ -182,9 +182,9 @@ struct JellyfinClientStateTests {
         let a = JellyfinClient(configuration: .init(url: URL(string: "https://a")!, client: "t", deviceName: "d", deviceID: "i", version: "1"))
         let b = JellyfinClient(configuration: .init(url: URL(string: "https://b")!, client: "t", deviceName: "d", deviceID: "i", version: "1"))
         let before = state.generation
-        let reconnected = state.install(b, url: URL(string: "https://b")!, accessToken: "tok-b")   // a reconnect lands
+        let reconnected = state.install(b, url: URL(string: "https://b")!, dialURL: nil, accessToken: "tok-b")   // a reconnect lands
         // …then the probe that started before it finishes: refused.
-        let stale = state.install(a, url: URL(string: "https://a")!, accessToken: nil, ifGeneration: before)
+        let stale = state.install(a, url: URL(string: "https://a")!, dialURL: nil, accessToken: nil, ifGeneration: before)
         #expect(reconnected)
         #expect(stale == false)
         #expect(state.serverURL == URL(string: "https://b"))
@@ -210,5 +210,207 @@ struct JellyfinClientStateTests {
         #expect(api.getConnection()?.client.accessToken == "tok")
         #expect(api.getServerURL() == URL(string: "https://nas.local"))
         #expect(api.getPreferredLanguage() == "en")
+    }
+
+    // MARK: - Dial URL (adresse locale, 2026-11-09)
+    //
+    // The public URL stays the server's IDENTITY; only the transport dials a
+    // separate DIAL URL (the LAN address). `JellyfinAPIClient` has no
+    // URLSession / URLProtocol injection seam, so the two contracts that would
+    // need a stubbed `/System/Info/Public` (`connectToServer(url:dialURL:)`'s
+    // install, `fetchServerInfo`'s version guard) are locked through
+    // `ClientState` directly, like `staleInstallDropped`.
+
+    private static let identity = URL(string: "https://jellyfin.example.com/jellyfin")!
+    private static let lan = URL(string: "https://192.168.1.20:8920")!
+    private static let otherServer = URL(string: "https://other.example.net")!
+
+    private static func sdkClient(_ url: URL) -> JellyfinClient {
+        JellyfinClient(configuration: .init(url: url, client: "t", deviceName: "d", deviceID: "i", version: "1"))
+    }
+
+    @Test("A dial URL rebuilds the client in place: identity, token and version kept")
+    func dialURLRebuildsInPlace() {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+        api.setServerVersion("12.0.0")
+
+        api.setDialURL(Self.lan)
+
+        #expect(api.getServerURL() == Self.identity, "the identity never moves")
+        #expect(api.getDialURL() == Self.lan)
+        #expect(api.currentDialURL() == Self.lan)
+        #expect(api.getConnection()?.serverURL == Self.lan, "getConnection hands out the URL to DIAL")
+        #expect(api.getConnection()?.client.configuration.url == Self.lan)
+        #expect(api.knownServerVersion() == ServerVersion(12, 0, 0), "same server: the version survives a route change")
+        #expect(api.getConnection()?.client.accessToken == "tok")
+    }
+
+    @Test("Setting the dial back to nil dials the identity again")
+    func clearingDialDialsIdentity() {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+        api.setDialURL(Self.lan)
+
+        api.setDialURL(nil)
+
+        #expect(api.getDialURL() == Self.identity)
+        #expect(api.getConnection()?.client.configuration.url == Self.identity)
+        #expect(api.getConnection()?.client.accessToken == "tok")
+    }
+
+    @Test("An unchanged dial URL does not rebuild the client")
+    func unchangedDialIsNoOp() throws {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+        api.setDialURL(Self.lan)
+        let before = try #require(api.connectionWithGeneration()).generation
+
+        api.setDialURL(Self.lan)
+
+        #expect(api.connectionWithGeneration()?.generation == before)
+    }
+
+    @Test("An identity-bound dial for another server is refused: dial and generation untouched")
+    func dialForForeignIdentityRefused() throws {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+        let before = try #require(api.connectionWithGeneration()).generation
+
+        api.setDialURL(Self.lan, forIdentity: Self.otherServer)
+
+        #expect(api.getDialURL() == Self.identity)
+        #expect(api.connectionWithGeneration()?.generation == before)
+        #expect(api.getConnection()?.client.configuration.url == Self.identity)
+    }
+
+    @Test("An identity-bound dial for the same server applies, whatever its spelling")
+    func dialForSameIdentityApplies() {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+
+        api.setDialURL(Self.lan, forIdentity: URL(string: "https://JELLYFIN.example.com/jellyfin/")!)
+
+        #expect(api.getDialURL() == Self.lan)
+        #expect(api.getServerURL() == Self.identity)
+    }
+
+    @Test("A dial URL before any connection is dropped")
+    func dialWithoutConnectionIsDropped() {
+        let api = JellyfinAPIClient()
+        api.setDialURL(Self.lan)
+        #expect(api.getClient() == nil)
+        #expect(api.getDialURL() == nil)
+    }
+
+    @Test("Every reconnect dials the identity again")
+    func reconnectResetsDialURL() {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+        api.setDialURL(Self.lan)
+
+        api.reconnect(url: Self.identity, accessToken: "tok")
+
+        #expect(api.getDialURL() == Self.identity,
+                "a switch must not hand the next server's token to the previous LAN address")
+        #expect(api.getConnection()?.client.configuration.url == Self.identity)
+    }
+
+    @Test("A language change keeps the dial URL")
+    func languageChangeKeepsDial() {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+        api.setDialURL(Self.lan)
+
+        api.setPreferredLanguage("de")
+
+        #expect(api.getDialURL() == Self.lan)
+        #expect(api.getServerURL() == Self.identity)
+        #expect(api.getConnection()?.client.configuration.url == Self.lan)
+        #expect(api.getConnection()?.client.accessToken == "tok")
+    }
+
+    @Test("connectionWithGeneration hands out the identity AND the dial")
+    func connectionCarriesBothURLs() {
+        let api = JellyfinAPIClient()
+        api.reconnect(url: Self.identity, accessToken: "tok")
+        api.setDialURL(Self.lan)
+
+        let connection = api.connectionWithGeneration()
+
+        #expect(connection?.identity == Self.identity)
+        #expect(connection?.dial == Self.lan)
+        #expect(connection?.client.configuration.url == Self.lan)
+    }
+
+    /// `setDialURL` has no `await` between its snapshot and its install, so no
+    /// latch can hold the window from outside: the refusal is locked on
+    /// `install(…ifGeneration:)`, which is the only thing it relies on.
+    @Test("A dial write computed before a reconnect to another server is refused")
+    func staleDialWriteRefused() {
+        var state = JellyfinAPIClient.ClientState()
+        _ = state.install(Self.sdkClient(Self.identity), url: Self.identity, dialURL: nil, accessToken: "tok")
+        let snapshot = state.generation                      // setDialURL's snapshot
+        let reconnected = state.install(Self.sdkClient(Self.otherServer), url: Self.otherServer, dialURL: nil, accessToken: "tok-2")
+        let stale = state.install(Self.sdkClient(Self.lan), url: Self.identity, dialURL: Self.lan, accessToken: "tok", ifGeneration: snapshot)
+
+        #expect(reconnected)
+        #expect(stale == false)
+        #expect(state.serverURL == Self.otherServer)
+        #expect(state.dialURL == nil)
+        #expect(state.effectiveDialURL == Self.otherServer, "the other server is dialled on its own identity")
+        #expect(state.accessToken == "tok-2")
+    }
+
+    /// The install step of `connectToServer(url:dialURL:)` — the probe itself
+    /// needs a stubbed transport the client does not have (see the MARK above).
+    @Test("A connect through a dial URL installs the identity beside it")
+    func connectWithDialInstallsIdentity() {
+        var state = JellyfinAPIClient.ClientState()
+        let generation = state.generation
+        let installed = state.install(Self.sdkClient(Self.lan), url: Self.identity, dialURL: Self.lan, accessToken: nil, ifGeneration: generation)
+
+        #expect(installed)
+        #expect(state.serverURL == Self.identity)
+        #expect(state.dialURL == Self.lan)
+        #expect(state.effectiveDialURL == Self.lan)
+        #expect(state.client?.configuration.url == Self.lan)
+    }
+
+    @Test("A dial equal to the identity is stored as « dial the identity »")
+    func dialEqualToIdentityIsNil() {
+        var state = JellyfinAPIClient.ClientState()
+        _ = state.install(Self.sdkClient(Self.identity), url: Self.identity, dialURL: Self.identity, accessToken: nil)
+        #expect(state.dialURL == nil)
+        #expect(state.effectiveDialURL == Self.identity)
+    }
+
+    /// `fetchServerInfo`'s version write: a route change between the probe and
+    /// the write bumps the generation but names the SAME server (identity), so
+    /// the version is kept — while a switch to another server still drops it.
+    @Test("fetchServerInfo's version guard compares the identity, not the dial")
+    func fetchServerInfoKeepsVersionAcrossDial() {
+        let version = ServerVersion(12, 0, 0)
+
+        var state = JellyfinAPIClient.ClientState()
+        _ = state.install(Self.sdkClient(Self.identity), url: Self.identity, dialURL: nil, accessToken: "tok")
+        let probed = state.generation
+        _ = state.install(Self.sdkClient(Self.lan), url: Self.identity, dialURL: Self.lan, accessToken: "tok", ifGeneration: probed)
+        state.recordVersion(version, probedOn: Self.identity, atGeneration: probed)
+        #expect(state.serverVersion == version, "a route change is the same server")
+
+        var switched = JellyfinAPIClient.ClientState()
+        _ = switched.install(Self.sdkClient(Self.identity), url: Self.identity, dialURL: nil, accessToken: "tok")
+        let probedBefore = switched.generation
+        _ = switched.install(Self.sdkClient(Self.otherServer), url: Self.otherServer, dialURL: nil, accessToken: "tok-2")
+        switched.recordVersion(version, probedOn: Self.identity, atGeneration: probedBefore)
+        #expect(switched.serverVersion == nil, "another server's version is never stamped on this one")
+
+        // The probe ran on the LAN address but names the identity: a version
+        // recorded while dialling the LAN lands.
+        var dialled = JellyfinAPIClient.ClientState()
+        _ = dialled.install(Self.sdkClient(Self.lan), url: Self.identity, dialURL: Self.lan, accessToken: "tok")
+        dialled.recordVersion(version, probedOn: Self.identity, atGeneration: dialled.generation)
+        #expect(dialled.serverVersion == version)
     }
 }

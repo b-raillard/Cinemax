@@ -84,6 +84,9 @@ final class RemoteControlListener {
         let token = generation
 
         Task { [weak self] in
+            // The route first (LAN at home): at launch this runs right after
+            // the session is restored, ahead of the launch probe's answer.
+            await ServerRouteController.shared.awaitPendingProbe()
             // Announce the withdrawal too — clearing `supportsMediaControl` is
             // what actually removes a still-live session from other clients'
             // pickers. Then stop, because a disabled listener has no socket.

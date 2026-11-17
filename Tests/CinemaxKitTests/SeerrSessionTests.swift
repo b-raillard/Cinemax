@@ -1,0 +1,4196 @@
+import Foundation
+import Observation
+import Testing
+import Get
+import JellyfinAPI
+@testable import CinemaxKit
+@testable import Cinemax
+
+// MARK: - Fixtures
+
+/// Plain HTTP like the Seerr below: the silent re-sign-in is refused when it
+/// would downgrade from an HTTPS Jellyfin (`SeerrAccess.downgradesFromHTTPS`),
+/// which the tests of that refusal set up explicitly.
+private let jellyfinURL = URL(string: "http://maison.local")!
+private let httpsJellyfinURL = URL(string: "https://maison.local")!
+private let httpsSeerrURL = URL(string: "https://seerr.maison.local")!
+private let seerrURL = URL(string: "http://192.168.1.20:5055")!
+private let otherSeerrURL = URL(string: "http://192.168.1.30:5055")!
+private let enabledConfig = SeerrUserConfig(isEnabled: true, url: seerrURL)
+private let prefsKey = "me|\(SeerrUserConfig.preferencesId)|\(SeerrUserConfig.client)"
+
+private let settingsReply = StubSeerrTransport.Reply.response(
+    status: 200, body: #"{"mediaServerType":2,"partialRequestsEnabled":true}"#)
+private let forbiddenReply = StubSeerrTransport.Reply.response(
+    status: 403, body: #"{"error":"You do not have permission to access this endpoint"}"#)
+private let notFoundReply = StubSeerrTransport.Reply.response(status: 404, body: #"{"message":"Not found"}"#)
+private let searchReply = StubSeerrTransport.Reply.response(
+    status: 200, body: #"{"page":1,"totalPages":1,"totalResults":0,"results":[]}"#)
+private let initiatedReply = StubSeerrTransport.Reply.response(status: 200, body: #"{"code":"123456","secret":"s"}"#)
+private let approvedReply = StubSeerrTransport.Reply.response(status: 200, body: #"{"authenticated":true}"#)
+
+private let aliceJSON = #"{"id":7,"permissions":32,"jellyfinUserId":"A","displayName":"Alice"}"#
+private let bobJSON = #"{"id":8,"permissions":32,"jellyfinUserId":"B","displayName":"Bob"}"#
+private let alice = SeerrUser(id: SeerrUserID(rawValue: 7), permissions: .request, jellyfinUserId: "A", displayName: "Alice")
+private let bob = SeerrUser(id: SeerrUserID(rawValue: 8), permissions: .request, jellyfinUserId: "B", displayName: "Bob")
+
+private func userReply(_ json: String = aliceJSON) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: json)
+}
+
+private func authenticatedReply(cookie: String) -> StubSeerrTransport.Reply {
+    .response(status: 200, headers: ["Set-Cookie": "connect.sid=\(cookie); Path=/; HttpOnly"], body: aliceJSON)
+}
+
+/// A secret bound to the Seerr address it was issued for.
+private func bound(_ value: String, to url: URL = seerrURL) -> SeerrBoundSecret {
+    SeerrBoundSecret(value: value, origin: url)
+}
+
+private func policy(maxRating: Int? = nil, admin: Bool = false) -> UserPolicy {
+    var policy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
+    policy.maxParentalRating = maxRating
+    policy.isAdministrator = admin
+    return policy
+}
+
+private func carriesKey(_ request: URLRequest) -> Bool {
+    request.value(forHTTPHeaderField: "X-Api-Key") != nil
+}
+
+private func carriesCookie(_ request: URLRequest) -> Bool {
+    request.value(forHTTPHeaderField: "Cookie")?.contains("connect.sid=") == true
+}
+
+/// Fires once on the first mutation of whatever the tracking closure read.
+private final class ObservationFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didFire = false
+    var fired: Bool { lock.withLock { didFire } }
+    func fire() { lock.withLock { didFire = true } }
+}
+
+/// Every arrival waits until `count` arrivals happened: holds concurrent
+/// requests together so their order cannot decide the test.
+private final class Barrier: @unchecked Sendable {
+    private let lock = NSLock()
+    private let count: Int
+    private var arrived = 0
+    private let latch = TestLatch()
+
+    init(_ count: Int) { self.count = count }
+
+    func arrive() async {
+        let full = lock.withLock { () -> Bool in
+            arrived += 1
+            return arrived >= count
+        }
+        if full { latch.open() }
+        await latch.wait()
+    }
+}
+
+/// Answers by PATH (relative to `/api/v1`), so concurrent callers cannot take
+/// each other's replies, and runs `onRequest(path, n)` — `n` = how many
+/// earlier requests went to that path — before choosing the answer.
+private final class RoutedSeerrTransport: SeerrTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var routes: [String: [StubSeerrTransport.Reply]]
+    private var sent: [URLRequest] = []
+    private var counts: [String: Int] = [:]
+    private var ranDry = false
+    private var hook: (@Sendable (String, Int) async -> Void)?
+
+    init(_ routes: [String: [StubSeerrTransport.Reply]]) {
+        self.routes = routes
+    }
+
+    var requests: [URLRequest] { lock.withLock { sent } }
+    var exhausted: Bool { lock.withLock { ranDry } }
+
+    func onRequest(_ hook: @escaping @Sendable (String, Int) async -> Void) {
+        lock.withLock { self.hook = hook }
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let path = request.url?.path.replacingOccurrences(of: "/api/v1", with: "") ?? ""
+        let (index, hook) = lock.withLock { () -> (Int, (@Sendable (String, Int) async -> Void)?) in
+            sent.append(request)
+            let index = counts[path, default: 0]
+            counts[path] = index + 1
+            return (index, self.hook)
+        }
+        await hook?(path, index)
+        let reply = lock.withLock { () -> StubSeerrTransport.Reply? in
+            guard var queue = routes[path], !queue.isEmpty else {
+                ranDry = true
+                return nil
+            }
+            let next = queue.removeFirst()
+            routes[path] = queue
+            return next
+        }
+        switch reply {
+        case nil:
+            throw StubSeerrTransport.Exhausted()
+        case .failure(let error):
+            throw error
+        case .response(let status, let headers, let body):
+            let url = request.url ?? seerrURL
+            let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers)!
+            return (Data(body.utf8), response)
+        }
+    }
+}
+
+/// The test host IS the app: `refreshCurrentUser` / `setAgeCap` publish to the
+/// REAL shared Keychain item the widget and the Top Shelf read. Put it back
+/// (root CLAUDE.md test RULE, T4 — same as `sharedSessionRoundTrips`).
+@MainActor
+private func preservingSharedSession(_ body: () async -> Void) async {
+    let keychain = KeychainService()
+    let original = keychain.readSharedSession()
+    await body()
+    if let original { keychain.saveSharedSession(original) } else { keychain.deleteSharedSession() }
+}
+
+/// Signed in on server `S1` as `userId`, with the Seerr configuration `config`
+/// stored in that user's DisplayPreferences (`nil` = never configured).
+/// `knownUser: false` leaves `currentUser` unfetched — the policy unknown.
+@MainActor
+private func signedIn(
+    userId: String = "A",
+    policy userPolicy: UserPolicy? = policy(),
+    knownUser: Bool = true,
+    config: SeerrUserConfig? = enabledConfig,
+    api: MockAPIClient = MockAPIClient(),
+    registryServerID: String? = "srv",
+    jellyfin: URL = jellyfinURL
+) -> (AppState, MockAPIClient) {
+    if let config {
+        api.displayPreferences[prefsKey] = SeerrUserConfig.merged(config, into: nil)
+    }
+    let keychain = MockKeychain()
+    keychain.savedServers = [ServerEntry(
+        id: "S1", name: "Maison", url: jellyfin, serverID: registryServerID,
+        accessToken: "tok\(userId)", userId: userId, username: userId,
+        lastUsedAt: Date(timeIntervalSince1970: 1_000))]
+    keychain.savedActiveServerId = "S1"
+    let app = AppState(apiClient: api, keychain: keychain)
+    app.settingsDefaults = .isolatedForTesting()
+    app.loadServersFromKeychain()
+    app.serverURL = jellyfin
+    app.hasServer = true
+    app.isAuthenticated = true
+    app.accessToken = "tok\(userId)"
+    app.currentUserId = userId
+    if knownUser {
+        var user = UserDto()
+        user.id = userId
+        user.policy = userPolicy
+        app.currentUser = user
+    }
+    return (app, api)
+}
+
+/// Makes the signed-in user a Jellyfin administrator the way the app learns
+/// it — `refreshCurrentUser` — with the shared session put back afterwards.
+@MainActor
+private func promoteToAdmin(_ app: AppState, _ api: MockAPIClient) async {
+    var admin = UserDto()
+    admin.id = app.currentUserId
+    admin.policy = policy(admin: true)
+    api.stubbedUserByID = admin
+    await preservingSharedSession { await app.refreshCurrentUser() }
+}
+
+@MainActor
+private func makeSession(
+    _ transport: any SeerrTransport,
+    storage: MockKeychain = MockKeychain(),
+    defaults: UserDefaults = .isolatedForTesting(),
+    following app: AppState? = nil
+) -> SeerrSession {
+    let session = SeerrSession(storage: storage, defaults: defaults, transport: transport, signInPause: {})
+    // The Pro gate fails closed when unwired; these tests are about everything else.
+    session.proAllowsProvider = { true }
+    if let app { session.follow(app) }
+    return session
+}
+
+private extension SeerrSession {
+    /// What `AppNavigation` wires: the account the app is on.
+    func follow(_ app: AppState) {
+        activeAccountKeyProvider = { [app] in app.activeAccountKey }
+    }
+}
+
+private func search(_ client: SeerrClient, _ credential: SeerrCredential) async throws -> [SeerrTitle] {
+    try await client.search("dune", credential)
+}
+
+// MARK: - Suite
+
+@MainActor
+@Suite("Seerr session")
+struct SeerrSessionTests {
+
+    // MARK: Fail closed
+
+    @Test("a server age cap makes no Seerr call, through any entry point")
+    func cappedAccountMakesNoSeerrCall() async {
+        let stub = StubSeerrTransport()
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn(policy: policy(maxRating: 10))
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.isAgeCapped)
+        #expect(session.connection == .unavailable)
+        #expect(session.credential() == nil)
+        #expect(!session.isVisible(proAllows: true, isOnline: true))
+        await #expect(throws: (any Error).self) { try await session.perform(search) }
+        #expect(await session.signIn(address: seerrURL, appState: app) == .failure(.cancelled))
+        #expect(stub.requests.isEmpty)
+    }
+
+    @Test("a device age cap makes no Seerr call")
+    func deviceCapMakesNoSeerrCall() async {
+        let stub = StubSeerrTransport()
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set(12, forKey: SettingsKey.privacyMaxContentAge)
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, defaults: defaults, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.isAgeCapped)
+        #expect(session.connection == .unavailable)
+        #expect(stub.requests.isEmpty)
+    }
+
+    @Test("a device cap set while connected hides Seerr at once, before any reload")
+    func deviceCapAppliesWithoutReload() async {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let defaults = UserDefaults.isolatedForTesting()
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, defaults: defaults, following: app)
+        await session.reload(appState: app)
+        #expect(session.isVisible(proAllows: true, isOnline: true))
+
+        defaults.set(10, forKey: SettingsKey.privacyMaxContentAge)
+
+        #expect(session.isAgeCapped)
+        #expect(!session.isVisible(proAllows: true, isOnline: true))
+        #expect(session.credential() == nil)
+        await #expect(throws: (any Error).self) { try await session.perform(search) }
+        #expect(stub.requests.count == 2)
+    }
+
+    @Test("a disabled configuration, or one without an address, makes no Seerr call")
+    func disabledMakesNoSeerrCall() async {
+        let stub = StubSeerrTransport()
+        let disabled = SeerrUserConfig(isEnabled: false, url: seerrURL)
+        let (app, _) = signedIn(config: disabled)
+        let session = makeSession(stub, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.config == disabled)
+        #expect(session.connection == .unavailable)
+        #expect(!session.isVisible(proAllows: true, isOnline: true))
+
+        let (noAddress, _) = signedIn(userId: "B", config: SeerrUserConfig(isEnabled: true, url: nil))
+        session.follow(noAddress)
+        await session.reload(appState: noAddress)
+
+        #expect(session.connection == .unavailable)
+        #expect(stub.requests.isEmpty)
+    }
+
+    @Test("an unknown policy (user not fetched yet) is a cap: no Seerr call")
+    func policyUnknownIsCapped() async {
+        let stub = StubSeerrTransport()
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn(knownUser: false)
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.isAgeCapped)
+        #expect(session.connection == .unavailable)
+
+        // A cached record belonging to ANOTHER account is no better.
+        var someoneElse = UserDto()
+        someoneElse.id = "Z"
+        someoneElse.policy = policy()
+        app.currentUser = someoneElse
+        await session.reload(appState: app)
+
+        #expect(session.isAgeCapped)
+        #expect(stub.requests.isEmpty)
+    }
+
+    @Test("a known user without a policy is capped too (fail closed)")
+    func knownUserWithoutPolicyIsCapped() async {
+        let stub = StubSeerrTransport()
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn(policy: nil)
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.isAgeCapped)
+        #expect(session.connection == .unavailable)
+        #expect(stub.requests.isEmpty)
+    }
+
+    @Test("without Pro, reload makes no Seerr call (the configuration is still read)")
+    func proRefusedMakesNoSeerrCall() async {
+        let stub = StubSeerrTransport()
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        session.proAllowsProvider = { false }
+
+        await session.reload(appState: app)
+
+        #expect(session.config == enabledConfig)
+        #expect(session.connection == .unavailable)
+        #expect(session.credential() == nil)
+        await #expect(throws: (any Error).self) { try await session.perform(search) }
+        #expect(await session.signIn(address: seerrURL, appState: app) == .failure(.cancelled))
+        #expect(stub.requests.isEmpty)
+    }
+
+    // MARK: Identity
+
+    @Test("a stored cookie answered by /auth/me restores the connection")
+    func cookieRestoresConnection() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .connected(alice))
+        #expect(session.credential() == .session(cookie: "abc"))
+        #expect(!session.usesDeviceKey)
+        #expect(session.publicSettings?.isJellyfin == true)
+        #expect(session.isVisible(proAllows: true, isOnline: true))
+        #expect(!session.isVisible(proAllows: false, isOnline: true))
+        #expect(!session.isVisible(proAllows: true, isOnline: false))
+        let me = try #require(stub.requests.last)
+        #expect(me.url?.path == "/api/v1/auth/me")
+        #expect(me.value(forHTTPHeaderField: "Cookie")?.contains("connect.sid=abc") == true)
+        #expect(!stub.exhausted)
+    }
+
+    @Test("a cookie /auth/me refuses at reload signs in again silently")
+    func reloadWithDeadCookieReSignsInSilently() async {
+        let stub = StubSeerrTransport([settingsReply, forbiddenReply,
+                                       initiatedReply, approvedReply, authenticatedReply(cookie: "fresh")])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("dead")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .connected(alice))
+        #expect(session.credential() == .session(cookie: "fresh"))
+        #expect(storage.seerrSessions()["S1|A"] == bound("fresh"))
+        #expect(api.authorizeQuickConnectCalls == ["123456"])
+        #expect(!stub.exhausted)
+    }
+
+    @Test("a silent sign-in that fails at reload shows the prompt: cookie dropped, no retry")
+    func reloadReSignInFailureShowsPrompt() async {
+        let stub = StubSeerrTransport([settingsReply, forbiddenReply, initiatedReply])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("dead"), "S1|B": bound("bob")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        api.stubbedAuthorizeQuickConnectResult = false
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .notConnected)
+        #expect(session.showsConnectPrompt(proAllows: true, isOnline: true))
+        #expect(storage.seerrSessions() == ["S1|B": bound("bob")])
+        #expect(api.authorizeQuickConnectCalls.count == 1)
+        #expect(stub.requests.count == 3)
+        #expect(!stub.exhausted)
+    }
+
+    @Test("an unreachable Seerr keeps the last known connection of the same account")
+    func blipKeepsConnection() async {
+        let stub = StubSeerrTransport([settingsReply, userReply(), .failure(URLError(.timedOut))])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .connected(alice))
+        #expect(storage.seerrSessions()["S1|A"] == bound("abc"))
+    }
+
+    @Test("the device key resolves the Seerr user; a 404 is « not linked »")
+    func deviceKeyResolvesUser() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrAPIKeys(["S1": bound("KEY")])
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .connected(alice))
+        #expect(session.usesDeviceKey)
+        #expect(session.credential() == .apiKey(key: "KEY", user: SeerrUserID(rawValue: 7)))
+        let lookup = try #require(stub.requests.last)
+        #expect(lookup.url?.path == "/api/v1/user/jellyfin/A")
+        #expect(lookup.value(forHTTPHeaderField: "X-Api-Key") == "KEY")
+        #expect(lookup.value(forHTTPHeaderField: "X-API-User") == nil)
+
+        let notLinked = makeSession(StubSeerrTransport([settingsReply, notFoundReply]), storage: storage, following: app)
+        await notLinked.reload(appState: app)
+
+        #expect(notLinked.connection == .notLinked)
+        #expect(notLinked.credential() == nil)
+    }
+
+    @Test("a device key entered for another Seerr address is never sent")
+    func deviceKeyBoundElsewhereIsNeverSent() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply(), searchReply])
+        let storage = MockKeychain()
+        storage.saveSeerrAPIKeys(["S1": bound("KEY", to: URL(string: "http://seerr-a.local:5055")!)])
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()       // the profile's configuration points at seerrURL
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+        _ = try await session.perform(search)
+
+        #expect(!session.usesDeviceKey)
+        #expect(session.credential() == .session(cookie: "abc"))
+        #expect(stub.requests.count == 3)
+        #expect(!stub.requests.contains(where: carriesKey))
+        #expect(storage.seerrAPIKeys()["S1"] != nil)      // not erased: it belongs to its own address
+    }
+
+    @Test("a session cookie issued by another Seerr address is never sent, nor erased")
+    func cookieBoundElsewhereIsNeverSent() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("x", to: otherSeerrURL)])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .notConnected)
+        #expect(session.credential() == nil)
+        #expect(!stub.requests.contains(where: carriesCookie))
+        #expect(storage.seerrSessions()["S1|A"] == bound("x", to: otherSeerrURL))
+    }
+
+    @Test("signing in to a typed address never sends its cookie to the saved one")
+    func testedAddressCookieStaysWithIt() async {
+        let stub = StubSeerrTransport([settingsReply, userReply(),
+                                       initiatedReply, approvedReply, authenticatedReply(cookie: "x")])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("y")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        #expect(session.connection == .connected(alice))
+
+        _ = await session.signIn(address: otherSeerrURL, appState: app)
+
+        #expect(storage.seerrSessions()["S1|A"] == bound("x", to: otherSeerrURL))
+        #expect(session.connection == .notConnected)       // the saved address has no session any more
+        #expect(session.credential() == nil)
+        let sentBefore = stub.requests.count
+        stub.enqueue(settingsReply)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .notConnected)
+        #expect(stub.requests.count == sentBefore + 1)    // /settings/public only
+        #expect(!stub.requests.dropFirst(sentBefore).contains(where: carriesCookie))
+        #expect(storage.seerrSessions()["S1|A"] == bound("x", to: otherSeerrURL))
+        #expect(!stub.exhausted)
+    }
+
+    @Test("a device key Seerr refuses is « key refused »")
+    func refusedDeviceKey() async {
+        let storage = MockKeychain()
+        storage.saveSeerrAPIKeys(["S1": bound("OLD")])
+        let (app, _) = signedIn()
+        let session = makeSession(StubSeerrTransport([settingsReply, forbiddenReply]), storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .keyRefused)
+        #expect(session.credential() == nil)
+        #expect(!session.showsConnectPrompt(proAllows: true, isOnline: true))
+    }
+
+    @Test("an admin whose own Seerr switch is off still gets an identity, but no browse surface")
+    func adminWithOwnSeerrOffResolvesIdentity() async {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, api) = signedIn(config: SeerrUserConfig(isEnabled: false, url: seerrURL))
+        await promoteToAdmin(app, api)
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .connected(alice))
+        #expect(session.credential() == .session(cookie: "abc"))
+        #expect(!session.isVisible(proAllows: true, isOnline: true))
+        #expect(!session.showsConnectPrompt(proAllows: true, isOnline: true))
+    }
+
+    // MARK: perform — the 403 probe
+
+    @Test("a dead session signs in again silently, once, then retries")
+    func deadSessionReSignsInOnce() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("old")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        for reply in [forbiddenReply, forbiddenReply, initiatedReply, approvedReply,
+                      authenticatedReply(cookie: "fresh"), searchReply] {
+            stub.enqueue(reply)
+        }
+
+        let results = try await session.perform(search)
+
+        #expect(results.isEmpty)
+        #expect(api.authorizeQuickConnectCalls == ["123456"])
+        #expect(stub.requests[3].url?.path == "/api/v1/auth/me")
+        #expect(stub.requests[3].value(forHTTPHeaderField: "Cookie")?.contains("connect.sid=old") == true)
+        #expect(stub.requests.last?.value(forHTTPHeaderField: "Cookie")?.contains("connect.sid=fresh") == true)
+        #expect(storage.seerrSessions()["S1|A"] == bound("fresh"))
+        #expect(session.credential() == .session(cookie: "fresh"))
+        #expect(session.connection == .connected(alice))
+        #expect(!stub.exhausted)
+    }
+
+    @Test("a silent sign-in that fails disconnects, drops the cookie and surfaces the error")
+    func failedReSignInDisconnects() async {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("old")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        api.stubbedAuthorizeQuickConnectResult = false
+        for reply in [forbiddenReply, forbiddenReply, initiatedReply] { stub.enqueue(reply) }
+
+        await #expect(throws: SeerrError.forbidden) { try await session.perform(search) }
+
+        #expect(session.connection == .notConnected)
+        #expect(storage.seerrSessions()["S1|A"] == nil)
+        #expect(api.authorizeQuickConnectCalls.count == 1)
+        #expect(stub.requests.count == 5)
+        #expect(!stub.exhausted)
+    }
+
+    @Test("a 403 on the retry after a silent sign-in surfaces: no second sign-in")
+    func forbiddenAfterReSignInSurfaces() async {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("old")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        for reply in [forbiddenReply, forbiddenReply, initiatedReply, approvedReply,
+                      authenticatedReply(cookie: "fresh"), forbiddenReply] {
+            stub.enqueue(reply)
+        }
+
+        await #expect(throws: SeerrError.forbidden) { try await session.perform(search) }
+
+        #expect(api.authorizeQuickConnectCalls.count == 1)
+        #expect(stub.requests.count == 8)
+        #expect(!stub.exhausted)
+    }
+
+    @Test("concurrent calls on a dead session share ONE silent sign-in")
+    func concurrentDeadSessionsSignInOnce() async throws {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply(), forbiddenReply, forbiddenReply],
+            "/search": [forbiddenReply, forbiddenReply, searchReply, searchReply],
+            "/auth/jellyfin/quickconnect/initiate": [initiatedReply],
+            "/auth/jellyfin/quickconnect/check": [approvedReply],
+            "/auth/jellyfin/quickconnect/authenticate": [authenticatedReply(cookie: "fresh")],
+        ])
+        let searches = Barrier(2)
+        let probes = Barrier(2)
+        // Both first calls are refused together, and both probes answered
+        // together: each caller then reaches the sign-in while the other's
+        // would be in flight.
+        transport.onRequest { path, index in
+            if path == "/search", index < 2 { await searches.arrive() }
+            if path == "/auth/me", index >= 1 { await probes.arrive() }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("old")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let first = Task { try await session.perform(search) }
+        let second = Task { try await session.perform(search) }
+        _ = try await first.value
+        _ = try await second.value
+
+        #expect(api.authorizeQuickConnectCalls.count == 1)
+        #expect(storage.seerrSessions()["S1|A"] == bound("fresh"))
+        #expect(session.connection == .connected(alice))
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a silent sign-in that fails never overwrites a fresher session")
+    func failedSilentSignInSparesAFresherSession() async throws {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/auth/jellyfin/quickconnect/initiate": [initiatedReply, initiatedReply],
+            "/auth/jellyfin/quickconnect/check": [approvedReply],
+            "/auth/jellyfin/quickconnect/authenticate": [authenticatedReply(cookie: "manual")],
+        ])
+        let silentStarted = TestLatch()
+        let releaseSilent = TestLatch()
+        transport.onRequest { path, index in
+            if path == "/auth/jellyfin/quickconnect/initiate", index == 0 {
+                silentStarted.open()
+                await releaseSilent.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("old")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await silentStarted.wait()
+        // The user taps « Se connecter à Seerr » meanwhile, and it works.
+        #expect(await session.signIn(address: seerrURL, appState: app) == .success(alice))
+        api.stubbedAuthorizeQuickConnectResult = false
+        releaseSilent.open()
+        await #expect(throws: SeerrError.forbidden) { try await call.value }
+
+        #expect(session.connection == .connected(alice))
+        #expect(session.credential() == .session(cookie: "manual"))
+        #expect(storage.seerrSessions()["S1|A"] == bound("manual"))
+    }
+
+    @Test("a genuine refusal (/auth/me still answers) does not sign in again")
+    func genuineForbiddenDoesNotReSignIn() async {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        stub.enqueue(forbiddenReply)
+        stub.enqueue(userReply())
+
+        await #expect(throws: SeerrError.forbidden) { try await session.perform(search) }
+
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(session.connection == .connected(alice))
+        #expect(storage.seerrSessions()["S1|A"] == bound("abc"))
+        #expect(!stub.exhausted)
+    }
+
+    @Test("key mode: a refused key or an unlinked user surfaces the 403, never a retry")
+    func keyModeProbeNeverRetries() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrAPIKeys(["S1": bound("KEY")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        stub.enqueue(forbiddenReply)
+        stub.enqueue(forbiddenReply)
+
+        await #expect(throws: SeerrError.forbidden) { try await session.perform(search) }
+
+        #expect(session.connection == .keyRefused)
+        let probe = try #require(stub.requests.last)
+        #expect(probe.url?.path == "/api/v1/user/jellyfin/A")
+        #expect(probe.value(forHTTPHeaderField: "X-API-User") == nil)
+
+        stub.enqueue(settingsReply)
+        stub.enqueue(userReply())
+        await session.reload(appState: app)
+        stub.enqueue(forbiddenReply)
+        stub.enqueue(notFoundReply)
+
+        await #expect(throws: SeerrError.forbidden) { try await session.perform(search) }
+
+        #expect(session.connection == .notLinked)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(!stub.exhausted)
+    }
+
+    // MARK: No silent sign-in downgrading from an HTTPS Jellyfin (owner, 2026-11-07)
+
+    @Test("an HTTPS Jellyfin never signs in silently to a plain-HTTP Seerr: reload and perform both fall to the tap")
+    func noSilentReSignInWhenJellyfinHTTPSAndSeerrHTTP() async throws {
+        // Reload: `/auth/me` refuses the stored cookie.
+        let stub = StubSeerrTransport([settingsReply, forbiddenReply])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("dead")])
+        let (app, api) = signedIn(jellyfin: httpsJellyfinURL)
+        let session = makeSession(stub, storage: storage, following: app)
+
+        await session.reload(appState: app)
+
+        #expect(session.connection == .notConnected)
+        #expect(session.showsConnectPrompt(proAllows: true, isOnline: true))
+        #expect(storage.seerrSessions()["S1|A"] == nil)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(stub.requests.count == 2)       // /settings/public, /auth/me — no Quick Connect
+        #expect(!stub.exhausted)
+        // The visible « Se connecter à Seerr » still works.
+        for reply in [initiatedReply, approvedReply, authenticatedReply(cookie: "tapped")] { stub.enqueue(reply) }
+        #expect(await session.signIn(address: seerrURL, appState: app) == .success(alice))
+        #expect(session.connection == .connected(alice))
+        #expect(storage.seerrSessions()["S1|A"] == bound("tapped"))
+        #expect(api.authorizeQuickConnectCalls == ["123456"])
+
+        // Perform: the session dies while connected.
+        let liveStub = StubSeerrTransport([settingsReply, userReply()])
+        let liveStorage = MockKeychain()
+        liveStorage.saveSeerrSessions(["S1|A": bound("old")])
+        let (liveApp, liveApi) = signedIn(jellyfin: httpsJellyfinURL)
+        let liveSession = makeSession(liveStub, storage: liveStorage, following: liveApp)
+        await liveSession.reload(appState: liveApp)
+        #expect(liveSession.connection == .connected(alice))
+        liveStub.enqueue(forbiddenReply)
+        liveStub.enqueue(forbiddenReply)
+
+        await #expect(throws: SeerrError.forbidden) { try await liveSession.perform(search) }
+
+        #expect(liveSession.connection == .notConnected)
+        #expect(liveSession.showsConnectPrompt(proAllows: true, isOnline: true))
+        #expect(liveStorage.seerrSessions()["S1|A"] == nil)
+        #expect(liveApi.authorizeQuickConnectCalls.isEmpty)
+        #expect(liveStub.requests.count == 4)   // + the call and its /auth/me probe
+        #expect(!liveStub.exhausted)
+    }
+
+    @Test("the silent sign-in stays for every other scheme pair")
+    func silentReSignInStillWorksOtherwise() async {
+        let pairs: [(jellyfin: URL, seerr: URL)] = [
+            (jellyfinURL, seerrURL),            // http → http
+            (httpsJellyfinURL, httpsSeerrURL),  // https → https
+            (jellyfinURL, httpsSeerrURL),       // http → https
+        ]
+        for pair in pairs {
+            let stub = StubSeerrTransport([settingsReply, forbiddenReply,
+                                           initiatedReply, approvedReply, authenticatedReply(cookie: "fresh")])
+            let storage = MockKeychain()
+            storage.saveSeerrSessions(["S1|A": bound("dead", to: pair.seerr)])
+            let (app, api) = signedIn(config: SeerrUserConfig(isEnabled: true, url: pair.seerr), jellyfin: pair.jellyfin)
+            let session = makeSession(stub, storage: storage, following: app)
+
+            await session.reload(appState: app)
+
+            let label = "\(pair.jellyfin.absoluteString) → \(pair.seerr.absoluteString)"
+            #expect(session.connection == .connected(alice), "\(label)")
+            #expect(storage.seerrSessions()["S1|A"] == bound("fresh", to: pair.seerr), "\(label)")
+            #expect(api.authorizeQuickConnectCalls == ["123456"], "\(label)")
+            #expect(!stub.exhausted, "\(label)")
+        }
+    }
+
+    @Test("a downgrade is an HTTPS Jellyfin with a plain-HTTP Seerr, nothing else")
+    func downgradeTruthTable() {
+        let http = URL(string: "http://h")
+        let https = URL(string: "HTTPS://h")
+        #expect(SeerrAccess.downgradesFromHTTPS(jellyfin: https, seerr: http))
+        #expect(SeerrAccess.downgradesFromHTTPS(jellyfin: URL(string: "https://h"), seerr: URL(string: "HTTP://s:5055")))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: http, seerr: http))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: https, seerr: https))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: http, seerr: https))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: nil, seerr: http))
+        #expect(!SeerrAccess.downgradesFromHTTPS(jellyfin: https, seerr: nil))
+    }
+
+    // MARK: Generations and the account switch
+
+    @Test("reloading the same account keeps the generation and never blanks the state")
+    func sameAccountReloadKeepsGenerationAndSections() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        let snapshot = try #require(session.snapshot())
+        let started = TestLatch()
+        let release = TestLatch()
+        api.onGetDisplayPreferences = { started.open(); await release.wait() }
+        stub.enqueue(settingsReply)
+        stub.enqueue(userReply())
+        let flag = ObservationFlag()
+        withObservationTracking {
+            _ = session.connection
+            _ = session.config
+            _ = session.isAgeCapped
+        } onChange: {
+            flag.fire()
+        }
+
+        let reload = Task { await session.reload(appState: app) }
+        await started.wait()
+
+        #expect(session.connection == .connected(alice))
+        #expect(session.isCurrent(snapshot))
+        release.open()
+        await reload.value
+
+        #expect(session.isCurrent(snapshot))
+        #expect(session.connection == .connected(alice))
+        #expect(!flag.fired)
+        #expect(!stub.exhausted)
+    }
+
+    @Test("reloading ANOTHER account blanks everything before its first await")
+    func reloadResetsBeforeFirstAwait() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (admin, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: admin)
+        await session.reload(appState: admin)
+        #expect(session.isVisible(proAllows: true, isOnline: true))
+        let adminSnapshot = try #require(session.snapshot())
+
+        let (child, childAPI) = signedIn(userId: "B")
+        let started = TestLatch()
+        let release = TestLatch()
+        childAPI.onGetDisplayPreferences = { started.open(); await release.wait() }
+        stub.enqueue(settingsReply)
+        session.follow(child)
+        let reload = Task { await session.reload(appState: child) }
+        await started.wait()
+
+        #expect(session.connection == .unavailable)
+        #expect(!session.isVisible(proAllows: true, isOnline: true))
+        #expect(session.credential() == nil)
+        #expect(session.config == nil)
+        #expect(!session.isCurrent(adminSnapshot))
+        #expect(session.snapshot()?.accountKey == "S1|B")
+        release.open()
+        await reload.value
+
+        #expect(session.connection == .notConnected)
+    }
+
+    @Test("a late answer for the account left behind is dropped")
+    func staleAnswerIsDropped() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply(bobJSON)])
+        let urlA = URL(string: "http://seerr-a.local:5055")!
+        let urlB = URL(string: "http://seerr-b.local:5055")!
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("a", to: urlA), "S1|B": bound("b", to: urlB)])
+        let configA = SeerrUserConfig(isEnabled: true, url: urlA)
+        let configB = SeerrUserConfig(isEnabled: true, url: urlB)
+        let (appA, apiA) = signedIn(config: configA)
+        let (appB, _) = signedIn(userId: "B", config: configB)
+        let session = makeSession(stub, storage: storage, following: appA)
+        let started = TestLatch()
+        let release = TestLatch()
+        apiA.onGetDisplayPreferences = { started.open(); await release.wait() }
+
+        let reloadA = Task { await session.reload(appState: appA) }
+        await started.wait()
+        session.follow(appB)
+        await session.reload(appState: appB)
+        release.open()
+        await reloadA.value
+
+        #expect(session.config == configB)
+        #expect(session.connection == .connected(bob))
+        #expect(session.snapshot()?.accountKey == "S1|B")
+        #expect(session.credential() == .session(cookie: "b"))
+        #expect(stub.requests.count == 2)
+        #expect(stub.requests.allSatisfy { $0.url?.host == "seerr-b.local" })
+        #expect(!stub.exhausted)
+    }
+
+    @Test("an account change resets — unless the reload of that very account already began")
+    func accountChangeSparesTheNewAccountsReload() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply(bobJSON)])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|B": bound("b")])
+        let (appB, apiB) = signedIn(userId: "B")
+        let session = makeSession(stub, storage: storage, following: appB)
+        let started = TestLatch()
+        let release = TestLatch()
+        apiB.onGetDisplayPreferences = { started.open(); await release.wait() }
+
+        let reload = Task { await session.reload(appState: appB) }
+        await started.wait()
+        // SwiftUI's `onChange(of: activeAccountKey)` may arrive after the
+        // reload of the account it announces has started.
+        session.accountDidChange(to: "S1|B")
+        release.open()
+        await reload.value
+
+        #expect(session.connection == .connected(bob))
+        let snapshot = try #require(session.snapshot())
+
+        session.accountDidChange(to: "S1|C")
+
+        #expect(!session.isCurrent(snapshot))
+        #expect(session.snapshot() == nil)
+        #expect(session.connection == .unavailable)
+        #expect(session.isAgeCapped)
+
+        session.accountDidChange(to: nil)
+        #expect(session.connection == .unavailable)
+    }
+
+    @Test("the moment the app is on another account, nothing of the previous one is served")
+    func switchWindowServesNothing() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply()])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        let snapshot = try #require(session.snapshot())
+
+        // `applyActiveServer` moved the app; no reset, no reload yet.
+        app.currentUserId = "B"
+
+        #expect(session.credential() == nil)
+        #expect(session.snapshot() == nil)
+        #expect(!session.isCurrent(snapshot))
+        #expect(!session.isVisible(proAllows: true, isOnline: true))
+        #expect(!session.showsConnectPrompt(proAllows: true, isOnline: true))
+        await #expect(throws: (any Error).self) { try await session.perform(search) }
+        #expect(stub.requests.count == 2)
+    }
+
+    @Test("an answer — or a failure — landing after a switch is a cancellation")
+    func answerAfterSwitchIsCancelled() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply()],
+            "/search": [searchReply, .response(status: 500, body: "{}")],
+        ])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        transport.onRequest { path, _ in
+            if path == "/search" { await MainActor.run { app.currentUserId = "B" } }
+        }
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        await #expect(throws: CancellationError.self) { try await session.perform(search) }
+
+        app.currentUserId = "A"
+        await #expect(throws: CancellationError.self) { try await session.perform(search) }
+        #expect(!transport.exhausted)
+    }
+
+    @Test("the approval refuses to run once the app has moved to another account")
+    func approvalRefusedAfterAccountMoved() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/auth/jellyfin/quickconnect/initiate": [initiatedReply],
+        ])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("old")])
+        let (app, api) = signedIn()
+        // The Jellyfin client already speaks for B (`applyActiveServer`
+        // repoints it and moves `currentUserId` in one main-actor slice)
+        // while the silent sign-in is between Seerr's code and its approval.
+        transport.onRequest { path, _ in
+            if path == "/auth/jellyfin/quickconnect/initiate" { await MainActor.run { app.currentUserId = "B" } }
+        }
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        await #expect(throws: CancellationError.self) { try await session.perform(search) }
+
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(storage.seerrSessions() == ["S1|A": bound("old")])
+    }
+
+    @Test("reset forgets the identity, never the stored secrets")
+    func resetKeepsSecrets() async {
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        storage.saveSeerrAPIKeys(["S2": bound("KEY")])
+        let (app, _) = signedIn()
+        let session = makeSession(StubSeerrTransport([settingsReply, userReply()]), storage: storage, following: app)
+        await session.reload(appState: app)
+
+        session.reset()
+
+        #expect(session.connection == .unavailable)
+        #expect(session.config == nil)
+        #expect(session.publicSettings == nil)
+        #expect(session.client == nil)
+        #expect(session.isAgeCapped)
+        #expect(session.credential() == nil)
+        #expect(storage.seerrSessions() == ["S1|A": bound("abc")])
+        #expect(storage.seerrAPIKeys() == ["S2": bound("KEY")])
+    }
+
+    // MARK: Render gates
+
+    @Test("the connect prompt shows only when signed out of Seerr in account mode")
+    func promptOnlyWhenNotConnected() async {
+        let (app, _) = signedIn()
+        let notConnected = makeSession(StubSeerrTransport([settingsReply]), following: app)
+        await notConnected.reload(appState: app)
+
+        #expect(notConnected.connection == .notConnected)
+        #expect(notConnected.showsConnectPrompt(proAllows: true, isOnline: true))
+        #expect(!notConnected.showsConnectPrompt(proAllows: false, isOnline: true))
+        #expect(!notConnected.showsConnectPrompt(proAllows: true, isOnline: false))
+        #expect(!notConnected.isVisible(proAllows: true, isOnline: true))
+
+        let cookies = MockKeychain()
+        cookies.saveSeerrSessions(["S1|A": bound("abc")])
+        let connected = makeSession(StubSeerrTransport([settingsReply, userReply()]), storage: cookies, following: app)
+        await connected.reload(appState: app)
+        #expect(!connected.showsConnectPrompt(proAllows: true, isOnline: true))
+
+        let keys = MockKeychain()
+        keys.saveSeerrAPIKeys(["S1": bound("KEY")])
+        let keyMode = makeSession(StubSeerrTransport([settingsReply, notFoundReply]), storage: keys, following: app)
+        await keyMode.reload(appState: app)
+        #expect(keyMode.connection == .notLinked)
+        #expect(!keyMode.showsConnectPrompt(proAllows: true, isOnline: true))
+
+        let (child, _) = signedIn(userId: "B", policy: policy(maxRating: 10))
+        let capped = makeSession(StubSeerrTransport(), following: child)
+        await capped.reload(appState: child)
+        #expect(!capped.showsConnectPrompt(proAllows: true, isOnline: true))
+    }
+
+    // MARK: Sign in / out, device key
+
+    @Test("sign-in stores the cookie under the active account; it connects only for the saved address")
+    func signInConnectsOnlyForTheSavedAddress() async {
+        let stub = StubSeerrTransport([settingsReply,
+                                       initiatedReply, approvedReply, authenticatedReply(cookie: "c1")])
+        let storage = MockKeychain()
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let tested = await session.signIn(address: otherSeerrURL, appState: app)
+
+        #expect(tested == .success(alice))
+        #expect(storage.seerrSessions()["S1|A"] == bound("c1", to: otherSeerrURL))
+        #expect(session.connection == .notConnected)
+        #expect(stub.requests.count == 4)
+        #expect(stub.requests.dropFirst().allSatisfy { $0.url?.host == "192.168.1.30" })
+
+        for reply in [initiatedReply, approvedReply, authenticatedReply(cookie: "c2")] { stub.enqueue(reply) }
+        let saved = await session.signIn(address: seerrURL, appState: app)
+
+        #expect(saved == .success(alice))
+        #expect(session.connection == .connected(alice))
+        #expect(session.credential() == .session(cookie: "c2"))
+        #expect(storage.seerrSessions()["S1|A"] == bound("c2"))
+        #expect(api.authorizeQuickConnectCalls.count == 2)
+    }
+
+    @Test("a cancelled sign-in changes nothing")
+    func cancelledSignInChangesNothing() async {
+        let stub = StubSeerrTransport([settingsReply, initiatedReply])
+        let storage = MockKeychain()
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        api.shouldThrow = true
+        api.stubbedError = CancellationError()
+
+        let result = await session.signIn(address: seerrURL, appState: app)
+
+        #expect(result == .failure(.cancelled))
+        #expect(storage.seerrSessions().isEmpty)
+        #expect(session.connection == .notConnected)
+    }
+
+    @Test("sign-out logs out on Seerr and forgets the cookie")
+    func signOutForgetsCookie() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply(), .response(status: 200, body: #"{"status":"ok"}"#)])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc"), "S1|B": bound("b")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        await session.signOut()
+
+        #expect(storage.seerrSessions() == ["S1|B": bound("b")])
+        #expect(session.connection == .notConnected)
+        #expect(session.credential() == nil)
+        let logout = try #require(stub.requests.last)
+        #expect(logout.url?.path == "/api/v1/auth/logout")
+        #expect(logout.value(forHTTPHeaderField: "Cookie")?.contains("connect.sid=abc") == true)
+    }
+
+    @Test("a reload in flight never brings back the session « Se déconnecter » gave up")
+    func signOutBeatsAReloadInFlight() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/auth/logout": [.response(status: 200, body: #"{"status":"ok"}"#)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, index in
+            if path == "/settings/public", index == 1 {
+                started.open()
+                await release.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let reload = Task { await session.reload(appState: app) }
+        await started.wait()
+        await session.signOut()
+        release.open()
+        await reload.value
+
+        #expect(session.connection == .notConnected)
+        #expect(storage.seerrSessions().isEmpty)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(!transport.requests.contains { $0.url?.path.contains("quickconnect") == true })
+    }
+
+    @Test("a call that outlives « Se déconnecter » never signs in again")
+    func signOutBeatsACallInFlight() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/auth/logout": [.response(status: 200, body: #"{"status":"ok"}"#)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            if path == "/search" {
+                started.open()
+                await release.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await started.wait()
+        await session.signOut()
+        release.open()
+        await #expect(throws: SeerrError.forbidden) { try await call.value }
+
+        #expect(session.connection == .notConnected)
+        #expect(storage.seerrSessions().isEmpty)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(!transport.requests.contains { $0.url?.path.contains("quickconnect") == true })
+    }
+
+    @Test("a silent sign-in in flight is dropped by « Se déconnecter »")
+    func signOutBeatsASilentSignInInFlight() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/auth/jellyfin/quickconnect/initiate": [initiatedReply],
+            "/auth/jellyfin/quickconnect/check": [approvedReply],
+            "/auth/jellyfin/quickconnect/authenticate": [authenticatedReply(cookie: "renewed")],
+            "/auth/logout": [.response(status: 200, body: #"{"status":"ok"}"#)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            if path == "/auth/jellyfin/quickconnect/initiate" {
+                started.open()
+                await release.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await started.wait()
+        await session.signOut()
+        release.open()
+        _ = try? await call.value
+
+        #expect(session.connection == .notConnected)
+        #expect(session.credential() == nil)
+        #expect(storage.seerrSessions().isEmpty)
+    }
+
+    @Test("the device key is an admin's, stored per server with its address, and switches the mode")
+    func deviceKeyIsPerServer() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let storage = MockKeychain()
+        storage.saveSeerrAPIKeys(["S9": bound("OTHER")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        #expect(session.connection == .notConnected)
+
+        await session.setDeviceKey("KEY", address: seerrURL, appState: app)       // not an admin
+
+        #expect(storage.seerrAPIKeys() == ["S9": bound("OTHER")])
+        #expect(stub.requests.count == 1)
+
+        await promoteToAdmin(app, api)
+        stub.enqueue(settingsReply)
+        stub.enqueue(userReply())
+
+        await session.setDeviceKey("  KEY \n", address: seerrURL, appState: app)
+
+        #expect(storage.seerrAPIKeys() == ["S9": bound("OTHER"), "S1": bound("KEY")])
+        #expect(session.usesDeviceKey)
+        #expect(session.credential() == .apiKey(key: "KEY", user: SeerrUserID(rawValue: 7)))
+        stub.enqueue(settingsReply)
+
+        await session.setDeviceKey(nil, address: seerrURL, appState: app)
+
+        #expect(storage.seerrAPIKeys() == ["S9": bound("OTHER")])
+        #expect(!session.usesDeviceKey)
+        #expect(session.connection == .notConnected)
+        #expect(!stub.exhausted)
+    }
+
+    /// Settings shows « Clé enregistrée » for any key stored for this server,
+    /// even one entered for another Seerr address (unusable, but there to remove).
+    @Test("a stored device key is reported for the active server only, whatever its address")
+    func storedDeviceKeyIsPerServer() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let storage = MockKeychain()
+        storage.saveSeerrAPIKeys(["S9": bound("OTHER")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        #expect(!session.hasStoredDeviceKey(appState: app))
+        storage.saveSeerrAPIKeys(["S9": bound("OTHER"),
+                                  "S1": SeerrBoundSecret(value: "KEY", origin: URL(string: "http://elsewhere:5055")!)])
+        #expect(session.hasStoredDeviceKey(appState: app))
+        storage.saveSeerrAPIKeys(["S1": SeerrBoundSecret(value: "", origin: URL(string: "http://elsewhere:5055")!)])
+        #expect(!session.hasStoredDeviceKey(appState: app))
+    }
+
+    /// « Tester la connexion » with a key already saved: the stored key is
+    /// used only toward the address it was entered for, and only by an admin.
+    @Test("the stored key is lent to the test only for its own address, and only to an admin")
+    func deviceKeyForTestOnlyForItsAddress() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let storage = MockKeychain()
+        storage.saveSeerrAPIKeys(["S1": bound("KEY"), "S9": bound("OTHER")])
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        let elsewhere = URL(string: "http://elsewhere:5055")!
+
+        #expect(session.deviceKeyForTest(address: seerrURL, appState: app) == nil)   // not an admin
+        await promoteToAdmin(app, api)
+        #expect(session.deviceKeyForTest(address: seerrURL, appState: app) == "KEY")
+        #expect(session.deviceKeyForTest(address: URL(string: "http://192.168.1.20:5055/")!, appState: app) == "KEY")
+        #expect(session.deviceKeyForTest(address: elsewhere, appState: app) == nil)
+        #expect(session.storedDeviceKeyOrigin(appState: app).map { SeerrAddress.sameOrigin($0, seerrURL) } == true)
+    }
+
+    /// `AppNavigation` wires the Pro gate; an unwired session must not call Seerr.
+    @Test("an unwired Pro gate fails closed: no Seerr call")
+    func unwiredProGateFailsClosed() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let (app, _) = signedIn()
+        let session = SeerrSession(storage: MockKeychain(), defaults: .isolatedForTesting(), transport: stub, signInPause: {})
+        session.follow(app)
+        await session.reload(appState: app)
+        #expect(stub.requests.isEmpty)
+        #expect(session.connection == .unavailable)
+    }
+
+    @Test("a device key without an address is never stored; removing needs no address")
+    func deviceKeyNeedsAnAddress() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let storage = MockKeychain()
+        let (app, api) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        await promoteToAdmin(app, api)
+
+        await session.setDeviceKey("KEY", address: nil, appState: app)
+        #expect(storage.seerrAPIKeys().isEmpty)
+        #expect(stub.requests.isEmpty)
+
+        storage.saveSeerrAPIKeys(["S1": bound("KEY")])
+        await session.setDeviceKey(nil, address: nil, appState: app)
+        #expect(storage.seerrAPIKeys().isEmpty)
+        #expect(!session.hasStoredDeviceKey(appState: app))
+    }
+
+    @Test("forgetting an account drops its cookie; forgetting a server drops its key")
+    func forgettingDropsSecrets() {
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("a"), "S1|B": bound("b")])
+        storage.saveSeerrAPIKeys(["S1": bound("K1"), "S2": bound("K2")])
+        let session = makeSession(StubSeerrTransport(), storage: storage)
+
+        session.forgetAccount("S1|A")
+        session.forgetServer("S2")
+
+        #expect(storage.seerrSessions() == ["S1|B": bound("b")])
+        #expect(storage.seerrAPIKeys() == ["S1": bound("K1")])
+    }
+
+    @Test("a language change rebuilds the client with the new language")
+    func languageRebuildsClient() async throws {
+        let stub = StubSeerrTransport([settingsReply, userReply(), searchReply])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(stub, storage: storage, following: app)
+        session.setLanguage("fr")
+        await session.reload(appState: app)
+
+        session.setLanguage("de")
+        _ = try await session.perform(search)
+
+        let query = URLComponents(url: try #require(stub.requests.last?.url), resolvingAgainstBaseURL: false)?.queryItems
+        #expect(query?.first { $0.name == "language" }?.value == "de")
+    }
+}
+
+// MARK: - Secret binding
+
+@Suite("Seerr secret binding")
+struct SeerrSecretBindingTests {
+
+    @Test("same Seerr: case, default port, trailing slash and a pasted /api/v1 do not matter")
+    func sameOrigin() {
+        func same(_ lhs: String, _ rhs: String) -> Bool {
+            SeerrAddress.sameOrigin(URL(string: lhs), URL(string: rhs))
+        }
+        #expect(same("http://192.168.1.20:5055", "HTTP://192.168.1.20:5055/"))
+        #expect(same("https://Hote/seerr", "https://hote/seerr/api/v1"))
+        #expect(same("http://hote", "http://hote:80"))
+        #expect(same("https://hote", "https://hote:443/"))
+    }
+
+    @Test("another scheme, host, port or path is another Seerr")
+    func otherOrigin() {
+        func same(_ lhs: String, _ rhs: String) -> Bool {
+            SeerrAddress.sameOrigin(URL(string: lhs), URL(string: rhs))
+        }
+        #expect(!same("http://hote:5055", "https://hote:5055"))
+        #expect(!same("http://hote:5055", "http://autre:5055"))
+        #expect(!same("http://hote:5055", "http://hote:5056"))
+        #expect(!same("https://hote/seerr", "https://hote/autre"))
+        #expect(!same("https://hote/seerr", "https://hote"))
+        #expect(!SeerrAddress.sameOrigin(nil, URL(string: "http://hote")))
+        #expect(!SeerrAddress.sameOrigin(URL(string: "http://hote"), nil))
+    }
+
+    @Test("a bound secret prints nothing of its value")
+    func boundSecretIsRedacted() {
+        let secret = SeerrBoundSecret(value: "s%3Asecret", origin: seerrURL)
+        #expect(!"\(secret)".contains("secret"))
+        #expect(secret.isBound(to: URL(string: "http://192.168.1.20:5055/")))
+        #expect(!secret.isBound(to: otherSeerrURL))
+    }
+}
+
+// MARK: - AppState hooks
+
+@MainActor
+@Suite("Seerr session — AppState hooks")
+struct SeerrSessionAppStateHookTests {
+
+    @Test("refreshCurrentUser announces itself even signed out (its early return)")
+    func refreshAnnouncesEvenSignedOut() async {
+        let app = AppState(apiClient: MockAPIClient(), keychain: MockKeychain())
+        app.settingsDefaults = .isolatedForTesting()
+        var calls = 0
+        app.onCurrentUserRefreshed = { calls += 1 }
+
+        await preservingSharedSession { await app.refreshCurrentUser() }
+
+        #expect(calls == 1)
+    }
+
+    @Test("removing a server announces its id, after each of its accounts")
+    func removeServerAnnouncesTheServer() async {
+        let keychain = MockKeychain()
+        let active = ServerEntry(id: "S1", url: jellyfinURL, accessToken: "tokA", userId: "A")
+        let other = ServerEntry(id: "S2", url: URL(string: "https://autre.local")!, accessToken: "tokB", userId: "B")
+        keychain.savedServers = [active, other]
+        keychain.savedActiveServerId = "S1"
+        let app = AppState(apiClient: MockAPIClient(), keychain: keychain)
+        app.settingsDefaults = .isolatedForTesting()
+        app.sessionRevoker = { _, _ in }
+        app.loadServersFromKeychain()
+        var events: [String] = []
+        app.onAccountForgotten = { events.append("account:\($0)") }
+        app.onServerForgotten = { events.append("server:\($0)") }
+        // `removeServer` forgets the server's certificate pin in the REAL
+        // Keychain item: put the pins back as they were.
+        let real = KeychainService()
+        let pins = real.getTrustedCertificates()
+
+        await app.removeServer(other)
+
+        real.saveTrustedCertificates(pins)
+        #expect(events == ["account:S2|B", "server:S2"])
+    }
+
+    @Test("a change of the ACTIVE account's age cap announces itself")
+    func ageCapChangeAnnouncesItself() async {
+        let (app, _) = signedIn()
+        var calls = 0
+        app.onAgeCapChanged = { calls += 1 }
+
+        await preservingSharedSession { app.setAgeCap(12, forAccountKey: "S1|A") }
+        app.setAgeCap(16, forAccountKey: "S1|Z")       // another account: stored, applies when it opens
+
+        #expect(calls == 1)
+    }
+}
+
+// MARK: - Connection test
+
+private let statusReply = StubSeerrTransport.Reply.response(status: 200, body: #"{"version":"3.4.0"}"#)
+private let seerrServerReply = StubSeerrTransport.Reply.response(status: 200, body: #"{"serverId":"srv","ip":"x"}"#)
+
+@MainActor
+@Suite("Seerr connection test")
+struct SeerrConnectionTestTests {
+    private let loc = LocalizationManager()
+
+    /// Account mode: Quick Connect is on, the session is loaded (no cookie).
+    private func accountMode(
+        _ replies: [StubSeerrTransport.Reply], quickConnect: Bool = true, policy userPolicy: UserPolicy = policy()
+    ) async -> (StubSeerrTransport, SeerrSession, AppState, MockAPIClient) {
+        let stub = StubSeerrTransport([settingsReply])
+        let (app, api) = signedIn(policy: userPolicy)
+        app.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: jellyfinURL)
+        api.stubbedQuickConnectEnabled = quickConnect
+        let session = makeSession(stub, following: app)
+        await session.reload(appState: app)
+        for reply in replies { stub.enqueue(reply) }
+        return (stub, session, app, api)
+    }
+
+    private func keyMode(
+        _ replies: [StubSeerrTransport.Reply], liveServerID: String? = "srv", registryServerID: String? = "srv"
+    ) -> (StubSeerrTransport, SeerrSession, AppState) {
+        let stub = StubSeerrTransport(replies)
+        let (app, _) = signedIn(registryServerID: registryServerID)
+        app.serverInfo = liveServerID.map {
+            ServerInfo(name: "Maison", serverID: $0, version: "10.11.0", url: jellyfinURL)
+        }
+        return (stub, makeSession(stub, following: app), app)
+    }
+
+    private func run(_ session: SeerrSession, _ app: AppState, key: String? = nil) async -> SeerrTestReport {
+        await SeerrConnectionTest.run(address: seerrURL, deviceKey: key, session: session, appState: app, loc: loc)
+    }
+
+    private let signInReplies = [initiatedReply, approvedReply, authenticatedReply(cookie: "c")]
+
+    @Test("nothing answering is « unreachable »")
+    func reportsUnreachable() async {
+        let (_, session, app, _) = await accountMode([.failure(URLError(.cannotConnectToHost))])
+        let report = await run(session, app)
+        #expect(report == SeerrTestReport(failure: .unreachable))
+    }
+
+    @Test("something else answering /status is « not Seerr », a redirect is « redirected »")
+    func reportsNotSeerr() async {
+        let (_, session, app, _) = await accountMode([.response(status: 200, body: "<html></html>")])
+        #expect(await run(session, app).failure == .notSeerr)
+        let (_, redirected, app2, _) = await accountMode([.response(status: 302, headers: ["Location": "https://elsewhere.example/"])])
+        #expect(await run(redirected, app2).failure == .redirected)
+    }
+
+    /// Jellyfin itself answers `/api/v1/status` with an empty 404 (bench,
+    /// 2026-11-07): something answers, so it is the port, not a dead host.
+    @Test("an HTTP error from /status is « not Seerr », never « unreachable »")
+    func httpErrorFromStatusIsNotSeerr() async {
+        let (_, notFound, app, _) = await accountMode([.response(status: 404, body: "")])
+        #expect(await run(notFound, app).failure == .notSeerr)
+        let (_, serverError, app2, _) = await accountMode([.response(status: 500, body: "oops")])
+        #expect(await run(serverError, app2).failure == .notSeerr)
+        // Past /status, Seerr HAS answered: a later HTTP error is not « the port ».
+        let (_, later, app3, _) = await accountMode([statusReply, .response(status: 500, body: "oops")])
+        #expect(await run(later, app3).failure == .unreachable)
+    }
+
+    /// A reverse proxy answering for a Seerr that is down: « ne répond pas ».
+    @Test("a gateway error from /status is « unreachable »")
+    func gatewayErrorIsUnreachable() async {
+        for code in [502, 503, 504] {
+            let (_, session, app, _) = await accountMode([.response(status: code, body: "<html>Bad Gateway</html>")])
+            #expect(await run(session, app).failure == .unreachable, "\(code)")
+        }
+    }
+
+    @Test("a Seerr older than 3.4 is « too old »")
+    func reportsTooOld() async {
+        let (stub, session, app, _) = await accountMode([.response(status: 200, body: #"{"version":"3.3.2"}"#)])
+        let report = await run(session, app)
+        #expect(report.failure == .tooOld("3.3.2"))
+        #expect(report.verified.isEmpty)
+        #expect(stub.requests.count == 2)   // the reload's /settings/public, then /status: it stopped there
+    }
+
+    @Test("a Seerr on Plex or Emby is « not Jellyfin »")
+    func reportsNotJellyfin() async {
+        let plex = StubSeerrTransport.Reply.response(status: 200, body: #"{"mediaServerType":1}"#)
+        let (_, session, app, _) = await accountMode([statusReply, plex])
+        #expect(await run(session, app).failure == .notJellyfin)
+    }
+
+    @Test("Quick Connect off on Jellyfin stops before any Seerr sign-in")
+    func reportsQuickConnectOff() async {
+        let (stub, session, app, api) = await accountMode([statusReply, settingsReply], quickConnect: false)
+        let report = await run(session, app)
+        #expect(report.failure == .quickConnectOff)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(stub.requests.count == 3)
+    }
+
+    @Test("an approval Jellyfin answers 404 is « another Jellyfin »")
+    func reportsOtherJellyfinFromApproval404() async {
+        let (_, session, app, api) = await accountMode([statusReply, settingsReply, initiatedReply])
+        api.shouldThrow = true
+        api.stubbedError = Get.APIError.unacceptableStatusCode(404)
+        #expect(await run(session, app).failure == .otherJellyfin)
+    }
+
+    @Test("a different Jellyfin server id behind the key is « another Jellyfin »")
+    func reportsOtherJellyfinFromServerId() async {
+        let other = StubSeerrTransport.Reply.response(status: 200, body: #"{"serverId":"elsewhere"}"#)
+        let (_, session, app) = keyMode([statusReply, settingsReply, other])
+        let report = await run(session, app, key: "KEY")
+        #expect(report.failure == .otherJellyfin)
+        #expect(report.verified.count == 1)      // the version line only; the user is never looked up
+    }
+
+    @Test("a Jellyfin refusal names its cause: device restriction, session limit, or plain refusal")
+    func reportsDeviceRestriction() async {
+        var restricted = policy()
+        restricted.enableAllDevices = false
+        let (_, session, app, api) = await accountMode([statusReply, settingsReply, initiatedReply], policy: restricted)
+        api.shouldThrow = true
+        api.stubbedError = Get.APIError.unacceptableStatusCode(403)
+        #expect(await run(session, app).failure == .jellyfinDevice)
+    }
+
+    @Test("a key Seerr refuses is « key refused »")
+    func reportsKeyRefused() async {
+        let (_, session, app) = keyMode([statusReply, settingsReply, forbiddenReply])
+        #expect(await run(session, app, key: "KEY").failure == .keyRefused)
+    }
+
+    @Test("a user Seerr has not imported is « not in Seerr », in both modes")
+    func reportsNotInSeerr() async {
+        let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, notFoundReply])
+        #expect(await run(session, app, key: "KEY").failure == .notInSeerr)
+        let denied = StubSeerrTransport.Reply.response(status: 403, body: #"{"message":"Access denied."}"#)
+        let (_, accountSession, accountApp, _) = await accountMode(
+            [statusReply, settingsReply, initiatedReply, approvedReply, denied])
+        #expect(await run(accountSession, accountApp).failure == .notInSeerr)
+    }
+
+    @Test("success lists what was verified; a user who cannot manage requests is warned")
+    func successListsVerifiedAndWarnsWithoutManage() async {
+        let storage = MockKeychain()
+        let stub = StubSeerrTransport([settingsReply])
+        let (app, api) = signedIn()
+        app.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: jellyfinURL)
+        api.stubbedQuickConnectEnabled = true
+        let session = makeSession(stub, storage: storage, following: app)
+        await session.reload(appState: app)
+        for reply in [statusReply, settingsReply] + signInReplies { stub.enqueue(reply) }
+
+        let report = await run(session, app)
+
+        #expect(report.failure == nil)
+        #expect(report.verified == [
+            loc.localized("seerr.test.ok.version", "3.4.0"),
+            loc.localized("seerr.test.ok.server", "Maison"),
+            loc.localized("seerr.test.ok.quickConnect"),
+            loc.localized("seerr.test.ok.account", loc.localized("seerr.test.ok.role.request")),
+        ])
+        #expect(report.warnings == [loc.localized("seerr.test.warning.cannotManage")])
+        // The test saves no configuration: the cookie bound to the address is the only trace
+        // (the typed address is the saved one here, so the session reads as connected).
+        #expect(storage.seerrSessions()["S1|A"] == bound("c"))
+        #expect(session.connection == .connected(alice))
+    }
+
+    @Test("key mode succeeds with the key's user; an admin is not warned")
+    func keyModeSucceedsWithoutWarningForAdmins() async {
+        let admin = #"{"id":1,"permissions":2,"jellyfinUserId":"A","displayName":"Alice"}"#
+        let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, userReply(admin)])
+        let report = await run(session, app, key: "KEY")
+        #expect(report.failure == nil)
+        // The bench address is plain HTTP: the key's own warning, nothing else.
+        #expect(report.warnings == [loc.localized("seerr.test.warning.httpKey")])
+        #expect(report.verified.count == 3)      // no Quick Connect line in key mode
+    }
+
+    @Test("key mode over HTTPS is not warned: the key does not travel in clear")
+    func keyModeOverHTTPSIsNotWarned() async {
+        let admin = #"{"id":1,"permissions":2,"jellyfinUserId":"A","displayName":"Alice"}"#
+        let (_, session, app) = keyMode([statusReply, settingsReply, seerrServerReply, userReply(admin)])
+        let report = await SeerrConnectionTest.run(
+            address: URL(string: "https://seerr.example.org")!, deviceKey: "KEY", session: session, appState: app, loc: loc)
+        #expect(report.failure == nil)
+        #expect(report.warnings.isEmpty)
+    }
+
+    /// Owner, 2026-11-07: from an HTTPS Jellyfin a plain-HTTP Seerr is never
+    /// signed in to silently — the test says so, in account mode, where a
+    /// session has to be renewed (key mode renews nothing).
+    @Test("an HTTPS Jellyfin with a plain-HTTP Seerr gets the session warning in account mode only")
+    func schemeMixIsWarnedInAccountMode() async {
+        let stub = StubSeerrTransport([settingsReply])
+        let (app, api) = signedIn(jellyfin: httpsJellyfinURL)
+        app.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: httpsJellyfinURL)
+        api.stubbedQuickConnectEnabled = true
+        let session = makeSession(stub, following: app)
+        await session.reload(appState: app)
+        for reply in [statusReply, settingsReply] + signInReplies { stub.enqueue(reply) }
+
+        let report = await run(session, app)
+
+        #expect(report.failure == nil)
+        #expect(report.warnings == [
+            loc.localized("seerr.test.warning.httpSeerr"),
+            loc.localized("seerr.test.warning.cannotManage"),
+        ])
+
+        let admin = #"{"id":1,"permissions":2,"jellyfinUserId":"A","displayName":"Alice"}"#
+        let keyStub = StubSeerrTransport([statusReply, settingsReply, seerrServerReply, userReply(admin)])
+        let (keyApp, _) = signedIn(jellyfin: httpsJellyfinURL)
+        keyApp.serverInfo = ServerInfo(name: "Maison", serverID: "srv", version: "10.11.0", url: httpsJellyfinURL)
+        let keyReport = await run(makeSession(keyStub, following: keyApp), keyApp, key: "KEY")
+        #expect(keyReport.failure == nil)
+        // Never the session warning; the key's own one, the address being HTTP.
+        #expect(keyReport.warnings == [loc.localized("seerr.test.warning.httpKey")])
+    }
+
+    @Test("a Quick Connect probe that does not get through is « unreachable »; only a refusal is « off »")
+    func failedQuickConnectProbeIsUnreachable() async {
+        let (stub, session, app, api) = await accountMode([statusReply, settingsReply])
+        api.quickConnectEnabledError = URLError(.timedOut)
+        let report = await run(session, app)
+        #expect(report.failure == .unreachable)
+        #expect(api.authorizeQuickConnectCalls.isEmpty)
+        #expect(stub.requests.count == 3)
+    }
+
+    @Test("serverInfo not fetched yet (after a switch): the registry's server id is compared")
+    func otherJellyfinFromRegistryWhenServerInfoMissing() async {
+        let other = StubSeerrTransport.Reply.response(status: 200, body: #"{"serverId":"elsewhere"}"#)
+        let (_, session, app) = keyMode([statusReply, settingsReply, other], liveServerID: nil)
+        #expect(app.serverInfo == nil)
+        #expect(await run(session, app, key: "KEY").failure == .otherJellyfin)
+        // And the same server, known only by the registry, passes.
+        let (_, okSession, okApp) = keyMode(
+            [statusReply, settingsReply, seerrServerReply, userReply()], liveServerID: nil)
+        #expect(await run(okSession, okApp, key: "KEY").failure == nil)
+    }
+
+    @Test("a Jellyfin server id known nowhere fails closed")
+    func serverIdUnknownFailsClosed() async {
+        let (_, session, app) = keyMode(
+            [statusReply, settingsReply, seerrServerReply], liveServerID: nil, registryServerID: nil)
+        #expect(await run(session, app, key: "KEY").failure == .otherJellyfin)
+        let (_, emptySession, emptyApp) = keyMode(
+            [statusReply, settingsReply, seerrServerReply], liveServerID: "", registryServerID: "")
+        #expect(await run(emptySession, emptyApp, key: "KEY").failure == .otherJellyfin)
+    }
+
+    @Test("a Seerr linked to another Jellyfin says so before looking for the user")
+    func otherJellyfinBeforeUserLookup() async {
+        let other = StubSeerrTransport.Reply.response(status: 200, body: #"{"serverId":"elsewhere"}"#)
+        let (stub, session, app) = keyMode([statusReply, settingsReply, other, notFoundReply])
+        #expect(await run(session, app, key: "KEY").failure == .otherJellyfin)
+        #expect(stub.requests.count == 3)
+    }
+
+    @Test("key mode without a signed-in user is an empty report")
+    func keyModeWithoutUserIsEmpty() async {
+        let (_, session, app) = keyMode([statusReply, settingsReply])
+        app.currentUserId = nil
+        #expect(await run(session, app, key: "KEY") == SeerrTestReport())
+    }
+
+    @Test("a cancelled sign-in is an empty report")
+    func cancelledSignInIsEmpty() async {
+        let (_, session, app, api) = await accountMode([statusReply, settingsReply, initiatedReply])
+        api.shouldThrow = true
+        api.stubbedError = CancellationError()
+        #expect(await run(session, app) == SeerrTestReport())
+    }
+
+    @Test("a re-sign-in finishing after the mode or the address changed writes nothing")
+    func reSignInIgnoresModeOrAddressChange() async throws {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/user/jellyfin/A": [userReply()],
+            "/auth/jellyfin/quickconnect/initiate": [initiatedReply],
+            "/auth/jellyfin/quickconnect/check": [approvedReply],
+            "/auth/jellyfin/quickconnect/authenticate": [authenticatedReply(cookie: "late")],
+        ])
+        let silentStarted = TestLatch()
+        let releaseSilent = TestLatch()
+        transport.onRequest { path, _ in
+            if path == "/auth/jellyfin/quickconnect/initiate" {
+                silentStarted.open()
+                await releaseSilent.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("old")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await silentStarted.wait()
+        await promoteToAdmin(app, api)
+        await session.setDeviceKey("KEY", address: seerrURL, appState: app)     // account mode → key mode
+        releaseSilent.open()
+        _ = try? await call.value
+
+        #expect(session.usesDeviceKey)
+        #expect(storage.seerrSessions()["S1|A"] == bound("old"))
+        #expect(session.connection == .connected(alice))
+    }
+
+    @Test("a re-sign-in finishing after the saved address changed writes nothing")
+    func reSignInIgnoresAddressChange() async throws {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, settingsReply],
+            "/auth/me": [userReply(), forbiddenReply],
+            "/search": [forbiddenReply],
+            "/auth/jellyfin/quickconnect/initiate": [initiatedReply],
+            "/auth/jellyfin/quickconnect/check": [approvedReply],
+            "/auth/jellyfin/quickconnect/authenticate": [authenticatedReply(cookie: "late")],
+        ])
+        let silentStarted = TestLatch()
+        let releaseSilent = TestLatch()
+        transport.onRequest { path, _ in
+            if path == "/auth/jellyfin/quickconnect/initiate" {
+                silentStarted.open()
+                await releaseSilent.wait()
+            }
+        }
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("old")])
+        let (app, api) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        let call = Task { try await session.perform(search) }
+        await silentStarted.wait()
+        api.displayPreferences[prefsKey] = SeerrUserConfig.merged(
+            SeerrUserConfig(isEnabled: true, url: otherSeerrURL), into: nil)
+        await session.reload(appState: app)                                    // same account, another address
+        releaseSilent.open()
+        _ = try? await call.value
+
+        #expect(session.client?.baseURL == otherSeerrURL)
+        #expect(storage.seerrSessions()["S1|A"] == bound("old"))              // "late" was never written
+        #expect(session.connection == .notConnected)
+    }
+}
+
+// MARK: - Activation (admin)
+
+private func prefsKey(for userId: String) -> String {
+    "\(userId)|\(SeerrUserConfig.preferencesId)|\(SeerrUserConfig.client)"
+}
+
+private func jellyfinUser(_ id: String, _ name: String, maxRating: Int? = nil) -> UserDto {
+    var user = UserDto()
+    user.id = id
+    user.name = name
+    user.policy = policy(maxRating: maxRating)
+    return user
+}
+
+private let adminJSON = #"{"id":1,"permissions":2,"jellyfinUserId":"ADMIN","displayName":"Admin"}"#
+
+@MainActor
+private struct ActivationWorld {
+    let app: AppState
+    let api: MockAPIClient
+    let session: SeerrSession
+    let transport: RoutedSeerrTransport
+    let model = SeerrActivationModel()
+    let loc = LocalizationManager()
+
+    func writes(for userId: String) -> [DisplayPreferencesDto] {
+        api.updateDisplayPreferencesCalls.filter { $0.userId == userId }.map(\.prefs)
+    }
+
+    func stored(_ userId: String) -> SeerrUserConfig {
+        SeerrUserConfig.read(api.displayPreferences[prefsKey(for: userId)])
+    }
+}
+
+/// An administrator (`ADMIN`) whose Seerr session is connected, over `users`.
+/// `enabled` users carry `seerr.enabled` + the address; the admin always keeps
+/// the address. `lookups` answers `/user/jellyfin/<id>` (absent ⇒ no answer).
+@MainActor
+private func activationWorld(
+    users: [UserDto], enabled: Set<String> = [], lookups: [String: StubSeerrTransport.Reply] = [:],
+    credentialed: Bool = true, publicSettings: StubSeerrTransport.Reply = settingsReply,
+    extraRoutes: [String: [StubSeerrTransport.Reply]] = [:],
+    adminHasAddress: Bool = true
+) async -> ActivationWorld {
+    let api = MockAPIClient()
+    api.stubbedUsers = users
+    for user in users {
+        guard let id = user.id else { continue }
+        let on = enabled.contains(id)
+        if on || (id == "ADMIN" && adminHasAddress) {
+            api.displayPreferences[prefsKey(for: id)] = SeerrUserConfig.merged(
+                SeerrUserConfig(isEnabled: on, url: seerrURL), into: nil)
+        }
+    }
+    let (app, _) = signedIn(userId: "ADMIN", config: enabledConfig, api: api)
+    var routes: [String: [StubSeerrTransport.Reply]] = [
+        "/settings/public": [publicSettings], "/auth/me": [userReply(adminJSON)]]
+    for (id, reply) in lookups { routes["/user/jellyfin/\(id)"] = [reply] }
+    routes.merge(extraRoutes) { $1 }
+    let transport = RoutedSeerrTransport(routes)
+    let storage = MockKeychain()
+    if credentialed { storage.saveSeerrSessions(["S1|ADMIN": bound("abc")]) }
+    let session = makeSession(transport, storage: storage, following: app)
+    await session.reload(appState: app)
+    return ActivationWorld(app: app, api: api, session: session, transport: transport)
+}
+
+@MainActor
+@Suite("Seerr activation")
+struct SeerrActivationTests {
+    private let adminUser = jellyfinUser("ADMIN", "Admin")
+    private let ann = jellyfinUser("ANN", "Ann")
+    private let bobUser = jellyfinUser("BOB", "Bob")
+    private let tom = jellyfinUser("TOM", "Tom", maxRating: 10)
+
+    @Test("a server-capped user is refused with a reason, and nothing is written for them")
+    func cappedUserIsRefusedWithReason() async {
+        let world = await activationWorld(
+            users: [adminUser, tom], lookups: ["ADMIN": userReply(adminJSON)])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setEnabled(true, userId: "TOM", appState: world.app, loc: world.loc)
+
+        #expect(message == world.loc.localized("seerr.activation.refused.capped", "Tom"))
+        #expect(world.writes(for: "TOM").isEmpty)
+        #expect(world.model.lines.first { $0.id == "TOM" }?.kind == .ageCapped)
+        #expect(world.model.lines.first { $0.id == "TOM" }?.isEnabled == false)
+    }
+
+    @Test("enable-all skips the capped, writes the others, and summarises")
+    func enableAllSkipsCappedAndSummarises() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser, tom],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply, "BOB": userReply(bobJSON)])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let summary = await world.model.enableAll(appState: world.app, loc: world.loc)
+
+        #expect(world.api.updateDisplayPreferencesCalls.count == 3)
+        #expect(world.writes(for: "TOM").isEmpty)
+        for id in ["ADMIN", "ANN", "BOB"] { #expect(world.stored(id) == SeerrUserConfig(isEnabled: true, url: seerrURL)) }
+        #expect(summary == SeerrActivationModel.activationSummary(enabled: 3, refusedNames: ["Tom"], loc: world.loc))
+        #expect(world.model.enabledCount == 3)
+    }
+
+    @Test("a switch flipped while the list reloads is not put back by that reload")
+    func reloadKeepsASwitchFlippedMeanwhile() async {
+        let world = await activationWorld(users: [adminUser, ann], extraRoutes: [
+            "/user/jellyfin/ADMIN": [userReply(adminJSON), userReply(adminJSON)],
+            "/user/jellyfin/ANN": [notFoundReply, notFoundReply],
+        ])
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.model.lines.first { $0.id == "ANN" }?.isEnabled == false)
+        // The second load has read Ann's configuration (off) and waits on Seerr.
+        let started = TestLatch()
+        let release = TestLatch()
+        world.transport.onRequest { path, index in
+            if path == "/user/jellyfin/ANN", index == 1 {
+                started.open()
+                await release.wait()
+            }
+        }
+        let reload = Task { await world.model.load(appState: world.app, session: world.session) }
+        await started.wait()
+
+        #expect(await world.model.setEnabled(true, userId: "ANN", appState: world.app, loc: world.loc) == nil)
+        release.open()
+        #expect(await reload.value)
+
+        #expect(world.model.lines.first { $0.id == "ANN" }?.isEnabled == true)
+        // The next load reads what the server holds: still on.
+        #expect(world.writes(for: "ANN").last.map { SeerrUserConfig.read($0).isEnabled } == true)
+    }
+
+    @Test("a write carries every other pref of the stored entity")
+    func writePreservesOtherPrefs() async {
+        let world = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply])
+        var existing = DisplayPreferencesDto(client: SeerrUserConfig.client, id: SeerrUserConfig.preferencesId)
+        existing.customPrefs = ["skipForwardLength": "30000", "chromecastVersion": "stable"]
+        existing.sortBy = "SortName"
+        world.api.displayPreferences[prefsKey(for: "ANN")] = existing
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setEnabled(true, userId: "ANN", appState: world.app, loc: world.loc)
+
+        #expect(message == nil)
+        let sent = world.writes(for: "ANN")
+        #expect(sent.count == 1)
+        #expect(sent.first?.customPrefs?["skipForwardLength"] == "30000")
+        #expect(sent.first?.customPrefs?["chromecastVersion"] == "stable")
+        #expect(sent.first?.sortBy == "SortName")
+        #expect(sent.first?.customPrefs?["seerr.enabled"] == "true")
+        #expect(sent.first?.customPrefs?["seerr.url"] == seerrURL.absoluteString)
+    }
+
+    @Test("disable-all keeps the admin's address, and each user's")
+    func disableAllKeepsAdminAddress() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser], enabled: ["ADMIN", "ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(), "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.model.enabledCount == 2)
+
+        _ = await world.model.disableAll(appState: world.app, loc: world.loc)
+
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+        #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+        #expect(world.writes(for: "BOB").isEmpty)
+        #expect(world.model.enabledCount == 0)
+    }
+
+    @Test("turning one user off keeps their stored address")
+    func disableOneKeepsAddress() async {
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"], lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setEnabled(false, userId: "ANN", appState: world.app, loc: world.loc)
+
+        #expect(message == nil)
+        #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+    }
+
+    @Test("a new address rewrites the admin and every enabled user, never a disabled one")
+    func setAddressRewritesEnabledOnly() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(), "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+
+        _ = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: false, url: otherSeerrURL))
+        #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: true, url: otherSeerrURL))
+        #expect(world.writes(for: "BOB").isEmpty)
+        #expect(world.api.updateDisplayPreferencesCalls.count == 2)
+    }
+
+    /// Recette 2026-11-17 (a colleague's server): connecting Seerr left every
+    /// profile off, the admin's own included, so the admin who had just set
+    /// it up saw nothing of it. The FIRST address switches the admin on.
+    @Test("the admin's first address also switches the admin on")
+    func firstAddressEnablesTheAdmin() async {
+        let world = await activationWorld(
+            users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply],
+            adminHasAddress: false)
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+
+        #expect(message == nil)
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: true, url: otherSeerrURL))
+        #expect(world.model.lines.first { $0.id == "ADMIN" }?.isEnabled == true)
+        #expect(world.writes(for: "ANN").isEmpty)
+    }
+
+    /// Owner 2026-11-17: at the FIRST connection, every profile Seerr already
+    /// lets request is switched on with the admin. Unknown to Seerr, without
+    /// the right, or capped by age ⇒ left off. Done once the lines have read
+    /// Seerr with the new address (the load right after the save).
+    @Test("the first connection switches on whoever Seerr lets request")
+    func firstConnectionEnablesRequesters() async {
+        let cara = jellyfinUser("CARA", "Cara")
+        let movieOnly = #"{"id":11,"permissions":262144,"jellyfinUserId":"CARA","displayName":"Cara"}"#
+        let dan = jellyfinUser("DAN", "Dan")
+        let noRight = #"{"id":12,"permissions":0,"jellyfinUserId":"DAN","displayName":"Dan"}"#
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser, cara, dan, tom],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(), "BOB": notFoundReply,
+                      "CARA": userReply(movieOnly), "DAN": userReply(noRight), "TOM": userReply()],
+            adminHasAddress: false)
+
+        _ = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+        #expect(await world.model.load(appState: world.app, session: world.session))
+
+        for id in ["ADMIN", "ANN", "CARA"] {
+            #expect(world.stored(id) == SeerrUserConfig(isEnabled: true, url: otherSeerrURL), "\(id)")
+        }
+        for id in ["BOB", "DAN", "TOM"] { #expect(world.writes(for: id).isEmpty, "\(id)") }
+        #expect(world.model.lines.filter(\.isEnabled).map(\.id) == ["ADMIN", "ANN", "CARA"])
+
+        // Once only: a later load switches nobody back on.
+        _ = await world.model.setEnabled(false, userId: "ANN", appState: world.app, loc: world.loc)
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.stored("ANN").isEnabled == false)
+    }
+
+    @Test("a change of address switches no requester on")
+    func addressChangeEnablesNoRequester() async {
+        let world = await activationWorld(
+            users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()])
+
+        _ = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+        await world.model.load(appState: world.app, session: world.session)
+
+        #expect(world.writes(for: "ANN").isEmpty)
+        #expect(world.stored("ADMIN").isEnabled == false)
+    }
+
+    /// « Synchroniser depuis Seerr » (owner 2026-11-17): our switch takes
+    /// what Seerr says. Seerr says nothing for a user it will create at first
+    /// sign-in, or when the lookup failed: those are left as they are.
+    @Test("what Seerr says about each line: on, off, or nothing")
+    func syncTarget() {
+        let requester = SeerrUser(id: SeerrUserID(rawValue: 3), permissions: .request, jellyfinUserId: "X", displayName: "X")
+        let noRight = SeerrUser(id: SeerrUserID(rawValue: 4), permissions: SeerrPermissions(rawValue: 0), jellyfinUserId: "Y", displayName: "Y")
+        #expect(SeerrUserLineKind.linked(requester).syncTarget == true)
+        #expect(SeerrUserLineKind.linked(noRight).syncTarget == false)
+        #expect(SeerrUserLineKind.mustBeAdded.syncTarget == false)
+        #expect(SeerrUserLineKind.ageCapped.syncTarget == false)
+        #expect(SeerrUserLineKind.willBeCreated.syncTarget == nil)
+        #expect(SeerrUserLineKind.unknown.syncTarget == nil)
+    }
+
+    @Test("syncing from Seerr overwrites the switches with Seerr's rights, re-read first")
+    func syncFromSeerrOverwrites() async {
+        let cara = jellyfinUser("CARA", "Cara")
+        let eve = jellyfinUser("EVE", "Eve")
+        let noRight = #"{"id":12,"permissions":0,"jellyfinUserId":"ANN","displayName":"Ann"}"#
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser, cara, eve, tom], enabled: ["ANN", "CARA", "EVE"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(noRight), "BOB": userReply(bobJSON),
+                      "CARA": notFoundReply, "EVE": .failure(URLError(.timedOut))])
+
+        let outcome = await world.model.syncFromSeerr(appState: world.app, session: world.session)
+
+        #expect(outcome == SeerrSyncOutcome(enabled: ["Admin", "Bob"], disabled: ["Ann", "Cara"], unchanged: ["Eve"]))
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: true, url: seerrURL))
+        #expect(world.stored("BOB") == SeerrUserConfig(isEnabled: true, url: seerrURL))
+        #expect(world.stored("ANN") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+        #expect(world.stored("CARA") == SeerrUserConfig(isEnabled: false, url: seerrURL))
+        #expect(world.writes(for: "EVE").isEmpty)
+        #expect(world.writes(for: "TOM").isEmpty)
+        #expect(world.model.lines.filter(\.isEnabled).map(\.id) == ["ADMIN", "BOB", "EVE"])
+    }
+
+    @Test("syncing when the users cannot be read changes nothing and says so")
+    func syncFromSeerrUnreadable() async {
+        let world = await activationWorld(users: [adminUser, ann], enabled: ["ANN"], lookups: ["ADMIN": userReply(adminJSON)])
+        world.api.getUsersError = URLError(.timedOut)
+
+        let outcome = await world.model.syncFromSeerr(appState: world.app, session: world.session)
+
+        #expect(outcome == SeerrSyncOutcome(unreachable: true))
+        #expect(world.api.updateDisplayPreferencesCalls.isEmpty)
+    }
+
+    @Test("the sync's summary names who moved and who was left alone")
+    func syncSummary() {
+        let loc = LocalizationManager()
+        let text = SeerrSyncOutcome(enabled: ["Bob"], disabled: ["Ann", "Cara"], unchanged: ["Eve"]).summary(loc: loc)
+        #expect(text.contains(loc.counted("seerr.sync.enabled", 1)))
+        #expect(text.contains(loc.counted("seerr.sync.disabled", 2)))
+        #expect(text.contains("Eve"))
+        #expect(SeerrSyncOutcome().summary(loc: loc) == loc.localized("seerr.sync.nothing"))
+        #expect(SeerrSyncOutcome(unreachable: true).summary(loc: loc) == loc.localized("seerr.sync.unreachable"))
+    }
+
+    @Test("may request: the general right, or films or series alone; an admin always")
+    func canRequest() {
+        #expect(SeerrPermissions(rawValue: 32).canRequest)
+        #expect(SeerrPermissions(rawValue: 262144).canRequest)
+        #expect(SeerrPermissions(rawValue: 524288).canRequest)
+        #expect(SeerrPermissions.admin.canRequest)
+        #expect(!SeerrPermissions(rawValue: 0).canRequest)
+        #expect(!SeerrPermissions.manageIssues.canRequest)
+    }
+
+    @Test("a server-capped admin is not switched on by the first address")
+    func firstAddressLeavesACappedAdminOff() async {
+        let world = await activationWorld(users: [adminUser], lookups: ["ADMIN": userReply(adminJSON)], adminHasAddress: false)
+        world.app.currentUser?.policy = policy(maxRating: 10)
+
+        _ = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+
+        #expect(world.stored("ADMIN") == SeerrUserConfig(isEnabled: false, url: otherSeerrURL))
+    }
+
+    @Test("a load whose users did not answer says so, and the next one fills the lines")
+    func failedLoadIsNotALoad() async {
+        let world = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply])
+        world.api.getUsersError = URLError(.timedOut)
+        #expect(await world.model.load(appState: world.app, session: world.session) == false)
+        #expect(world.model.lines.isEmpty)
+
+        world.api.getUsersError = nil
+        #expect(await world.model.load(appState: world.app, session: world.session))
+        #expect(world.model.lines.count == 2)
+    }
+
+    @Test("a failed Seerr lookup is « unknown »; with no credential nothing is looked up")
+    func lookupFailureIsUnknown() async {
+        let failing = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": .failure(URLError(.timedOut))])
+        await failing.model.load(appState: failing.app, session: failing.session)
+        #expect(failing.model.lines.map(\.kind) == [.linked(SeerrUser(
+            id: SeerrUserID(rawValue: 1), permissions: .admin, jellyfinUserId: "ADMIN", displayName: "Admin")), .unknown])
+
+        let keyless = await activationWorld(users: [adminUser, ann], credentialed: false)
+        let before = keyless.transport.requests.count
+        await keyless.model.load(appState: keyless.app, session: keyless.session)
+        #expect(keyless.transport.requests.count == before)
+        #expect(keyless.model.lines.map(\.kind) == [.unknown, .unknown])
+    }
+
+    @Test("lines keep the server's user order and reflect each stored switch")
+    func linesInUserOrder() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser], enabled: ["BOB"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply, "BOB": userReply(bobJSON)],
+            publicSettings: .response(status: 200, body: #"{"mediaServerType":2,"newPlexLogin":true}"#))
+        await world.model.load(appState: world.app, session: world.session)
+
+        #expect(world.model.lines.map(\.id) == ["ADMIN", "ANN", "BOB"])
+        #expect(world.model.lines.map(\.name) == ["Admin", "Ann", "Bob"])
+        #expect(world.model.lines.map(\.isEnabled) == [false, false, true])
+        #expect(world.model.lines[1].kind == .willBeCreated)
+    }
+
+    @Test("a profile switch in the middle of enable-all stops the writes")
+    func switchMidEnableAllStopsWriting() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply, "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        let started = TestLatch()
+        let release = TestLatch()
+        world.api.onUpdateDisplayPreferences = { _ in started.open(); await release.wait() }
+
+        let task = Task { await world.model.enableAll(appState: world.app, loc: world.loc) }
+        await started.wait()
+        world.app.currentUserId = "OTHER"
+        release.open()
+        _ = await task.value
+
+        #expect(world.api.updateDisplayPreferencesCalls.count == 1)
+    }
+
+    @Test("disable-all names who could not be switched off")
+    func disableAllReportsFailures() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser], enabled: ["ANN", "BOB"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply(), "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        world.api.failingUpdateUserIds = ["ANN"]
+
+        let message = await world.model.disableAll(appState: world.app, loc: world.loc)
+
+        #expect(message == world.loc.localized(world.loc.pluralKey("seerr.activation.summary.disableFailed", 1), "Ann"))
+        #expect(world.stored("BOB").isEnabled == false)
+        #expect(world.stored("ANN").isEnabled == true)
+    }
+
+    @Test("a failed admin write leaves the remembered address alone")
+    func setAddressKeepsOldAddressWhenAdminWriteFails() async {
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()])
+        await world.model.load(appState: world.app, session: world.session)
+        world.api.failingUpdateUserIds = ["ADMIN"]
+
+        let message = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+        #expect(message == world.loc.localized(world.loc.pluralKey("seerr.activation.summary.addressFailed", 1), "Admin"))
+        #expect(world.stored("ANN").url == otherSeerrURL)
+
+        world.api.failingUpdateUserIds = []
+        let enabled = await world.model.setEnabled(true, userId: "ADMIN", appState: world.app, loc: world.loc)
+        #expect(enabled == nil)
+        #expect(world.stored("ADMIN").url == seerrURL)      // still the old address
+    }
+
+    @Test("a failed admin address write names the admin even before the lines are loaded")
+    func addressFailureNamesTheAdminWithoutLines() async {
+        let world = await activationWorld(users: [adminUser], lookups: ["ADMIN": userReply(adminJSON)])
+        world.app.currentUser?.name = "Admin"
+        world.api.failingUpdateUserIds = ["ADMIN"]
+
+        let message = await world.model.setAddress(otherSeerrURL, appState: world.app, loc: world.loc)
+
+        #expect(world.model.lines.isEmpty)
+        #expect(message == world.loc.localized(world.loc.pluralKey("seerr.activation.summary.addressFailed", 1), "Admin"))
+    }
+
+    @Test("an id that is not in the list is never enabled")
+    func unknownUserIsNeverEnabled() async {
+        let world = await activationWorld(users: [adminUser], lookups: ["ADMIN": userReply(adminJSON)])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let message = await world.model.setEnabled(true, userId: "GHOST", appState: world.app, loc: world.loc)
+
+        #expect(message == world.loc.localized("seerr.activation.failed.enable", ""))
+        #expect(world.writes(for: "GHOST").isEmpty)
+    }
+
+    @Test("loading for another account clears the previous account's lines")
+    func loadForAnotherAccountClearsLines() async {
+        let world = await activationWorld(users: [adminUser, ann], lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        #expect(world.model.lines.count == 2)
+
+        world.app.currentUserId = "OTHER"
+        await world.session.reload(appState: world.app)
+        world.api.getUsersError = URLError(.notConnectedToInternet)
+        await world.model.load(appState: world.app, session: world.session)
+
+        #expect(world.model.lines.isEmpty)
+    }
+
+    @Test("a failed write is named in the enable-all summary, the others still land")
+    func enableAllReportsFailedNames() async {
+        let world = await activationWorld(
+            users: [adminUser, ann, bobUser, tom],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": notFoundReply, "BOB": notFoundReply])
+        await world.model.load(appState: world.app, session: world.session)
+        world.api.failingUpdateUserIds = ["ANN"]
+
+        let summary = await world.model.enableAll(appState: world.app, loc: world.loc)
+
+        #expect(summary == SeerrActivationModel.activationSummary(
+            enabled: 2, refusedNames: ["Tom"], failedNames: ["Ann"], loc: world.loc))
+        #expect(world.stored("ADMIN").isEnabled && world.stored("BOB").isEnabled)
+        #expect(!world.stored("ANN").isEnabled)
+    }
+
+    @Test("« Validation automatique » reads Seerr's current set, moves only its bit, and keeps what Seerr stored")
+    func autoApproveIsAReadModifyWrite() async throws {
+        // Ann, on the server now: request + 4K films auto-approved (65536).
+        let current = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":65568}"#)
+        let stored = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":65824}"#)
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()],
+            extraRoutes: ["/user/7/settings/permissions": [current, stored]])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let saved = await world.model.setAutoApprove(
+            .movie, true, userId: "ANN", session: world.session, appState: world.app)
+
+        #expect(saved)
+        let calls = world.transport.requests.filter { $0.url?.path.hasSuffix("/user/7/settings/permissions") == true }
+        #expect(calls.map(\.httpMethod) == ["GET", "POST"])
+        let body = try #require(calls.last?.httpBody)
+        let sent = try JSONSerialization.jsonObject(with: body) as? [String: Int]
+        #expect(sent == ["permissions": 65568 | 256])
+        let line = try #require(world.model.lines.first { $0.id == "ANN" })
+        #expect(line.kind.seerrUser?.permissions.rawValue == 65824)
+        #expect(world.model.savingAutoApprove.isEmpty)
+    }
+
+    @Test("a refused permission write says so and leaves the line as it was")
+    func autoApproveRefused() async throws {
+        let current = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":32}"#)
+        let refused = StubSeerrTransport.Reply.response(
+            status: 403, body: #"{"message":"You do not have permission to modify this user"}"#)
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()],
+            extraRoutes: ["/user/7/settings/permissions": [current, refused]])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let saved = await world.model.setAutoApprove(
+            .tv, true, userId: "ANN", session: world.session, appState: world.app)
+
+        #expect(saved == false)
+        #expect(world.model.lines.first { $0.id == "ANN" }?.kind.seerrUser?.permissions == .request)
+    }
+
+    @Test("the right to report moves CREATE_ISSUES alone, through the same read-modify-write")
+    func issueReportingIsAReadModifyWrite() async throws {
+        let current = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":65824}"#)
+        let stored = StubSeerrTransport.Reply.response(status: 200, body: #"{"permissions":4260128}"#)
+        let world = await activationWorld(
+            users: [adminUser, ann], enabled: ["ANN"],
+            lookups: ["ADMIN": userReply(adminJSON), "ANN": userReply()],
+            extraRoutes: ["/user/7/settings/permissions": [current, stored]])
+        await world.model.load(appState: world.app, session: world.session)
+
+        let saved = await world.model.setIssueReporting(true, userId: "ANN", session: world.session, appState: world.app)
+
+        #expect(saved)
+        let calls = world.transport.requests.filter { $0.url?.path.hasSuffix("/user/7/settings/permissions") == true }
+        #expect(calls.map(\.httpMethod) == ["GET", "POST"])
+        let sent = try JSONSerialization.jsonObject(with: try #require(calls.last?.httpBody)) as? [String: Int]
+        #expect(sent == ["permissions": 65824 | 4194304])
+        let line = try #require(world.model.lines.first { $0.id == "ANN" })
+        #expect(line.kind.seerrUser?.permissions.canReportIssues == true)
+        #expect(SeerrPermissions(rawValue: 65824 | 4194304).settingIssueReporting(false).rawValue == 65824)
+    }
+
+    @Test("who may change the right to report")
+    func issueReportAccess() {
+        let owner = SeerrUser(id: SeerrUserID(rawValue: 1), permissions: .admin)
+        let usersManager = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: [.request, .manageUsers])
+        let issuesManager = SeerrUser(id: SeerrUserID(rawValue: 3), permissions: [.request, .manageIssues])
+        let requestsManager = SeerrUser(id: SeerrUserID(rawValue: 5), permissions: [.request, .manageRequests])
+        let plain = SeerrUser(id: SeerrUserID(rawValue: 4), permissions: .request)
+        typealias Access = SeerrIssueReportAccess
+        #expect(Access.of(plain, me: owner) == .editable)
+        #expect(Access.of(requestsManager, me: owner) == .editable)
+        #expect(Access.of(plain, me: plain) == .notAllowed)
+        #expect(Access.of(plain, me: nil) == .notAllowed)
+        #expect(Access.of(owner, me: owner) == .always)
+        #expect(Access.of(issuesManager, me: owner) == .always)
+        #expect(Access.of(usersManager, me: usersManager) == .ownAccount)
+    }
+
+    @Test("who may change « Validation automatique »")
+    func autoApprovalAccess() {
+        let owner = SeerrUser(id: SeerrUserID(rawValue: 1), permissions: .admin)
+        let usersManager = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: [.request, .manageUsers])
+        let requester = SeerrUser(id: SeerrUserID(rawValue: 2), permissions: .request)
+        let manager = SeerrUser(id: SeerrUserID(rawValue: 3), permissions: [.request, .manageRequests])
+        let plain = SeerrUser(id: SeerrUserID(rawValue: 4), permissions: .request)
+        typealias Access = SeerrAutoApprovalAccess
+        #expect(Access.of(plain, me: owner) == .editable)
+        #expect(Access.of(plain, me: usersManager) == .editable)
+        #expect(Access.of(plain, me: requester) == .notAllowed)
+        #expect(Access.of(plain, me: nil) == .notAllowed)
+        #expect(Access.of(owner, me: owner) == .alwaysAdmin)
+        #expect(Access.of(manager, me: owner) == .alwaysManager)
+        #expect(Access.of(usersManager, me: usersManager) == .ownAccount)
+    }
+
+    @Test("the admin summary's card, and what it lets under it")
+    func summaryCard() {
+        let url = URL(string: "http://seerr.local:5055")
+        typealias Card = SeerrSummaryCard
+        // No address: the welcome card alone.
+        let setup = Card.of(url: nil, connection: .connected(alice), usesDeviceKey: false)
+        #expect(setup == .setup)
+        #expect(!setup.showsRequestRows && !setup.showsAdministration)
+        // Signed out / not answering: the rows greyed, with the reason.
+        let signIn = Card.of(url: url, connection: .notConnected, usesDeviceKey: false)
+        #expect(signIn == .signIn)
+        #expect(signIn.showsRequestRows && signIn.lockedReasonKey == "seerr.hub.locked.signIn")
+        let down = Card.of(url: url, connection: .unavailable, usesDeviceKey: true)
+        #expect(down == .unavailable && down.lockedReasonKey == "seerr.hub.locked.unavailable")
+        // Key mode failures: the fix in the card, no request rows, admin open.
+        let notLinked = Card.of(url: url, connection: .notLinked, usesDeviceKey: true)
+        #expect(notLinked == .failure(.notInSeerr))
+        #expect(!notLinked.showsRequestRows && notLinked.showsAdministration)
+        #expect(Card.of(url: url, connection: .keyRefused, usesDeviceKey: true) == .failure(.keyRefused))
+        // Connected: rows open.
+        let connected = Card.of(url: url, connection: .connected(alice), usesDeviceKey: true)
+        #expect(connected == .connected(alice, usesDeviceKey: true))
+        #expect(connected.showsRequestRows && connected.lockedReasonKey == nil && connected.showsAdministration)
+    }
+
+    @Test("the line kind truth table")
+    func lineKinds() {
+        let request = SeerrUser(id: SeerrUserID(rawValue: 2), permissions: .request)
+        let approved = SeerrUser(id: SeerrUserID(rawValue: 3), permissions: [.request, .autoApprove])
+        let adminSeerr = SeerrUser(id: SeerrUserID(rawValue: 4), permissions: .admin)
+        let movieOnly = SeerrUser(id: SeerrUserID(rawValue: 5), permissions: [.request, .autoApproveMovie])
+        func kind(_ policy: UserPolicy?, _ user: SeerrUser?, failed: Bool = false, plex: Bool = false) -> SeerrUserLineKind {
+            SeerrUserLineKind.kind(policy: policy, seerrUser: user, lookupFailed: failed, newPlexLogin: plex)
+        }
+        #expect(kind(policy(maxRating: 10), request) == .ageCapped)
+        #expect(kind(policy(maxRating: 10), nil, failed: true) == .ageCapped)
+        #expect(kind(policy(), request, failed: true) == .unknown)
+        #expect(kind(policy(), request) == .linked(request))
+        #expect(kind(policy(), approved) == .linked(approved))
+        #expect(kind(policy(), adminSeerr) == .linked(adminSeerr))
+        #expect(kind(policy(), movieOnly) == .linked(movieOnly))
+        let loc = LocalizationManager()
+        #expect(SeerrActivationModel.lineText(.linked(request), loc: loc) == loc.localized("seerr.settings.line.linked"))
+        #expect(SeerrActivationModel.lineText(.linked(approved), loc: loc)
+            == loc.localized("seerr.settings.line.linkedAutoApprove"))
+        #expect(SeerrActivationModel.lineText(.linked(adminSeerr), loc: loc)
+            == loc.localized("seerr.settings.line.linkedAutoApprove"))
+        #expect(SeerrActivationModel.lineText(.linked(movieOnly), loc: loc)
+            == loc.localized("seerr.settings.line.linkedAutoApproveMovies"))
+        #expect(kind(policy(), nil, plex: true) == .willBeCreated)
+        #expect(kind(policy(), nil, plex: false) == .mustBeAdded)
+        #expect(kind(nil, nil) == .mustBeAdded)
+    }
+
+    @Test("the summary names who was refused, with the plural rule")
+    func summaryWording() {
+        let loc = LocalizationManager()
+        #expect(SeerrActivationModel.activationSummary(enabled: 3, refusedNames: [], loc: loc)
+                == loc.counted("seerr.activation.summary.enabled", 3))
+        let one = SeerrActivationModel.activationSummary(enabled: 1, refusedNames: ["Tom"], loc: loc)
+        #expect(one.hasPrefix(loc.counted("seerr.activation.summary.enabled", 1)))
+        #expect(one.contains(loc.localized(loc.pluralKey("seerr.activation.summary.refused", 1), "Tom")))
+        let two = SeerrActivationModel.activationSummary(enabled: 0, refusedNames: ["Tom", "Zoé"], loc: loc)
+        #expect(two.contains(loc.localized(loc.pluralKey("seerr.activation.summary.refused", 2), "Tom, Zoé")))
+    }
+}
+
+// MARK: - Mes demandes (Settings → Demandes)
+
+private func requestJSON(
+    _ id: Int, status: Int = 1, type: String = "movie", seasons: [Int] = [],
+    tmdbId: Int = 11, mediaStatus: Int = 2, jellyfinId: String? = nil, by requester: String = aliceJSON
+) -> String {
+    let seasonList = seasons.map { #"{"seasonNumber":\#($0)}"# }.joined(separator: ",")
+    let jellyfin = jellyfinId.map { #","jellyfinMediaId":"\#($0)""# } ?? ""
+    return #"{"id":\#(id),"status":\#(status),"type":"\#(type)","seasons":[\#(seasonList)],"#
+        + #""createdAt":"2026-11-01T10:00:00.000Z","updatedAt":"2026-11-02T10:00:00.000Z","#
+        + #""requestedBy":\#(requester),"media":{"tmdbId":\#(tmdbId),"status":\#(mediaStatus)\#(jellyfin)}}"#
+}
+
+private func requestPage(_ items: [String], total: Int) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"pageInfo":{"pages":2,"pageSize":20,"results":\#(total),"page":1},"#
+        + #""results":[\#(items.joined(separator: ","))]}"#)
+}
+
+/// `/movie/{id}` as Seerr 3.5.1 serves it: no `mediaType` (measured on the bench).
+private func movieReply(_ id: Int, _ title: String) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"id":\#(id),"title":"\#(title)","posterPath":"/m\#(id).jpg"}"#)
+}
+
+private func tvReply(_ id: Int, _ name: String) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"id":\#(id),"name":"\#(name)","posterPath":"/t\#(id).jpg","seasons":[]}"#)
+}
+
+private func myRequest(
+    status: SeerrRequestStatus = .pending, kind: SeerrMediaKind = .movie, seasons: [Int] = [],
+    media: SeerrMediaStatus = .pending, jellyfinId: String? = nil
+) -> SeerrRequest {
+    SeerrRequest(
+        id: 1, status: status, kind: kind, seasons: seasons, createdAt: .distantPast, updatedAt: .distantPast,
+        requestedBy: alice, media: SeerrRequestMedia(tmdbId: 1, status: media, jellyfinMediaId: jellyfinId))
+}
+
+private func isRequestList(_ request: URLRequest) -> Bool {
+    request.url?.path.hasSuffix("/request") == true
+}
+
+private func queryValue(_ name: String, in request: URLRequest?) -> String? {
+    request?.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.queryItems }?
+        .first { $0.name == name }?.value
+}
+
+/// Signed in to Seerr (account mode) as Alice — Seerr id 7, with
+/// `permissions` — plus whatever `routes` the test answers.
+@MainActor
+private func myRequestsWorld(
+    permissions: Int = 32, routes: [String: [StubSeerrTransport.Reply]]
+) async -> (SeerrSession, AppState, RoutedSeerrTransport) {
+    var all = routes
+    all["/settings/public"] = [settingsReply]
+    all["/auth/me"] = [userReply(#"{"id":7,"permissions":\#(permissions),"jellyfinUserId":"A","displayName":"Alice"}"#)]
+    let transport = RoutedSeerrTransport(all)
+    let storage = MockKeychain()
+    storage.saveSeerrSessions(["S1|A": bound("abc")])
+    let (app, _) = signedIn()
+    let session = makeSession(transport, storage: storage, following: app)
+    await session.reload(appState: app)
+    return (session, app, transport)
+}
+
+@MainActor
+@Suite("Seerr — Mes demandes")
+struct SeerrMyRequestsTests {
+    private let pending = "seerr.myRequests.status.pending"
+    private let approved = "seerr.myRequests.status.approved"
+    private let declined = "seerr.myRequests.status.declined"
+    private let available = "seerr.myRequests.status.available"
+
+    @Test("only my requests: requestedBy is my Seerr id, even for a manager; a first page of 20")
+    func onlyMyRequests() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, tmdbId: 11)], total: 1)],
+            "/movie/11": [movieReply(11, "Dune")],
+        ])
+        #expect(session.connection == .connected(SeerrUser(
+            id: SeerrUserID(rawValue: 7), permissions: [.manageRequests, .request],
+            jellyfinUserId: "A", displayName: "Alice")))
+
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("requestedBy", in: sent) == "7")
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(queryValue("filter", in: sent) == "all")
+        #expect(model.rows.map(\.id) == [1])
+        #expect(model.rows.first?.title == "Dune")
+        #expect(!model.canLoadMore)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("the status line: arrived first, then refused, waiting, else approved")
+    func statusLines() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.statusKey(myRequest(status: .pending)) == pending)
+        // Someone else's request moved the media: mine still waits.
+        #expect(Model.statusKey(myRequest(status: .pending, media: .processing)) == pending)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .processing)) == approved)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .pending)) == approved)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .partiallyAvailable)) == approved)
+        // Sending it to the downloader failed: still approved, the admin retries.
+        #expect(Model.statusKey(myRequest(status: .failed, media: .processing)) == approved)
+        #expect(Model.statusKey(myRequest(status: .declined)) == declined)
+        #expect(Model.statusKey(myRequest(status: .approved, media: .available)) == available)
+        #expect(Model.statusKey(myRequest(status: .pending, media: .available)) == available)
+        // A series whose requested seasons all arrived, others still missing.
+        #expect(Model.statusKey(myRequest(status: .completed, kind: .tv, media: .partiallyAvailable)) == available)
+        let loc = LocalizationManager()
+        for key in [pending, approved, declined, available] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
+    }
+
+    @Test("only a request still waiting for an admin can be withdrawn")
+    func onlyPendingCanBeCancelled() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.canCancel(myRequest(status: .pending)))
+        #expect(!Model.canCancel(myRequest(status: .approved, media: .processing)))
+        #expect(!Model.canCancel(myRequest(status: .declined)))
+        // Mine waits, but the title already arrived through someone else's.
+        #expect(!Model.canCancel(myRequest(status: .pending, media: .available)))
+    }
+
+    @Test("a title looked up once is not asked again when the list is read again")
+    func titlesAreRemembered() async {
+        let page = requestPage([requestJSON(1, tmdbId: 11)], total: 1)
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [page, page],
+            "/movie/11": [movieReply(11, "Dune")],
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.rows.map(\.title) == ["Dune"])
+
+        await model.loadFirstPage(session: session)   // « Actualiser »
+
+        #expect(model.rows.map(\.title) == ["Dune"])
+        #expect(model.rows.allSatisfy { !$0.isTitlePending })
+        #expect(transport.requests.filter(isCall("/movie/11")).count == 1)
+        #expect(!transport.exhausted)
+
+        // Titles are in the app's language: another language asks again.
+        session.setLanguage("de")
+        #expect(session.rememberedTitle(kind: .movie, tmdbId: 11) == nil)
+    }
+
+    @Test("withdrawing a pending request sends DELETE, removes the row, says so")
+    func cancelRemovesRow() async {
+        let loc = LocalizationManager()
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [requestPage([requestJSON(1, tmdbId: 11), requestJSON(2, status: 2, tmdbId: 11)], total: 2)],
+            "/movie/11": [movieReply(11, "Dune"), movieReply(11, "Dune")],
+            "/request/1": [.response(status: 204, body: "")],
+        ])
+        let toasts = ToastCenter()
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        // An approved request is not withdrawable: nothing is sent.
+        await model.cancel(2, session: session, toasts: toasts, loc: loc)
+        #expect(!transport.requests.contains(where: isCall("/request/2")))
+
+        await model.cancel(1, session: session, toasts: toasts, loc: loc)
+        #expect(transport.requests.first(where: isCall("/request/1"))?.httpMethod == "DELETE")
+        #expect(model.rows.map(\.id) == [2])
+        #expect(model.cancelling == nil)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.myRequests.cancelled"))
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a request an admin settled meanwhile (401) says so and is read again; another failure keeps the row")
+    func cancelRefused() async {
+        let loc = LocalizationManager()
+        let (session, _, _) = await myRequestsWorld(routes: [
+            "/request": [
+                requestPage([requestJSON(1, tmdbId: 11), requestJSON(3, tmdbId: 11)], total: 2),
+                requestPage([requestJSON(1, status: 2, tmdbId: 11), requestJSON(3, tmdbId: 11)], total: 2),
+            ],
+            "/movie/11": Array(repeating: movieReply(11, "Dune"), count: 4),
+            "/request/1": [.response(status: 401, body: #"{"message":"You do not have permission to delete this request."}"#)],
+            "/request/3": [.response(status: 500, body: #"{"message":"boom"}"#)],
+        ])
+        let toasts = ToastCenter()
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        await model.cancel(1, session: session, toasts: toasts, loc: loc)
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.alreadyHandled"))
+        // Read again: request 1 now shows as approved, no longer withdrawable.
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(model.rows.first.map { SeerrMyRequestsModel.canCancel($0.request) } == false)
+
+        await model.cancel(3, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(model.cancelling == nil)
+        #expect(toasts.current?.level == .error)
+        #expect(toasts.current?.title == loc.localized("seerr.myRequests.cancelFailed"))
+    }
+
+    @Test("a series names its seasons, ascending, once each; a film names none")
+    func seasonsSuffix() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.seasonList(myRequest(kind: .tv, seasons: [5, 4, 4])) == "4, 5")
+        #expect(Model.seasonList(myRequest(kind: .tv, seasons: [])) == nil)
+        #expect(Model.seasonList(myRequest(kind: .movie, seasons: [1])) == nil)
+        let loc = LocalizationManager()
+        #expect(Model.seasonsSuffix(myRequest(kind: .tv, seasons: [5, 4]), loc: loc)
+                == loc.localized(loc.pluralKey("seerr.myRequests.seasons", 2), "4, 5"))
+        #expect(Model.seasonsSuffix(myRequest(kind: .tv, seasons: [4]), loc: loc)
+                == loc.localized(loc.pluralKey("seerr.myRequests.seasons", 1), "4"))
+        #expect(Model.seasonsSuffix(myRequest(kind: .movie), loc: loc) == nil)
+        #expect(loc.localized("seerr.myRequests.seasons.one", "4") != loc.localized("seerr.myRequests.seasons", "4"))
+    }
+
+    @Test("paging: 20, then the rest, then nothing once the total is reached")
+    func pagingStopsAtTotal() async {
+        let first = (1...20).map { requestJSON($0, tmdbId: 11) }
+        let second = (21...25).map { requestJSON($0, tmdbId: 11) }
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [requestPage(first, total: 25), requestPage(second, total: 25)],
+            "/movie/11": Array(repeating: movieReply(11, "Dune"), count: 25),
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.rows.count == 20)
+        #expect(model.canLoadMore)
+
+        await model.loadNextPage(session: session)
+        #expect(model.rows.map(\.id) == Array(1...25))
+        #expect(model.rows.allSatisfy { $0.title == "Dune" })
+        #expect(!model.canLoadMore)
+        let pages = transport.requests.filter(isRequestList)
+        #expect(pages.count == 2)
+        #expect(queryValue("skip", in: pages.last) == "20")
+        #expect(queryValue("requestedBy", in: pages.last) == "7")
+
+        // Past the total, « Afficher plus » asks for nothing.
+        await model.loadNextPage(session: session)
+        #expect(transport.requests.filter(isRequestList).count == 2)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a request already listed is not listed twice when the order moved between pages")
+    func pagingDeduplicates() async {
+        let first = (1...20).map { requestJSON($0, tmdbId: 11) }
+        // Request 20 was modified meanwhile: the second page repeats it.
+        let second = (20...24).map { requestJSON($0, tmdbId: 11) }
+        let (session, _, _) = await myRequestsWorld(routes: [
+            "/request": [requestPage(first, total: 25), requestPage(second, total: 25)],
+            "/movie/11": Array(repeating: movieReply(11, "Dune"), count: 24),
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        await model.loadNextPage(session: session)
+        #expect(model.rows.map(\.id) == Array(1...24))
+        // 25 rows were served: the total is reached, nothing more to ask.
+        #expect(!model.canLoadMore)
+    }
+
+    @Test("titles load row by row: a failed one reads unavailable, and the list never waits for them")
+    func titlesPerRow() async {
+        let held = TestLatch()
+        let asked = TestLatch()
+        let (session, _, transport) = await myRequestsWorld(routes: [
+            "/request": [requestPage([
+                requestJSON(1, tmdbId: 11), requestJSON(2, type: "tv", seasons: [4, 5], tmdbId: 22),
+                requestJSON(3, tmdbId: 33),
+            ], total: 3)],
+            "/movie/11": [movieReply(11, "Dune")],
+            "/tv/22": [tvReply(22, "The Expanse")],
+            "/movie/33": [notFoundReply],
+        ])
+        transport.onRequest { path, _ in
+            guard path == "/movie/11" else { return }
+            asked.open()
+            await held.wait()
+        }
+        let model = SeerrMyRequestsModel()
+        let load = Task { await model.loadFirstPage(session: session) }
+        await asked.wait()
+        // The rows are on screen while a title is still on its way.
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.rows.first?.isTitlePending == true)
+        held.open()
+        await load.value
+
+        #expect(model.rows[0].title == "Dune")
+        #expect(model.rows[0].posterPath == "/m11.jpg")
+        #expect(model.rows[1].title == "The Expanse")
+        #expect(model.rows[1].posterPath == "/t22.jpg")
+        #expect(model.rows[2].title == nil)
+        #expect(model.rows[2].isTitlePending == false)
+        #expect(model.phase == .loaded)
+    }
+
+    @Test("no request yet: loaded and empty")
+    func emptyList() async {
+        let (session, _, _) = await myRequestsWorld(routes: ["/request": [requestPage([], total: 0)]])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.phase == .loaded)
+        #expect(model.rows.isEmpty)
+        #expect(!model.canLoadMore)
+    }
+
+    @Test("a list Seerr does not serve ends in a failure, never a stranded spinner")
+    func failedList() async {
+        let (session, _, _) = await myRequestsWorld(routes: [
+            "/request": [.response(status: 500, body: #"{"message":"boom"}"#)],
+        ])
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+        #expect(model.phase == .failed)
+        #expect(model.rows.isEmpty)
+    }
+
+    @Test("« Regarder » opens the Jellyfin item, and only once the title has arrived")
+    func watchUsesJellyfinId() {
+        typealias Model = SeerrMyRequestsModel
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .available, jellyfinId: jellyfinDune)) == jellyfinDune)
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .available)) == nil)
+        #expect(Model.watchTarget(myRequest(status: .approved, media: .processing, jellyfinId: jellyfinDune)) == nil)
+        #expect(Model.watchTarget(myRequest(status: .completed, media: .partiallyAvailable, jellyfinId: jellyfinDune)) == nil)
+        // Seerr's word is checked like any other way into the deep-link route.
+        #expect(Model.watchTarget(myRequest(media: .available, jellyfinId: "not-an-id")) == nil)
+        #expect(Model.watchTarget(myRequest(media: .available, jellyfinId: String(repeating: "0", count: 32))) == nil)
+
+        let (app, _) = signedIn()
+        #expect(Model.watch(myRequest(media: .available, jellyfinId: jellyfinDune), appState: app))
+        #expect(app.pendingDeepLinkItemId == jellyfinDune)
+        app.pendingDeepLinkItemId = nil
+        #expect(!Model.watch(myRequest(media: .processing, jellyfinId: jellyfinDune), appState: app))
+        #expect(app.pendingDeepLinkItemId == nil)
+    }
+}
+
+// MARK: - À valider (Settings → Demandes)
+
+private let leaJSON = #"{"id":9,"permissions":32,"jellyfinUserId":"L","displayName":"Léa"}"#
+
+/// Léa's pending requests 1…`count` (all for TMDb 11), and a title for each.
+private func pendingRoutes(
+    _ count: Int, total: Int, extra: [String: [StubSeerrTransport.Reply]] = [:]
+) -> [String: [StubSeerrTransport.Reply]] {
+    var routes = extra
+    routes["/request", default: []].insert(
+        requestPage((1...count).map { requestJSON($0, by: leaJSON) }, total: total), at: 0)
+    routes["/movie/11"] = Array(repeating: movieReply(11, "Dune"), count: count + 5)
+    return routes
+}
+
+private func settled(_ id: Int, status: Int) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: requestJSON(id, status: status, by: leaJSON))
+}
+
+private func isCall(_ suffix: String) -> (URLRequest) -> Bool {
+    { $0.url?.path.hasSuffix(suffix) == true }
+}
+
+@MainActor
+@Suite("Seerr — À valider")
+struct SeerrPendingTests {
+    private let loc = LocalizationManager()
+
+    @Test("a button in flight says so, on screen and to VoiceOver; the other keeps its name")
+    func buttonTitleFollowsInFlight() {
+        #expect(SeerrPendingModel.buttonTitleKey(.approve, inFlight: nil) == "seerr.pending.approve")
+        #expect(SeerrPendingModel.buttonTitleKey(.approve, inFlight: .approve) == "seerr.pending.approving")
+        #expect(SeerrPendingModel.buttonTitleKey(.approve, inFlight: .decline) == "seerr.pending.approve")
+        #expect(SeerrPendingModel.buttonTitleKey(.decline, inFlight: nil) == "seerr.pending.decline")
+        #expect(SeerrPendingModel.buttonTitleKey(.decline, inFlight: .decline) == "seerr.pending.declining")
+        #expect(SeerrPendingModel.buttonTitleKey(.decline, inFlight: .approve) == "seerr.pending.decline")
+    }
+
+    @Test("the count is the pending listing's own total, everyone's requests — never /request/count")
+    func countFromPendingFilter() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: pendingRoutes(20, total: 23))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("filter", in: sent) == "pending")
+        // The queue is the household's: never narrowed to the manager.
+        #expect(queryValue("requestedBy", in: sent) == nil)
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(model.count == 23)
+        #expect(model.rows.count == 20)
+        #expect(model.rows.allSatisfy { $0.request.requestedBy.displayName == "Léa" && $0.title == "Dune" })
+        #expect(model.canLoadMore)
+        #expect(model.phase == .loaded)
+        #expect(!transport.requests.contains(where: isCall("/request/count")))
+        #expect(transport.requests.filter(isRequestList).count == 1)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("approving or refusing removes the row, drops the count, says so — and the next page starts that much earlier")
+    func approveRemovesRow() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(20, total: 22, extra: [
+            "/request": [requestPage([requestJSON(21, by: leaJSON), requestJSON(22, by: leaJSON)], total: 20)],
+            "/request/2/approve": [settled(2, status: 2)],
+            "/request/3/decline": [settled(3, status: 3)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(!model.rows.contains { $0.id == 2 })
+        #expect(model.count == 21)
+        #expect(model.inFlight.isEmpty)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.approved"))
+        let approval = transport.requests.first(where: isCall("/request/2/approve"))
+        #expect(approval?.httpMethod == "POST")
+
+        await model.decline(3, session: session, toasts: toasts, loc: loc)
+        #expect(!model.rows.contains { $0.id == 3 })
+        #expect(model.count == 20)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.declined"))
+        #expect(transport.requests.first(where: isCall("/request/3/decline"))?.httpMethod == "POST")
+
+        // 20 served, 2 settled: the listing is 2 shorter, so the next page's skip is 18.
+        #expect(model.canLoadMore)
+        await model.loadNextPage(session: session)
+        #expect(queryValue("skip", in: transport.requests.filter(isRequestList).last) == "18")
+        #expect(queryValue("filter", in: transport.requests.filter(isRequestList).last) == "pending")
+        #expect(model.rows.map(\.id) == [1] + Array(4...22))
+        #expect(model.count == 20)
+        #expect(!model.canLoadMore)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a request settled elsewhere first (409) leaves quietly: row removed, an info toast")
+    func alreadyHandledIsQuiet() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [.response(status: 409, body: #"{"message":"Request is not pending."}"#)],
+            "/request/3/decline": [.response(status: 409, body: #"{"message":"Request is not pending."}"#)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(model.count == 2)
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.alreadyHandled"))
+
+        await model.decline(3, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1])
+        #expect(model.count == 1)
+        #expect(toasts.current?.level == .info)
+        #expect(model.inFlight.isEmpty)
+    }
+
+    @Test("any other failure keeps the row for another try, with an error toast")
+    func otherErrorKeepsRow() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [.response(status: 500, body: #"{"message":"boom"}"#), settled(2, status: 2)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.count == 3)
+        #expect(model.inFlight.isEmpty)
+        #expect(toasts.current?.level == .error)
+        #expect(toasts.current?.title == loc.localized("seerr.pending.approveFailed"))
+
+        // The row is still there to be pressed again.
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(toasts.current?.level == .success)
+    }
+
+    @Test("while a request is being settled, a second press on its row sends nothing")
+    func secondPressIgnored() async {
+        let asked = TestLatch()
+        let held = TestLatch()
+        let (session, _, transport) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [settled(2, status: 2)],
+        ]))
+        transport.onRequest { path, _ in
+            guard path == "/request/2/approve" else { return }
+            asked.open()
+            await held.wait()
+        }
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        let first = Task { await model.approve(2, session: session, toasts: toasts, loc: loc) }
+        await asked.wait()
+        #expect(model.inFlight[2] == .approve)
+        #expect(model.inFlight[1] == nil)
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        await model.decline(2, session: session, toasts: toasts, loc: loc)
+        held.open()
+        await first.value
+
+        #expect(transport.requests.filter { $0.url?.path.contains("/request/2/") == true }.count == 1)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(!transport.exhausted)
+    }
+
+    @Test("an account change during the call writes and shows nothing")
+    func accountChangeMidCall() async {
+        let (session, app, transport) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(3, total: 3, extra: [
+            "/request/2/approve": [settled(2, status: 2)],
+        ]))
+        transport.onRequest { path, _ in
+            if path == "/request/2/approve" { await MainActor.run { app.currentUserId = "B" } }
+        }
+        let toasts = ToastCenter()
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        await model.approve(2, session: session, toasts: toasts, loc: loc)
+        #expect(toasts.current == nil)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.count == 3)
+    }
+
+    @Test("without Seerr's permission to manage requests: no section, no call — whatever Jellyfin says")
+    func hiddenWithoutManage() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: 32 | 128, routes: [:])
+        #expect(!SeerrPendingModel.isShown(for: session.connection))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+        #expect(model.phase == .idle)
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(!transport.exhausted)
+
+        func connected(_ permissions: SeerrPermissions) -> SeerrSession.Connection {
+            .connected(SeerrUser(id: SeerrUserID(rawValue: 1), permissions: permissions))
+        }
+        #expect(SeerrPendingModel.isShown(for: connected(.manageRequests)))
+        #expect(SeerrPendingModel.isShown(for: connected([.manageRequests, .request])))
+        // A Seerr admin passes every check, as on the server.
+        #expect(SeerrPendingModel.isShown(for: connected(.admin)))
+        #expect(!SeerrPendingModel.isShown(for: connected([.request, .autoApprove, .requestView])))
+        #expect(!SeerrPendingModel.isShown(for: .notConnected))
+        #expect(!SeerrPendingModel.isShown(for: .unavailable))
+        #expect(!SeerrPendingModel.isShown(for: .notLinked))
+    }
+
+    @Test("a pending list Seerr does not serve ends in a failure, and can be read again")
+    func failedThenRetried() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: [
+            "/request": [.response(status: 500, body: #"{"message":"boom"}"#), requestPage([], total: 0)],
+        ])
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+        #expect(model.phase == .failed)
+        await model.load(session: session)
+        #expect(model.phase == .loaded)
+        #expect(model.rows.isEmpty)
+        #expect(model.count == 0)
+        #expect(!model.canLoadMore)
+    }
+
+    @Test("who and when: « Demandé par Léa · il y a 2 h », in the app's language")
+    func requestedLine() {
+        let created = Date.now.addingTimeInterval(-7_200)
+        func request(by user: SeerrUser) -> SeerrRequest {
+            SeerrRequest(id: 1, status: .pending, kind: .movie, createdAt: created, updatedAt: created,
+                         requestedBy: user, media: SeerrRequestMedia(tmdbId: 1, status: .pending))
+        }
+        let style = SeerrPendingModel.relativeStyle(loc: loc)
+        #expect(style.locale == loc.locale)
+        let when = created.formatted(style)
+        let lea = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: .request, displayName: "Léa")
+        #expect(SeerrPendingModel.requestedLine(request(by: lea), loc: loc)
+                == loc.localized("seerr.pending.requestedBy", "Léa", when))
+        let nobody = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: .request)
+        #expect(SeerrPendingModel.requestedLine(request(by: nobody), loc: loc)
+                == loc.localized("seerr.pending.requestedAt", when))
+        #expect(loc.localized("seerr.pending.requestedBy", "Léa", when).contains("Léa"))
+        #expect(loc.localized("seerr.pending.requestedBy", "Léa", when).contains(when))
+        for key in ["seerr.pending.approved", "seerr.pending.declined", "seerr.pending.alreadyHandled",
+                    "seerr.pending.approveFailed", "seerr.pending.declineFailed", "seerr.pending.empty",
+                    "seerr.pending.approve", "seerr.pending.decline", "seerr.pending.approving",
+                    "seerr.pending.declining", "seerr.settings.section.pending"] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
+        #expect(loc.counted("seerr.settings.section.pendingCount", 3).contains("3"))
+    }
+
+    // MARK: The Réglages bubble (owner 2026-11-08, proposal A)
+
+    @Test("the bubble says nothing at 0 or unknown, the number up to 99, then « 99+ »")
+    func badgeLabel() {
+        #expect(SeerrPendingModel.badgeLabel(nil) == nil)
+        #expect(SeerrPendingModel.badgeLabel(0) == nil)
+        #expect(SeerrPendingModel.badgeLabel(1) == "1")
+        #expect(SeerrPendingModel.badgeLabel(99) == "99")
+        #expect(SeerrPendingModel.badgeLabel(100) == "99+")
+    }
+
+    @Test("a manager's count is read with ONE row asked, the pending listing's total kept")
+    func refreshReadsTheTotal() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 7)],
+        ])
+        await session.refreshPendingCount()
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("filter", in: sent) == "pending")
+        #expect(queryValue("take", in: sent) == "1")
+        #expect(queryValue("requestedBy", in: sent) == nil)
+        #expect(session.pendingBadgeCount == 7)
+        // A new account forgets it.
+        session.reset()
+        #expect(session.pendingBadgeCount == nil)
+    }
+
+    @Test("someone who may not manage requests asks nothing and gets no bubble")
+    func noBubbleForARequester() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: 32, routes: [:])
+        await session.refreshPendingCount()
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(session.pendingBadgeCount == nil)
+    }
+
+    @Test("« À valider » keeps the bubble in step: its listing, then every approval")
+    func listingAndApprovalUpdateTheBubble() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(20, total: 22, extra: [
+            "/request/2/approve": [settled(2, status: 2)],
+        ]))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+        #expect(session.pendingBadgeCount == 22)
+
+        await model.approve(2, session: session, toasts: ToastCenter(), loc: loc)
+        #expect(session.pendingBadgeCount == 21)
+    }
+
+    @Test("a read that started before an approval never writes its older number over it")
+    func olderReadLosesToAFresherNumber() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 5)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            guard path == "/request" else { return }
+            started.open()
+            await release.wait()
+        }
+        let read = Task { await session.refreshPendingCount() }
+        await started.wait()
+        // « À valider » settles one meanwhile: 3 is the fresher number.
+        session.notePendingCount(3, for: try #require(session.snapshot()))
+        release.open()
+        await read.value
+        #expect(session.pendingBadgeCount == 3)
+    }
+
+    @Test("an identity forgotten (Pro gone, cap on) forgets its count: it never comes back unread")
+    func forgottenIdentityForgetsTheCount() async {
+        let (session, app, _) = await myRequestsWorld(permissions: 48, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 4)],
+        ])
+        await session.refreshPendingCount()
+        #expect(session.pendingBadgeCount == 4)
+        #expect(session.showsPendingBadge)
+
+        session.proAllowsProvider = { false }
+        await session.reload(appState: app)
+        session.proAllowsProvider = { true }
+        #expect(session.pendingCount == nil)
+        #expect(!session.showsPendingBadge)
+    }
+
+    @Test("a request withdrawn in Mes demandes leaves « À valider » with the count; a 404 reads as already handled")
+    func withdrawalAndNotFoundLeaveTheQueue() async {
+        let (session, _, _) = await myRequestsWorld(permissions: 16, routes: pendingRoutes(20, total: 22, extra: [
+            "/request/3/approve": [notFoundReply],
+        ]))
+        let model = SeerrPendingModel()
+        await model.load(session: session)
+
+        model.forget(2, session: session)
+        #expect(!model.rows.contains { $0.id == 2 })
+        #expect(session.pendingBadgeCount == 21)
+        // Not listed here: nothing moves.
+        model.forget(999, session: session)
+        #expect(session.pendingBadgeCount == 21)
+
+        // Withdrawn elsewhere before the approval reached Seerr.
+        await model.approve(3, session: session, toasts: ToastCenter(), loc: loc)
+        #expect(!model.rows.contains { $0.id == 3 })
+        #expect(session.pendingBadgeCount == 20)
+    }
+}
+
+// MARK: - Signalements (Settings → Seerr)
+
+/// One open report as `GET /issue` lists it (Seerr 3.5.1, measured on the
+/// bench): `media` with Seerr's own id, the comments WITHOUT their author.
+/// `message` is already JSON-escaped (`\n` written `\\n`).
+private func issueJSON(
+    _ id: Int, type: Int = 4, season: Int = 2, episode: Int = 0, tmdbId: Int = 1399, mediaType: String = "tv",
+    jellyfinId: String? = nil, message: String? = "Épisodes manquants : 4, 5", by reporter: String? = leaJSON
+) -> String {
+    let jellyfin = jellyfinId.map { #","jellyfinMediaId":"\#($0)""# } ?? #","jellyfinMediaId":null"#
+    let comments = message.map { #"[{"id":\#(id * 10),"message":"\#($0)","createdAt":"2026-11-11T19:38:38.000Z"}]"# } ?? "[]"
+    let author = reporter.map { #""createdBy":\#($0),"# } ?? ""
+    return #"{"id":\#(id),"issueType":\#(type),"status":1,"problemSeason":\#(season),"problemEpisode":\#(episode),"#
+        + #""createdAt":"2026-11-11T19:38:38.000Z","updatedAt":"2026-11-11T19:38:38.000Z",\#(author)"#
+        + #""media":{"id":8,"tmdbId":\#(tmdbId),"mediaType":"\#(mediaType)","status":4\#(jellyfin)},"#
+        + #""comments":\#(comments)}"#
+}
+
+private func issuePage(_ items: [String], total: Int) -> StubSeerrTransport.Reply {
+    .response(status: 200, body: #"{"pageInfo":{"pages":1,"pageSize":20,"results":\#(total),"page":1},"#
+        + #""results":[\#(items.joined(separator: ","))]}"#)
+}
+
+/// Léa's open reports 1…`count` (all on TMDb 1399), and a title for each.
+private func issueRoutes(
+    _ count: Int, total: Int, extra: [String: [StubSeerrTransport.Reply]] = [:]
+) -> [String: [StubSeerrTransport.Reply]] {
+    var routes = extra
+    routes["/issue", default: []].insert(issuePage((1...count).map { issueJSON($0) }, total: total), at: 0)
+    routes["/tv/1399"] = Array(repeating: tvReply(1399, "Game of Thrones"), count: count + 5)
+    return routes
+}
+
+private func isIssueList(_ request: URLRequest) -> Bool {
+    request.url?.path.hasSuffix("/issue") == true
+}
+
+/// MANAGE_ISSUES (1048576) alone, and with MANAGE_REQUESTS (16).
+private let manageIssues = 1_048_576
+private let manageBoth = 1_048_576 | 16
+
+private func issue(
+    kind: SeerrIssueKind = .other, season: Int = 2, episode: Int = 0, mediaKind: SeerrMediaKind = .tv,
+    message: String? = "Épisodes manquants : 4, 5", jellyfinId: String? = nil, by user: SeerrUser? = nil
+) -> SeerrIssue {
+    // Two hours ago: two fixtures built a few microseconds apart format alike.
+    SeerrIssue(id: 1, kind: kind, problemSeason: season, problemEpisode: episode,
+               createdAt: .now.addingTimeInterval(-7_200), createdBy: user,
+               media: SeerrIssueMedia(id: 8, tmdbId: 1399, kind: mediaKind, jellyfinMediaId: jellyfinId),
+               message: message)
+}
+
+@MainActor
+@Suite("Seerr — Signalements")
+struct SeerrIssuesTests {
+    private let loc = LocalizationManager()
+
+    @Test("an issue decodes as Seerr 3.5.1 lists it; its text is its OLDEST comment; an odd row is skipped but counted")
+    func decoding() throws {
+        let body = #"{"pageInfo":{"pages":1,"pageSize":20,"results":3,"page":1},"results":["#
+            + #"{"id":3,"issueType":1,"status":1,"problemSeason":0,"problemEpisode":0,"#
+            + #""createdAt":"2026-11-11T19:38:38.000Z","createdBy":\#(leaJSON),"#
+            + #""media":{"id":12,"tmdbId":13597,"mediaType":"movie","jellyfinMediaId":"b2e4dd44b2af3357366b144be4bfa75b"},"#
+            + #""comments":[{"id":9,"message":"later reply"},{"id":4,"message":"Pas d'image"}]},"#
+            + #"{"id":4,"issueType":9,"createdAt":"2026-11-11T19:38:38.000Z","media":{"id":8,"tmdbId":1399,"mediaType":"tv"}},"#
+            + #"{"id":5,"issueType":4,"createdAt":"2026-11-11T19:38:38.000Z"}]}"#
+        let page = try SeerrJSON.decoder().decode(SeerrIssuePage.self, from: Data(body.utf8))
+        #expect(page.total == 3)
+        // The third (no media) is skipped — and still counted for the next skip.
+        #expect(page.served == 3)
+        #expect(page.results.map(\.id) == [3, 4])
+        let first = page.results[0]
+        #expect(first.kind == .video)
+        #expect(first.status == .open)
+        #expect(first.media == SeerrIssueMedia(id: 12, tmdbId: 13597, kind: .movie,
+                                               jellyfinMediaId: "b2e4dd44b2af3357366b144be4bfa75b"))
+        #expect(first.createdBy?.displayName == "Léa")
+        #expect(first.message == "Pas d'image")
+        // An unknown type reads as « other »; no author, no comment, no season: defaults.
+        let second = page.results[1]
+        #expect(second.kind == .other)
+        #expect(second.createdBy == nil)
+        #expect(second.message == nil)
+        #expect(second.problemSeason == 0 && second.problemEpisode == 0)
+    }
+
+    @Test("the list is the household's OPEN reports, newest first (sort=added), 20 at a time — never /issue/count")
+    func loadsTheOpenReports() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(20, total: 23))
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        let sent = try #require(transport.requests.first(where: isIssueList))
+        #expect(queryValue("filter", in: sent) == "open")
+        // Seerr 3.5.1 answers 400 to `sort=created`: only `added` / `modified`.
+        #expect(queryValue("sort", in: sent) == "added")
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(model.phase == .loaded)
+        #expect(model.count == 23)
+        #expect(model.rows.count == 20)
+        #expect(model.canLoadMore)
+        #expect(model.rows.allSatisfy { $0.title == "Game of Thrones" && !$0.isTitlePending })
+        #expect(!transport.requests.contains(where: isCall("/issue/count")))
+        // The listing writes the bubble's half.
+        #expect(session.issueBadgeCount == 23)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("resolving removes the row, drops the count and the bubble, says so — and the next page starts one earlier")
+    func resolveRemovesRow() async {
+        let (session, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(20, total: 21, extra: [
+            "/issue": [issuePage([issueJSON(21)], total: 20)],
+            "/issue/2/resolved": [.response(status: 200, body: issueJSON(2))],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(!model.rows.contains { $0.id == 2 })
+        #expect(model.count == 20)
+        #expect(model.resolving.isEmpty)
+        #expect(session.issueBadgeCount == 20)
+        #expect(toasts.current?.level == .success)
+        #expect(toasts.current?.title == loc.localized("seerr.issues.resolved"))
+        #expect(transport.requests.first(where: isCall("/issue/2/resolved"))?.httpMethod == "POST")
+
+        // 20 served, 1 resolved: the listing is one shorter, so skip is 19.
+        await model.loadNextPage(session: session)
+        #expect(queryValue("skip", in: transport.requests.filter(isIssueList).last) == "19")
+        #expect(model.rows.map(\.id) == [1] + Array(3...21))
+        #expect(!model.canLoadMore)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("a report gone meanwhile — 404, or Seerr 3.5.1's 500 « Issue not found. » — leaves quietly with an info toast")
+    func goneIsQuiet() async {
+        let (session, _, _) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(3, total: 3, extra: [
+            "/issue/2/resolved": [notFoundReply],
+            "/issue/3/resolved": [.response(status: 500, body: #"{"message":"Issue not found."}"#)],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(toasts.current?.level == .info)
+        #expect(toasts.current?.title == loc.localized("seerr.issues.alreadyHandled"))
+
+        await model.resolve(3, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1])
+        #expect(model.count == 1)
+        #expect(session.issueBadgeCount == 1)
+        #expect(toasts.current?.level == .info)
+    }
+
+    @Test("any other failure keeps the row for another try, with an error toast")
+    func otherFailureKeepsRow() async {
+        let (session, _, _) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(3, total: 3, extra: [
+            "/issue/2/resolved": [.response(status: 500, body: #"{"message":"boom"}"#),
+                                  .response(status: 200, body: issueJSON(2))],
+        ]))
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+        #expect(model.count == 3)
+        #expect(model.resolving.isEmpty)
+        #expect(toasts.current?.level == .error)
+        #expect(toasts.current?.title == loc.localized("seerr.issues.resolveFailed"))
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(model.rows.map(\.id) == [1, 3])
+        #expect(toasts.current?.level == .success)
+    }
+
+    @Test("while a report is being resolved, a second press sends nothing")
+    func secondPressIgnored() async {
+        let asked = TestLatch()
+        let held = TestLatch()
+        let (session, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(3, total: 3, extra: [
+            "/issue/2/resolved": [.response(status: 200, body: issueJSON(2))],
+        ]))
+        transport.onRequest { path, _ in
+            guard path == "/issue/2/resolved" else { return }
+            asked.open()
+            await held.wait()
+        }
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        let first = Task { await model.resolve(2, session: session, toasts: toasts, loc: loc) }
+        await asked.wait()
+        #expect(model.resolving == [2])
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        held.open()
+        await first.value
+
+        #expect(transport.requests.filter(isCall("/issue/2/resolved")).count == 1)
+        #expect(model.rows.map(\.id) == [1, 3])
+    }
+
+    @Test("an account change during the call writes and shows nothing")
+    func accountChangeMidCall() async {
+        let (session, app, transport) = await myRequestsWorld(permissions: manageIssues, routes: issueRoutes(3, total: 3, extra: [
+            "/issue/2/resolved": [.response(status: 200, body: issueJSON(2))],
+        ]))
+        transport.onRequest { path, _ in
+            if path == "/issue/2/resolved" { await MainActor.run { app.currentUserId = "B" } }
+        }
+        let toasts = ToastCenter()
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+
+        await model.resolve(2, session: session, toasts: toasts, loc: loc)
+        #expect(toasts.current == nil)
+        #expect(model.rows.map(\.id) == [1, 2, 3])
+    }
+
+    @Test("without Seerr's permission to manage reports: no page, no call — reporting is not managing")
+    func hiddenWithoutManage() async {
+        // CREATE_ISSUES + MANAGE_REQUESTS: may report and validate, not manage reports.
+        let (session, _, transport) = await myRequestsWorld(permissions: 4_194_304 | 16, routes: [
+            "/request": [requestPage([], total: 0)],
+        ])
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+        await session.refreshBadgeCounts()
+        #expect(model.phase == .idle)
+        #expect(!transport.requests.contains(where: isIssueList))
+        #expect(session.issueBadgeCount == nil)
+        #expect(!transport.exhausted)
+
+        func connected(_ permissions: SeerrPermissions) -> SeerrSession.Connection {
+            .connected(SeerrUser(id: SeerrUserID(rawValue: 1), permissions: permissions))
+        }
+        #expect(SeerrIssuesModel.isShown(for: connected(.manageIssues)))
+        #expect(SeerrIssuesModel.isShown(for: connected(.admin)))
+        #expect(!SeerrIssuesModel.isShown(for: connected(.createIssues)))
+        #expect(!SeerrIssuesModel.isShown(for: connected(.manageRequests)))
+        #expect(!SeerrIssuesModel.isShown(for: .notConnected))
+        #expect(!SeerrIssuesModel.isShown(for: .unavailable))
+    }
+
+    @Test("a list Seerr does not serve ends in a failure, and can be read again")
+    func failedThenRetried() async {
+        let (session, _, _) = await myRequestsWorld(permissions: manageIssues, routes: [
+            "/issue": [.response(status: 500, body: #"{"message":"boom"}"#), issuePage([], total: 0)],
+        ])
+        let model = SeerrIssuesModel()
+        await model.load(session: session)
+        #expect(model.phase == .failed)
+        await model.load(session: session)
+        #expect(model.phase == .loaded)
+        #expect(model.rows.isEmpty)
+        #expect(!model.canLoadMore)
+    }
+
+    // MARK: The bubble
+
+    @Test("the bubble is requests waiting PLUS reports open, each read with one row asked")
+    func bubbleSumsBothHalves() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: manageBoth, routes: [
+            "/request": [requestPage([requestJSON(1, by: leaJSON)], total: 3)],
+            "/issue": [issuePage([issueJSON(1)], total: 2)],
+        ])
+        await session.refreshBadgeCounts()
+
+        let sent = try #require(transport.requests.first(where: isIssueList))
+        #expect(queryValue("filter", in: sent) == "open")
+        #expect(queryValue("take", in: sent) == "1")
+        #expect(session.pendingBadgeCount == 3)
+        #expect(session.issueBadgeCount == 2)
+        #expect(session.settingsBadgeCount == 5)
+        #expect(session.badgeEligibility == [true, true])
+        // VoiceOver says what the 5 is made of.
+        #expect(SettingsScreen.badgeValue(pending: 3, issues: 2, loc: loc)
+                == loc.counted("seerr.settings.pendingBubble", 3) + ", " + loc.counted("seerr.settings.issuesBubble", 2))
+        #expect(SettingsScreen.badgeValue(pending: 0, issues: 2, loc: loc) == loc.counted("seerr.settings.issuesBubble", 2))
+        #expect(SettingsScreen.badgeValue(pending: 4, issues: nil, loc: loc) == loc.counted("seerr.settings.pendingBubble", 4))
+        // A new account forgets both.
+        session.reset()
+        #expect(session.settingsBadgeCount == nil)
+    }
+
+    @Test("a manager of reports alone: the bubble is the reports, /request is never asked; a requester gets none")
+    func bubbleForOneHalf() async {
+        let (issuesOnly, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: [
+            "/issue": [issuePage([issueJSON(1)], total: 4)],
+        ])
+        await issuesOnly.refreshBadgeCounts()
+        #expect(issuesOnly.settingsBadgeCount == 4)
+        #expect(issuesOnly.pendingBadgeCount == nil)
+        #expect(issuesOnly.badgeEligibility == [false, true])
+        #expect(!transport.requests.contains(where: isRequestList))
+
+        let (requester, _, quiet) = await myRequestsWorld(permissions: 32, routes: [:])
+        await requester.refreshBadgeCounts()
+        #expect(requester.settingsBadgeCount == nil)
+        #expect(requester.badgeEligibility == [false, false])
+        #expect(!quiet.requests.contains(where: isIssueList))
+        #expect(!quiet.requests.contains(where: isRequestList))
+    }
+
+    @Test("a count read that started before a resolution never writes its older number over it")
+    func olderReadLosesToAFresherNumber() async throws {
+        let (session, _, transport) = await myRequestsWorld(permissions: manageIssues, routes: [
+            "/issue": [issuePage([issueJSON(1)], total: 5)],
+        ])
+        let started = TestLatch()
+        let release = TestLatch()
+        transport.onRequest { path, _ in
+            guard path == "/issue" else { return }
+            started.open()
+            await release.wait()
+        }
+        let read = Task { await session.refreshIssueCount() }
+        await started.wait()
+        session.noteIssueCount(3, for: try #require(session.snapshot()))
+        release.open()
+        await read.value
+        #expect(session.issueBadgeCount == 3)
+    }
+
+    @Test("an identity forgotten (Pro gone) forgets the reports' count too")
+    func forgottenIdentityForgetsTheCount() async {
+        let (session, app, _) = await myRequestsWorld(permissions: manageIssues, routes: [
+            "/issue": [issuePage([issueJSON(1)], total: 4)],
+        ])
+        await session.refreshIssueCount()
+        #expect(session.issueBadgeCount == 4)
+        session.proAllowsProvider = { false }
+        await session.reload(appState: app)
+        session.proAllowsProvider = { true }
+        #expect(session.issueCount == nil)
+        #expect(!session.showsIssueBadge)
+    }
+
+    // MARK: What a row says
+
+    @Test("our report's episodes are read in ANY language: the numbers after the first line's colon, then the word")
+    func episodeListAcrossLanguages() {
+        for message in ["Épisodes manquants : 4, 5", "Missing episodes: 5, 4", "Fehlende Folgen: 4,5,4"] {
+            let text = SeerrIssueText.parse(message, kind: .other, mediaKind: .tv)
+            #expect(text.missingEpisodes == [4, 5], "\(message)")
+            #expect(text.note == nil)
+        }
+        let withWord = SeerrIssueText.parse("Missing episodes: 7\n  Il manque la fin  ", kind: .other, mediaKind: .tv)
+        #expect(withWord.missingEpisodes == [7])
+        #expect(withWord.note == "Il manque la fin")
+        // A report written in Seerr's own page: the whole text is the word.
+        let free = SeerrIssueText.parse("Le son: décalé de 2 s", kind: .other, mediaKind: .tv)
+        #expect(free.missingEpisodes.isEmpty)
+        #expect(free.note == "Le son: décalé de 2 s")
+        // Only a series report of type « other » is ours.
+        #expect(SeerrIssueText.parse("Missing episodes: 4", kind: .video, mediaKind: .tv).missingEpisodes.isEmpty)
+        #expect(SeerrIssueText.parse("Missing episodes: 4", kind: .other, mediaKind: .movie).missingEpisodes.isEmpty)
+        #expect(SeerrIssueText.parse("   ", kind: .other, mediaKind: .tv) == SeerrIssueText(missingEpisodes: [], note: nil))
+        #expect(SeerrIssueText.parse("Missing episodes: 0", kind: .other, mediaKind: .tv).missingEpisodes.isEmpty)
+        // A colon in the user's own text is not our list (recette 2026-11-11:
+        // « 4:3 » read as episode 3, the text gone).
+        for word in ["L image est en 4:3", "Coupure à 12:30", "Remarque : 4, 5"] {
+            let text = SeerrIssueText.parse(word, kind: .other, mediaKind: .tv)
+            #expect(text.missingEpisodes.isEmpty, "\(word)")
+            #expect(text.note == word)
+        }
+        // The prefixes come from the app's own tables, in its three languages.
+        #expect(Set(SeerrIssueText.reportPrefixes) == ["Épisodes manquants :", "Missing episodes:", "Fehlende Folgen:"])
+    }
+
+    @Test("the problem line: « Saison 2 · épisodes 4, 5 manquants », « Saison 2 », or the kind")
+    func problemLine() {
+        let season = loc.localized("seerr.issues.season", 2)
+        #expect(SeerrIssuesModel.problemLine(issue(), loc: loc)
+                == season + " · " + loc.localized(loc.pluralKey("seerr.issues.missingEpisodes", 2), "4, 5"))
+        #expect(SeerrIssuesModel.problemLine(issue(message: "Missing episodes: 6"), loc: loc)
+                == season + " · " + loc.localized(loc.pluralKey("seerr.issues.missingEpisodes", 1), "6"))
+        // Another « other » report on a season: the season alone (its word says the rest).
+        #expect(SeerrIssuesModel.problemLine(issue(message: "Mauvaise saison"), loc: loc) == season)
+        // Any other kind: the kind, after the season and episode it names.
+        #expect(SeerrIssuesModel.problemLine(issue(kind: .audio, episode: 3, message: nil), loc: loc)
+                == season + " · " + loc.localized("seerr.issues.episode", 3) + " · " + loc.localized("seerr.issues.type.audio"))
+        #expect(SeerrIssuesModel.problemLine(issue(kind: .video, season: 0, mediaKind: .movie), loc: loc)
+                == loc.localized("seerr.issues.type.video"))
+        #expect(SeerrIssuesModel.problemLine(issue(kind: .other, season: 0, mediaKind: .movie, message: nil), loc: loc)
+                == loc.localized("seerr.issues.type.other"))
+        // No season named: the line still opens with a capital.
+        let noSeason = SeerrIssuesModel.problemLine(issue(season: 0), loc: loc)
+        #expect(noSeason.first?.isUppercase == true)
+        for key in ["seerr.issues.type.video", "seerr.issues.type.audio", "seerr.issues.type.subtitles",
+                    "seerr.issues.type.other", "seerr.issues.resolve", "seerr.issues.resolving", "seerr.issues.open",
+                    "seerr.issues.resolved", "seerr.issues.alreadyHandled", "seerr.issues.resolveFailed",
+                    "seerr.issues.empty", "seerr.settings.section.issues", "seerr.hub.issues.none"] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
+    }
+
+    @Test("who and when: « Signalé par Léa · il y a 2 h », in the app's language; the word apart")
+    func reportedLineAndNote() {
+        let lea = SeerrUser(id: SeerrUserID(rawValue: 9), permissions: .request, displayName: "Léa")
+        let reported = issue(message: "Épisodes manquants : 4\nMerci !", by: lea)
+        let when = reported.createdAt.formatted(SeerrPendingModel.relativeStyle(loc: loc))
+        #expect(SeerrIssuesModel.reportedLine(reported, loc: loc) == loc.localized("seerr.issues.reportedBy", "Léa", when))
+        #expect(SeerrIssuesModel.reportedLine(issue(), loc: loc) == loc.localized("seerr.issues.reportedAt", when))
+        #expect(SeerrIssuesModel.note(reported) == "Merci !")
+        #expect(SeerrIssuesModel.note(issue()) == nil)
+    }
+
+    @Test("« Voir la fiche » opens Seerr's Jellyfin id whatever the title's availability; nothing without one")
+    func openTarget() {
+        let id = "b2e4dd44b2af3357366b144be4bfa75b"
+        #expect(SeerrIssuesModel.openTarget(issue(jellyfinId: id)) == id)
+        #expect(SeerrIssuesModel.openTarget(issue()) == nil)
+        #expect(SeerrIssuesModel.openTarget(issue(jellyfinId: "../Users")) == nil)
+        let (app, _) = signedIn()
+        #expect(SeerrIssuesModel.open(issue(jellyfinId: id), appState: app))
+        #expect(app.pendingDeepLinkItemId == id)
+        #expect(!SeerrIssuesModel.open(issue(), appState: app))
+    }
+
+    @Test("the resolve button says when it runs, on screen and to VoiceOver")
+    func resolveTitle() {
+        #expect(SeerrIssuesModel.resolveTitleKey(isResolving: false) == "seerr.issues.resolve")
+        #expect(SeerrIssuesModel.resolveTitleKey(isResolving: true) == "seerr.issues.resolving")
+        #expect(SeerrPermissions(rawValue: manageIssues).canManageIssues)
+        #expect(SeerrPermissions.admin.canManageIssues)
+        #expect(!SeerrPermissions.createIssues.canManageIssues)
+    }
+}
+
+@Suite("Seerr settings — connection report")
+struct SeerrConnectionReportTests {
+    @Test("the report stays while the field names the tested address, and goes as soon as it names another")
+    func reportFollowsTheField() throws {
+        let tested = try #require(URL(string: "http://127.0.0.1:5055"))
+        #expect(SeerrTestReport.stillApplies(typed: "http://127.0.0.1:5055", testedAddress: tested))
+        // `runTest` writes the normalized form back into the field.
+        #expect(SeerrTestReport.stillApplies(typed: tested.absoluteString, testedAddress: tested))
+        #expect(SeerrTestReport.stillApplies(typed: "127.0.0.1:5055/", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "http://127.0.0.1:505", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "http://127.0.0.1:8096", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "", testedAddress: tested))
+        #expect(!SeerrTestReport.stillApplies(typed: "http://127.0.0.1:5055", testedAddress: nil))
+    }
+}
+
+// MARK: - Arrival message (launch / foreground)
+
+private let arrivalKey = SettingsKey.seerrArrivalsSeen(accountKey: "S1|A")
+private let jellyfinDune = "0123456789abcdef0123456789abcdef"
+
+/// One of my requests, approved, its media AVAILABLE.
+private func arrivedJSON(_ id: Int, type: String = "movie", tmdbId: Int = 11, jellyfinId: String? = nil) -> String {
+    requestJSON(id, status: 2, type: type, tmdbId: tmdbId, mediaStatus: 5, jellyfinId: jellyfinId)
+}
+
+private func isAvailableList(_ request: URLRequest) -> Bool {
+    isRequestList(request) && queryValue("filter", in: request) == "available"
+}
+
+/// How many times « Voir » asked for Réglages → Demandes.
+@MainActor
+private final class OpenCounter {
+    var count = 0
+}
+
+/// Signed in to Seerr (account mode) as Alice, Seerr id 7, with `permissions`.
+@MainActor
+private func arrivalWorld(
+    permissions: Int = 32, config: SeerrUserConfig = enabledConfig, admin: Bool = false,
+    defaults: UserDefaults = .isolatedForTesting(), routes: [String: [StubSeerrTransport.Reply]]
+) async -> (SeerrSession, AppState, MockAPIClient, RoutedSeerrTransport) {
+    var all = routes
+    all["/settings/public"] = [settingsReply]
+    all["/auth/me"] = [userReply(#"{"id":7,"permissions":\#(permissions),"jellyfinUserId":"A","displayName":"Alice"}"#)]
+    let transport = RoutedSeerrTransport(all)
+    let storage = MockKeychain()
+    storage.saveSeerrSessions(["S1|A": bound("abc")])
+    let (app, api) = signedIn(config: config)
+    if admin { await promoteToAdmin(app, api) }
+    let session = makeSession(transport, storage: storage, defaults: defaults, following: app)
+    await session.reload(appState: app)
+    return (session, app, api, transport)
+}
+
+/// One check, its toast shown the way `AppNavigation` shows it.
+@MainActor
+private func checkArrivals(
+    _ session: SeerrSession, _ app: AppState, defaults: UserDefaults, toasts: ToastCenter,
+    opened: OpenCounter = OpenCounter()
+) async {
+    let arrival = await SeerrArrivalWatcher.check(
+        session: session, appState: app, defaults: defaults, loc: LocalizationManager(),
+        openRequests: { opened.count += 1 })
+    if let arrival { toasts.show(arrival) }
+}
+
+@MainActor
+@Suite("Seerr — arrival message")
+struct SeerrArrivalTests {
+    private let loc = LocalizationManager()
+
+    @Test("a manager hears only of HIS arrivals: requestedBy is his own Seerr id, filter available, 20")
+    func managerOnlyHearsOwnArrivals() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set([Int](), forKey: arrivalKey)
+        let (session, app, _, transport) = await arrivalWorld(permissions: 48, routes: [
+            "/request": [requestPage([arrivedJSON(3)], total: 1)],
+            "/movie/11": [movieReply(11, "Dune")],
+        ])
+        let toasts = ToastCenter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+
+        let sent = try #require(transport.requests.first(where: isRequestList))
+        #expect(queryValue("requestedBy", in: sent) == "7")
+        #expect(queryValue("filter", in: sent) == "available")
+        #expect(queryValue("take", in: sent) == "20")
+        #expect(queryValue("skip", in: sent) == "0")
+        #expect(toasts.current?.title == loc.localized("seerr.arrival.title", "Dune"))
+        #expect(!transport.exhausted)
+    }
+
+    @Test("the first check on a device seeds in silence; an arrival after it is announced")
+    func firstCheckSeedsSilently() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        let (session, app, _, transport) = await arrivalWorld(defaults: defaults, routes: [
+            "/request": [
+                requestPage([arrivedJSON(2), arrivedJSON(1)], total: 2),
+                requestPage([arrivedJSON(3, tmdbId: 33), arrivedJSON(2), arrivedJSON(1)], total: 3),
+            ],
+            "/movie/33": [movieReply(33, "Arrival")],
+        ])
+        let toasts = ToastCenter()
+        #expect(defaults.object(forKey: arrivalKey) == nil)
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+
+        #expect(toasts.current == nil)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [2, 1])
+        // Nothing to announce: no title was looked up.
+        #expect(!transport.requests.contains { $0.url?.path.contains("/movie/") == true })
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+
+        #expect(toasts.current?.title == loc.localized("seerr.arrival.title", "Arrival"))
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [3, 2, 1])
+        #expect(!transport.exhausted)
+    }
+
+    @Test("only what was not seen yet is announced, named by Jellyfin, with « Regarder » opening its fiche")
+    func announcesOnlyNew() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set([1], forKey: arrivalKey)
+        let (session, app, api, transport) = await arrivalWorld(routes: [
+            "/request": [
+                requestPage([arrivedJSON(2, jellyfinId: jellyfinDune), arrivedJSON(1)], total: 2),
+                requestPage([arrivedJSON(2, jellyfinId: jellyfinDune), arrivedJSON(1)], total: 2),
+            ],
+        ])
+        api.getItemHandler = { id in
+            var item = BaseItemDto()
+            item.id = id
+            item.name = "Dune : Deuxième partie"
+            return item
+        }
+        let toasts = ToastCenter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+
+        let toast = try #require(toasts.current)
+        #expect(toast.title == loc.localized("seerr.arrival.title", "Dune : Deuxième partie"))
+        #expect(toast.action?.title == loc.localized("seerr.myRequests.watch"))
+        #expect(toast.duration >= 5)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [2, 1])
+        // Jellyfin named it: Seerr was not asked for its title.
+        #expect(!transport.requests.contains { $0.url?.path.contains("/movie/") == true })
+        toast.action?.perform()
+        #expect(app.pendingDeepLinkItemId == jellyfinDune)
+
+        toasts.dismiss()
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+        #expect(toasts.current == nil)
+        #expect(!transport.exhausted)
+    }
+
+    @Test("Jellyfin failing, Seerr names it; both failing, the count says it; no fiche ⇒ « Voir »")
+    func titleFallsBack() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set([Int](), forKey: arrivalKey)
+        let (session, app, api, _) = await arrivalWorld(routes: [
+            "/request": [
+                requestPage([arrivedJSON(2, jellyfinId: jellyfinDune)], total: 1),
+                requestPage([arrivedJSON(3, tmdbId: 33), arrivedJSON(2, jellyfinId: jellyfinDune)], total: 2),
+            ],
+            "/movie/11": [movieReply(11, "Dune")],
+            "/movie/33": [notFoundReply],
+        ])
+        api.getItemHandler = { _ in throw URLError(.badServerResponse) }
+        let toasts = ToastCenter()
+        let opened = OpenCounter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts, opened: opened)
+        #expect(toasts.current?.title == loc.localized("seerr.arrival.title", "Dune"))
+        #expect(toasts.current?.action?.title == loc.localized("seerr.myRequests.watch"))
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts, opened: opened)
+        let toast = try #require(toasts.current)
+        #expect(toast.title == loc.counted("seerr.arrival.several", 1))
+        // Seerr knows no Jellyfin id for it: no fiche to open, Mes demandes instead.
+        #expect(toast.action?.title == loc.localized("seerr.arrival.view"))
+        toast.action?.perform()
+        #expect(opened.count == 1)
+    }
+
+    @Test("several arrivals are ONE toast, counted by title, « Voir » opening Réglages → Demandes")
+    func severalBecomeOneToast() async throws {
+        let defaults = UserDefaults.isolatedForTesting()
+        // Stored but empty is not a first check: everything is new.
+        defaults.set([Int](), forKey: arrivalKey)
+        let (session, app, _, transport) = await arrivalWorld(routes: [
+            "/request": [requestPage([
+                arrivedJSON(1, tmdbId: 11), arrivedJSON(2, tmdbId: 12),
+                arrivedJSON(3, type: "tv", tmdbId: 22), arrivedJSON(4, type: "tv", tmdbId: 22),
+            ], total: 4)],
+        ])
+        let toasts = ToastCenter()
+        let opened = OpenCounter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts, opened: opened)
+
+        let toast = try #require(toasts.current)
+        #expect(toast.title == loc.counted("seerr.arrival.several", 3))
+        #expect(toast.title.contains("3"))
+        #expect(toast.action?.title == loc.localized("seerr.arrival.view"))
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [1, 2, 3, 4])
+        // No title looked up for a count.
+        #expect(transport.requests.filter { !isRequestList($0) }.allSatisfy { $0.url?.path.contains("/movie/") != true })
+        toast.action?.perform()
+        #expect(opened.count == 1)
+        // « Voir » once the app moved to another account opens nothing.
+        app.currentUserId = "B"
+        toast.action?.perform()
+        #expect(opened.count == 1)
+        #expect(app.pendingDeepLinkItemId == nil)
+    }
+
+    @Test("a capped account, or one Seerr is hidden for, is never checked: no call, no toast, nothing stored")
+    func cappedOrHiddenNoCheck() async {
+        let toasts = ToastCenter()
+
+        // The device cap, set while connected.
+        let capped = UserDefaults.isolatedForTesting()
+        var (session, app, _, transport) = await arrivalWorld(defaults: capped, routes: [:])
+        #expect(session.isVisible(proAllows: true, isOnline: true))
+        capped.set(12, forKey: SettingsKey.privacyMaxContentAge)
+        await checkArrivals(session, app, defaults: capped, toasts: toasts)
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(capped.object(forKey: arrivalKey) == nil)
+
+        // The server cap: nothing Seerr was even resolved.
+        let serverCapped = UserDefaults.isolatedForTesting()
+        let (cappedApp, _) = signedIn(policy: policy(maxRating: 12))
+        let cappedTransport = RoutedSeerrTransport([:])
+        let cappedSession = makeSession(cappedTransport, defaults: serverCapped, following: cappedApp)
+        await cappedSession.reload(appState: cappedApp)
+        await checkArrivals(cappedSession, cappedApp, defaults: serverCapped, toasts: toasts)
+        #expect(cappedTransport.requests.isEmpty)
+        #expect(serverCapped.object(forKey: arrivalKey) == nil)
+
+        // Connected, then no Pro, then offline.
+        let hidden = UserDefaults.isolatedForTesting()
+        (session, app, _, transport) = await arrivalWorld(routes: [:])
+        session.proAllowsProvider = { false }
+        await checkArrivals(session, app, defaults: hidden, toasts: toasts)
+        session.proAllowsProvider = { true }
+        app.isOnlineProvider = { false }
+        await checkArrivals(session, app, defaults: hidden, toasts: toasts)
+        #expect(!transport.requests.contains(where: isRequestList))
+
+        // An admin whose own switch is off: an identity, no browse surface.
+        (session, app, _, transport) = await arrivalWorld(
+            config: SeerrUserConfig(isEnabled: false, url: seerrURL), admin: true, routes: [:])
+        #expect(session.connection == .connected(alice))
+        await checkArrivals(session, app, defaults: hidden, toasts: toasts)
+        #expect(!transport.requests.contains(where: isRequestList))
+        #expect(hidden.object(forKey: arrivalKey) == nil)
+        #expect(toasts.current == nil)
+    }
+
+    @Test("a failed fetch writes nothing: the next successful check is still the silent first one")
+    func failedFetchSeedsNothing() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        let (session, app, _, transport) = await arrivalWorld(defaults: defaults, routes: [
+            "/request": [
+                .response(status: 500, body: #"{"message":"boom"}"#),
+                requestPage([arrivedJSON(1)], total: 1),
+            ],
+        ])
+        let toasts = ToastCenter()
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+        #expect(transport.requests.contains(where: isAvailableList))
+        #expect(defaults.object(forKey: arrivalKey) == nil)
+        #expect(toasts.current == nil)
+
+        await checkArrivals(session, app, defaults: defaults, toasts: toasts)
+        #expect(toasts.current == nil)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [1])
+    }
+
+    @Test("two checks racing announce an arrival once: the seen set is read after the fetch")
+    func concurrentChecksAnnounceOnce() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        defaults.set([Int](), forKey: arrivalKey)
+        let (session, app, _, transport) = await arrivalWorld(routes: [
+            "/request": [requestPage([arrivedJSON(1)], total: 1), requestPage([arrivedJSON(1)], total: 1)],
+            "/movie/11": [movieReply(11, "Dune"), movieReply(11, "Dune")],
+        ])
+        let asked = TestLatch()
+        let held = TestLatch()
+        transport.onRequest { path, index in
+            // The FIRST listing is held until the second check has finished.
+            guard path == "/request", index == 0 else { return }
+            asked.open()
+            await held.wait()
+        }
+        let loc = LocalizationManager()
+        let first = Task {
+            await SeerrArrivalWatcher.check(
+                session: session, appState: app, defaults: defaults, loc: loc, openRequests: {})
+        }
+        await asked.wait()
+        let second = await SeerrArrivalWatcher.check(
+            session: session, appState: app, defaults: defaults, loc: loc, openRequests: {})
+        held.open()
+        let late = await first.value
+
+        #expect(second?.title == loc.localized("seerr.arrival.title", "Dune"))
+        #expect(late == nil)
+        #expect(defaults.array(forKey: arrivalKey) as? [Int] == [1])
+    }
+
+    @Test("« Voir » closes any deeper Settings page, selects Demandes and asks for the Settings tab")
+    func openRequestsLandsOnRequests() {
+        let (app, _) = signedIn()
+        let nav = SettingsNavCoordinator()
+        nav.selectedCategory = .appearance
+        nav.selectedInterfaceSub = .menu
+        nav.showsAppIconPage = true
+
+        SeerrArrivalWatcher.openRequests(appState: app, settingsNav: nav)
+
+        #expect(nav.selectedCategory == .requests)
+        #expect(nav.selectedInterfaceSub == nil)
+        #expect(!nav.showsAppIconPage)
+        #expect(app.pendingDeepLinkTabId == MenuEntry.settingsID)
+    }
+
+    @Test("« Qui regarde ? » at launch holds the check until a profile is chosen, then runs ONE")
+    func launchPickerHoldsArrivals() {
+        typealias Flow = AccountSwitchFlow
+        #expect(Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 2))
+        // Every missing input: no picker, nothing held past the launch.
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: false, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: false, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: false, memorizedAccountsAllowed: true, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: false, accountCount: 2))
+        #expect(!Flow.showsLaunchPicker(
+            isTVOS: true, isAuthenticated: true, askOnLaunch: true, memorizedAccountsAllowed: true, accountCount: 1))
+
+        // Held from the start: the launch check (the PREVIOUS profile's) waits.
+        let gate = SeerrArrivalGate()
+        #expect(gate.isHeld)
+        #expect(!gate.admit())
+        #expect(!gate.admit())
+        // The picker closes: ONE check runs, then every check passes.
+        #expect(gate.release())
+        #expect(!gate.isHeld)
+        #expect(gate.admit())
+        #expect(!gate.release())
+
+        // No check came while held (the reload still running): nothing to run
+        // at release — the hook's own check passes the gate when it arrives.
+        let quiet = SeerrArrivalGate()
+        #expect(!quiet.release())
+        #expect(quiet.admit())
+    }
+
+    @Test("an account forgotten on this device forgets its seen arrivals and its dismissed invitation")
+    func forgetAccountForgetsArrivals() {
+        let defaults = UserDefaults.isolatedForTesting()
+        let otherKey = SettingsKey.seerrArrivalsSeen(accountKey: "S1|B")
+        defaults.set([3, 2], forKey: arrivalKey)
+        defaults.set(true, forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: "S1|A"))
+        defaults.set([9], forKey: otherKey)
+        let session = makeSession(StubSeerrTransport(), defaults: defaults)
+
+        session.forgetAccount("S1|A")
+
+        #expect(defaults.object(forKey: arrivalKey) == nil)
+        #expect(defaults.object(forKey: SettingsKey.seerrSearchPromptDismissed(accountKey: "S1|A")) == nil)
+        #expect(defaults.array(forKey: otherKey) as? [Int] == [9])
+    }
+
+    @Test("the seen list keeps what is on the page first, the newest 200 at most")
+    func seenListCapped() {
+        func arrived(_ id: Int) -> SeerrRequest {
+            SeerrRequest(
+                id: id, status: .approved, kind: .movie, createdAt: .distantPast, updatedAt: .distantPast,
+                requestedBy: alice, media: SeerrRequestMedia(tmdbId: id, status: .available))
+        }
+        let previous = Array(1...200)
+        let stored = SeerrArrivalWatcher.stored(available: [arrived(300), arrived(150)], previous: previous)
+        #expect(stored.count == SeerrArrivalWatcher.maxSeen)
+        #expect(Array(stored.prefix(2)) == [300, 150])
+        #expect(!stored.contains(200))   // the oldest went
+        #expect(stored.contains(199))
+        #expect(Set(stored).count == stored.count)
+
+        let first = SeerrArrivalWatcher.newArrivals(available: [arrived(1)], seen: nil)
+        #expect(first.toAnnounce.isEmpty)
+        #expect(first.seen == [1])
+        let next = SeerrArrivalWatcher.newArrivals(available: [arrived(2), arrived(1)], seen: [1])
+        #expect(next.toAnnounce.map(\.id) == [2])
+        #expect(next.seen == [1, 2])
+        for key in ["seerr.arrival.title", "seerr.arrival.view"] {
+            #expect(loc.localized(key) != key, "\(key) is missing")
+        }
+    }
+}
+
+// MARK: - Performance (what a foreground and a fiche cost)
+
+private final class CallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.withLock { value } }
+    func add() { lock.withLock { value += 1 } }
+}
+
+@MainActor
+@Suite("Seerr — performance")
+struct SeerrPerformanceTests {
+    private func search(_ session: SeerrSession, isAutomatic: Bool = true) async -> MissingSection<SeerrTitle>? {
+        await session.loadSection(isAutomatic: isAutomatic) { client, credential in
+            try await client.search("dune", credential)
+        }
+    }
+
+    @Test("a Seerr that stopped answering is asked nothing automatic for a minute, then again")
+    func downSeerrIsLeftAlone() async {
+        let defaults = UserDefaults.isolatedForTesting()
+        // A request manager, so the bubble's count would be asked too. Every
+        // route answers once: after the first reload, Seerr no longer answers.
+        let (session, app, _, transport) = await arrivalWorld(permissions: 2, defaults: defaults, routes: [:])
+        var clock = Date(timeIntervalSince1970: 1_000)
+        session.now = { clock }
+        let connected = transport.requests.count
+
+        await session.reload(appState: app)
+        #expect(transport.requests.count == connected + 1)   // the probe
+        #expect(session.isDown)
+        #expect(session.connection == .connected(SeerrUser(
+            id: SeerrUserID(rawValue: 7), permissions: SeerrPermissions(rawValue: 2), jellyfinUserId: "A", displayName: "Alice")))
+
+        await session.refreshPendingCount()
+        _ = await SeerrArrivalWatcher.check(
+            session: session, appState: app, defaults: defaults, loc: LocalizationManager(), openRequests: {})
+        for _ in 0..<3 { #expect(await search(session) == .hidden) }
+        #expect(transport.requests.count == connected + 1)
+        print("PERF down: probe=1 automatic+sections(3)=\(transport.requests.count - connected - 1)")
+
+        // A press is still asked.
+        #expect(await search(session, isAutomatic: false) == .hidden)
+        #expect(transport.requests.count == connected + 2)
+
+        // A minute later the next section tries once — and holds off again.
+        clock += SeerrSession.downCooldown + 1
+        #expect(!session.isDown)
+        #expect(await search(session) == .hidden)
+        #expect(transport.requests.count == connected + 3)
+        #expect(session.isDown)
+    }
+
+    @Test("an answer ends the wait at once")
+    func anAnswerClearsDown() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, .failure(URLError(.timedOut)), settingsReply],
+            "/auth/me": [userReply(), userReply()],
+            "/search": [searchReply],
+        ])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+        await session.reload(appState: app)
+        #expect(session.isDown)
+
+        await session.reload(appState: app)   // « Réessayer », or the next foreground
+
+        #expect(!session.isDown)
+        #expect(await search(session) == .loaded([]))
+    }
+
+    @Test("an explicit call that is answered ends the wait too")
+    func anAnsweredCallClearsDown() async throws {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, .failure(URLError(.timedOut))],
+            "/auth/me": [userReply()],
+            "/search": [searchReply],
+        ])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+        await session.reload(appState: app)
+        #expect(session.isDown)
+
+        _ = try await session.perform { client, credential in try await client.search("dune", credential) }
+
+        #expect(!session.isDown)
+    }
+
+    @Test("an account with no Seerr address is read once per ten minutes by the routine reload, always by the others")
+    func unconfiguredAccountIsNotReReadOnEveryForeground() async {
+        let counter = CallCounter()
+        let (app, api) = signedIn(config: nil)
+        api.onGetDisplayPreferences = { counter.add() }
+        let stub = StubSeerrTransport([])
+        let session = makeSession(stub, following: app)
+        var clock = Date(timeIntervalSince1970: 1_000)
+        session.now = { clock }
+
+        for _ in 0..<5 { await session.reload(appState: app, isRoutine: true) }
+        #expect(counter.count == 1)
+        print("PERF unconfigured: jellyfinReads(5 foregrounds)=\(counter.count) seerrCalls=\(stub.requests.count)")
+
+        // Réglages, a tier / cap / network change: always read.
+        await session.reload(appState: app)
+        #expect(counter.count == 2)
+
+        clock += SeerrSession.unconfiguredTTL + 1
+        await session.reload(appState: app, isRoutine: true)
+        #expect(counter.count == 3)
+        #expect(stub.requests.isEmpty)
+    }
+
+    @Test("a configured account is read on every routine reload; an account change forgets the memo")
+    func configuredAccountIsAlwaysRead() async {
+        let counter = CallCounter()
+        let (app, api) = signedIn()
+        api.onGetDisplayPreferences = { counter.add() }
+        let stub = StubSeerrTransport([settingsReply, settingsReply])
+        let session = makeSession(stub, following: app)
+        await session.reload(appState: app, isRoutine: true)
+        await session.reload(appState: app, isRoutine: true)
+        #expect(counter.count == 2)
+
+        let other = CallCounter()
+        let (unconfigured, otherAPI) = signedIn(userId: "B", config: nil)
+        otherAPI.onGetDisplayPreferences = { other.add() }
+        session.follow(unconfigured)
+        await session.reload(appState: unconfigured, isRoutine: true)
+        session.follow(app)
+        await session.reload(appState: app, isRoutine: true)
+        session.follow(unconfigured)
+        await session.reload(appState: unconfigured, isRoutine: true)
+        #expect(other.count == 2)
+    }
+}

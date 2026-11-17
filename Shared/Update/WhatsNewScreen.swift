@@ -274,6 +274,13 @@ struct WhatsNewScreen: View {
 
     private var footer: some View {
         VStack(spacing: CinemaSpacing.spacing4) {
+            if let key = page?.footnoteKey {
+                Text(loc.localized(key))
+                    .font(CinemaFont.label(.medium))
+                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: proseWidth, alignment: .leading)
+            }
             dots
             // Same layout rule as `OnboardingScreen`'s footer: fixed-width CTAs
             // and a spacer on tvOS; equal slots across the row on iOS, where

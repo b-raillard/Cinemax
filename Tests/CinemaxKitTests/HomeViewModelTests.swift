@@ -964,3 +964,86 @@ struct HomeResumeHereTests {
         #expect(vm.elsewhere.isEmpty)
     }
 }
+
+/// Launch ordering (local server address): Home's load waits for the route
+/// being decided before its first request, and the route owner's launch
+/// refresh does not reload a Home whose load already went out on that dial.
+@MainActor
+@Suite("Home — route décidée avant le premier chargement")
+struct HomeRouteWaitTests {
+    @MainActor private final class Flag { var raised = false }
+
+    @Test("load() parks before its first request until the route is applied")
+    func loadWaitsForTheRoute() async {
+        let api = MockAPIClient()
+        let appState = AppState(apiClient: api, keychain: MockKeychain())
+        appState.currentUserId = "user1"
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        let route = TestLatch()
+        let entered = Flag()
+        vm.awaitRoute = {
+            entered.raised = true
+            await route.wait()
+        }
+        let lan = URL(string: "https://192.168.1.10:8920")!
+
+        let loading = Task { await vm.load(using: appState) }
+        #expect(await eventually { entered.raised })
+        #expect(api.getResumeItemsCallCount == 0, "no request before the route")
+        #expect(vm.loadsAwaitingRoute == 1)
+        // The launch refresh lands while the load is parked: it will go out
+        // on the new route anyway — no second load.
+        #expect(!vm.needsRouteReload(currentDial: lan))
+
+        api.setDialURL(lan)
+        route.open()
+        await loading.value
+
+        #expect(api.getResumeItemsCallCount == 1)
+        #expect(vm.loadsAwaitingRoute == 0)
+        #expect(!vm.needsRouteReload(currentDial: lan), "at home: loaded once, on the LAN")
+        #expect(vm.needsRouteReload(currentDial: nil), "a load that went out on another dial is reloaded")
+    }
+}
+
+/// The content that replaces Home's / the library's skeleton rises in once,
+/// right after the swap — a lazy row re-created later by scrolling must not.
+@Suite("ContentReveal")
+struct ContentRevealTests {
+    @Test("reveals only within the window after the skeleton left")
+    func contentRevealOnlyWithinWindow() {
+        let t = Date(timeIntervalSinceReferenceDate: 1_000)
+        #expect(!ContentReveal.shouldAnimate(now: t, revealStartedAt: nil))
+        #expect(ContentReveal.shouldAnimate(now: t.addingTimeInterval(0.2), revealStartedAt: t))
+        #expect(!ContentReveal.shouldAnimate(now: t.addingTimeInterval(1.5), revealStartedAt: t))
+    }
+
+    /// The block's FIRST frame must already be hidden, from body: hiding it in
+    /// `onAppear` and un-hiding it in the same tick is a no-op SwiftUI never
+    /// animates (final review 2026-11-14).
+    @Test("a block starts hidden only until it has played, inside the window, motion on")
+    func revealStartsHiddenOnlyBeforeItHasPlayed() {
+        let t = Date(timeIntervalSinceReferenceDate: 1_000)
+        #expect(ContentReveal.startsHidden(revealed: false, motionEnabled: true, now: t.addingTimeInterval(0.1), revealStartedAt: t))
+        #expect(!ContentReveal.startsHidden(revealed: true, motionEnabled: true, now: t.addingTimeInterval(0.1), revealStartedAt: t))
+        #expect(!ContentReveal.startsHidden(revealed: false, motionEnabled: false, now: t.addingTimeInterval(0.1), revealStartedAt: t))
+        #expect(!ContentReveal.startsHidden(revealed: false, motionEnabled: true, now: t.addingTimeInterval(5), revealStartedAt: t))
+    }
+
+    @Test("the clock stamps only the skeleton's visible → hidden edge")
+    @MainActor
+    func clockStampsOnlyTheLeavingEdge() {
+        let t = Date(timeIntervalSinceReferenceDate: 1_000)
+        let clock = ContentRevealClock()
+        clock.noteSkeleton(visible: false, motionEnabled: true, now: t)
+        #expect(clock.startedAt == nil)              // never shown: nothing to reveal
+        clock.noteSkeleton(visible: true, motionEnabled: true, now: t)
+        clock.noteSkeleton(visible: false, motionEnabled: true, now: t.addingTimeInterval(2))
+        #expect(clock.startedAt == t.addingTimeInterval(2))
+        clock.noteSkeleton(visible: false, motionEnabled: true, now: t.addingTimeInterval(9))
+        #expect(clock.startedAt == t.addingTimeInterval(2))  // body re-evaluated: no re-stamp
+        clock.noteSkeleton(visible: true, motionEnabled: false, now: t.addingTimeInterval(10))
+        clock.noteSkeleton(visible: false, motionEnabled: false, now: t.addingTimeInterval(11))
+        #expect(clock.startedAt == nil)              // motion off: no reveal
+    }
+}

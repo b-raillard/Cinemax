@@ -87,7 +87,9 @@ final class SkipSegmentController {
                     alreadySkipped: autoSkippedSegmentKeys.contains(key),
                     isPlaying: (player?.rate ?? 0) > 0,
                     inSyncPlayGroup: false,
-                    canHandOffToNext: false
+                    // The native path never hands off: it seeks to the end and
+                    // lets `didPlayToEndTime` run autoplay.
+                    handOff: nil
                 )
                 if action != .none, let player {
                     autoSkippedSegmentKeys.insert(key)

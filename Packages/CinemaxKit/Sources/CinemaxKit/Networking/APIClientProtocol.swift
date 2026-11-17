@@ -67,6 +67,26 @@ public protocol ServerAPI: Sendable {
     /// construction — see the implementation for why a refusal is a legitimate
     /// server configuration rather than an error to surface.
     func uploadDiagnostics(_ document: String) async -> String?
+
+    /// Repoints the TRANSPORT at `dialURL` — the server's local address while
+    /// the route owner has chosen it — keeping the identity URL, the token and
+    /// the learned version. `nil` = dial the identity. Every `reconnect` and
+    /// `connectToServer(url:)` resets it to `nil`.
+    func setDialURL(_ dialURL: URL?)
+
+    /// `setDialURL` refused (a no-op, no client rebuild) unless the client's
+    /// current identity is the same server as `identity`. The route owner's
+    /// only entry point: a dial is never installed on a foreign identity.
+    func setDialURL(_ dialURL: URL?, forIdentity identity: URL)
+
+    /// The base the client dials now (the identity when no dial URL is set),
+    /// `nil` before any connection.
+    func currentDialURL() -> URL?
+
+    /// `connectToServer(url:)` probing through `dialURL` (`nil` = `url`):
+    /// `url` stays the server's identity, and the returned `ServerInfo.url`
+    /// is `url` whatever was dialled.
+    func connectToServer(url: URL, dialURL: URL?) async throws -> ServerInfo
 }
 
 public extension ServerAPI {
@@ -89,6 +109,21 @@ public extension ServerAPI {
     /// Default `nil`: a mock has no server to upload to, and every caller must
     /// already treat "no file name" as the ordinary outcome.
     func uploadDiagnostics(_ document: String) async -> String? { nil }
+
+    /// Default no-op: a mock has no transport to repoint.
+    func setDialURL(_ dialURL: URL?) {}
+
+    /// Default no-op: a mock has no transport to repoint.
+    func setDialURL(_ dialURL: URL?, forIdentity identity: URL) {}
+
+    /// Default `nil`: a mock dials nothing.
+    func currentDialURL() -> URL? { nil }
+
+    /// Default: a conformer without a separate transport just connects to the
+    /// identity.
+    func connectToServer(url: URL, dialURL: URL?) async throws -> ServerInfo {
+        try await connectToServer(url: url)
+    }
 }
 
 /// Authentication, user listing, and active-session queries.
@@ -159,9 +194,27 @@ public protocol AuthAPI: Sendable {
 /// by far the heaviest field of a `BaseItemDto`. Only pass `.card` from a
 /// query whose items are drawn as cards and nothing else — the detail screen
 /// always re-fetches its own item by id, so a card's lean DTO never reaches it.
+/// `.cardWithProviderIds` is `.card` plus `ProviderIds` (the TMDb id): asked
+/// only where a Seerr section must tell the owned cards from the missing ones
+/// (a fiche's collection rows), and only while that section may show.
 public enum ItemFieldSet: Sendable, Equatable {
     case detail
     case card
+    case cardWithProviderIds
+}
+
+/// What one `searchItems` pass asks for beyond the items themselves.
+public struct SearchItemsExtras: OptionSet, Sendable {
+    public let rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+
+    /// `totalRecordCount` — a second, `COUNT` query server-side, for a caller
+    /// that READS the total (see the `enableTotalRecordCount` RULE).
+    public static let totalRecordCount = Self(rawValue: 1 << 0)
+    /// `ProviderIds` (the TMDb id) on each item — asked only by the search
+    /// screen while its Seerr section is visible, to tell owned titles from
+    /// missing ones.
+    public static let providerIds = Self(rawValue: 1 << 1)
 }
 
 /// Library queries: items, genres, search, series/seasons/episodes.
@@ -215,7 +268,9 @@ public protocol LibraryAPI: Sendable {
     func getUserViews(userId: String) async throws -> [BaseItemDto]
     func getItem(userId: String, itemId: String) async throws -> BaseItemDto
     func getSimilarItems(itemId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
-    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, enableTotalRecordCount: Bool) async throws -> [BaseItemDto]
+    /// Callers go through the extension's `enableTotalRecordCount:` /
+    /// `includeProviderIds:` labels; see `SearchItemsExtras`.
+    func searchItems(userId: String, searchTerm: String, includeItemTypes: [BaseItemKind], limit: Int, extras: SearchItemsExtras) async throws -> [BaseItemDto]
 
     func getSeasons(seriesId: String, userId: String) async throws -> [BaseItemDto]
     func getEpisodes(seriesId: String, seasonId: String, userId: String) async throws -> [BaseItemDto]
@@ -225,6 +280,9 @@ public protocol LibraryAPI: Sendable {
     /// `getEpisodes` asks for. Its cache key is outside `userDataCachePrefixes`
     /// because the payload carries no userData at all; see the implementation.
     func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference]
+    /// Every episode file of a series as (season, first, last) — no fields, no
+    /// userData, no images. Read by the missing-episodes check only.
+    func getEpisodeNumbering(seriesId: String, userId: String) async throws -> [EpisodeNumbering]
     func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto?
 
     /// Next-up episodes across ALL in-progress series (the global "Next Up"
@@ -263,8 +321,10 @@ public protocol LibraryAPI: Sendable {
     func getItemUserData(itemId: String, userId: String) async throws -> UserItemDataDto?
 
     /// Filmography for a person (persons are items — fetch the person's own
-    /// bio via `getItem` with the person id).
-    func getPersonItems(personId: String, userId: String, limit: Int) async throws -> [BaseItemDto]
+    /// bio via `getItem` with the person id). `includeProviderIds`: each
+    /// item's TMDb id, asked only while the actor page's Seerr section may
+    /// show — what tells an owned title from a missing one.
+    func getPersonItems(personId: String, userId: String, limit: Int, includeProviderIds: Bool) async throws -> [BaseItemDto]
 
     /// Persons matching `searchTerm`, for the search screen's person row.
     /// Returns `BaseItemDto` (persons are Jellyfin items), so scoring and image
@@ -725,13 +785,31 @@ public extension PlaylistAPI {
     func renamePlaylist(playlistId: String, name: String) async throws {}
 }
 
+// MARK: - User preferences
+
+/// Server-side DisplayPreferences (the per-user Seerr configuration lives
+/// there). Conformance is declared in `JellyfinAPIClient+DisplayPreferences.swift`.
+public protocol UserPreferencesAPI: Sendable {
+    func getDisplayPreferences(id: String, client: String, userId: String?) async throws -> DisplayPreferencesDto
+    func updateDisplayPreferences(_ prefs: DisplayPreferencesDto, id: String, client: String, userId: String?) async throws
+}
+
+public extension UserPreferencesAPI {
+    func getDisplayPreferences(id: String, client: String, userId: String?) async throws -> DisplayPreferencesDto {
+        throw JellyfinError.notConnected
+    }
+    func updateDisplayPreferences(_ prefs: DisplayPreferencesDto, id: String, client: String, userId: String?) async throws {
+        throw JellyfinError.notConnected
+    }
+}
+
 // MARK: - Aggregate
 
 /// Umbrella protocol kept as the default dependency type — view models and
 /// screens that touch multiple domains (e.g. `HomeViewModel`,
 /// `MediaDetailViewModel`) depend on this. Leaf components should prefer the
 /// narrower sub-protocol they actually need.
-public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI & RemoteControlAPI & PlaylistAPI
+public typealias APIClientProtocol = ServerAPI & AuthAPI & LibraryAPI & PlaybackAPI & AdminAPI & SyncPlayAPI & RemoteControlAPI & PlaylistAPI & UserPreferencesAPI
 
 // MARK: - Default arguments
 
@@ -808,15 +886,21 @@ public extension LibraryAPI {
         searchTerm: String,
         includeItemTypes: [BaseItemKind] = [.movie, .series, .episode],
         limit: Int = 20,
-        enableTotalRecordCount: Bool = true
+        enableTotalRecordCount: Bool = true,
+        includeProviderIds: Bool = false
     ) async throws -> [BaseItemDto] {
-        try await searchItems(
+        var extras: SearchItemsExtras = []
+        if enableTotalRecordCount { extras.insert(.totalRecordCount) }
+        if includeProviderIds { extras.insert(.providerIds) }
+        return try await searchItems(
             userId: userId, searchTerm: searchTerm, includeItemTypes: includeItemTypes,
-            limit: limit, enableTotalRecordCount: enableTotalRecordCount
+            limit: limit, extras: extras
         )
     }
-    func getPersonItems(personId: String, userId: String, limit: Int = 60) async throws -> [BaseItemDto] {
-        try await getPersonItems(personId: personId, userId: userId, limit: limit)
+    func getPersonItems(
+        personId: String, userId: String, limit: Int = 60, includeProviderIds: Bool = false
+    ) async throws -> [BaseItemDto] {
+        try await getPersonItems(personId: personId, userId: userId, limit: limit, includeProviderIds: includeProviderIds)
     }
 }
 
