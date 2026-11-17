@@ -185,6 +185,7 @@
 		3674658960C75FB68F6576B9 /* CinemaButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCD86E8274D7D248752E886F /* CinemaButton.swift */; };
 		36CE061A3A3CABB5F2F23FDD /* VLCEngineLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 740569AC9A2EEDAAF3432A95 /* VLCEngineLog.swift */; };
 		371D4A76714777A1D53F1851 /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA4B77C16CBDDF5EEF20B11C /* ProfileScreen.swift */; };
+		372609770477484B3BA70578 /* HeroTextTone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F9F27523FAE9EC94A0D3EED /* HeroTextTone.swift */; };
 		373DC8B1721530FDD630866E /* ReviewPromptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21BABF86A35C84258A60B23F /* ReviewPromptTests.swift */; };
 		37F5065EA2B06211DD095DE4 /* MenuSettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6F59E7E97CEC6588B7625C2 /* MenuSettingsScreen.swift */; };
 		389E81F4513E0CE8A622D08F /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC1B61BF8E4B4D7BFFEEDF40 /* MainTabView.swift */; };
@@ -706,6 +707,7 @@
 		D3097808B1EC4C5F4F4DE1A6 /* AdminDashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F1A9840C693FD9D46644B69 /* AdminDashboardViewModel.swift */; };
 		D3BAE11501833552BCAC705A /* SettingsAppearanceView+iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4368B442E0B7FC8828AB76E /* SettingsAppearanceView+iOS.swift */; };
 		D585F4071DD435BBDACD16FA /* ExtensionServerTrust.swift in Sources */ = {isa = PBXBuildFile; fileRef = 809F99BE7D6CE419D78212E4 /* ExtensionServerTrust.swift */; };
+		D5DF08D3E88719C8E3A894CA /* HeroTextTone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F9F27523FAE9EC94A0D3EED /* HeroTextTone.swift */; };
 		D64C3AD31EC5F1CC8C2197F7 /* PlayLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA4717DCFEE46C5BE3F4787 /* PlayLink.swift */; };
 		D795322803A88D523D9D8351 /* SettingsTVLanguagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4EBD3E46649C6D2B2201E5F /* SettingsTVLanguagePicker.swift */; };
 		D7C21084767D68802677716C /* ProTierViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78921C2150C2BE34E40FF9A1 /* ProTierViews.swift */; };
@@ -1063,6 +1065,7 @@
 		5F07644595CAB3060CA6E9C3 /* MetadataRemoteImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetadataRemoteImagePicker.swift; sourceTree = "<group>"; };
 		5F3FB6BF53E15B2FC37932C6 /* TVBackNavigationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVBackNavigationTests.swift; sourceTree = "<group>"; };
 		5F479C56E760C0460D8B0C07 /* AdminPluginsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminPluginsViewModel.swift; sourceTree = "<group>"; };
+		5F9F27523FAE9EC94A0D3EED /* HeroTextTone.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroTextTone.swift; sourceTree = "<group>"; };
 		6047CCD9906C3327F1A0C8FD /* NextUpCountdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NextUpCountdownView.swift; sourceTree = "<group>"; };
 		6107E1A1B9B5086CCD12DEC1 /* CinemaxTVTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CinemaxTVTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		611E44F72064D91AE6DBCC6C /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
@@ -2140,6 +2143,7 @@
 				CB88BD157A83540E8C49B329 /* FlowLayout.swift */,
 				59CE3A78C397CC15A81F1635 /* GlassTextField.swift */,
 				89294A4325865302AB163A3C /* HeroBackdropImage.swift */,
+				5F9F27523FAE9EC94A0D3EED /* HeroTextTone.swift */,
 				A863021FF6B842EE2A0E27CA /* LoadingStateView.swift */,
 				7D53C46CC9C173E104ABA41C /* MediaQualityBadges.swift */,
 				8AE5FB096BB1BE0581798DFD /* PosterCard.swift */,
@@ -2695,6 +2699,7 @@
 				456D3029E556DF1761B9CCAC /* HLSManifestLoader.swift in Sources */,
 				D835F577D3A0BA5D93A8D881 /* Haptics.swift in Sources */,
 				283176386959EFAD7BE0E52D /* HeroBackdropImage.swift in Sources */,
+				D5DF08D3E88719C8E3A894CA /* HeroTextTone.swift in Sources */,
 				47242004DB5BA9497108DE62 /* HomeScreen.swift in Sources */,
 				FA853F39728C4E3652D2C5E5 /* HomeViewModel.swift in Sources */,
 				8311B0FCEF3D978D2406F1A9 /* IPhoneDuoDetection.swift in Sources */,
@@ -3123,6 +3128,7 @@
 				D18BC3D9D5BA81F6EBB57830 /* HLSManifestLoader.swift in Sources */,
 				EA8D01A984329CE0A45EBB34 /* Haptics.swift in Sources */,
 				8497BA437CDCC5ECB1BFC24D /* HeroBackdropImage.swift in Sources */,
+				372609770477484B3BA70578 /* HeroTextTone.swift in Sources */,
 				28A82A58BDED7ACD5B9221F8 /* HomeScreen.swift in Sources */,
 				46E0FC9041E6B386190D5B6C /* HomeViewModel.swift in Sources */,
 				C5E489B70D749E7EF41DF44B /* IPhoneDuoDetection.swift in Sources */,
