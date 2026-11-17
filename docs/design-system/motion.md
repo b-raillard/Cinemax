@@ -56,6 +56,8 @@ You don't need to do anything if you use:
 - `CinemaToggleIndicator` (takes an explicit `animated` parameter passed at call site)
 - `ToastOverlay`
 - `cardZoomDestination(_:)` (`CardZoomTransition.swift`) — the iOS card → fiche zoom falls back to the default push when motion is off
+- `.symbolPop(on:)` and `.rollingNumber(_:)` (`FocusScaleModifier.swift`) — key `rollingNumber` on the NUMBER, not the formatted string, where the number is at hand
+- `ProgressBarView` — glides on every value change; `fillsOnAppear: true` only where few bars are on screen
 
 New components must consume `\.motionEffectsEnabled` or take an explicit `animated: Bool` parameter.
 
@@ -73,7 +75,20 @@ Where they appear in the codebase, for consistency:
 | tvOS settings-row focus border | 0.15 s | `.easeOut` |
 | Toast enter/exit | spring | default spring |
 | Rainbow easter egg tick | 33 ms (30 fps) | linear (hue increment) |
-| `CinemaMotion.standard` | 0.3 s | used when "standard" feels right |
+
+### State-change tokens — `CinemaMotion` (`FocusScaleModifier.swift`)
+
+Added 2026-11-14 (spec `docs/superpowers/specs/2026-11-14-interface-animations-design.md`). A new state-change animation takes its curve from here and goes through `CinemaMotion.gated(_:enabled:)`, which returns `nil` when motion is off.
+
+| Token | Value | Used by |
+| --- | --- | --- |
+| `symbolPop` | `.bouncy(duration: 0.45)` | `.symbolPop(on:)` — fiche favourite / watched glyphs |
+| `imageFade` | `.easeOut(duration: 0.3)` | artwork arriving |
+| `contentReveal` + `revealStagger` | `.easeOut(duration: 0.45)`, 0.08 s | content rising in after a skeleton |
+| `numeric` | `.snappy(duration: 0.35)` | `.rollingNumber(_:)` — counts, remaining time |
+| `progressFill` | `.easeOut(duration: 0.7)` | `ProgressBarView` |
+| `listSwap` | `.easeOut(duration: 0.34)` | episodes on a season change |
+| `overlaySlide` / `overlaySlideOut` | 0.3 s / 0.2 s | UIKit player overlays |
 
 Don't invent new durations unless you have a specific reason. Match what's next to you on the screen.
 

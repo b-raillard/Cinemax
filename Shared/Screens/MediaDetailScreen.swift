@@ -1502,7 +1502,8 @@ struct MediaDetailScreen: View {
             systemImage: viewModel.isFavorite ? "heart.fill" : "heart",
             label: loc.localized("detail.action.favorite"),
             accessibilityLabel: loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"),
-            isActive: viewModel.isFavorite
+            isActive: viewModel.isFavorite,
+            pops: true
         ) {
             Task { await viewModel.toggleFavorite(using: appState) }
         }
@@ -1514,7 +1515,8 @@ struct MediaDetailScreen: View {
             systemImage: viewModel.isPlayed ? "checkmark.circle.fill" : "checkmark.circle",
             label: loc.localized("detail.action.watched"),
             accessibilityLabel: loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"),
-            isActive: viewModel.isPlayed
+            isActive: viewModel.isPlayed,
+            pops: true
         ) {
             Task { await viewModel.togglePlayed(using: appState) }
         }
@@ -1617,7 +1619,8 @@ struct MediaDetailScreen: View {
                 systemImage: viewModel.isFavorite ? "heart.fill" : "heart",
                 active: viewModel.isFavorite,
                 accessibility: loc.localized(viewModel.isFavorite ? "detail.favorite.remove" : "detail.favorite.add"),
-                trigger: viewModel.isFavorite
+                trigger: viewModel.isFavorite,
+                pops: true
             ) {
                 Task { await viewModel.toggleFavorite(using: appState) }
             }
@@ -1626,7 +1629,8 @@ struct MediaDetailScreen: View {
                 systemImage: viewModel.isPlayed ? "checkmark.circle.fill" : "checkmark.circle",
                 active: viewModel.isPlayed,
                 accessibility: loc.localized(viewModel.isPlayed ? "detail.watched.remove" : "detail.watched.add"),
-                trigger: viewModel.isPlayed
+                trigger: viewModel.isPlayed,
+                pops: true
             ) {
                 Task { await viewModel.togglePlayed(using: appState) }
             }
@@ -1685,6 +1689,12 @@ struct MediaDetailScreen: View {
         }
     }
 
+    private func actionGlyph(_ systemImage: String, active: Bool) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: CinemaScale.pt(22), weight: .semibold))
+            .foregroundStyle(active ? themeManager.accent : CinemaColor.onSurface)
+    }
+
     /// One secondary action: a tappable 44pt glass icon chip. `active` paints
     /// the icon in the accent (toggled-on state); `trigger` drives the haptic.
     private func secondaryActionCell(
@@ -1692,6 +1702,7 @@ struct MediaDetailScreen: View {
         active: Bool,
         accessibility: String,
         trigger: Bool,
+        pops: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -1699,9 +1710,12 @@ struct MediaDetailScreen: View {
                 Circle()
                     .fill(.ultraThinMaterial)
                     .frame(width: 44, height: 44)
-                Image(systemName: systemImage)
-                    .font(.system(size: CinemaScale.pt(22), weight: .semibold))
-                    .foregroundStyle(active ? themeManager.accent : CinemaColor.onSurface)
+                if pops {
+                    actionGlyph(systemImage, active: active)
+                        .symbolPop(on: trigger)
+                } else {
+                    actionGlyph(systemImage, active: active)
+                }
             }
         }
         .buttonStyle(.plain)
@@ -2405,10 +2419,10 @@ private struct PlayActionButtonsSection: View, Equatable {
 
             if showResume {
                 #if os(iOS)
-                ProgressBarView(progress: progress)
+                ProgressBarView(progress: progress, fillsOnAppear: true)
                     .frame(maxWidth: .infinity)
                 #else
-                ProgressBarView(progress: progress)
+                ProgressBarView(progress: progress, fillsOnAppear: true)
                     .frame(width: playButtonWidth)
                 #endif
 
@@ -2416,6 +2430,7 @@ private struct PlayActionButtonsSection: View, Equatable {
                     Text(remainingText)
                         .font(CinemaFont.label(.medium))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .rollingNumber(remainingText)
                 }
             }
 
