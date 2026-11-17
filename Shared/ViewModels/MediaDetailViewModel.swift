@@ -58,6 +58,10 @@ final class MediaDetailViewModel {
     private(set) var similarTask: Task<Void, Never>?
     var seasons: [BaseItemDto] = []
     var episodes: [BaseItemDto] = []
+    /// Bumped each time `selectSeason` lands a new season's episodes, and only
+    /// then: the fiche animates the episode list on it, so a refresh of the
+    /// season on screen (return from the player, marking watched) never slides.
+    private(set) var seasonSwapCount = 0
     var selectedSeasonId: String?
     var nextUpEpisode: BaseItemDto?
     /// Episodes from the next-up episode's season, when it differs from the currently displayed season.
@@ -1141,6 +1145,8 @@ final class MediaDetailViewModel {
 
     func selectSeason(_ seasonId: String, seriesId: String, using appState: AppState) async {
         guard let userId = appState.currentUserId else { return }
+        // Re-selecting the season on screen reloads it but must not slide it.
+        let isSeasonChange = selectedSeasonId != seasonId
         selectedSeasonId = seasonId
         seasonGeneration += 1
         let expectedGeneration = seasonGeneration
@@ -1148,6 +1154,7 @@ final class MediaDetailViewModel {
             let newEpisodes = try await appState.apiClient.getEpisodes(seriesId: seriesId, seasonId: seasonId, userId: userId)
             guard seasonGeneration == expectedGeneration else { return }
             episodes = newEpisodes
+            if isSeasonChange { seasonSwapCount += 1 }
             rebuildNavigationMaps()
             reloadSeerrEpisodes(using: appState)
         } catch {

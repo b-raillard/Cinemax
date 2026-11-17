@@ -22,7 +22,8 @@ struct HeroBackdropImage: View {
         fallbackBackground
             .overlay { DriftingBackdropRepresentable(url: url, drifting: motionEnabled) }
         #else
-        CinemaLazyImage(url: url, fallbackIcon: nil, fallbackBackground: fallbackBackground)
+        // No fade: the iOS Home hero crossfades between candidates itself.
+        CinemaLazyImage(url: url, fallbackIcon: nil, fallbackBackground: fallbackBackground, fadesIn: false)
         #endif
     }
 }
@@ -52,11 +53,14 @@ extension View {
     /// Without the bleed the image stopped dead at the safe-area edge while the
     /// rails below slid under it: the iPhone Duo's right-hand column (status +
     /// vertical tab bar) and the notch side of any iPhone in landscape.
+    /// `parallax` (iOS, the fiche): the image inside the box scrolls at 55 %
+    /// of the page (`ScrollMotion.parallaxOffset`); the box, its gradient and
+    /// its clip do not move.
     ///
     /// `clearInLightMode`: Home's and the library's heroes draw NO gradient
     /// in light mode on iOS — see `HeroBackdropShade`.
-    func heroBackdropBleed(topExtension: CGFloat = 0, clearInLightMode: Bool = false) -> some View {
-        modifier(HeroBackdropBleed(topExtension: topExtension, clearInLightMode: clearInLightMode))
+    func heroBackdropBleed(topExtension: CGFloat = 0, parallax: Bool = false, clearInLightMode: Bool = false) -> some View {
+        modifier(HeroBackdropBleed(topExtension: topExtension, parallax: parallax, clearInLightMode: clearInLightMode))
     }
 
     /// The glass behind a hero's « Plus d'infos » (Home and the library), with
@@ -121,7 +125,8 @@ private struct HeroSecondaryButtonBackground: ViewModifier {
 ///   the reported inset instead (negative padding) and draws past the frame.
 private struct HeroBackdropBleed: ViewModifier {
     let topExtension: CGFloat
-    let clearInLightMode: Bool
+    var parallax: Bool = false
+    var clearInLightMode: Bool = false
     @Environment(\.colorScheme) private var colorScheme
     #if os(iOS)
     @State private var reportedInsets = EdgeInsets()
@@ -142,7 +147,14 @@ private struct HeroBackdropBleed: ViewModifier {
             .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { reportedInsets = $0 }
             .overlay {
                 Color.clear
-                    .overlay(alignment: .top) { content }
+                    .overlay(alignment: .top) {
+                        // The box starts `topExtension` above the hero, so the
+                        // hero's own top is the image's minY + topExtension.
+                        content.visualEffect { [parallax, topExtension] view, proxy in
+                            view.offset(y: parallax
+                                ? ScrollMotion.parallaxOffset(minY: proxy.frame(in: .scrollView).minY + topExtension) : 0)
+                        }
+                    }
                     .overlay {
                         if shade == .gradient {
                             CinemaGradient.heroOverlay.allowsHitTesting(false)

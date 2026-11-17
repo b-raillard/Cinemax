@@ -129,6 +129,52 @@ struct MediaDetailViewModelTests {
         #expect(vm.episodes.map(\.id) == ["ep-1"])
     }
 
+    /// The season swap animation keys on `seasonSwapCount`: a real season
+    /// change bumps it, a refresh of the season on screen must not (spec
+    /// 2026-11-14, `saisons`).
+    @Test("selecting a season bumps the swap count")
+    func selectingASeasonBumpsTheSwapCount() async {
+        let api = MockAPIClient()
+        api.getEpisodesHandler = { _ in [makeEpisode(id: "ep-1", name: "Pilot")] }
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        let appState = makeAppState(api: api)
+
+        await vm.selectSeason("season-A", seriesId: "series-1", using: appState)
+
+        #expect(vm.seasonSwapCount == 1)
+    }
+
+    @Test("re-selecting the season on screen does not bump the swap count")
+    func reselectingTheSameSeasonDoesNotBumpTheSwapCount() async {
+        let api = MockAPIClient()
+        api.getEpisodesHandler = { _ in [makeEpisode(id: "ep-1", name: "Pilot")] }
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        let appState = makeAppState(api: api)
+
+        await vm.selectSeason("season-A", seriesId: "series-1", using: appState)
+        await vm.selectSeason("season-A", seriesId: "series-1", using: appState)
+
+        #expect(vm.seasonSwapCount == 1)
+    }
+
+    @Test("refreshing the same season does not bump the swap count")
+    func refreshingTheSameSeasonDoesNotBumpTheSwapCount() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in makeSeries(id: id, played: false) }
+        api.getEpisodesHandler = { _ in [makeEpisode(id: "ep-1", name: "One")] }
+        let appState = makeAppState(api: api)
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        vm.item = makeSeries(id: "series-1", played: false)
+        vm.resolvedType = .series
+        vm.selectedSeasonId = "season-1"
+        vm.isLoading = false
+
+        await vm.refreshAfterPlayback(using: appState)
+
+        #expect(vm.episodes.map(\.id) == ["ep-1"])
+        #expect(vm.seasonSwapCount == 0)
+    }
+
     @Test("togglePlayed flips state and marks the movie played, then unplayed")
     func togglePlayedRoundTrip() async {
         let api = MockAPIClient()

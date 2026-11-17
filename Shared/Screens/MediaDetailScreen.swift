@@ -188,6 +188,11 @@ struct MediaDetailScreen: View {
     /// screen (the hero, inside the scroll view, reports none): the backdrop
     /// runs up under them instead of leaving a dark band above the image.
     @State private var topBarInset: CGFloat = 0
+    /// iOS: the hero's height and whether it has scrolled away — the item's
+    /// name then takes over in the navigation bar (`ScrollMotion`).
+    @State private var heroHeight: CGFloat = 0
+    @State private var showsBarTitle = false
+    @Environment(\.motionEffectsEnabled) private var motionEnabled
     /// The screen's width, for `useTwoColumnLayout` — 0 until measured.
     @State private var screenWidth: CGFloat = 0
 
@@ -436,6 +441,24 @@ struct MediaDetailScreen: View {
         }
         #if os(tvOS)
         .scrollClipDisabled()
+        #else
+        // Once the hero has scrolled away, the item's name shows in the bar.
+        .onScrollGeometryChange(for: Bool.self) { [heroHeight] geo in
+            ScrollMotion.showsBarTitle(scrolled: geo.contentOffset.y + geo.contentInsets.top, heroHeight: heroHeight)
+        } action: { _, shows in
+            showsBarTitle = shows
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text(item.name ?? "")
+                    .font(CinemaFont.label(.large))
+                    .foregroundStyle(CinemaColor.onSurface)
+                    .lineLimit(1)
+                    .opacity(showsBarTitle ? 1 : 0)
+                    .animation(CinemaMotion.gated(CinemaMotion.barTitleFade, enabled: motionEnabled), value: showsBarTitle)
+                    .accessibilityHidden(!showsBarTitle)
+            }
+        }
         #endif
     }
 
@@ -749,6 +772,7 @@ struct MediaDetailScreen: View {
             } action: { height in
                 heroLogoHeight = height
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { heroHeight = $0 }
             #endif
             .overlay {
                 Group {
@@ -756,14 +780,18 @@ struct MediaDetailScreen: View {
                         CinemaLazyImage(
                             url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue),
                             fallbackIcon: nil,
-                            fallbackBackground: CinemaColor.surfaceContainerLow
+                            fallbackBackground: CinemaColor.surfaceContainerLow,
+                            // The card → fiche zoom owns this moment.
+                            fadesIn: false
                         )
                         .accessibilityHidden(true)
                     } else {
                         BackdropFallbackView()
                     }
                 }
-                .heroBackdropBleed(topExtension: topBarInset)
+                // Parallax (iOS): the IMAGE scrolls slower than the page, inside
+                // the clipped box — the gradient and the box's bottom edge stay put.
+                .heroBackdropBleed(topExtension: topBarInset, parallax: motionEnabled)
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: detailHeroSpacing) {
@@ -802,6 +830,14 @@ struct MediaDetailScreen: View {
                 // driver (`heroBackdropBleed`).
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .clipped()
+                #if os(iOS)
+                // The hero text fades out as it leaves; the bar title takes over.
+                .visualEffect { [motionEnabled] content, proxy in
+                    content.opacity(motionEnabled
+                        ? ScrollMotion.heroTitleOpacity(scrolled: -proxy.frame(in: .scrollView).minY,
+                                                        heroHeight: proxy.size.height) : 1)
+                }
+                #endif
             }
     }
 
@@ -1878,6 +1914,7 @@ struct MediaDetailScreen: View {
                     }
                 }
             }
+            .listSwapSlide(trigger: viewModel.seasonSwapCount)
             .padding(.horizontal, contentPadding)
             missingEpisodesBlock
             // One owned season: no pill row to append to, so the missing
@@ -1954,6 +1991,7 @@ struct MediaDetailScreen: View {
                     }
                 }
                 .scrollTargetLayout()
+                .listSwapSlide(trigger: viewModel.seasonSwapCount)
                 .padding(.horizontal, contentPadding)
             }
             .scrollTargetBehavior(.viewAligned)
@@ -2419,10 +2457,10 @@ private struct PlayActionButtonsSection: View, Equatable {
 
             if showResume {
                 #if os(iOS)
-                ProgressBarView(progress: progress, fillsOnAppear: true)
+                ProgressBarView(progress: progress)
                     .frame(maxWidth: .infinity)
                 #else
-                ProgressBarView(progress: progress, fillsOnAppear: true)
+                ProgressBarView(progress: progress)
                     .frame(width: playButtonWidth)
                 #endif
 

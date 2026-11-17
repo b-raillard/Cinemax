@@ -1005,3 +1005,45 @@ struct HomeRouteWaitTests {
         #expect(vm.needsRouteReload(currentDial: nil), "a load that went out on another dial is reloaded")
     }
 }
+
+/// The content that replaces Home's / the library's skeleton rises in once,
+/// right after the swap — a lazy row re-created later by scrolling must not.
+@Suite("ContentReveal")
+struct ContentRevealTests {
+    @Test("reveals only within the window after the skeleton left")
+    func contentRevealOnlyWithinWindow() {
+        let t = Date(timeIntervalSinceReferenceDate: 1_000)
+        #expect(!ContentReveal.shouldAnimate(now: t, revealStartedAt: nil))
+        #expect(ContentReveal.shouldAnimate(now: t.addingTimeInterval(0.2), revealStartedAt: t))
+        #expect(!ContentReveal.shouldAnimate(now: t.addingTimeInterval(1.5), revealStartedAt: t))
+    }
+
+    /// The block's FIRST frame must already be hidden, from body: hiding it in
+    /// `onAppear` and un-hiding it in the same tick is a no-op SwiftUI never
+    /// animates (final review 2026-11-14).
+    @Test("a block starts hidden only until it has played, inside the window, motion on")
+    func revealStartsHiddenOnlyBeforeItHasPlayed() {
+        let t = Date(timeIntervalSinceReferenceDate: 1_000)
+        #expect(ContentReveal.startsHidden(revealed: false, motionEnabled: true, now: t.addingTimeInterval(0.1), revealStartedAt: t))
+        #expect(!ContentReveal.startsHidden(revealed: true, motionEnabled: true, now: t.addingTimeInterval(0.1), revealStartedAt: t))
+        #expect(!ContentReveal.startsHidden(revealed: false, motionEnabled: false, now: t.addingTimeInterval(0.1), revealStartedAt: t))
+        #expect(!ContentReveal.startsHidden(revealed: false, motionEnabled: true, now: t.addingTimeInterval(5), revealStartedAt: t))
+    }
+
+    @Test("the clock stamps only the skeleton's visible → hidden edge")
+    @MainActor
+    func clockStampsOnlyTheLeavingEdge() {
+        let t = Date(timeIntervalSinceReferenceDate: 1_000)
+        let clock = ContentRevealClock()
+        clock.noteSkeleton(visible: false, motionEnabled: true, now: t)
+        #expect(clock.startedAt == nil)              // never shown: nothing to reveal
+        clock.noteSkeleton(visible: true, motionEnabled: true, now: t)
+        clock.noteSkeleton(visible: false, motionEnabled: true, now: t.addingTimeInterval(2))
+        #expect(clock.startedAt == t.addingTimeInterval(2))
+        clock.noteSkeleton(visible: false, motionEnabled: true, now: t.addingTimeInterval(9))
+        #expect(clock.startedAt == t.addingTimeInterval(2))  // body re-evaluated: no re-stamp
+        clock.noteSkeleton(visible: true, motionEnabled: false, now: t.addingTimeInterval(10))
+        clock.noteSkeleton(visible: false, motionEnabled: false, now: t.addingTimeInterval(11))
+        #expect(clock.startedAt == nil)              // motion off: no reveal
+    }
+}
