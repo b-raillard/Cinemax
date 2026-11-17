@@ -914,14 +914,14 @@ struct HomeScreen: View {
             #endif
             .overlay {
                 Group {
-                    if item.hasBackdropImage, let backdropId = item.backdropItemID {
-                        HeroBackdropImage(url: appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue))
+                    if let url = heroBackdropURL(item) {
+                        HeroBackdropImage(url: url)
                         .accessibilityHidden(true)
                     } else {
                         BackdropFallbackView()
                     }
                 }
-                .heroBackdropBleed()
+                .heroBackdropBleed(clearInLightMode: true)
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
@@ -940,7 +940,7 @@ struct HomeScreen: View {
 
                         metadataText(for: item)
                     }
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
+                    .heroMetaStyle()
 
                     Text(item.name ?? "")
 
@@ -1040,8 +1040,7 @@ struct HomeScreen: View {
                                 .padding(.vertical, heroPadding > 60 ? CinemaSpacing.spacing4 : CinemaSpacing.spacing2)
                                 .padding(.horizontal, CinemaSpacing.spacing4)
                                 #if os(iOS)
-                                .background(.ultraThinMaterial)
-                                .clipShape(RoundedRectangle(cornerRadius: CinemaRadius.large))
+                                .heroSecondaryButtonBackground()
                                 #endif
                             }
                             #if os(tvOS)
@@ -1077,7 +1076,15 @@ struct HomeScreen: View {
                 // the backdrop clips itself, wider than it (`heroBackdropBleed`).
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .clipped()
+                .heroAdaptiveText(backdropURL: heroBackdropURL(item))
             }
+    }
+
+    /// The hero's backdrop, or nil for the fallback — the one URL both the
+    /// image and its text's tone (`heroAdaptiveText`) read.
+    private func heroBackdropURL(_ item: BaseItemDto) -> URL? {
+        guard item.hasBackdropImage, let backdropId = item.backdropItemID else { return nil }
+        return appState.imageBuilder.imageURL(itemId: backdropId, imageType: .backdrop, maxWidth: ImageURLBuilder.backdropPixelWidth, tag: item.backdropImageTagValue)
     }
 
     // MARK: - Continue Watching
