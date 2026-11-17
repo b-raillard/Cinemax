@@ -56,8 +56,61 @@ extension View {
     /// `parallax` (iOS, the fiche): the image inside the box scrolls at 55 %
     /// of the page (`ScrollMotion.parallaxOffset`); the box, its gradient and
     /// its clip do not move.
-    func heroBackdropBleed(topExtension: CGFloat = 0, parallax: Bool = false) -> some View {
-        modifier(HeroBackdropBleed(topExtension: topExtension, parallax: parallax))
+    ///
+    /// `clearInLightMode`: Home's and the library's heroes draw NO gradient
+    /// in light mode on iOS — see `HeroBackdropShade`.
+    func heroBackdropBleed(topExtension: CGFloat = 0, parallax: Bool = false, clearInLightMode: Bool = false) -> some View {
+        modifier(HeroBackdropBleed(topExtension: topExtension, parallax: parallax, clearInLightMode: clearInLightMode))
+    }
+
+    /// The glass behind a hero's « Plus d'infos » (Home and the library), with
+    /// its light-mode edge — see `HeroSecondaryButtonBackground`.
+    @MainActor
+    func heroSecondaryButtonBackground() -> some View {
+        modifier(HeroSecondaryButtonBackground())
+    }
+}
+
+/// What shades a hero backdrop. In dark mode `CinemaGradient.heroOverlay`
+/// (a black wash from 0.4 to opaque) is the cinema look. In LIGHT mode the same
+/// gradient is a WHITE wash: it bleached Home's backdrop to a pale ghost and
+/// left « Plus d'infos » with no edge (recette 2026-11-15, C9). A dark veil
+/// under a white fade, a hero kept dark, a glass card under the text and a
+/// fade on the bottom half only were built and compared on the simulator; the
+/// owner chose NO shade at all — the image as it is, the hero meeting the page
+/// with a straight edge — for Home and the library on iOS. tvOS and the fiche
+/// keep the gradient: nobody looked at tvOS, and the fiche's backdrop runs up
+/// under the status bar, whose dark light-mode glyphs need its light top.
+enum HeroBackdropShade: Equatable {
+    case gradient
+    case none
+
+    nonisolated static func resolve(isLight: Bool, clearInLightMode: Bool, isTV: Bool) -> Self {
+        isLight && clearInLightMode && !isTV ? .none : .gradient
+    }
+}
+
+/// The fill behind a hero's « Plus d'infos »: the glass it always had, plus,
+/// in light mode, a light `onSurface` edge (1 pt at `lightEdgeOpacity`) —
+/// glass on an unshaded light image had no visible outline at all. The
+/// owner's choice among four (recette 2026-11-15: edge / thicker glass + white
+/// rim / white pill / dark glass); the one documented exception to « no 1px
+/// borders » besides the dashed missing-title outline. Dark mode is unchanged.
+private struct HeroSecondaryButtonBackground: ViewModifier {
+    nonisolated static let lightEdgeOpacity: Double = 0.35
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: CinemaRadius.large)
+        content
+            .background(.ultraThinMaterial)
+            .clipShape(shape)
+            .overlay {
+                if colorScheme == .light {
+                    shape.strokeBorder(CinemaColor.onSurface.opacity(Self.lightEdgeOpacity), lineWidth: 1)
+                }
+            }
     }
 }
 
@@ -73,9 +126,20 @@ extension View {
 private struct HeroBackdropBleed: ViewModifier {
     let topExtension: CGFloat
     var parallax: Bool = false
+    var clearInLightMode: Bool = false
+    @Environment(\.colorScheme) private var colorScheme
     #if os(iOS)
     @State private var reportedInsets = EdgeInsets()
     #endif
+
+    private var shade: HeroBackdropShade {
+        #if os(tvOS)
+        let isTV = true
+        #else
+        let isTV = false
+        #endif
+        return HeroBackdropShade.resolve(isLight: colorScheme == .light, clearInLightMode: clearInLightMode, isTV: isTV)
+    }
 
     func body(content: Content) -> some View {
         #if os(iOS)
@@ -91,7 +155,11 @@ private struct HeroBackdropBleed: ViewModifier {
                                 ? ScrollMotion.parallaxOffset(minY: proxy.frame(in: .scrollView).minY + topExtension) : 0)
                         }
                     }
-                    .overlay { CinemaGradient.heroOverlay.allowsHitTesting(false) }
+                    .overlay {
+                        if shade == .gradient {
+                            CinemaGradient.heroOverlay.allowsHitTesting(false)
+                        }
+                    }
                     .ignoresSafeArea(edges: .horizontal)
                     .clipped()
                     .padding(.leading, -reportedInsets.leading)
