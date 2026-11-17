@@ -103,3 +103,25 @@ nonisolated struct AutoSkipPreferences: Equatable {
         )
     }
 }
+
+// MARK: - Skip button presentation (spec 2026-11-14, `lecteur`)
+
+/// Why « Passer l'intro / le générique » is being shown or hidden.
+enum SkipButtonChange: Sendable, CaseIterable {
+    case setup, itemReset, invalidTime, autoSkipped, handedToNextUpCard
+    case segmentEntered, segmentLeft, userSkipped
+}
+
+/// Whether that change slides the button in / out or applies at once. Only the
+/// segment coming and going (and the user's own press) animates; a reset, an
+/// invalid time, an auto-skip and the hand-off to the countdown card — which
+/// has its own fade — are instant. Motion Effects off: always instant.
+enum SkipButtonPresentation {
+    nonisolated static func animates(_ change: SkipButtonChange, motionEnabled: Bool) -> Bool {
+        guard motionEnabled else { return false }
+        switch change {
+        case .segmentEntered, .segmentLeft, .userSkipped: return true
+        case .setup, .itemReset, .invalidTime, .autoSkipped, .handedToNextUpCard: return false
+        }
+    }
+}

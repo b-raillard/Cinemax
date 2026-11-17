@@ -62,6 +62,7 @@ You don't need to do anything if you use:
 - `ContentRow` (iOS) — edge cards recede (`ScrollMotion.edgeRecede`), on by default; `.edgeRecede(false)` on the cast, Seerr's missing titles and « En direct »
 - `.listSwapSlide(trigger:)` — keyframes on a trigger, never an `.id` swap, and the SAME modifier with motion off (zero-amplitude keyframes — an `if motionEnabled` branch would change the stack's identity when Reduce Motion flips); the fiche's episode lists, keyed on `MediaDetailViewModel.seasonSwapCount` (a re-selected season does not count)
 - The fiche hero (iOS) — the IMAGE moves inside `heroBackdropBleed(…, parallax:)`'s clipped box (the gradient and the box edge stay put), the text fades over the last 90 pt before the hero is gone, then the item's name shows in the bar (`ScrollMotion`, `.scrollView` minY = 0 at rest, measured)
+- Player (UIKit, `MotionEffects.isEnabledNow`): the skip button's slide (`setSkipButtonVisible`), the iOS play/pause crossfade, the countdown number's crossfade — see `Shared/Screens/VideoPlayer/CLAUDE.md`
 - `.contentReveal(step:)` + `ContentRevealClock` (`SkeletonViews.swift`) — Home and the library: the first blocks rise in each time the skeleton leaves, never on an in-place change
 
 New components must consume `\.motionEffectsEnabled` or take an explicit `animated: Bool` parameter.
@@ -95,7 +96,9 @@ Added 2026-11-14 (spec `docs/superpowers/specs/2026-11-14-interface-animations-d
 | `progressFill` | `.easeOut(duration: 0.7)` | `ProgressBarView` |
 | `listSwapDistance` / `listSwapDuration` / `listSwapFadeDuration` | 24 pt, 0.34 s, 0.24 s | episodes on a season change (`.listSwapSlide`) |
 | `barTitleFade` | `.easeOut(duration: 0.2)` | the fiche's bar title |
-| `overlaySlide` / `overlaySlideOut` | 0.3 s / 0.2 s | UIKit player overlays |
+| `overlaySlide` / `overlaySlideOut` / `overlaySlideDistance` | 0.3 s / 0.2 s / 26 pt | the player's skip button |
+| `glyphCrossfade` | 0.2 s | iOS HUD play/pause |
+| `countdownTick` | 0.25 s | next-up countdown number |
 
 Don't invent new durations unless you have a specific reason. Match what's next to you on the screen.
 

@@ -122,3 +122,24 @@ struct AutoSkipPolicyTests {
         #expect(AutoSkipPreferences.current(defaults: defaults) == AutoSkipPreferences(intro: true, credits: false))
     }
 }
+
+/// « Passer l'intro / le générique » slides in and out only when the segment
+/// itself comes and goes (or the user presses it); every reset, auto-skip and
+/// hand-off to the countdown card stays instant (spec 2026-11-14, `lecteur`).
+@Suite("Bouton « Passer » — animation")
+struct SkipButtonPresentationTests {
+    @Test("animates only inside a segment, never with motion off")
+    func skipButtonAnimatesOnlyInsideASegment() {
+        let animated: [SkipButtonChange] = [.segmentEntered, .segmentLeft, .userSkipped]
+        let instant: [SkipButtonChange] = [.setup, .itemReset, .invalidTime, .autoSkipped, .handedToNextUpCard]
+        for change in animated {
+            #expect(SkipButtonPresentation.animates(change, motionEnabled: true), "\(change)")
+        }
+        for change in instant {
+            #expect(!SkipButtonPresentation.animates(change, motionEnabled: true), "\(change)")
+        }
+        for change in animated + instant {
+            #expect(!SkipButtonPresentation.animates(change, motionEnabled: false), "\(change)")
+        }
+    }
+}
