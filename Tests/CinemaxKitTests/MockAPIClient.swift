@@ -872,6 +872,16 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         }
         return []
     }
+    /// Series id → every episode of the series. With no handler the call
+    /// THROWS, so a fixture that only describes one season keeps exercising
+    /// the season fallback — and its `getEpisodeRefsCallCount` stays what it was.
+    var getSeriesEpisodeRefsHandler: (@Sendable (String) async throws -> [EpisodeReference])?
+    private(set) var getSeriesEpisodeRefsCallCount = 0
+    func getSeriesEpisodeRefs(seriesId: String, userId: String) async throws -> [EpisodeReference] {
+        recordLock.withLock { getSeriesEpisodeRefsCallCount += 1 }
+        guard let handler = getSeriesEpisodeRefsHandler else { throw URLError(.badServerResponse) }
+        return try await handler(seriesId)
+    }
     var stubbedNextUp: BaseItemDto?
     /// Drapeau **dédié**, distinct de `shouldThrow` : plusieurs suites existantes
     /// activent `shouldThrow` tout en laissant `getNextUp` réussir, et les faire
@@ -908,6 +918,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         recordLock.withLock { getNextUpEpisodesCallCount += 1 }
         if shouldThrow { throw stubbedError }
         return stubbedNextUpItems
+    }
+    /// (seriesId, episodeId) of every « Retirer de À suivre ».
+    private(set) var hideFromNextUpCalls: [[String]] = []
+    var hideFromNextUpShouldThrow = false
+    func hideFromNextUp(seriesId: String, episodeId: String, userId: String) async throws {
+        if hideFromNextUpShouldThrow { throw stubbedError }
+        recordLock.withLock { hideFromNextUpCalls.append([seriesId, episodeId]) }
     }
     private(set) var markPlayedCalls: [String] = []
     private(set) var markUnplayedCalls: [String] = []

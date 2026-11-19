@@ -29,11 +29,13 @@ extension View {
         artwork: CardArtwork,
         navigation: CardPlaybackNavigation? = nil,
         onRemoveFromResume: (() -> Void)? = nil,
+        onRemoveFromNextUp: (() -> Void)? = nil,
         onGoToSeries: ((String) -> Void)? = nil
     ) -> some View {
         modifier(MediaCardContextMenu(
             item: CardMenuItem(item), artwork: artwork, navigation: navigation,
-            onRemoveFromResume: onRemoveFromResume, onGoToSeries: onGoToSeries
+            onRemoveFromResume: onRemoveFromResume, onRemoveFromNextUp: onRemoveFromNextUp,
+            onGoToSeries: onGoToSeries
         ))
     }
 }
@@ -147,6 +149,8 @@ private struct MediaCardContextMenu: ViewModifier {
     let artwork: CardArtwork
     let navigation: CardPlaybackNavigation?
     let onRemoveFromResume: (() -> Void)?
+    /// « Retirer de À suivre » — only Home's next-up rail provides it.
+    let onRemoveFromNextUp: (() -> Void)?
     let onGoToSeries: ((String) -> Void)?
 
     // Optimistic mirrors of the toggle state. The menu label is derived from
@@ -205,7 +209,8 @@ private struct MediaCardContextMenu: ViewModifier {
     private var menuContent: CardMenuContent {
         CardMenuContent(
             item: item, navigation: navigation,
-            onRemoveFromResume: onRemoveFromResume, onGoToSeries: onGoToSeries,
+            onRemoveFromResume: onRemoveFromResume, onRemoveFromNextUp: onRemoveFromNextUp,
+            onGoToSeries: onGoToSeries,
             playedOverride: $playedOverride, favoriteOverride: $favoriteOverride
         )
     }
@@ -235,6 +240,8 @@ private struct CardMenuContent: View {
     let item: CardMenuItem
     let navigation: CardPlaybackNavigation?
     let onRemoveFromResume: (() -> Void)?
+    /// « Retirer de À suivre » — only Home's next-up rail provides it.
+    let onRemoveFromNextUp: (() -> Void)?
     let onGoToSeries: ((String) -> Void)?
     @Binding var playedOverride: OptimisticFlag?
     @Binding var favoriteOverride: OptimisticFlag?
@@ -362,6 +369,14 @@ private struct CardMenuContent: View {
                     Label(loc.localized("home.continueWatching.remove"), systemImage: "minus.circle")
                 }
             }
+            if let onRemoveFromNextUp {
+                Divider()
+                Button(role: .destructive) {
+                    onRemoveFromNextUp()
+                } label: {
+                    Label(loc.localized("home.nextUp.remove"), systemImage: "minus.circle")
+                }
+            }
         }
     }
 
@@ -389,14 +404,14 @@ private struct CardMenuContent: View {
 
         #if os(tvOS)
         coordinator?.play(
-            itemId: target.itemId, title: target.title, startTime: startTime,
+            itemId: nav?.episodeId ?? target.itemId, title: target.title, startTime: startTime,
             previousEpisode: nav?.previous, nextEpisode: nav?.next,
             episodeNavigator: nav?.navigator,
             using: appState
         )
         #else
         cardActions?.present(playback: CardPlaybackRequest(
-            itemId: target.itemId, title: target.title, startTime: startTime,
+            itemId: nav?.episodeId ?? target.itemId, title: target.title, startTime: startTime,
             previousEpisode: nav?.previous, nextEpisode: nav?.next,
             episodeNavigator: nav?.navigator
         ))
@@ -409,12 +424,13 @@ private struct CardMenuContent: View {
     /// Only an episode has neighbours. A **series** card qualifies too when
     /// its next-up probe handed back an episode id (`target.itemId` then
     /// differs from the card's own): the resolver learns the season from that
-    /// id. When the probe instead fell through to the series id, the season
-    /// lookup comes back empty and this is one cached call spent on a `nil`.
+    /// id. When the probe instead fell through to the series id (nothing next
+    /// up — a series watched to the end), the resolver picks the episode to
+    /// open on and hands it back as `episodeId`, so the replay chains.
     private func resolvedEpisodeNavigation(for target: CardPlayTarget) async -> CardPlaybackNavigation? {
         guard let userId = appState.currentUserId else { return nil }
         let isEpisode = item.type == .episode
-        guard isEpisode || target.itemId != item.id else { return nil }
+        guard isEpisode || item.type == .series else { return nil }
         return await CardEpisodeNavigationResolver.resolve(
             episodeId: target.itemId,
             seriesId: isEpisode ? item.seriesId : item.id,

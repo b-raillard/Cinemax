@@ -365,15 +365,23 @@ enum CardEpisodeNavigationResolver {
         // timed out), which is what makes that case a clean `nil`.
         if series == nil || season == nil {
             guard let item = try? await api.getItem(userId: userId, itemId: episodeId) else { return nil }
+            // Still the SERIES: nothing was next up, or the next-up probe timed
+            // out. Ask again (10 s-cached, and this probe has its own deadline)
+            // and open on that episode, else on the series' first one — as the
+            // episode, so a series watched to the end chains when replayed.
+            if item.type == .series {
+                return await seriesStart(seriesId: episodeId, api: api, userId: userId)
+            }
             series = series ?? item.seriesID
             season = season ?? item.seasonID
         }
         guard let series, let season else { return nil }
-        // `getEpisodeRefs`: only prev/next is derived here, and that needs an
-        // ordered list of ids and titles — nothing the full episode DTO adds.
-        guard let episodes = try? await api.getEpisodeRefs(
-            seriesId: series, seasonId: season, userId: userId
-        ) else { return nil }
+        // The lean refs, never the full episode DTO: only prev/next is derived
+        // here. Series-wide, so the last episode of a season is followed by
+        // the first of the next one (`episodeNavigationRefs`).
+        let episodes = await episodeNavigationRefs(
+            episodeId: episodeId, seriesId: series, seasonId: season, api: api, userId: userId
+        )
 
         let nav = buildEpisodeNavigation(for: episodeId, in: episodes)
         // A one-episode season yields no navigator; handing the player an
@@ -382,6 +390,19 @@ enum CardEpisodeNavigationResolver {
         guard let navigator = nav.navigator else { return nil }
         return CardPlaybackNavigation(
             previous: nav.previous, next: nav.next, navigator: navigator
+        )
+    }
+
+    private static func seriesStart(
+        seriesId: String, api: any LibraryAPI, userId: String
+    ) async -> CardPlaybackNavigation? {
+        guard let all = try? await api.getSeriesEpisodeRefs(seriesId: seriesId, userId: userId) else { return nil }
+        let nextUpId = (try? await api.getNextUp(seriesId: seriesId, userId: userId))?.id
+        guard let startId = nextUpId ?? seriesOpeningEpisode(in: all)?.id else { return nil }
+        let nav = buildEpisodeNavigation(for: startId, in: seriesEpisodeChain(containing: startId, in: all))
+        guard let navigator = nav.navigator else { return nil }
+        return CardPlaybackNavigation(
+            previous: nav.previous, next: nav.next, navigator: navigator, episodeId: startId
         )
     }
 }

@@ -534,6 +534,36 @@ extension JellyfinAPIClient {
         }
     }
 
+    /// The whole series in ONE light request (`/Shows/{id}/Episodes` without a
+    /// season) — episode navigation must cross a season boundary, and a single
+    /// season's list ends the chain at that season's last episode. Same cache
+    /// discipline as `getEpisodeRefs` (no userData → outside the userData
+    /// sweep, 300 s; no rating filter, the chain must stay contiguous).
+    /// Virtual (missing) episodes are dropped: they cannot be played, so they
+    /// are no one's "next". Measured on Jellyfin 10.11 (2026-11-19): ~680 bytes
+    /// per episode, season-then-episode order, `ParentIndexNumber` and
+    /// `LocationType` present with no `fields`.
+    public func getSeriesEpisodeRefs(seriesId: String, userId: String) async throws -> [EpisodeReference] {
+        let cacheKey = "seriesepisoderefs-\(seriesId)-\(userId)"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
+        if let cached: [EpisodeReference] = cache.get(cacheKey) { return cached }
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        var params = Paths.GetEpisodesParameters(userID: userId, fields: [], enableUserData: false)
+        params.enableImages = false
+        do {
+            let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
+            let refs = (response.value.items ?? []).compactMap { item -> EpisodeReference? in
+                guard item.locationType != .virtual, let id = item.id else { return nil }
+                return EpisodeReference(id: id, name: item.name ?? "", season: item.parentIndexNumber)
+            }
+            cache.set(cacheKey, value: refs, ttl: 300, stamp: cacheStamp)
+            return refs
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     public func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
         // Short-TTL cache mirroring `getEpisodes`: a series-detail open fires
         // this alongside `getItem`/`getSeasons`, and the tvOS post-playback
@@ -562,7 +592,17 @@ extension JellyfinAPIClient {
                 enableUserData: true
             )
             let response = try await client.send(Paths.getNextUp(parameters: params))
-            items = response.value.items ?? []
+            var fetched = response.value.items ?? []
+            // The episode after the most RECENT play wins over the server's
+            // reading (`NextUpCorrection`) — here rather than in a caller, so
+            // the fiche, the card menus and the playback-time resolution of a
+            // series all name the same episode as the « À suivre » rail.
+            if let corrected = await correctedNextUp(
+                seriesId: seriesId, userId: userId, serverEpisodeId: fetched.first?.id
+            ) {
+                fetched = [corrected]
+            }
+            items = fetched
             cache.set(cacheKey, value: items, ttl: 10, stamp: cacheStamp)
         }
         guard let next = items.first else { return nil }
@@ -580,11 +620,121 @@ extension JellyfinAPIClient {
                 enableUserData: true
             )
             let response = try await client.send(Paths.getNextUp(parameters: params))
-            return applyRatingFilter(response.value.items ?? [])
+            let server = applyRatingFilter(response.value.items ?? [])
+            let rail = await correctedNextUpRail(server, userId: userId, limit: limit)
+            // « Retirer de À suivre » — read on every load, never cached: the
+            // list is the account's, another device may have just changed it.
+            // Unreadable preferences hide nothing.
+            let hidden = NextUpHiddenList(try? await getDisplayPreferences(
+                id: NextUpHiddenList.preferencesId, client: NextUpHiddenList.client, userId: userId
+            ))
+            return rail.filter { !hidden.hides(seriesId: $0.seriesID, episodeId: $0.id) }
         } catch {
             notifyIfUnauthorized(error)
             throw error
         }
+    }
+
+    public func hideFromNextUp(seriesId: String, episodeId: String, userId: String) async throws {
+        // Read-modify-write: a DisplayPreferences write replaces the entity.
+        let dto = try await getDisplayPreferences(
+            id: NextUpHiddenList.preferencesId, client: NextUpHiddenList.client, userId: userId
+        )
+        var hidden = NextUpHiddenList(dto)
+        hidden.hide(seriesId: seriesId, episodeId: episodeId)
+        try await updateDisplayPreferences(
+            hidden.merged(into: dto),
+            id: NextUpHiddenList.preferencesId, client: NextUpHiddenList.client, userId: userId
+        )
+    }
+
+    // MARK: - Next-up correction (`NextUpCorrection`)
+
+    /// The played episodes, most recent first — ties towards the higher
+    /// episode, so a season marked watched in one tap reads as finished.
+    private func recentPlays(userId: String, seriesId: String?, limit: Int) async throws -> [RecentPlay] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        var params = Paths.GetItemsParameters(
+            userID: userId,
+            limit: limit,
+            isRecursive: true,
+            sortOrder: [.descending, .descending, .descending],
+            parentID: seriesId,
+            includeItemTypes: [.episode],
+            filters: [.isPlayed],
+            sortBy: [.datePlayed, .parentIndexNumber, .indexNumber]
+        )
+        params.enableUserData = true
+        params.enableImages = false
+        let response = try await client.send(Paths.getItems(parameters: params))
+        return (response.value.items ?? []).compactMap { item in
+            guard let id = item.id, let series = item.seriesID,
+                  let playedAt = item.userData?.lastPlayedDate else { return nil }
+            return RecentPlay(seriesId: series, episodeId: id, playedAt: playedAt)
+        }
+    }
+
+    /// Episodes by id, in the order asked.
+    private func nextUpItems(ids: [String], userId: String, fields: [ItemFields]?) async throws -> [BaseItemDto] {
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        var params = Paths.GetItemsParameters(userID: userId)
+        params.ids = ids
+        params.fields = fields
+        params.enableUserData = true
+        let items = try await client.send(Paths.getItems(parameters: params)).value.items ?? []
+        return ids.compactMap { id in items.first { $0.id == id } }
+    }
+
+    /// The episode after the series' most recent play, when it is not the one
+    /// the server named. `nil` — the server's answer stands — when nothing was
+    /// played inside the window, when that play was the last episode or a
+    /// special, and when any of the lookups fails.
+    private func correctedNextUp(seriesId: String, userId: String, serverEpisodeId: String?) async -> BaseItemDto? {
+        guard let plays = try? await recentPlays(userId: userId, seriesId: seriesId, limit: 1),
+              let last = NextUpCorrection.lastPlays(plays, now: Date()).first,
+              let refs = try? await getSeriesEpisodeRefs(seriesId: seriesId, userId: userId),
+              let next = SeriesEpisodeOrder.successor(of: last.episodeId, in: refs),
+              next.id != serverEpisodeId else { return nil }
+        return try? await nextUpItems(ids: [next.id], userId: userId, fields: [.mediaSources]).first
+    }
+
+    private func correctedNextUpRail(_ server: [BaseItemDto], userId: String, limit: Int) async -> [BaseItemDto] {
+        guard let plays = try? await recentPlays(
+            userId: userId, seriesId: nil, limit: NextUpCorrection.recentPlayLimit
+        ) else { return server }
+        let lastPlays = NextUpCorrection.lastPlays(plays, now: Date())
+        guard !lastPlays.isEmpty else { return server }
+
+        // One lean, 300 s-cached list per recently played series — the same
+        // `seriesepisoderefs-` entries Home's navigation maps read.
+        let successors = await withTaskGroup(of: (String, String?).self) { group in
+            for play in lastPlays {
+                group.addTask { [self] in
+                    let refs = try? await getSeriesEpisodeRefs(seriesId: play.seriesId, userId: userId)
+                    return (play.seriesId, refs.flatMap { SeriesEpisodeOrder.successor(of: play.episodeId, in: $0)?.id })
+                }
+            }
+            var found: [String: String] = [:]
+            for await (seriesId, next) in group {
+                if let next { found[seriesId] = next }
+            }
+            return found
+        }
+
+        var serverNextUp: [String: String] = [:]
+        for item in server {
+            if let seriesId = item.seriesID, let id = item.id { serverNextUp[seriesId] = id }
+        }
+        let plan = NextUpCorrection.plan(lastPlays: lastPlays, successors: successors, serverNextUp: serverNextUp)
+        guard !plan.corrected.isEmpty,
+              let fetched = try? await nextUpItems(ids: plan.corrected.map(\.episodeId), userId: userId, fields: nil)
+        else { return server }
+
+        // Corrected series lead: they are the most recently watched, which is
+        // also how the server orders the rail.
+        let replaced = Set(fetched.compactMap(\.seriesID))
+        let rest = server.filter { item in !(item.seriesID.map(replaced.contains) ?? false) }
+        return Array((applyRatingFilter(fetched) + rest).prefix(limit))
     }
 
     /// Episodes the server expects to air soon, for series the user follows.

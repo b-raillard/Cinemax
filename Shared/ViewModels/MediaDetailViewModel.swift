@@ -64,9 +64,28 @@ final class MediaDetailViewModel {
     private(set) var seasonSwapCount = 0
     var selectedSeasonId: String?
     var nextUpEpisode: BaseItemDto?
+    /// The last next-up request THREW (as opposed to answering « nothing next
+    /// up »). The Play button then leaves the choice of episode to the
+    /// playback-time resolution, which asks again, instead of restarting the
+    /// series from its first episode on a network hiccup.
+    private(set) var nextUpLoadFailed = false
     /// Episodes from the next-up episode's season, when it differs from the currently displayed season.
     /// Used so episodeNavigation can build prev/next refs for the resume action button.
     var nextUpEpisodes: [BaseItemDto] = []
+    /// Every available episode of the series, all seasons (lean refs) — what
+    /// lets an episode's prev/next cross a season boundary. Empty until it
+    /// lands, or when the request failed: the maps then stop at the season.
+    private(set) var seriesEpisodeRefs: [EpisodeReference] = []
+    /// Bumped on every rebuild of the navigation maps. The fiche's `Equatable`
+    /// sub-views (play buttons, episode rows / cards) compare it: they cannot
+    /// compare the navigator closure itself, and a mid-season episode has the
+    /// SAME prev/next ids in the season chain and in the series-wide one — so
+    /// without it they kept the season-only navigator they were first built
+    /// with, and the season's last episode ended on the end-of-series card.
+    private(set) var navigationRevision = 0
+    /// The side task filling `seriesEpisodeRefs` (see `loadSeriesNavigation`).
+    /// Internal so a test can await it instead of racing it.
+    private(set) var seriesNavigationTask: Task<Void, Never>?
     /// Precomputed episode navigation map — O(1) lookups by episode ID.
     var episodeNavigationMap: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
     /// Same map but for nextUpEpisodes (cross-season next-up).
@@ -586,6 +605,12 @@ final class MediaDetailViewModel {
         if resolvedType != .boxSet, errorMessage == nil, let similarSourceId = item?.id {
             similarTask = Task { await loadSimilar(for: similarSourceId, using: appState) }
         }
+        // Cross-season navigation: a side task as well — the fiche paints with
+        // the season's own navigation and gains the series-wide chain when
+        // this lands. Never on the critical path, silent on failure.
+        if resolvedType == .series, errorMessage == nil, let seriesId = item?.id {
+            seriesNavigationTask = Task { await loadSeriesNavigation(seriesId: seriesId, using: appState) }
+        }
         // The seasons Seerr knows and the library lacks: a side task too, once
         // the owned seasons and episodes are written — never on the critical
         // path, silent on failure.
@@ -649,12 +674,21 @@ final class MediaDetailViewModel {
             }()
 
             let refreshedItem = try? await itemTask
-            let refreshedNextUp = try? await nextUpTask
+            let refreshedNextUp: BaseItemDto?
+            let nextUpFailed: Bool
+            do {
+                refreshedNextUp = try await nextUpTask
+                nextUpFailed = false
+            } catch {
+                refreshedNextUp = nil
+                nextUpFailed = true
+            }
             let refreshedEpisodes = await episodesTask
 
             guard loadGeneration == generation else { return }
             if let refreshedItem { item = refreshedItem }
             nextUpEpisode = refreshedNextUp
+            nextUpLoadFailed = nextUpFailed
             // Only onto the season they were fetched for: the user may have
             // switched season while this was in flight, and `selectSeason`'s
             // own generation does not cover this writer (audit 2026-09-22, B8).
@@ -1050,10 +1084,19 @@ final class MediaDetailViewModel {
         async let nextUpTask = apiClient.getNextUp(seriesId: seriesId, userId: userId)
 
         let loadedSeasons = try await seasonsTask
-        let loadedNextUp = try? await nextUpTask
+        let loadedNextUp: BaseItemDto?
+        let nextUpFailed: Bool
+        do {
+            loadedNextUp = try await nextUpTask
+            nextUpFailed = false
+        } catch {
+            loadedNextUp = nil
+            nextUpFailed = true
+        }
         guard loadGeneration == generation else { return }
         seasons = loadedSeasons
         nextUpEpisode = loadedNextUp
+        nextUpLoadFailed = nextUpFailed
 
         // Not `loadedSeasons.first` blindly: a fiche reached by an episode's id
         // (`cinemax://item/…` from the widget / Top Shelf, a search result, a
@@ -1101,6 +1144,18 @@ final class MediaDetailViewModel {
             rating: rating,
             maxAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
         )
+    }
+
+    /// Fills `seriesEpisodeRefs` off the critical path and re-derives the
+    /// navigation maps with it. Silent on failure (the maps keep stopping at
+    /// the season), dropped if the screen has moved on to another item.
+    private func loadSeriesNavigation(seriesId: String, using appState: AppState) async {
+        guard let userId = appState.currentUserId,
+              let loaded = try? await appState.apiClient.getSeriesEpisodeRefs(seriesId: seriesId, userId: userId)
+        else { return }
+        guard item?.id == seriesId, loaded != seriesEpisodeRefs else { return }
+        seriesEpisodeRefs = loaded
+        rebuildNavigationMaps()
     }
 
     /// Fills « Titres similaires » off the critical path. Silent on failure —
@@ -1166,8 +1221,20 @@ final class MediaDetailViewModel {
     /// Precomputes the refs + id→index pair once per list so per-episode
     /// population is O(1) instead of re-running compactMap+firstIndex inside
     /// `buildEpisodeNavigation` on every call.
+    ///
+    /// The series-wide chain wins wherever it knows the episode: the last
+    /// episode of a season is followed by the first of the next one. The
+    /// season's own list stays underneath as the fallback (request failed, or
+    /// an episode newer than the 300 s-cached series list).
     private func rebuildNavigationMaps() {
-        episodeNavigationMap = Self.makeNavigationMap(from: episodes)
+        navigationRevision &+= 1
+        var map = Self.makeNavigationMap(from: episodes)
+        let chains = SeriesEpisodeChains(seriesEpisodeRefs)
+        for ref in seriesEpisodeRefs {
+            guard let pre = chains.precomputed(for: ref.id) else { continue }
+            map[ref.id] = buildEpisodeNavigation(for: ref.id, refs: pre.refs, indexByID: pre.indexByID)
+        }
+        episodeNavigationMap = map
         nextUpNavigationMap = Self.makeNavigationMap(from: nextUpEpisodes)
     }
 

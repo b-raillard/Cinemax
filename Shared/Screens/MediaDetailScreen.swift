@@ -1218,6 +1218,9 @@ struct MediaDetailScreen: View {
         let progress: Double
         let remainingMinutes: Int
         let nextEpisode: BaseItemDto?
+        /// The id prev/next is built for: the next-up episode, a collection's
+        /// member, or the opening episode of a series with nothing next up.
+        let navigationItemId: String?
     }
 
     private func resolvedPlayTarget(for item: BaseItemDto) -> ResolvedPlayTarget {
@@ -1240,15 +1243,25 @@ struct MediaDetailScreen: View {
         // rewatch stopped part-way, and resumes (see its doc).
         let showResume = CardPlayTargetResolver.isResumable(positionTicks: posTicks) && totalTicks > 0
 
+        // A series with nothing « next up » (watched to the end) opens on its
+        // first episode — as the EPISODE, so it carries its navigation and the
+        // rewatch chains (`seriesOpeningEpisode`). Until the series-wide list
+        // lands, or when the next-up request FAILED, this is nil and the series
+        // id plays: `getPlaybackInfo` asks for next-up again.
+        let opening = isSeries && nextEp == nil && !viewModel.nextUpLoadFailed
+            ? seriesOpeningEpisode(in: viewModel.seriesEpisodeRefs)
+            : nil
+
         return ResolvedPlayTarget(
-            itemId: nextEp?.id ?? item.id ?? "",
-            title: nextEp?.name ?? item.name ?? "",
+            itemId: nextEp?.id ?? opening?.id ?? item.id ?? "",
+            title: nextEp?.name ?? opening?.name ?? item.name ?? "",
             startSeconds: showResume ? posTicks.jellyfinSeconds : nil,
             startTicks: showResume ? posTicks : nil,
             showResume: showResume,
             progress: showResume ? min(1.0, Double(posTicks) / Double(totalTicks)) : 0,
             remainingMinutes: max(0, totalTicks - posTicks).jellyfinMinutes,
-            nextEpisode: nextEp
+            nextEpisode: nextEp,
+            navigationItemId: nextEp?.id ?? opening?.id
         )
     }
 
@@ -1441,12 +1454,10 @@ struct MediaDetailScreen: View {
         // the collection's members is what gives "Play all" its ⏮/⏭, its
         // autoplay-next and its end-of-set card, with NO second queue authority
         // beside it.
-        let epNav = nextEp.flatMap { ep -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)? in
-            guard let id = ep.id else { return nil }
-            if viewModel.resolvedType == .boxSet {
-                return buildEpisodeNavigation(for: id, in: viewModel.collectionChildren)
-            }
-            return episodeNavigation(for: id)
+        let epNav = target.navigationItemId.map { id in
+            viewModel.resolvedType == .boxSet
+                ? buildEpisodeNavigation(for: id, in: viewModel.collectionChildren)
+                : episodeNavigation(for: id)
         }
 
         let playSection = PlayActionButtonsSection(
@@ -1460,6 +1471,7 @@ struct MediaDetailScreen: View {
             epPrev: epNav?.previous,
             epNext: epNav?.next,
             epNavigator: epNav?.navigator,
+            navigationRevision: viewModel.navigationRevision,
             // Only meaningful for multi-source items; `selectedSource` returns
             // nil otherwise and playback falls back to the ranked pick.
             mediaSourceId: selectedSource(item)?.id,
@@ -1898,6 +1910,7 @@ struct MediaDetailScreen: View {
                             epPrev: nav.previous,
                             epNext: nav.next,
                             epNavigator: nav.navigator,
+                            navigationRevision: viewModel.navigationRevision,
                             episodeThumbnailWidth: episodeThumbnailWidth,
                             episodeTitleFontSize: episodeTitleFontSize,
                             onSelectOverview: { episodeOverview = $0 }
@@ -1971,6 +1984,7 @@ struct MediaDetailScreen: View {
                                     epPrev: nav.previous,
                                     epNext: nav.next,
                                     epNavigator: nav.navigator,
+                                    navigationRevision: viewModel.navigationRevision,
                                     episodeTitleFontSize: episodeTitleFontSize,
                                     onSelectOverview: { episodeOverview = $0 },
                                     onToggleWatched: { ep in
@@ -2406,6 +2420,9 @@ private struct PlayActionButtonsSection: View, Equatable {
     let epPrev: EpisodeRef?
     let epNext: EpisodeRef?
     let epNavigator: EpisodeNavigator?
+    /// `MediaDetailViewModel.navigationRevision` — stands in for the navigator
+    /// in `==` (see there).
+    let navigationRevision: Int
     /// User's version pick for multi-source items; `nil` ⇒ ranked default.
     let mediaSourceId: String?
 
@@ -2423,9 +2440,9 @@ private struct PlayActionButtonsSection: View, Equatable {
 
     @Environment(ThemeManager.self) private var themeManager
 
-    // Equatable ignores the navigator closure — fresh closures that carry the
-    // same prev/next identity are treated as equal so the sub-view doesn't
-    // thrash when the parent rebuilds a functionally-identical navigator.
+    // The navigator closure cannot be compared; `navigationRevision` stands in
+    // for it, so a rebuilt chain (season → whole series) replaces the one this
+    // view was built with, while an unrelated parent re-render still skips it.
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.playItemId == rhs.playItemId
             && lhs.playTitle == rhs.playTitle
@@ -2436,6 +2453,7 @@ private struct PlayActionButtonsSection: View, Equatable {
             && lhs.remainingText == rhs.remainingText
             && lhs.epPrev?.id == rhs.epPrev?.id
             && lhs.epNext?.id == rhs.epNext?.id
+            && lhs.navigationRevision == rhs.navigationRevision
             && lhs.mediaSourceId == rhs.mediaSourceId
             && lhs.playLabel == rhs.playLabel
             && lhs.playFromBeginningLabel == rhs.playFromBeginningLabel

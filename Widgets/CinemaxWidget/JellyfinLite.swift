@@ -212,7 +212,11 @@ enum JellyfinLite {
             URLQueryItem(name: "limit", value: String(limit)),
             ratingField
         ]
-        return await fetchItems(comps: comps, session: session)
+        guard let server = await get(Envelope<Item>.self, comps: comps, session: session)?.items else { return nil }
+        // The app's own reading of « À suivre » (`correctedNextUp` below), so
+        // the widget names the same episodes as Home's rail.
+        let rail = await correctedNextUp(passingCap(server, session), session: session, limit: limit)
+        return rail.map(makeResumeItem)
     }
 
     /// Recently added movies/series, newest first (the app's Home "Recently
@@ -319,6 +323,147 @@ enum JellyfinLite {
               (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true,
               !data.isEmpty else { return nil }
         return data
+    }
+}
+
+// MARK: - « À suivre » as the app reads it
+
+/// A copy of CinemaxKit's `NextUpCorrection` + `NextUpHiddenList` (this
+/// extension cannot link the package — keep the two in step): the episode
+/// after the one watched most RECENTLY wins over the server's answer, and a
+/// series removed from « À suivre » stays out until its next-up episode
+/// changes. Every lookup that fails leaves the server's rail as it is.
+extension JellyfinLite {
+    private struct Envelope<Element: Decodable>: Decodable {
+        let items: [Element]
+        enum CodingKeys: String, CodingKey { case items = "Items" }
+    }
+
+    private struct PlayedEpisode: Decodable {
+        struct UserData: Decodable {
+            let lastPlayedDate: String?
+            enum CodingKeys: String, CodingKey { case lastPlayedDate = "LastPlayedDate" }
+        }
+        let id: String
+        let seriesId: String?
+        let userData: UserData?
+        enum CodingKeys: String, CodingKey { case id = "Id", seriesId = "SeriesId", userData = "UserData" }
+    }
+
+    private struct ChainEpisode: Decodable {
+        let id: String
+        let season: Int?
+        let locationType: String?
+        enum CodingKeys: String, CodingKey { case id = "Id", season = "ParentIndexNumber", locationType = "LocationType" }
+    }
+
+    private struct Preferences: Decodable {
+        let customPrefs: [String: String?]?
+        enum CodingKeys: String, CodingKey { case customPrefs = "CustomPrefs" }
+    }
+
+    private static func get<Body: Decodable>(_ type: Body.Type, comps: URLComponents, session: Session) async -> Body? {
+        guard let url = comps.url else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 10)
+        request.setValue("MediaBrowser Token=\(session.accessToken)", forHTTPHeaderField: "Authorization")
+        guard let (data, resp) = try? await Self.send(request, session: session),
+              (resp as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
+    }
+
+    private static func components(_ endpoint: String, _ query: [String: String], session: Session) -> URLComponents? {
+        guard var comps = URLComponents(url: session.serverURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.path = endpointPath(endpoint, serverURL: session.serverURL)
+        comps.queryItems = [URLQueryItem(name: "userId", value: session.userId)]
+            + query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
+        return comps
+    }
+
+    /// (series id, last played episode id), most recent play first, one per
+    /// series, 30 days back, 12 series at most.
+    private static func lastPlays(session: Session) async -> [(seriesId: String, episodeId: String)] {
+        guard let comps = components("/Items", [
+            "recursive": "true", "includeItemTypes": "Episode", "filters": "IsPlayed",
+            "sortBy": "DatePlayed,ParentIndexNumber,IndexNumber",
+            "sortOrder": "Descending,Descending,Descending",
+            "limit": "100", "enableUserData": "true", "enableImages": "false"
+        ], session: session),
+              let plays = await get(Envelope<PlayedEpisode>.self, comps: comps, session: session)?.items else { return [] }
+        // Jellyfin's dates are UTC ISO-8601: they compare as text.
+        let cutoff = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-30 * 24 * 3600))
+        var seen = Set<String>()
+        var result: [(seriesId: String, episodeId: String)] = []
+        for play in plays {
+            guard let seriesId = play.seriesId, let date = play.userData?.lastPlayedDate, date >= cutoff,
+                  seen.insert(seriesId).inserted else { continue }
+            result.append((seriesId, play.id))
+            if result.count == 12 { break }
+        }
+        return result
+    }
+
+    /// The episode after `episodeId` in the series' regular seasons.
+    private static func successor(of episodeId: String, seriesId: String, session: Session) async -> String? {
+        guard let comps = components("/Shows/\(seriesId)/Episodes", [
+            "enableUserData": "false", "enableImages": "false"
+        ], session: session),
+              let all = await get(Envelope<ChainEpisode>.self, comps: comps, session: session)?.items else { return nil }
+        let chain = all.enumerated()
+            .filter { $0.element.locationType != "Virtual" && $0.element.season != 0 }
+            .sorted { lhs, rhs in
+                let left = lhs.element.season ?? .max
+                let right = rhs.element.season ?? .max
+                return left == right ? lhs.offset < rhs.offset : left < right
+            }
+            .map(\.element.id)
+        guard let index = chain.firstIndex(of: episodeId), index + 1 < chain.count else { return nil }
+        return chain[index + 1]
+    }
+
+    /// Series id → the next-up episode the user removed from « À suivre ».
+    private static func hiddenNextUp(session: Session) async -> [String: String] {
+        guard let comps = components("/DisplayPreferences/jellyglass-nextup", ["client": "jellyglass"], session: session),
+              let prefs = await get(Preferences.self, comps: comps, session: session)?.customPrefs,
+              let stored = prefs["hidden"].flatMap({ $0 }),
+              let pairs = try? JSONDecoder().decode([[String]].self, from: Data(stored.utf8)) else { return [:] }
+        var hidden: [String: String] = [:]
+        for pair in pairs where pair.count == 2 { hidden[pair[0]] = pair[1] }
+        return hidden
+    }
+
+    private static func correctedNextUp(_ server: [Item], session: Session, limit: Int) async -> [Item] {
+        async let hiddenTask = hiddenNextUp(session: session)
+        let plays = await lastPlays(session: session)
+        let successors = await withTaskGroup(of: (String, String?).self) { group in
+            for play in plays {
+                group.addTask { (play.seriesId, await successor(of: play.episodeId, seriesId: play.seriesId, session: session)) }
+            }
+            var found: [String: String] = [:]
+            for await (seriesId, next) in group {
+                if let next { found[seriesId] = next }
+            }
+            return found
+        }
+        let serverNextUp = Dictionary(server.compactMap { item in item.seriesId.map { ($0, item.id) } }) { first, _ in first }
+        let wanted = plays.compactMap { play -> String? in
+            guard let next = successors[play.seriesId], serverNextUp[play.seriesId] != next else { return nil }
+            return next
+        }
+
+        var rail = server
+        if !wanted.isEmpty,
+           var comps = components("/Items", ["ids": wanted.joined(separator: ","), "enableUserData": "false"], session: session) {
+            comps.queryItems?.append(ratingField)
+            if let fetched = await get(Envelope<Item>.self, comps: comps, session: session)?.items {
+                let corrected = wanted.compactMap { id in fetched.first { $0.id == id } }
+                let replaced = Set(corrected.compactMap(\.seriesId))
+                rail = passingCap(corrected, session) + server.filter { item in
+                    !(item.seriesId.map(replaced.contains) ?? false)
+                }
+            }
+        }
+        let hidden = await hiddenTask
+        return Array(rail.filter { item in item.seriesId.map { hidden[$0] == item.id } != true }.prefix(limit))
     }
 }
 

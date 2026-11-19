@@ -158,6 +158,81 @@ struct EpisodeNavigationTests {
         let unknown = nav?("nope")
         #expect(unknown == nil)
     }
+
+    // MARK: - Chaîne de la série entière (défaut du 2026-11-19)
+
+    /// Deux saisons et un hors-série, dans l'ordre où le serveur les rend
+    /// (saison 0 en tête).
+    private var wholeSeries: [EpisodeReference] {
+        [
+            EpisodeReference(id: "sp-1", name: "Hors-série 1", season: 0),
+            EpisodeReference(id: "sp-2", name: "Hors-série 2", season: 0),
+            EpisodeReference(id: "s1e1", name: "S1E1", season: 1),
+            EpisodeReference(id: "s1e2", name: "S1E2", season: 1),
+            EpisodeReference(id: "s2e1", name: "S2E1", season: 2),
+            EpisodeReference(id: "s2e2", name: "S2E2", season: 2)
+        ]
+    }
+
+    /// Par le chemin « plusieurs épisodes » (`SeriesEpisodeChains`), celui de
+    /// l'Accueil et de la fiche.
+    private func seriesNavigation(_ id: String) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
+        guard let pre = SeriesEpisodeChains(wholeSeries).precomputed(for: id) else { return (nil, nil, nil) }
+        return buildEpisodeNavigation(for: id, refs: pre.refs, indexByID: pre.indexByID)
+    }
+
+    @Test("Le dernier épisode d'une saison a pour suivant le premier de la saison suivante")
+    func seasonBoundaryIsCrossed() {
+        let chain = seriesEpisodeChain(containing: "s1e2", in: wholeSeries)
+        let nav = buildEpisodeNavigation(for: "s1e2", in: chain)
+        #expect(nav.previous?.id == "s1e1")
+        #expect(nav.next?.id == "s2e1")
+
+        // Et le navigateur poursuit : après le passage de saison, le premier
+        // épisode de la saison 2 retrouve ses deux voisins.
+        let after = nav.navigator?("s2e1")
+        #expect(after?.0?.id == "s1e2")
+        #expect(after?.1?.id == "s2e2")
+    }
+
+    @Test("Seul le dernier épisode disponible de la série n'a pas de suivant")
+    func onlyTheLastAvailableEpisodeEndsTheSeries() {
+        let withoutNext = ["s1e1", "s1e2", "s2e1", "s2e2"].filter { seriesNavigation($0).next == nil }
+        #expect(withoutNext == ["s2e2"])
+        #expect(seriesNavigation("s2e2").navigator != nil, "sans navigateur, pas de carte de fin de série")
+    }
+
+    @Test("Les hors-série forment leur propre chaîne")
+    func specialsStayApart() {
+        #expect(seriesNavigation("s1e1").previous == nil, "S1E1 n'est pas précédé d'un hors-série")
+        #expect(seriesNavigation("sp-2").next == nil, "le dernier hors-série n'enchaîne pas sur S1E1")
+        #expect(seriesNavigation("sp-1").next?.id == "sp-2")
+        #expect(SeriesEpisodeChains(wholeSeries).precomputed(for: "inconnu") == nil)
+    }
+
+    /// « Si je regarde Arrow à nouveau, j'ai envie que mes épisodes
+    /// s'enchaînent » : une série sans « à suivre » s'ouvre sur son premier
+    /// épisode normal, jamais sur un hors-série listé avant lui.
+    @Test("Une série revue s'ouvre sur le premier épisode de la première saison")
+    func rewatchOpensOnTheFirstRegularEpisode() {
+        #expect(seriesOpeningEpisode(in: wholeSeries)?.id == "s1e1")
+        #expect(seriesNavigation("s1e1").next?.id == "s1e2")
+        let onlySpecials = [EpisodeReference(id: "sp-1", name: "", season: 0)]
+        #expect(seriesOpeningEpisode(in: onlySpecials)?.id == "sp-1")
+        #expect(seriesOpeningEpisode(in: []) == nil)
+    }
+
+    @Test("Les saisons sont chaînées par numéro, l'ordre du serveur gardé dans la saison")
+    func chainIsOrderedBySeasonNumber() {
+        let shuffled = [
+            EpisodeReference(id: "s2e1", name: "", season: 2),
+            EpisodeReference(id: "s1e1", name: "", season: 1),
+            EpisodeReference(id: "s2e2", name: "", season: 2),
+            EpisodeReference(id: "s1e2", name: "", season: 1)
+        ]
+        #expect(seriesEpisodeChain(containing: "s2e2", in: shuffled).map(\.id) == ["s1e1", "s1e2", "s2e1", "s2e2"])
+        #expect(seriesEpisodeChain(containing: "inconnu", in: shuffled).isEmpty)
+    }
 }
 
 // MARK: - MediaLibraryViewModel load resilience
@@ -279,5 +354,106 @@ struct MediaLibraryViewModelTests {
         await vm.loadInitial(using: appState, loc: LocalizationManager())
 
         #expect(vm.totalCount == 7)
+    }
+}
+
+// MARK: - « À suivre » : l'épisode après le dernier regardé
+
+/// Relevé sur le serveur du propriétaire le 2026-11-19 (12.4) : Arrow, saisons
+/// 4 à 8 vues, S02E19–22 regardés dans la semaine, S02E23 non vu. Le serveur ne
+/// proposait rien (il lit « après le PLUS AVANCÉ jamais vu »), et son option
+/// `enableRewatching` proposait S03E13, le prochain épisode DÉJÀ vu.
+@Suite("À suivre — correction par la dernière lecture")
+struct NextUpCorrectionTests {
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+    private func play(_ series: String, _ episode: String, daysAgo: Double) -> RecentPlay {
+        RecentPlay(seriesId: series, episodeId: episode, playedAt: now.addingTimeInterval(-daysAgo * 86_400))
+    }
+    private let arrow = [
+        EpisodeReference(id: "s2e22", name: "", season: 2),
+        EpisodeReference(id: "s2e23", name: "", season: 2),
+        EpisodeReference(id: "s3e1", name: "", season: 3),
+        EpisodeReference(id: "sp1", name: "", season: 0)
+    ]
+
+    @Test("L'épisode qui suit, à travers les saisons ; rien après le dernier ni après un hors-série")
+    func successorFollowsTheChain() {
+        #expect(SeriesEpisodeOrder.successor(of: "s2e22", in: arrow)?.id == "s2e23")
+        #expect(SeriesEpisodeOrder.successor(of: "s2e23", in: arrow)?.id == "s3e1")
+        #expect(SeriesEpisodeOrder.successor(of: "s3e1", in: arrow) == nil)
+        #expect(SeriesEpisodeOrder.successor(of: "sp1", in: arrow) == nil)
+        #expect(SeriesEpisodeOrder.successor(of: "inconnu", in: arrow) == nil)
+    }
+
+    @Test("Une lecture par série, la plus récente, dans les 30 jours")
+    func lastPlaysKeepsTheMostRecentPerSeriesInsideTheWindow() {
+        let plays = [
+            play("arrow", "s2e22", daysAgo: 1), play("arrow", "s2e21", daysAgo: 1.1),
+            play("silo", "e7", daysAgo: 29), play("vieux", "e1", daysAgo: 31)
+        ]
+        let last = NextUpCorrection.lastPlays(plays, now: now)
+        #expect(last.map(\.episodeId) == ["s2e22", "e7"])
+    }
+
+    @Test("Au plus douze séries corrigées par chargement")
+    func lastPlaysIsBounded() {
+        let plays = (0..<30).map { play("serie-\($0)", "e", daysAgo: Double($0) / 10) }
+        #expect(NextUpCorrection.lastPlays(plays, now: now).count == NextUpCorrection.maxSeries)
+    }
+
+    @Test("Arrow revient avec S02E23 ; une série suivie dans l'ordre n'est pas touchée")
+    func planCorrectsOnlyWhatDiffers() {
+        let last = [play("arrow", "s2e22", daysAgo: 1), play("gabby", "s7e2", daysAgo: 0.2), play("fini", "e10", daysAgo: 2)]
+        let plan = NextUpCorrection.plan(
+            lastPlays: last,
+            // « fini » : sa dernière lecture était le dernier épisode, pas de suivant.
+            successors: ["arrow": "s2e23", "gabby": "s7e3"],
+            serverNextUp: ["gabby": "s7e3", "autre": "x"]
+        )
+        #expect(plan.corrected == [.init(seriesId: "arrow", episodeId: "s2e23")])
+    }
+
+    @Test("Le serveur nomme un autre épisode : la dernière lecture l'emporte")
+    func planOverridesADifferentServerAnswer() {
+        let plan = NextUpCorrection.plan(
+            lastPlays: [play("s", "s1e5", daysAgo: 1)], successors: ["s": "s1e6"], serverNextUp: ["s": "s4e1"]
+        )
+        #expect(plan.corrected.map(\.episodeId) == ["s1e6"])
+    }
+}
+
+@Suite("À suivre — séries retirées")
+struct NextUpHiddenListTests {
+    @Test("Une série retirée revient dès que son épisode à suivre change")
+    func hiddenUntilTheNextUpEpisodeChanges() {
+        var list = NextUpHiddenList()
+        list.hide(seriesId: "arrow", episodeId: "s2e23")
+        #expect(list.hides(seriesId: "arrow", episodeId: "s2e23"))
+        #expect(!list.hides(seriesId: "arrow", episodeId: "s3e1"), "un épisode regardé depuis : la série revient")
+        #expect(!list.hides(seriesId: "silo", episodeId: "s2e23"))
+        #expect(!list.hides(seriesId: nil, episodeId: "s2e23"))
+    }
+
+    @Test("La liste survit à l'aller-retour dans les préférences du compte")
+    func roundTripsThroughDisplayPreferences() {
+        var list = NextUpHiddenList()
+        list.hide(seriesId: "arrow", episodeId: "s2e23")
+        list.hide(seriesId: "silo", episodeId: "s1e8")
+        var dto = DisplayPreferencesDto()
+        dto.customPrefs = ["autre": "gardé"]
+        let written = list.merged(into: dto)
+        #expect(written.customPrefs?["autre"] == "gardé")
+        #expect(NextUpHiddenList(written) == list)
+        #expect(NextUpHiddenList(storedValue: "pas du json").entries.isEmpty)
+        #expect(NextUpHiddenList(nil).entries.isEmpty)
+    }
+
+    @Test("Liste bornée : les plus anciens retraits sortent les premiers")
+    func capacityDropsTheOldest() {
+        var list = NextUpHiddenList()
+        for index in 0...NextUpHiddenList.capacity { list.hide(seriesId: "s\(index)", episodeId: "e") }
+        #expect(list.entries.count == NextUpHiddenList.capacity)
+        #expect(!list.hides(seriesId: "s0", episodeId: "e"))
+        #expect(list.hides(seriesId: "s\(NextUpHiddenList.capacity)", episodeId: "e"))
     }
 }

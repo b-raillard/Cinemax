@@ -1615,6 +1615,9 @@ struct HomeScreen: View {
                 // `WideCard` rail — same reason as Continue Watching above.
                 artwork: .backdrop,
                 navigation: CardPlaybackNavigation(nav),
+                onRemoveFromNextUp: {
+                    Task { await viewModel.removeNextUpItem(item, using: appState, toast: toast, loc: loc) }
+                },
                 onGoToSeries: { seriesDestination = SeriesDestination(id: $0) }
             )
         }

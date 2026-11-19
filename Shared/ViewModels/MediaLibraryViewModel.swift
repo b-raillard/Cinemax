@@ -539,8 +539,14 @@ final class MediaLibraryViewModel {
             let episodes = try await appState.apiClient.getEpisodes(
                 seriesId: seriesId, seasonId: seasonId, userId: userId
             )
+            // Navigation walks the whole series, not this season's list: the
+            // season's last episode must lead into the next season.
+            let chain = await episodeNavigationRefs(
+                episodeId: episodeId, seriesId: seriesId, seasonId: seasonId,
+                api: appState.apiClient, userId: userId
+            )
             guard heroItem?.id == seriesId else { return }
-            let nav = buildEpisodeNavigation(for: episodeId, in: episodes)
+            let nav = buildEpisodeNavigation(for: episodeId, in: chain)
             // Take the title and resume position from the episode as it appears
             // in the season list, so both resolution paths (next-up and the
             // first-episode fallback, where `nextUp` is nil) agree.

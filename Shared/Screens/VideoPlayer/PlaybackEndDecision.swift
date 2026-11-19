@@ -38,6 +38,30 @@ enum PlaybackEndDecision: Equatable {
     case recheck(after: TimeInterval)
 }
 
+/// What the VLC player does once an episode has genuinely ended.
+enum EpisodeEndAction: Equatable {
+    /// Hand off to the next episode (autoplay).
+    case playNext
+    /// « Vous avez terminé {série} » — nothing is left to play.
+    case endOfSeries
+    /// Close the player, no card.
+    case close
+}
+
+enum EpisodeEndPolicy {
+    /// The end-of-series card means "there is no next episode", and nothing
+    /// else. It used to be shown whenever a navigator existed and autoplay did
+    /// not fire — so with autoplay off, or the countdown cancelled, every
+    /// episode of a series ended on « Vous avez terminé {série} ».
+    static func action(
+        autoPlayNext: Bool, nextUpCancelled: Bool, hasNext: Bool, hasNavigator: Bool
+    ) -> EpisodeEndAction {
+        guard hasNavigator else { return .close }
+        guard hasNext else { return .endOfSeries }
+        return autoPlayNext && !nextUpCancelled ? .playNext : .close
+    }
+}
+
 enum PlaybackEndPolicy {
     /// How close to the runtime counts as "the end". libVLC's last position
     /// sample is not exact, so this cannot be zero.

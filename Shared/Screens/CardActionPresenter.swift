@@ -24,6 +24,9 @@ struct CardPlaybackNavigation {
     let previous: EpisodeRef?
     let next: EpisodeRef?
     let navigator: EpisodeNavigator?
+    /// Set when the navigation was resolved for a SERIES card: the episode the
+    /// trio was built around, to play in place of the series id.
+    var episodeId: String?
 }
 
 extension CardPlaybackNavigation {

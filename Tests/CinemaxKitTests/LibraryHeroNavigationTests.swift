@@ -132,6 +132,26 @@ struct LibraryHeroNavigationTests {
         #expect(play?.navigator != nil)
     }
 
+    @Test("Dernier épisode de la saison : le suivant est le premier de la saison suivante")
+    func lastEpisodeOfSeasonLeadsIntoNextSeason() async {
+        let api = MockAPIClient()
+        api.stubbedNextUp = makeHeroEpisode(id: "ep3", index: 3, seasonId: "s1")
+        api.getEpisodesHandler = { _ in makeHeroSeason() }
+        api.getSeriesEpisodeRefsHandler = { _ in
+            (1...3).map { EpisodeReference(id: "ep\($0)", name: "Épisode \($0)", season: 1) }
+                + [EpisodeReference(id: "s2ep1", name: "Épisode 1", season: 2)]
+        }
+
+        let vm = MediaLibraryViewModel(itemType: .series)
+        vm.heroItem = makeSeriesHeroItem()
+        await vm.loadHeroNavigation(using: makeAppState(api: api))
+
+        let play = vm.heroPlay
+        #expect(play?.itemId == "ep3")
+        #expect(play?.previous?.id == "ep2")
+        #expect(play?.next?.id == "s2ep1")
+    }
+
     @Test("Série entièrement vue : repli sur le premier épisode, navigateur présent")
     func fullyWatchedSeriesFallsBackToFirstEpisode() async {
         // Relevé sur appareil : après avoir regardé toute la série, `getNextUp`
