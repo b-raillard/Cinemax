@@ -284,7 +284,7 @@ struct AppNavigation: View {
         // state are process singletons, the three others this root's own
         // `@State`: captured strongly, nothing to protect.
         // Once that reload has settled, the arrival message: launch and
-        // every return to the foreground both come through here
+        // every return from the background both come through here
         // (`refreshCurrentUser`, directly or after a re-validation) —
         // unless the launch has not yet decided who is watching
         // (`arrivalGate`, released below).
@@ -768,22 +768,30 @@ struct AppNavigation: View {
             // peeks). Reuses the same coordinator: it gates on connectivity,
             // debounces against a concurrent lazy-401 cycle, refreshes the
             // user on `.valid`, and only logs out on a confirmed `.invalid`.
-            if appState.isAuthenticated,
-               let since = lastBackgroundedAt,
-               Date().timeIntervalSince(since) > 60 {
-                lastBackgroundedAt = nil
-                Task { await appState.handlePossibleSessionExpiry() }
-            } else if appState.isAuthenticated {
-                // Shorter hop — the token is not in question, but the
-                // POLICY may be. `AppState.currentUser` is a cache taken at
-                // login that nothing else refreshes for the life of the
-                // process, so an admin granting or withdrawing a permission
-                // reached a running client only at the next launch. The
-                // socket's `UserUpdated` frame is the immediate path (see
-                // `RemoteControlListener`); this is the floor for the case
-                // where the user has turned the remote-control socket off.
-                // One small request per foreground.
-                Task { await appState.refreshCurrentUser() }
+            // The stamp is consumed by EVERY `.active`: an `.active` with no
+            // `.background` before it is a peek (Control Center, a banner,
+            // the app switcher) and owes the session nothing — the launch's
+            // own first `.active` included, `restoreSession` having done it.
+            let backgroundedAt = lastBackgroundedAt
+            lastBackgroundedAt = nil
+            if appState.isAuthenticated {
+                switch AppState.foregroundAction(backgroundedAt: backgroundedAt, now: Date()) {
+                case .revalidateSession:
+                    Task { await appState.handlePossibleSessionExpiry() }
+                case .refreshUser:
+                    // Shorter hop — the token is not in question, but the
+                    // POLICY may be. `AppState.currentUser` is a cache taken at
+                    // login that nothing else refreshes for the life of the
+                    // process, so an admin granting or withdrawing a permission
+                    // reached a running client only at the next launch. The
+                    // socket's `UserUpdated` frame is the immediate path (see
+                    // `RemoteControlListener`); this is the floor for the case
+                    // where the user has turned the remote-control socket off.
+                    // One small request per return from the background.
+                    Task { await appState.refreshCurrentUser() }
+                case .none:
+                    break
+                }
             }
             // Re-open the socket dropped on background and re-declare the
             // capabilities, since the session may have been reaped while away.

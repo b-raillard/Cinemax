@@ -242,7 +242,7 @@ final class SeerrSession {
     /// account's age cap changes. The SAME account keeps its generation and
     /// its state until a new answer replaces it — no flicker on every return.
     ///
-    /// `isRoutine` — the `refreshCurrentUser` hook (launch, every foreground,
+    /// `isRoutine` — the `refreshCurrentUser` hook (launch, every return from the background,
     /// `UserUpdated`): an account read WITHOUT a Seerr address less than
     /// `unconfiguredTTL` ago is not read again, so the many users with no
     /// Seerr pay one Jellyfin request per ten minutes, not one per return.
