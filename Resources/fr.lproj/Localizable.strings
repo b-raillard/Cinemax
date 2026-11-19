@@ -1080,6 +1080,8 @@
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Retirer de Reprendre";
 "home.continueWatching.removed" = "Retiré de Reprendre";
+"home.nextUp.remove" = "Retirer de À suivre";
+"home.nextUp.removed" = "Retiré de À suivre";
 "accessibility.episode.watched" = "Vu";
 
 // MARK: - Multi-server (registered servers list)

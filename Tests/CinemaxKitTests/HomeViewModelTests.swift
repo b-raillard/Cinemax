@@ -701,6 +701,35 @@ struct HomeResumeRemovalTests {
         #expect(vm.resumeItems.isEmpty)
     }
 
+    private func makeNextUpEpisode(id: String, seriesId: String) -> BaseItemDto {
+        var item = BaseItemDto()
+        item.id = id
+        item.type = .episode
+        item.seriesID = seriesId
+        return item
+    }
+
+    @Test("Retirer de À suivre : la carte part, rien de l'état vu ne bouge")
+    func removingFromNextUpHidesTheSeries() async {
+        let api = MockAPIClient()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        vm.nextUpItems = [makeNextUpEpisode(id: "s2e23", seriesId: "arrow"), makeNextUpEpisode(id: "e8", seriesId: "silo")]
+        await vm.removeNextUpItem(vm.nextUpItems[0], using: makeAppState(api: api), toast: ToastCenter(), loc: LocalizationManager())
+        #expect(vm.nextUpItems.map(\.id) == ["e8"])
+        #expect(api.hideFromNextUpCalls == [["arrow", "s2e23"]])
+        #expect(api.markPlayedCalls.isEmpty && api.markUnplayedCalls.isEmpty)
+    }
+
+    @Test("Retirer de À suivre en échec : la carte revient à sa place")
+    func failedNextUpRemovalRestoresTheCard() async {
+        let api = MockAPIClient()
+        api.hideFromNextUpShouldThrow = true
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        vm.nextUpItems = [makeNextUpEpisode(id: "s2e23", seriesId: "arrow"), makeNextUpEpisode(id: "e8", seriesId: "silo")]
+        await vm.removeNextUpItem(vm.nextUpItems[0], using: makeAppState(api: api), toast: ToastCenter(), loc: LocalizationManager())
+        #expect(vm.nextUpItems.map(\.id) == ["s2e23", "e8"])
+    }
+
     @Test("Retirer un titre non vu de la reprise efface sa progression (MarkUnplayed)")
     func removingAnUnwatchedItemClearsIt() async {
         let api = MockAPIClient()

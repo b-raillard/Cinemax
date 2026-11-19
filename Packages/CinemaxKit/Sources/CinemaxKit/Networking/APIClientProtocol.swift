@@ -295,6 +295,10 @@ public protocol LibraryAPI: Sendable {
     /// filter, so the server returns the next unwatched episode for every show
     /// the user has started.
     func getNextUpEpisodes(userId: String, limit: Int) async throws -> [BaseItemDto]
+    /// « Retirer de À suivre »: drops the series from the next-up rail until
+    /// its next-up episode changes (`NextUpHiddenList`, stored in the
+    /// account's display preferences — every device of the account follows).
+    func hideFromNextUp(seriesId: String, episodeId: String, userId: String) async throws
     /// Episodes due to air soon. Carries a default no-op so hand-written test
     /// mocks need not stub a rail they don't exercise — the `SyncPlayAPI`
     /// pattern.

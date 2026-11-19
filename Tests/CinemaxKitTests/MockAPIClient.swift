@@ -919,6 +919,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if shouldThrow { throw stubbedError }
         return stubbedNextUpItems
     }
+    /// (seriesId, episodeId) of every « Retirer de À suivre ».
+    private(set) var hideFromNextUpCalls: [[String]] = []
+    var hideFromNextUpShouldThrow = false
+    func hideFromNextUp(seriesId: String, episodeId: String, userId: String) async throws {
+        if hideFromNextUpShouldThrow { throw stubbedError }
+        recordLock.withLock { hideFromNextUpCalls.append([seriesId, episodeId]) }
+    }
     private(set) var markPlayedCalls: [String] = []
     private(set) var markUnplayedCalls: [String] = []
     func markItemUnplayed(itemId: String, userId: String) async throws { recordLock.withLock { markUnplayedCalls.append(itemId) } }

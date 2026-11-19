@@ -1078,6 +1078,8 @@
 // MARK: - Continue Watching & detail UX
 "home.continueWatching.remove" = "Remove from Continue Watching";
 "home.continueWatching.removed" = "Removed from Continue Watching";
+"home.nextUp.remove" = "Remove from Next Up";
+"home.nextUp.removed" = "Removed from Next Up";
 "accessibility.episode.watched" = "Watched";
 
 // MARK: - Multi-server (registered servers list)

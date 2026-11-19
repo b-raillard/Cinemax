@@ -804,6 +804,29 @@ final class HomeViewModel {
     /// body, back when a "mark as watched" sibling existed. That sibling moved
     /// into the shared card menu, leaving one caller and one constant key — so
     /// the indirection is gone with it.
+    /// « Retirer de À suivre »: the series leaves the rail until its next-up
+    /// episode changes — watching any episode of it brings it back
+    /// (`NextUpHiddenList`). Nothing about the item's watched state moves.
+    func removeNextUpItem(
+        _ item: BaseItemDto,
+        using appState: AppState,
+        toast: ToastCenter,
+        loc: LocalizationManager
+    ) async {
+        guard let userId = appState.currentUserId, let id = item.id, let seriesId = item.seriesID,
+              let index = nextUpItems.firstIndex(where: { $0.id == id }) else { return }
+
+        let removed = nextUpItems.remove(at: index)
+        do {
+            try await appState.apiClient.hideFromNextUp(seriesId: seriesId, episodeId: id, userId: userId)
+            toast.success(loc.localized("home.nextUp.removed"))
+        } catch {
+            logger.error("Next-up removal failed: \(error.localizedDescription, privacy: .public)")
+            nextUpItems.insert(removed, at: min(index, nextUpItems.count))
+            toast.error(loc.userFacingMessage(for: error))
+        }
+    }
+
     func removeResumeItem(
         _ item: BaseItemDto,
         using appState: AppState,

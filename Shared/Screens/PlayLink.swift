@@ -107,14 +107,7 @@ func seriesOpeningEpisode(in all: [EpisodeReference]) -> EpisodeReference? {
 }
 
 private func orderedSeriesChain(_ all: [EpisodeReference], specials: Bool) -> [EpisodeReference] {
-    all.enumerated()
-        .filter { ($0.element.season == 0) == specials }
-        .sorted { lhs, rhs in
-            let left = lhs.element.season ?? .max
-            let right = rhs.element.season ?? .max
-            return left == right ? lhs.offset < rhs.offset : left < right
-        }
-        .map(\.element)
+    SeriesEpisodeOrder.chain(all, specials: specials)
 }
 
 /// Both chains of a series (regular seasons, specials), precomputed once —

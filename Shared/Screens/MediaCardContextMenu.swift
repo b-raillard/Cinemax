@@ -29,11 +29,13 @@ extension View {
         artwork: CardArtwork,
         navigation: CardPlaybackNavigation? = nil,
         onRemoveFromResume: (() -> Void)? = nil,
+        onRemoveFromNextUp: (() -> Void)? = nil,
         onGoToSeries: ((String) -> Void)? = nil
     ) -> some View {
         modifier(MediaCardContextMenu(
             item: CardMenuItem(item), artwork: artwork, navigation: navigation,
-            onRemoveFromResume: onRemoveFromResume, onGoToSeries: onGoToSeries
+            onRemoveFromResume: onRemoveFromResume, onRemoveFromNextUp: onRemoveFromNextUp,
+            onGoToSeries: onGoToSeries
         ))
     }
 }
@@ -147,6 +149,8 @@ private struct MediaCardContextMenu: ViewModifier {
     let artwork: CardArtwork
     let navigation: CardPlaybackNavigation?
     let onRemoveFromResume: (() -> Void)?
+    /// « Retirer de À suivre » — only Home's next-up rail provides it.
+    let onRemoveFromNextUp: (() -> Void)?
     let onGoToSeries: ((String) -> Void)?
 
     // Optimistic mirrors of the toggle state. The menu label is derived from
@@ -205,7 +209,8 @@ private struct MediaCardContextMenu: ViewModifier {
     private var menuContent: CardMenuContent {
         CardMenuContent(
             item: item, navigation: navigation,
-            onRemoveFromResume: onRemoveFromResume, onGoToSeries: onGoToSeries,
+            onRemoveFromResume: onRemoveFromResume, onRemoveFromNextUp: onRemoveFromNextUp,
+            onGoToSeries: onGoToSeries,
             playedOverride: $playedOverride, favoriteOverride: $favoriteOverride
         )
     }
@@ -235,6 +240,8 @@ private struct CardMenuContent: View {
     let item: CardMenuItem
     let navigation: CardPlaybackNavigation?
     let onRemoveFromResume: (() -> Void)?
+    /// « Retirer de À suivre » — only Home's next-up rail provides it.
+    let onRemoveFromNextUp: (() -> Void)?
     let onGoToSeries: ((String) -> Void)?
     @Binding var playedOverride: OptimisticFlag?
     @Binding var favoriteOverride: OptimisticFlag?
@@ -360,6 +367,14 @@ private struct CardMenuContent: View {
                     onRemoveFromResume()
                 } label: {
                     Label(loc.localized("home.continueWatching.remove"), systemImage: "minus.circle")
+                }
+            }
+            if let onRemoveFromNextUp {
+                Divider()
+                Button(role: .destructive) {
+                    onRemoveFromNextUp()
+                } label: {
+                    Label(loc.localized("home.nextUp.remove"), systemImage: "minus.circle")
                 }
             }
         }
