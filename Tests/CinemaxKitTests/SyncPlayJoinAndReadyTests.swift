@@ -62,8 +62,32 @@ private final class RecordingSyncPlayAPI: SyncPlayAPI, @unchecked Sendable {
     struct Report { let ticks: Int; let isPlaying: Bool; let entry: String? }
     private let store = OSAllocatedUnfairLock<[Report]>(initialState: [])
 
+    private let joins = OSAllocatedUnfairLock<[String]>(initialState: [])
+    private let leaves = OSAllocatedUnfairLock<Int>(initialState: 0)
+
     var ready: [Report] { store.withLock { $0 } }
-    func reset() { store.withLock { $0.removeAll() } }
+    var joined: [String] { joins.withLock { $0 } }
+    var left: Int { leaves.withLock { $0 } }
+    func reset() {
+        store.withLock { $0.removeAll() }
+        joins.withLock { $0.removeAll() }
+        leaves.withLock { $0 = 0 }
+    }
+
+    private let failingJoins = OSAllocatedUnfairLock<Int>(initialState: 0)
+    /// The next `count` joins throw (after being recorded).
+    func failNextJoins(_ count: Int) { failingJoins.withLock { $0 = count } }
+
+    func syncPlayJoinGroup(groupId: String) async throws {
+        joins.withLock { $0.append(groupId) }
+        let fails = failingJoins.withLock { left -> Bool in
+            guard left > 0 else { return false }
+            left -= 1
+            return true
+        }
+        if fails { throw URLError(.badServerResponse) }
+    }
+    func syncPlayLeaveGroup() async throws { leaves.withLock { $0 += 1 } }
 
     func syncPlayReady(positionTicks: Int, isPlaying: Bool, playlistItemId: String?) async throws {
         store.withLock { $0.append(Report(ticks: positionTicks, isPlaying: isPlaying, entry: playlistItemId)) }
@@ -112,6 +136,173 @@ struct SyncPlaySeekSettleReadyTests {
         ))
         api.reset()
         return c
+    }
+
+    /// Audit 2026-11-19 (PL-15) : chaque Pause et chaque Unpause du groupe
+    /// lançait un calage moteur, même quand le lecteur y était déjà.
+    @Test("Pause / Unpause ne calent que si le lecteur est ailleurs ; Seek cale toujours")
+    func transportSeeksOnlyWhenAway() async {
+        final class Seeks { var targets: [Int] = [] }
+        let seeks = Seeks()
+        let c = SyncPlayController.shared
+        _ = await c.createGroup(
+            named: "test", api: RecordingSyncPlayAPI(), loc: LocalizationManager(),
+            toast: ToastCenter(), currentUserName: "moi"
+        )
+        defer { c.leaveGroup() }
+        var heading = 60_200
+        c.bindPlayback(.init(
+            play: {}, pause: {}, seekMs: { seeks.targets.append($0) }, positionMs: { 10_000 }, stop: {},
+            headingMs: { heading }
+        ))
+        func command(_ kind: SyncPlayCommand.Kind, ms: Int) -> SyncPlayCommand {
+            SyncPlayCommand(command: kind, positionTicks: ms * 10_000, when: nil, emittedAt: nil, playlistItemId: nil)
+        }
+
+        // À 200 ms de la cible (un calage vers 60,2 s est en vol) : rien.
+        c.applyCommand(command(.pause, ms: 60_000))
+        c.applyCommand(command(.unpause, ms: 60_000))
+        #expect(seeks.targets.isEmpty)
+
+        // Ailleurs : on cale.
+        heading = 58_000
+        c.applyCommand(command(.pause, ms: 60_000))
+        c.applyCommand(command(.unpause, ms: 60_000))
+        #expect(seeks.targets == [60_000, 60_000])
+
+        // Un Seek cale toujours, même sur place.
+        heading = 60_000
+        c.applyCommand(command(.seek, ms: 60_000))
+        #expect(seeks.targets.count == 3)
+
+        #expect(!SyncPlayController.transportNeedsSeek(targetMs: 1_000, headingMs: 1_500))
+        #expect(SyncPlayController.transportNeedsSeek(targetMs: 1_000, headingMs: 1_501))
+    }
+
+    // MARK: - Retour dans le groupe après une coupure du socket (PL-13)
+
+    private func queue(item: String, ticks: Int) -> SyncPlayGroupUpdate {
+        SyncPlayGroupUpdate(
+            type: .playQueue, rawType: "PlayQueue", groupId: "g1", group: nil, userName: nil, state: nil,
+            playlist: [item], playlistItemIds: ["entry-1"], playingItemIndex: 0,
+            startPositionTicks: ticks, isPlaying: false
+        )
+    }
+
+    /// Un participant en lecture dans le groupe `g1`, sur l'élément `film`.
+    private func watching(api: RecordingSyncPlayAPI, seeks: @escaping @MainActor (Int) -> Void) async -> SyncPlayController {
+        let c = SyncPlayController.shared
+        _ = await c.joinGroup(
+            SyncPlayGroup(id: "g1", name: "test", participants: ["moi"]), api: api,
+            loc: LocalizationManager(), toast: ToastCenter(), currentUserName: "moi"
+        )
+        c.bindPlayback(.init(play: {}, pause: {}, seekMs: seeks, positionMs: { 62_515 }, stop: {}))
+        c.apply(queue(item: "film", ticks: 600_000_000))
+        c.applyState("Playing")
+        api.reset()
+        return c
+    }
+
+    /// Tracé sur Jellyfin 10.11.0 le 2026-11-19 : le serveur retire du groupe
+    /// la session dont le socket se ferme, et `Join` le remet en `Waiting`
+    /// jusqu'au `Ready` du revenant, à la position du `PlayQueue`.
+    @Test("Socket rétabli : on rejoint, on se cale sur la position du groupe, puis Ready")
+    func reconnectionRejoinsAndReportsReady() async {
+        final class Seeks { var targets: [Int] = []; var paused = 0 }
+        let seeks = Seeks()
+        let api = RecordingSyncPlayAPI()
+        let c = await watching(api: api) { seeks.targets.append($0) }
+        c.bindPlayback(.init(
+            play: {}, pause: { seeks.paused += 1 }, seekMs: { seeks.targets.append($0) },
+            positionMs: { 62_515 }, stop: {}
+        ))
+        defer { c.leaveGroup() }
+
+        c.socketDidReconnect()
+        await settle(until: { !api.joined.isEmpty })
+        #expect(api.joined == ["g1"])
+        // Un second signal pendant le retour ne rejoint pas deux fois.
+        c.socketDidReconnect()
+
+        c.apply(queue(item: "film", ticks: 625_150_855))
+        #expect(seeks.targets == [62_515])
+        // Jamais de pause avant le calage : elle ferme la fenêtre de calage
+        // sans rapport, et le `Ready` ne part plus (vu au simulateur).
+        #expect(seeks.paused == 0)
+        #expect(c.isWaitingForParticipants)
+        #expect(api.ready.isEmpty)
+
+        c.reportSeekSettled(isPlaying: true)
+        await settle(until: { !api.ready.isEmpty })
+        #expect(api.ready.count == 1)
+        #expect(api.ready.first?.entry == "entry-1")
+        #expect(api.joined == ["g1"])
+        #expect(c.isInGroup)
+    }
+
+    @Test("Socket rétabli, le groupe regarde autre chose : on quitte plutôt que de le retenir")
+    func reconnectionOntoAnotherItemLeaves() async {
+        let api = RecordingSyncPlayAPI()
+        let c = await watching(api: api) { _ in }
+        defer { c.leaveGroup() }
+
+        c.socketDidReconnect()
+        await settle(until: { !api.joined.isEmpty })
+        c.apply(queue(item: "autre-film", ticks: 0))
+
+        #expect(!c.isInGroup)
+        await settle(until: { api.left == 1 })
+        #expect(api.left == 1)
+        #expect(api.ready.isEmpty)
+    }
+
+    /// Un `Join` parti après le départ remettrait la session dans le groupe,
+    /// sans personne pour annoncer `Ready` : tout le groupe resterait en attente.
+    @Test("Quitter pendant le retour : aucun Join après le départ")
+    func leavingDuringRejoinSendsNoJoin() async {
+        let api = RecordingSyncPlayAPI()
+        let c = await watching(api: api) { _ in }
+
+        c.socketDidReconnect()
+        c.leaveGroup()
+
+        await settle(until: { api.left == 1 })
+        #expect(api.left == 1)
+        #expect(api.joined.isEmpty)
+        #expect(!c.isInGroup)
+    }
+
+    @Test("Retour refusé : une reconnexion réessaie ; sans elle, le délai fait quitter le groupe")
+    func refusedRejoinRetriesThenLeaves() async {
+        let api = RecordingSyncPlayAPI()
+        let c = await watching(api: api) { _ in }
+        let deadline = SyncPlayController.rejoinDeadline
+        SyncPlayController.rejoinDeadline = .milliseconds(600)
+        defer { SyncPlayController.rejoinDeadline = deadline }
+
+        api.failNextJoins(2)
+        c.socketDidReconnect()
+        await eventually { api.joined.count == 1 }
+        // Le socket retombe puis revient : nouvelle tentative, refusée aussi.
+        await eventually { c.socketDidReconnect(); return api.joined.count == 2 }
+        #expect(c.isInGroup)
+
+        // Plus aucune reconnexion : le délai tranche.
+        await eventually { !c.isInGroup }
+        #expect(!c.isInGroup)
+        await eventually { api.left == 1 }
+        #expect(api.left == 1)
+    }
+
+    @Test("Un groupe encore sans identifiant ne tente aucun retour")
+    func placeholderGroupDoesNotRejoin() async {
+        let api = RecordingSyncPlayAPI()
+        let c = await inGroup(api: api, positionMs: { 0 })
+        defer { c.leaveGroup() }
+
+        c.socketDidReconnect()
+        await settle(until: { !api.joined.isEmpty }, tries: 10)
+        #expect(api.joined.isEmpty)
     }
 
     @Test("Un calage réannonce la disponibilité à la position atteinte")

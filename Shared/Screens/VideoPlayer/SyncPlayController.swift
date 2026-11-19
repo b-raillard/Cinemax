@@ -75,6 +75,24 @@ final class SyncPlayController {
     /// `When` maps to local time via `When - clockOffset`.
     @ObservationIgnored private var clockOffset: TimeInterval = 0
     @ObservationIgnored private var scheduledCommandTask: Task<Void, Never>?
+    /// A re-join in progress after the socket came back — see `socketDidReconnect`.
+    @ObservationIgnored private var rejoin: Rejoin?
+    @ObservationIgnored private var rejoinWatchdog: Task<Void, Never>?
+    /// The re-join's `Join` request while it is out. A `Leave` waits for it:
+    /// landing first, it would be undone by the `Join` behind it, and a
+    /// session re-joined with nobody left to report `Ready` holds the group.
+    @ObservationIgnored private var rejoinRequest: Task<Void, Never>?
+    /// How long a re-join may take to hear the group's queue, then to report
+    /// `Ready`, before this participant leaves rather than hold the group.
+    /// `var` for the tests only.
+    static var rejoinDeadline: Duration = .seconds(15)
+
+    private enum Rejoin {
+        /// `Join` sent; the server's `PlayQueue` has not come back yet.
+        case awaitingQueue
+        /// Seeking to the group's position; `Ready` goes out when it settles.
+        case seeking
+    }
 
     // MARK: Playback bridge (injected by the presenter)
 
@@ -88,6 +106,23 @@ final class SyncPlayController {
         let positionMs: @MainActor () -> Int
         /// Server `Stop` handling. v1: pause in place (don't tear down).
         let stop: @MainActor () -> Void
+        /// Where the playhead is GOING: the target of a seek still in flight,
+        /// else the live position. `positionMs` stays the position actually
+        /// reached (what `Ready` must report); this one answers "would a seek
+        /// to X move anything?". `nil` falls back to `positionMs`.
+        var headingMs: (@MainActor () -> Int)?
+    }
+
+    /// A `Pause` / `Unpause` carrying a position the player already holds (or
+    /// is already seeking to) within this distance fires no engine seek. Both
+    /// used to seek unconditionally — two engine seeks per participant per
+    /// pause/resume cycle, and on resume a picture that jumped back by the
+    /// latency (0.4 s measured, see `reportSeekSettled`). A `Seek` command
+    /// always seeks (audit 2026-11-19, PL-15).
+    nonisolated static let transportSeekToleranceMs = 500
+
+    nonisolated static func transportNeedsSeek(targetMs: Int, headingMs: Int) -> Bool {
+        abs(targetMs - headingMs) > transportSeekToleranceMs
     }
 
     @ObservationIgnored private var bridge: PlaybackBridge?
@@ -221,8 +256,12 @@ final class SyncPlayController {
         let api = self.api
         let loc = self.loc
         let toast = self.toast
+        let pendingJoin = rejoinRequest
         teardownSession()
-        Task { try? await api?.syncPlayLeaveGroup() }
+        Task {
+            await pendingJoin?.value
+            try? await api?.syncPlayLeaveGroup()
+        }
         if let loc, let toast { toast.info(loc.localized("syncplay.left")) }
     }
 
@@ -346,6 +385,10 @@ final class SyncPlayController {
         guard isInGroup, groupState == .waiting, let api, let bridge else { return }
         let ticks = max(0, bridge.positionMs()) * Self.ticksPerMillisecond
         let entry = currentPlaylistItemId
+        if rejoin == .seeking {
+            rejoin = nil
+            rejoinWatchdog?.cancel(); rejoinWatchdog = nil
+        }
         trace("calage terminé — Ready réémis position=\(ticks) lecture=\(isPlaying) entrée=\(entry ?? "AUCUNE")")
         sendReport("Ready") { try await api.syncPlayReady(positionTicks: ticks, isPlaying: isPlaying, playlistItemId: entry) }
     }
@@ -456,6 +499,9 @@ final class SyncPlayController {
 
     private func teardownSession() {
         outboundSession &+= 1
+        rejoin = nil
+        rejoinWatchdog?.cancel(); rejoinWatchdog = nil
+        rejoinRequest = nil
         group = nil
         participants = []
         groupState = .idle
@@ -516,8 +562,114 @@ final class SyncPlayController {
         switch message {
         case .syncPlayCommand(let command): schedule(command)
         case .syncPlayGroupUpdate(let update): apply(update)
+        case .reconnected: socketDidReconnect()
         case .play, .displayMessage, .playstate, .userUpdated: break
         }
+    }
+
+    // MARK: - Re-join after a socket drop
+
+    /// The socket is back. Jellyfin dropped this session from the group when
+    /// the socket closed (see `JellyfinSocketMessage.reconnected`), and every
+    /// Pause / Seek / Unpause of the gap is lost — the player kept its own
+    /// position under a HUD still showing the group (audit 2026-11-19, PL-13).
+    ///
+    /// Re-joining is the server's own recovery, traced on 10.11.0: `Join`
+    /// answers `GroupJoined` + `PlayQueue` (the group's CURRENT position), puts
+    /// the whole group in `Waiting`, and holds it there until this session
+    /// reports `Ready` from that position. So the re-join must finish what it
+    /// starts — `applyRejoinQueue` seeks and the settle reports — or leave: a
+    /// member that re-joined and stays mute freezes everyone (`rejoinDeadline`).
+    ///
+    /// Internal rather than private so the tests can drive it as the hub does.
+    func socketDidReconnect() {
+        // The optimistic `""` id of a group still being created names nothing.
+        // One re-join at a time — but a `Join` that FAILED leaves the state
+        // armed with no request out, and a later reconnection may try again.
+        guard let api, let group, !group.id.isEmpty,
+              rejoin == nil || (rejoin == .awaitingQueue && rejoinRequest == nil) else { return }
+        trace("socket rétabli — retour dans le groupe id=\(group.id)")
+        rejoin = .awaitingQueue
+        armRejoinWatchdog()
+        let session = outboundSession
+        rejoinRequest = Task { [weak self] in
+            // The offset was sampled once, on another connection (and perhaps
+            // another route): sample it again before any `When` is scheduled.
+            await self?.sampleClock()
+            // The user may have left meanwhile (player closed): a `Join` sent
+            // now would put the session back with nobody to report `Ready`.
+            guard let self, self.outboundSession == session, self.rejoin == .awaitingQueue else { return }
+            do {
+                try await api.syncPlayJoinGroup(groupId: group.id)
+            } catch {
+                syncLogger.error("SyncPlay: re-join failed — \(error.localizedDescription, privacy: .public)")
+                // Left armed: a later reconnection tries again, and without
+                // one the deadline leaves the group — never a participant
+                // shown in a group the server no longer counts it in.
+                guard self.outboundSession == session else { return }
+                self.rejoinRequest = nil
+            }
+        }
+    }
+
+    /// The `PlayQueue` answering a re-join. Returns whether it consumed the update.
+    private func applyRejoinQueue(changed: Bool, ticks: Int) -> Bool {
+        guard rejoin == .awaitingQueue else { return false }
+        guard let bridge else {
+            // No player on screen (the lobby): nothing to line up, and the
+            // ordinary queue handling opens the item if it changed.
+            rejoin = nil
+            rejoinWatchdog?.cancel(); rejoinWatchdog = nil
+            return false
+        }
+        guard !changed else {
+            // The group moved to another title meanwhile; v1 never switches
+            // the media under an open player.
+            abandonRejoin("le groupe regarde autre chose")
+            return true
+        }
+        // The server is in `Waiting` on us — it says so only after a `Ready`.
+        groupState = .waiting
+        rejoin = .seeking
+        remoteEchoUntil = Date().addingTimeInterval(Self.remoteEchoWindow)
+        trace("retour dans le groupe : calage sur \(ticks)")
+        // The seek alone, in whatever state the player is: `SeekMachine` reports
+        // a settle (→ `reportSeekSettled` → `Ready`) when the playhead moves
+        // again, or at once when already paused. Pausing FIRST was tried and
+        // never reported (simulator, 2026-11-19): the transition to `.paused`
+        // closes the settle window through `endSettleInPause`, which leaves the
+        // `Ready` to the `.paused` handler — silent inside the echo window.
+        // The server accepts a `Ready` from a player still running up to a
+        // second ahead of its position (traced), then sends `Unpause`.
+        bridge.seekMs(ticks / Self.ticksPerMillisecond)
+        notifySessionChanged()
+        return true
+    }
+
+    private func armRejoinWatchdog() {
+        rejoinWatchdog?.cancel()
+        rejoinWatchdog = Task { [weak self] in
+            try? await Task.sleep(for: Self.rejoinDeadline)
+            guard !Task.isCancelled, let self, self.rejoin != nil else { return }
+            self.abandonRejoin("délai dépassé")
+        }
+    }
+
+    /// Leaves the group — server side too, the `Join` may have landed — so the
+    /// others are not held in `Waiting` by a member that cannot answer.
+    private func abandonRejoin(_ reason: String) {
+        trace("retour dans le groupe abandonné : \(reason)")
+        let api = self.api
+        let wasIn = isInGroup
+        let loc = self.loc
+        let toast = self.toast
+        let pendingJoin = rejoinRequest
+        teardownSession()
+        Task {
+            await pendingJoin?.value
+            try? await api?.syncPlayLeaveGroup()
+        }
+        if wasIn, let loc, let toast { toast.info(loc.localized("syncplay.groupEnded")) }
     }
 
     private func schedule(_ command: SyncPlayCommand) {
@@ -551,11 +703,11 @@ final class SyncPlayController {
 
         switch command.command {
         case .unpause:
-            if let ticks = command.positionTicks { bridge.seekMs(ticks / Self.ticksPerMillisecond) }
+            seekIfAway(command.positionTicks, bridge: bridge)
             bridge.play()
         case .pause:
             bridge.pause()
-            if let ticks = command.positionTicks { bridge.seekMs(ticks / Self.ticksPerMillisecond) }
+            seekIfAway(command.positionTicks, bridge: bridge)
         case .seek:
             if let ticks = command.positionTicks { bridge.seekMs(ticks / Self.ticksPerMillisecond) }
         case .stop:
@@ -563,7 +715,20 @@ final class SyncPlayController {
         }
     }
 
-    private func apply(_ update: SyncPlayGroupUpdate) {
+    /// `Pause` / `Unpause` only — see `transportSeekToleranceMs`.
+    private func seekIfAway(_ ticks: Int?, bridge: PlaybackBridge) {
+        guard let ticks else { return }
+        let targetMs = ticks / Self.ticksPerMillisecond
+        let headingMs = bridge.headingMs?() ?? bridge.positionMs()
+        guard Self.transportNeedsSeek(targetMs: targetMs, headingMs: headingMs) else {
+            trace("déjà en place (écart \(abs(targetMs - headingMs)) ms) — pas de calage")
+            return
+        }
+        bridge.seekMs(targetMs)
+    }
+
+    /// Internal rather than private so the tests can feed it what the socket delivers.
+    func apply(_ update: SyncPlayGroupUpdate) {
         switch update.type {
         case .groupJoined:
             if let g = update.group {
@@ -628,6 +793,8 @@ final class SyncPlayController {
             groupState = isPlaying ? .playing : .paused
         }
         notifySessionChanged()
+
+        if applyRejoinQueue(changed: changed, ticks: ticks) { return }
 
         // Announce only a genuine change of item: the server re-sends the queue
         // on several unrelated events, and re-opening the media the user is
