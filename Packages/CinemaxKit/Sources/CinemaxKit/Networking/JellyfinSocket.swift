@@ -32,6 +32,16 @@ public enum JellyfinSocketMessage: Sendable, Equatable {
     /// business decoding, and the only useful reaction is to re-read the user
     /// through the normal path. Announcing the fact is the whole job.
     case userUpdated
+    /// The connection is up again after a drop, or after the hub rebuilt it on
+    /// another route (`JellyfinSocketHub.repoint`). Nothing sent meanwhile was
+    /// delivered — and Jellyfin REMOVES a session from its SyncPlay group the
+    /// moment its socket closes (`WebSocketController.OnConnectionClosed` →
+    /// `SessionManager.CloseIfNeededAsync` → `SyncPlayManager.OnSessionEnded`;
+    /// traced on 10.11.0, 2026-11-19: the others get `UserLeft` at once, and
+    /// the returning socket hears nothing until it re-joins). The socket
+    /// yields this on the first frame of EVERY connection; the hub swallows
+    /// the session's first one, so a consumer only ever sees a RE-connection.
+    case reconnected
 }
 
 // MARK: - Socket
@@ -134,6 +144,7 @@ public actor JellyfinSocket {
                         // One line per connection: which authentication the
                         // server accepted is otherwise invisible.
                         socketLogger.info("Socket connected (auth: \(self.usingQueryAuth ? "ApiKey query" : "header", privacy: .public))")
+                        continuation.yield(.reconnected)
                     }
                     handleFrame(frame)
                 }
@@ -380,6 +391,10 @@ public actor JellyfinSocketHub {
     private(set) var activeEndpoint: RealtimeSocketEndpoint?
     private var pump: Task<Void, Never>?
     private var subscribers: [UUID: AsyncStream<JellyfinSocketMessage>.Continuation] = [:]
+    /// Whether this session's socket has delivered a first frame yet — what
+    /// tells a first connection (swallowed) from a re-connection (announced).
+    /// Survives `repoint` (same session, new route), reset by any other rebuild.
+    private var hasConnected = false
 
     init() {}
 
@@ -411,12 +426,12 @@ public actor JellyfinSocketHub {
     public func repoint(endpoint: RealtimeSocketEndpoint) {
         guard !subscribers.isEmpty, socket != nil, let activeEndpoint,
               !activeEndpoint.isSameConnection(as: endpoint) else { return }
-        ensureSocket(endpoint: endpoint)
+        ensureSocket(endpoint: endpoint, sameSession: true)
     }
 
     // MARK: - Private
 
-    private func ensureSocket(endpoint: RealtimeSocketEndpoint) {
+    private func ensureSocket(endpoint: RealtimeSocketEndpoint, sameSession: Bool = false) {
         // Explicit identity (socket URL + token), never the tokenised URL it
         // used to be — see `RealtimeSocketEndpoint.isSameConnection`.
         if let activeEndpoint, activeEndpoint.isSameConnection(as: endpoint), socket != nil { return }
@@ -432,6 +447,7 @@ public actor JellyfinSocketHub {
         // `subscribe` calls both pass the `activeEndpoint` check and both build a
         // socket — trading one race for a worse one.
         let closing = teardown()
+        if !sameSession { hasConnected = false }
         let socket = JellyfinSocket(endpoint: endpoint)
         self.socket = socket
         self.activeEndpoint = endpoint
@@ -444,7 +460,12 @@ public actor JellyfinSocketHub {
         }
     }
 
-    private func broadcast(_ message: JellyfinSocketMessage) {
+    /// Internal rather than private so the tests can feed it what a socket yields.
+    func broadcast(_ message: JellyfinSocketMessage) {
+        if message == .reconnected, !hasConnected {
+            hasConnected = true
+            return
+        }
         for continuation in subscribers.values {
             continuation.yield(message)
         }

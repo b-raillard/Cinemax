@@ -76,6 +76,30 @@ struct JellyfinSocketHubTests {
         #expect(delivered == 0)
     }
 
+    /// Audit 2026-11-19 (PL-13) : le socket annonce chaque connexion, le hub
+    /// tait la première de la session — un consommateur ne voit que les retours.
+    @Test("Only a RE-connection is announced, a repoint included")
+    func announcesOnlyReconnections() async {
+        let hub = JellyfinSocketHub()
+        let a = await hub.subscribe(endpoint: url)
+        await hub.broadcast(.reconnected)   // first connection: swallowed
+        await hub.broadcast(.reconnected)   // the socket dropped and came back
+        await hub.repoint(endpoint: otherURL)
+        await hub.broadcast(.reconnected)   // same session, new route
+        await hub.unsubscribe(a.id)
+        var delivered: [JellyfinSocketMessage] = []
+        for await message in a.messages { delivered.append(message) }
+        #expect(delivered == [.reconnected, .reconnected])
+
+        // A new session (every subscriber gone, then a fresh one) starts over.
+        let b = await hub.subscribe(endpoint: url)
+        await hub.broadcast(.reconnected)
+        await hub.unsubscribe(b.id)
+        var second = 0
+        for await _ in b.messages { second += 1 }
+        #expect(second == 0)
+    }
+
     // MARK: - Repoint (local server address)
 
     @Test("Repoint moves a live socket onto the new endpoint and keeps the subscribers")

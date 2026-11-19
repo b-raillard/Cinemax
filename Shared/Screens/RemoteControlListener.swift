@@ -181,6 +181,8 @@ final class RemoteControlListener {
                 command,
                 inSyncPlayGroup: SyncPlayController.shared.isInGroup
             )
+        case .reconnected:
+            break // Watch Together's concern — `SyncPlayController`.
         case .userUpdated:
             // An administrator saved this account's user record. Re-read it so
             // the permission gates (`syncPlayAccess`, `canSeeOthers`) stop

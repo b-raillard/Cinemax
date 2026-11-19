@@ -4672,7 +4672,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             pause: { [weak self] in self?.enginePause() },
             seekMs: { [weak self] ms in self?.seeks.engineSeek(Int32(clamping: ms)) },
             positionMs: { [weak self] in Int(self?.currentMs ?? 0) },
-            stop: { [weak self] in self?.enginePause() } // v1: pause on server Stop
+            stop: { [weak self] in self?.enginePause() }, // v1: pause on server Stop
+            headingMs: { [weak self] in
+                guard let self else { return 0 }
+                return Int(self.seeks.pendingTargetMs ?? self.seeks.settlingTargetMs ?? self.currentMs)
+            }
         ))
         syncPlay.onSessionChanged = { [weak self] in self?.refreshSyncPlayHUD() }
         refreshSyncPlayHUD()
