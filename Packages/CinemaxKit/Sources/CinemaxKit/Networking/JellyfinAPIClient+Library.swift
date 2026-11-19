@@ -589,8 +589,7 @@ extension JellyfinAPIClient {
                 // its versions are what the Version row must rank (12.0).
                 fields: [.mediaSources],
                 seriesID: seriesId,
-                enableUserData: true,
-                enableRewatching: true
+                enableUserData: true
             )
             let response = try await client.send(Paths.getNextUp(parameters: params))
             items = response.value.items ?? []
@@ -605,20 +604,10 @@ extension JellyfinAPIClient {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             // No `seriesID` ⇒ the server returns the next unwatched episode for
             // every in-progress series (the global rail).
-            // `enableRewatching`: without it the server reads "next up" as the
-            // episode after the HIGHEST one ever played, so a series watched to
-            // the end and started again never comes back — neither in this rail
-            // nor as the fiche's Play target. With it, next up follows the
-            // episode played most RECENTLY. Measured on the bench (10.11,
-            // 2026-11-19): series fully watched then replayed up to S02E10 →
-            // nothing without, S03E01 with; a series never replayed and one
-            // watched to the end are unchanged (the 12 rows of the rail were
-            // identical with and without).
             let params = Paths.GetNextUpParameters(
                 userID: userId,
                 limit: limit,
-                enableUserData: true,
-                enableRewatching: true
+                enableUserData: true
             )
             let response = try await client.send(Paths.getNextUp(parameters: params))
             return applyRatingFilter(response.value.items ?? [])
