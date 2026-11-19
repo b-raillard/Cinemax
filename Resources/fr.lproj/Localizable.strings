@@ -434,6 +434,7 @@
 "server.offline" = "Hors ligne";
 "server.httpWarning.title" = "Connexion non chiffrée";
 "server.httpWarning.message" = "Cette adresse utilise HTTP. Vos identifiants et jetons de lecture circuleront en clair sur le réseau. Utilisez HTTPS lorsque c'est possible — conservez HTTP uniquement pour un serveur sur votre réseau local de confiance.";
+"login.httpWarning.message" = "Votre mot de passe circulera en clair sur le réseau. À réserver à un réseau local de confiance.";
 
 "server.discovery.title" = "Serveurs sur ce réseau";
 "server.discovery.scanning" = "Recherche sur votre réseau...";

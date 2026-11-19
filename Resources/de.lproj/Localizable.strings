@@ -854,6 +854,7 @@
 "server.offline" = "Offline";
 "server.httpWarning.title" = "Unverschlüsselte Verbindung";
 "server.httpWarning.message" = "Diese Adresse verwendet HTTP. Deine Anmeldedaten und Wiedergabe-Tokens werden unverschlüsselt über das Netzwerk übertragen. Verwende nach Möglichkeit HTTPS – nutze HTTP nur für einen Server in deinem vertrauenswürdigen lokalen Netzwerk.";
+"login.httpWarning.message" = "Ihr Passwort wird unverschlüsselt über das Netzwerk übertragen. Nur in einem vertrauenswürdigen lokalen Netzwerk verwenden.";
 
 "server.discovery.title" = "Server in diesem Netzwerk";
 "server.discovery.scanning" = "Dein Netzwerk wird durchsucht …";

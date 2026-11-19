@@ -854,6 +854,7 @@
 "server.offline" = "Offline";
 "server.httpWarning.title" = "Unencrypted connection";
 "server.httpWarning.message" = "This address uses HTTP. Your credentials and playback tokens will travel in plain text over the network. Use HTTPS whenever possible — keep HTTP only for a server on a trusted local network.";
+"login.httpWarning.message" = "Your password will travel unencrypted over the network. Use only on a trusted local network.";
 
 "server.discovery.title" = "Servers on this network";
 "server.discovery.scanning" = "Scanning your network...";
