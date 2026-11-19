@@ -215,7 +215,11 @@ final class SeerrActivationModel {
         let api = appState.apiClient
         let hasCredential = session.credential() != nil
         let loaded = await withTaskGroup(of: Loaded.self) { group in
-            for (index, user) in users.enumerated() {
+            // A sliding window (audit PN-10): each task is one Jellyfin read
+            // plus one Seerr lookup, and a house of 12 sent 24 at once.
+            let limit = SeerrRequestTitles.maxConcurrentLookups
+            var queued = Array(users.enumerated()).dropFirst(limit).makeIterator()
+            func start(_ index: Int, _ user: UserDto) {
                 group.addTask { [session] in
                     let config = await Self.readConfig(api: api, userId: user.id)
                     let capped = user.policy?.maxParentalRating != nil
@@ -233,8 +237,12 @@ final class SeerrActivationModel {
                     }
                 }
             }
+            for (index, user) in users.enumerated().prefix(limit) { start(index, user) }
             var all: [Loaded] = []
-            for await item in group { all.append(item) }
+            for await item in group {
+                all.append(item)
+                if let (index, user) = queued.next() { start(index, user) }
+            }
             return all.sorted { $0.index < $1.index }
         }
         // A load cancelled midway (its trigger moved) holds failed lookups:
