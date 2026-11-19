@@ -71,6 +71,9 @@ final class MediaDetailViewModel {
     /// lets an episode's prev/next cross a season boundary. Empty until it
     /// lands, or when the request failed: the maps then stop at the season.
     private(set) var seriesEpisodeRefs: [EpisodeReference] = []
+    /// The side task filling `seriesEpisodeRefs` (see `loadSeriesNavigation`).
+    /// Internal so a test can await it instead of racing it.
+    private(set) var seriesNavigationTask: Task<Void, Never>?
     /// Precomputed episode navigation map — O(1) lookups by episode ID.
     var episodeNavigationMap: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
     /// Same map but for nextUpEpisodes (cross-season next-up).
@@ -590,6 +593,12 @@ final class MediaDetailViewModel {
         if resolvedType != .boxSet, errorMessage == nil, let similarSourceId = item?.id {
             similarTask = Task { await loadSimilar(for: similarSourceId, using: appState) }
         }
+        // Cross-season navigation: a side task as well — the fiche paints with
+        // the season's own navigation and gains the series-wide chain when
+        // this lands. Never on the critical path, silent on failure.
+        if resolvedType == .series, errorMessage == nil, let seriesId = item?.id {
+            seriesNavigationTask = Task { await loadSeriesNavigation(seriesId: seriesId, using: appState) }
+        }
         // The seasons Seerr knows and the library lacks: a side task too, once
         // the owned seasons and episodes are written — never on the critical
         // path, silent on failure.
@@ -1052,8 +1061,6 @@ final class MediaDetailViewModel {
     ) async throws {
         async let seasonsTask = apiClient.getSeasons(seriesId: seriesId, userId: userId)
         async let nextUpTask = apiClient.getNextUp(seriesId: seriesId, userId: userId)
-        // In parallel with everything below, read last: navigation only.
-        async let seriesRefsTask = apiClient.getSeriesEpisodeRefs(seriesId: seriesId, userId: userId)
 
         let loadedSeasons = try await seasonsTask
         let loadedNextUp = try? await nextUpTask
@@ -1085,9 +1092,6 @@ final class MediaDetailViewModel {
             episodes = loadedEpisodes
         }
 
-        let loadedSeriesRefs = (try? await seriesRefsTask) ?? []
-        guard loadGeneration == generation else { return }
-        seriesEpisodeRefs = loadedSeriesRefs
         rebuildNavigationMaps()
     }
 
@@ -1110,6 +1114,18 @@ final class MediaDetailViewModel {
             rating: rating,
             maxAge: UserDefaults.standard.integer(forKey: SettingsKey.privacyMaxContentAge)
         )
+    }
+
+    /// Fills `seriesEpisodeRefs` off the critical path and re-derives the
+    /// navigation maps with it. Silent on failure (the maps keep stopping at
+    /// the season), dropped if the screen has moved on to another item.
+    private func loadSeriesNavigation(seriesId: String, using appState: AppState) async {
+        guard let userId = appState.currentUserId,
+              let loaded = try? await appState.apiClient.getSeriesEpisodeRefs(seriesId: seriesId, userId: userId)
+        else { return }
+        guard item?.id == seriesId, loaded != seriesEpisodeRefs else { return }
+        seriesEpisodeRefs = loaded
+        rebuildNavigationMaps()
     }
 
     /// Fills « Titres similaires » off the critical path. Silent on failure —

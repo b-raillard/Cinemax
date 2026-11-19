@@ -353,6 +353,8 @@ struct MediaDetailViewModelTests {
         let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
 
         await vm.load(using: makeAppState(api: api), loc: LocalizationManager())
+        // Tâche annexe : la fiche ne l'attend pas pour s'afficher.
+        await vm.seriesNavigationTask?.value
 
         #expect(vm.selectedSeasonId == "season-1")
         #expect(vm.episodeNavigationMap["ep-s1e1"]?.next?.id == "ep-s2e1")
