@@ -67,6 +67,10 @@ final class MediaDetailViewModel {
     /// Episodes from the next-up episode's season, when it differs from the currently displayed season.
     /// Used so episodeNavigation can build prev/next refs for the resume action button.
     var nextUpEpisodes: [BaseItemDto] = []
+    /// Every available episode of the series, all seasons (lean refs) — what
+    /// lets an episode's prev/next cross a season boundary. Empty until it
+    /// lands, or when the request failed: the maps then stop at the season.
+    private(set) var seriesEpisodeRefs: [EpisodeReference] = []
     /// Precomputed episode navigation map — O(1) lookups by episode ID.
     var episodeNavigationMap: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
     /// Same map but for nextUpEpisodes (cross-season next-up).
@@ -1048,6 +1052,8 @@ final class MediaDetailViewModel {
     ) async throws {
         async let seasonsTask = apiClient.getSeasons(seriesId: seriesId, userId: userId)
         async let nextUpTask = apiClient.getNextUp(seriesId: seriesId, userId: userId)
+        // In parallel with everything below, read last: navigation only.
+        async let seriesRefsTask = apiClient.getSeriesEpisodeRefs(seriesId: seriesId, userId: userId)
 
         let loadedSeasons = try await seasonsTask
         let loadedNextUp = try? await nextUpTask
@@ -1079,6 +1085,9 @@ final class MediaDetailViewModel {
             episodes = loadedEpisodes
         }
 
+        let loadedSeriesRefs = (try? await seriesRefsTask) ?? []
+        guard loadGeneration == generation else { return }
+        seriesEpisodeRefs = loadedSeriesRefs
         rebuildNavigationMaps()
     }
 
@@ -1166,8 +1175,19 @@ final class MediaDetailViewModel {
     /// Precomputes the refs + id→index pair once per list so per-episode
     /// population is O(1) instead of re-running compactMap+firstIndex inside
     /// `buildEpisodeNavigation` on every call.
+    ///
+    /// The series-wide chain wins wherever it knows the episode: the last
+    /// episode of a season is followed by the first of the next one. The
+    /// season's own list stays underneath as the fallback (request failed, or
+    /// an episode newer than the 300 s-cached series list).
     private func rebuildNavigationMaps() {
-        episodeNavigationMap = Self.makeNavigationMap(from: episodes)
+        var map = Self.makeNavigationMap(from: episodes)
+        let chains = SeriesEpisodeChains(seriesEpisodeRefs)
+        for ref in seriesEpisodeRefs {
+            guard let pre = chains.precomputed(for: ref.id) else { continue }
+            map[ref.id] = buildEpisodeNavigation(for: ref.id, refs: pre.refs, indexByID: pre.indexByID)
+        }
+        episodeNavigationMap = map
         nextUpNavigationMap = Self.makeNavigationMap(from: nextUpEpisodes)
     }
 

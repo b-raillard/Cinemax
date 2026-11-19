@@ -340,6 +340,27 @@ struct MediaDetailViewModelTests {
         return api
     }
 
+    /// Défaut du 2026-11-19 : la carte de navigation de la fiche était bâtie
+    /// sur la saison affichée, donc son dernier épisode n'avait pas de suivant.
+    @Test("The last episode of a season is followed by the first of the next season")
+    func ficheNavigationCrossesSeasons() async {
+        let api = makeThreeSeasonAPI()
+        api.getSeriesEpisodeRefsHandler = { _ in
+            [EpisodeReference(id: "ep-s1e1", name: "S1E1", season: 1),
+             EpisodeReference(id: "ep-s2e1", name: "S2E1", season: 2)]
+                + (1...6).map { EpisodeReference(id: "ep-s3e\($0)", name: "S3E\($0)", season: 3) }
+        }
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+
+        await vm.load(using: makeAppState(api: api), loc: LocalizationManager())
+
+        #expect(vm.selectedSeasonId == "season-1")
+        #expect(vm.episodeNavigationMap["ep-s1e1"]?.next?.id == "ep-s2e1")
+        #expect(vm.episodeNavigationMap["ep-s3e1"]?.previous?.id == "ep-s2e1")
+        #expect(vm.episodeNavigationMap["ep-s3e6"]?.next == nil)
+        #expect(vm.episodeNavigationMap["ep-s3e6"]?.navigator != nil)
+    }
+
     @Test("A fiche opened for an episode lands on that episode's season")
     func episodeFicheOpensOnEpisodeSeason() async {
         let api = makeThreeSeasonAPI()

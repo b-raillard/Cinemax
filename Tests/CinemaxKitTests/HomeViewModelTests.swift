@@ -319,6 +319,30 @@ struct HomeViewModelTests {
         #expect(nav?.navigator != nil, "sans navigateur, ni enchaînement ni carte de fin")
     }
 
+    @Test("Carte sur le dernier épisode d'une saison : le suivant ouvre la saison suivante")
+    func railCardCrossesTheSeasonBoundary() async {
+        let api = MockAPIClient()
+        api.getSeriesEpisodeRefsHandler = { _ in
+            [EpisodeReference(id: "s1e1", name: "S1E1", season: 1),
+             EpisodeReference(id: "s1e2", name: "S1E2", season: 1),
+             EpisodeReference(id: "s2e1", name: "S2E1", season: 2)]
+        }
+        var ep = BaseItemDto()
+        ep.id = "s1e2"
+        ep.type = .episode
+        ep.seasonID = "season-1"
+        ep.seriesID = "series-1"
+        api.stubbedResumeItems = [ep]
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+
+        await vm.load(using: makeAppState(api: api))
+
+        let next = vm.resumeNavigation["s1e2"]?.next?.id
+        #expect(next == "s2e1", "sinon : fin de lecture automatique et carte de fin de série à chaque saison")
+        #expect(api.getSeriesEpisodeRefsCallCount == 1)
+        #expect(api.getEpisodesCallCount == 0)
+    }
+
     @Test("Le rail « À suivre » est couvert de la même façon")
     func tierTwoRefreshFillsMissingNextUpNavigation() async {
         let api = MockAPIClient()

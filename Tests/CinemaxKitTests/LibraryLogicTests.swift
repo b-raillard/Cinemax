@@ -158,6 +158,69 @@ struct EpisodeNavigationTests {
         let unknown = nav?("nope")
         #expect(unknown == nil)
     }
+
+    // MARK: - Chaîne de la série entière (défaut du 2026-11-19)
+
+    /// Deux saisons et un hors-série, dans l'ordre où le serveur les rend
+    /// (saison 0 en tête).
+    private var wholeSeries: [EpisodeReference] {
+        [
+            EpisodeReference(id: "sp-1", name: "Hors-série 1", season: 0),
+            EpisodeReference(id: "sp-2", name: "Hors-série 2", season: 0),
+            EpisodeReference(id: "s1e1", name: "S1E1", season: 1),
+            EpisodeReference(id: "s1e2", name: "S1E2", season: 1),
+            EpisodeReference(id: "s2e1", name: "S2E1", season: 2),
+            EpisodeReference(id: "s2e2", name: "S2E2", season: 2)
+        ]
+    }
+
+    /// Par le chemin « plusieurs épisodes » (`SeriesEpisodeChains`), celui de
+    /// l'Accueil et de la fiche.
+    private func seriesNavigation(_ id: String) -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?) {
+        guard let pre = SeriesEpisodeChains(wholeSeries).precomputed(for: id) else { return (nil, nil, nil) }
+        return buildEpisodeNavigation(for: id, refs: pre.refs, indexByID: pre.indexByID)
+    }
+
+    @Test("Le dernier épisode d'une saison a pour suivant le premier de la saison suivante")
+    func seasonBoundaryIsCrossed() {
+        let chain = seriesEpisodeChain(containing: "s1e2", in: wholeSeries)
+        let nav = buildEpisodeNavigation(for: "s1e2", in: chain)
+        #expect(nav.previous?.id == "s1e1")
+        #expect(nav.next?.id == "s2e1")
+
+        // Et le navigateur poursuit : après le passage de saison, le premier
+        // épisode de la saison 2 retrouve ses deux voisins.
+        let after = nav.navigator?("s2e1")
+        #expect(after?.0?.id == "s1e2")
+        #expect(after?.1?.id == "s2e2")
+    }
+
+    @Test("Seul le dernier épisode disponible de la série n'a pas de suivant")
+    func onlyTheLastAvailableEpisodeEndsTheSeries() {
+        let withoutNext = ["s1e1", "s1e2", "s2e1", "s2e2"].filter { seriesNavigation($0).next == nil }
+        #expect(withoutNext == ["s2e2"])
+        #expect(seriesNavigation("s2e2").navigator != nil, "sans navigateur, pas de carte de fin de série")
+    }
+
+    @Test("Les hors-série forment leur propre chaîne")
+    func specialsStayApart() {
+        #expect(seriesNavigation("s1e1").previous == nil, "S1E1 n'est pas précédé d'un hors-série")
+        #expect(seriesNavigation("sp-2").next == nil, "le dernier hors-série n'enchaîne pas sur S1E1")
+        #expect(seriesNavigation("sp-1").next?.id == "sp-2")
+        #expect(SeriesEpisodeChains(wholeSeries).precomputed(for: "inconnu") == nil)
+    }
+
+    @Test("Les saisons sont chaînées par numéro, l'ordre du serveur gardé dans la saison")
+    func chainIsOrderedBySeasonNumber() {
+        let shuffled = [
+            EpisodeReference(id: "s2e1", name: "", season: 2),
+            EpisodeReference(id: "s1e1", name: "", season: 1),
+            EpisodeReference(id: "s2e2", name: "", season: 2),
+            EpisodeReference(id: "s1e2", name: "", season: 1)
+        ]
+        #expect(seriesEpisodeChain(containing: "s2e2", in: shuffled).map(\.id) == ["s1e1", "s1e2", "s2e1", "s2e2"])
+        #expect(seriesEpisodeChain(containing: "inconnu", in: shuffled).isEmpty)
+    }
 }
 
 // MARK: - MediaLibraryViewModel load resilience

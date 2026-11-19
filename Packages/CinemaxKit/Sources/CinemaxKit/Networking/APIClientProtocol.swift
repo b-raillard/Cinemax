@@ -280,6 +280,11 @@ public protocol LibraryAPI: Sendable {
     /// `getEpisodes` asks for. Its cache key is outside `userDataCachePrefixes`
     /// because the payload carries no userData at all; see the implementation.
     func getEpisodeRefs(seriesId: String, seasonId: String, userId: String) async throws -> [EpisodeReference]
+    /// Every AVAILABLE episode of a series, all seasons, as (id, title, season
+    /// number) in the server's order — what prev/next needs to cross a season
+    /// boundary. One light request; missing (virtual) episodes are left out.
+    /// Feed it to `seriesEpisodeChain` rather than to the navigator directly.
+    func getSeriesEpisodeRefs(seriesId: String, userId: String) async throws -> [EpisodeReference]
     /// Every episode file of a series as (season, first, last) — no fields, no
     /// userData, no images. Read by the missing-episodes check only.
     func getEpisodeNumbering(seriesId: String, userId: String) async throws -> [EpisodeNumbering]

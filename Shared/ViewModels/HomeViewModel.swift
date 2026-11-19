@@ -688,14 +688,14 @@ final class HomeViewModel {
         // before), then derive each map from the shared season→episodes dict.
         let resumeEpisodes = resumeItems.filter { $0.type == .episode }
         let nextUpEpisodes = nextUpItems.filter { $0.type == .episode }
-        let seasonEpisodes = await fetchSeasonEpisodes(
+        let seriesEpisodes = await fetchSeriesEpisodes(
             for: resumeEpisodes + nextUpEpisodes, userId: userId, appState: appState
         )
         // Returning here cancels this load's own genre / sessions / « Parce
         // que vous avez vu » children, which the newer load re-runs anyway.
         guard generation == loadGeneration else { return }
-        resumeNavigation = buildNavigationMap(for: resumeEpisodes, seasonEpisodes: seasonEpisodes)
-        nextUpNavigation = buildNavigationMap(for: nextUpEpisodes, seasonEpisodes: seasonEpisodes)
+        resumeNavigation = buildNavigationMap(for: resumeEpisodes, seriesEpisodes: seriesEpisodes)
+        nextUpNavigation = buildNavigationMap(for: nextUpEpisodes, seriesEpisodes: seriesEpisodes)
 
         _ = await (genreRowsDone, sessionsDone, becauseYouWatchedDone, seasonRowDone, elsewhereDone)
 
@@ -703,85 +703,88 @@ final class HomeViewModel {
         isFullyLoaded = true
     }
 
-    /// Fetches the episode list for every unique season referenced by
-    /// `episodeItems`, exactly once. Shared across the Continue Watching and Next
-    /// Up rails so a season referenced by both is fetched a single time (the
-    /// `getEpisodes` 10s cache backs this up across separate calls too).
-    private func fetchSeasonEpisodes(
+    /// Fetches the series-wide episode list for every unique SERIES referenced
+    /// by `episodeItems`, exactly once — shared across the Continue Watching
+    /// and Next Up rails. Series-wide, not per season: a season's own list ends
+    /// the chain at its last episode, which is what stopped autoplay and raised
+    /// the end-of-series card at every season's end.
+    private func fetchSeriesEpisodes(
         for episodeItems: [BaseItemDto],
         userId: String,
         appState: AppState
     ) async -> [String: [EpisodeReference]] {
         guard !episodeItems.isEmpty else { return [:] }
 
-        // Dedup first — one entry per unique season across BOTH rails.
+        // Dedup first — one entry per unique series across BOTH rails. The
+        // season kept is only the fallback when the series-wide request fails.
         var seen = Set<String>()
-        var seasons: [(seasonId: String, seriesId: String)] = []
+        var series: [(seriesId: String, seasonId: String?)] = []
         for item in episodeItems {
-            guard let seasonId = item.seasonID,
-                  let seriesId = item.seriesID,
-                  !seen.contains(seasonId) else { continue }
-            seen.insert(seasonId)
-            seasons.append((seasonId: seasonId, seriesId: seriesId))
+            guard let seriesId = item.seriesID, !seen.contains(seriesId) else { continue }
+            seen.insert(seriesId)
+            series.append((seriesId: seriesId, seasonId: item.seasonID))
         }
 
         // Bound the fan-out to chunks of 6, matching every other fan-out in the
         // app (`loadGenreRows` below, `MediaLibraryViewModel.fetchGenreItems`).
         // The two rails carry up to 20 items each, so an unchunked group could
-        // fire ~40 concurrent `getEpisodes` at a self-hosted server — while the
+        // fire ~40 concurrent requests at a self-hosted server — while the
         // genre fan-out is running alongside it.
         let concurrencyLimit = 6
-        var seasonEpisodes: [String: [EpisodeReference]] = [:]
-        for start in stride(from: 0, to: seasons.count, by: concurrencyLimit) {
-            let chunk = seasons[start..<min(start + concurrencyLimit, seasons.count)]
+        var seriesEpisodes: [String: [EpisodeReference]] = [:]
+        for start in stride(from: 0, to: series.count, by: concurrencyLimit) {
+            let chunk = series[start..<min(start + concurrencyLimit, series.count)]
             await withTaskGroup(of: (String, [EpisodeReference])?.self) { group in
-                for season in chunk {
+                for entry in chunk {
                     group.addTask {
-                        // `getEpisodeRefs`, not `getEpisodes`: the only thing
+                        // The lean refs, never `getEpisodes`: the only thing
                         // derived from this is prev/next (id + title). The full
-                        // DTO made this the app's largest payload — 9.0× bigger
-                        // on a 23-episode season, up to 40 seasons per load.
-                        guard let eps = try? await appState.apiClient.getEpisodeRefs(
-                            seriesId: season.seriesId, seasonId: season.seasonId, userId: userId
-                        ) else { return nil }
-                        return (season.seasonId, eps)
+                        // DTO measured 9.0× bigger on a 23-episode season.
+                        let api = appState.apiClient
+                        if let all = try? await api.getSeriesEpisodeRefs(
+                            seriesId: entry.seriesId, userId: userId
+                        ) {
+                            return (entry.seriesId, all)
+                        }
+                        guard let seasonId = entry.seasonId,
+                              let season = try? await api.getEpisodeRefs(
+                                  seriesId: entry.seriesId, seasonId: seasonId, userId: userId
+                              ) else { return nil }
+                        return (entry.seriesId, season)
                     }
                 }
                 for await result in group {
-                    if let (seasonId, eps) = result { seasonEpisodes[seasonId] = eps }
+                    if let (seriesId, eps) = result { seriesEpisodes[seriesId] = eps }
                 }
             }
         }
-        return seasonEpisodes
+        return seriesEpisodes
     }
 
     /// Builds a prev/next episode-navigation map keyed by episode item ID for a
-    /// set of episode items, deriving each episode's prev/next from the shared
-    /// `seasonEpisodes` dict. Precomputes refs + id→index per referenced season
-    /// so each lookup is O(1). Pure (no fetching) — the season episode lists are
-    /// resolved once up front by `fetchSeasonEpisodes`.
+    /// set of episode items, from the shared `seriesEpisodes` dict. One
+    /// `SeriesEpisodeChains` per referenced series, so each lookup is O(1).
+    /// Pure (no fetching) — the lists are resolved once up front by
+    /// `fetchSeriesEpisodes`.
     private func buildNavigationMap(
         for episodeItems: [BaseItemDto],
-        seasonEpisodes: [String: [EpisodeReference]]
+        seriesEpisodes: [String: [EpisodeReference]]
     ) -> [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] {
         guard !episodeItems.isEmpty else { return [:] }
 
-        var precomputed: [String: (refs: [EpisodeRef], indexByID: [String: Int])] = [:]
-        for item in episodeItems {
-            guard let seasonId = item.seasonID,
-                  precomputed[seasonId] == nil,
-                  let eps = seasonEpisodes[seasonId] else { continue }
-            precomputed[seasonId] = precomputeEpisodeRefs(eps)
-        }
-
+        let chains = seriesEpisodes.mapValues { SeriesEpisodeChains($0) }
         var navigation: [String: (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)] = [:]
         for item in episodeItems {
             guard let id = item.id,
-                  let seasonId = item.seasonID,
-                  let pre = precomputed[seasonId] else { continue }
-            navigation[id] = buildEpisodeNavigation(
-                for: id, refs: pre.refs, indexByID: pre.indexByID
-            )
+                  let seriesId = item.seriesID,
+                  let chain = chains[seriesId] else { continue }
+            // An episode the list does not know (the season fallback of another
+            // season) keeps an explicit empty entry, as before.
+            guard let pre = chain.precomputed(for: id) else {
+                navigation[id] = (nil, nil, nil)
+                continue
+            }
+            navigation[id] = buildEpisodeNavigation(for: id, refs: pre.refs, indexByID: pre.indexByID)
         }
         return navigation
     }
@@ -1160,14 +1163,14 @@ final class HomeViewModel {
         }
         guard !missingResume.isEmpty || !missingNextUp.isEmpty else { return }
 
-        let seasonEpisodes = await fetchSeasonEpisodes(
+        let seriesEpisodes = await fetchSeriesEpisodes(
             for: missingResume + missingNextUp, userId: userId, appState: appState
         )
         resumeNavigation.merge(
-            buildNavigationMap(for: missingResume, seasonEpisodes: seasonEpisodes)
+            buildNavigationMap(for: missingResume, seriesEpisodes: seriesEpisodes)
         ) { _, new in new }
         nextUpNavigation.merge(
-            buildNavigationMap(for: missingNextUp, seasonEpisodes: seasonEpisodes)
+            buildNavigationMap(for: missingNextUp, seriesEpisodes: seriesEpisodes)
         ) { _, new in new }
     }
 

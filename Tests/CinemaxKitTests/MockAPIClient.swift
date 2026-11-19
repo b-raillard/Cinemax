@@ -872,6 +872,16 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         }
         return []
     }
+    /// Series id → every episode of the series. With no handler the call
+    /// THROWS, so a fixture that only describes one season keeps exercising
+    /// the season fallback — and its `getEpisodeRefsCallCount` stays what it was.
+    var getSeriesEpisodeRefsHandler: (@Sendable (String) async throws -> [EpisodeReference])?
+    private(set) var getSeriesEpisodeRefsCallCount = 0
+    func getSeriesEpisodeRefs(seriesId: String, userId: String) async throws -> [EpisodeReference] {
+        recordLock.withLock { getSeriesEpisodeRefsCallCount += 1 }
+        guard let handler = getSeriesEpisodeRefsHandler else { throw URLError(.badServerResponse) }
+        return try await handler(seriesId)
+    }
     var stubbedNextUp: BaseItemDto?
     /// Drapeau **dédié**, distinct de `shouldThrow` : plusieurs suites existantes
     /// activent `shouldThrow` tout en laissant `getNextUp` réussir, et les faire

@@ -23,10 +23,16 @@ import Foundation
 public struct EpisodeReference: Sendable, Equatable, Identifiable {
     public let id: String
     public let name: String
+    /// The season NUMBER (`ParentIndexNumber`; 0 = specials). Only the
+    /// series-wide list (`getSeriesEpisodeRefs`) fills it — that is what lets
+    /// the app keep the specials out of the regular seasons' chain. `nil` on a
+    /// single season's list, where it would say nothing.
+    public let season: Int?
 
-    public init(id: String, name: String) {
+    public init(id: String, name: String, season: Int? = nil) {
         self.id = id
         self.name = name
+        self.season = season
     }
 }
 

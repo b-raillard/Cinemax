@@ -74,6 +74,74 @@ func precomputeEpisodeRefs(_ episodes: [EpisodeReference]) -> (refs: [EpisodeRef
     return (refs, indexByID)
 }
 
+// MARK: - Series-wide chain
+
+/// The list a series episode's prev/next walks: every available episode of
+/// the SERIES, season after season — never one season's list.
+///
+/// A navigator built on a single season ends at that season's last episode:
+/// no "next" there, so autoplay stopped and the « Vous avez terminé {série} »
+/// card came up at the end of EVERY season (reported 2026-11-19).
+///
+/// - Regular seasons are chained in season-number order, keeping the server's
+///   order inside a season (the sort is made stable by the original offset).
+/// - Specials (season 0) are a chain of their own: the last special is not
+///   followed by S01E01, and S01E01 is not preceded by a special.
+/// - An id that is not in `all` yields `[]` — the caller falls back to the
+///   season's own list.
+func seriesEpisodeChain(containing episodeId: String, in all: [EpisodeReference]) -> [EpisodeReference] {
+    guard let target = all.first(where: { $0.id == episodeId }) else { return [] }
+    return orderedSeriesChain(all, specials: target.season == 0)
+}
+
+private func orderedSeriesChain(_ all: [EpisodeReference], specials: Bool) -> [EpisodeReference] {
+    all.enumerated()
+        .filter { ($0.element.season == 0) == specials }
+        .sorted { lhs, rhs in
+            let left = lhs.element.season ?? .max
+            let right = rhs.element.season ?? .max
+            return left == right ? lhs.offset < rhs.offset : left < right
+        }
+        .map(\.element)
+}
+
+/// Both chains of a series (regular seasons, specials), precomputed once —
+/// for the sites that build navigation for MANY episodes of a series (Home's
+/// rails, the fiche). Hand `precomputed(for:)` to `buildEpisodeNavigation`.
+struct SeriesEpisodeChains {
+    private let regular: (refs: [EpisodeRef], indexByID: [String: Int])
+    private let specials: (refs: [EpisodeRef], indexByID: [String: Int])
+
+    init(_ all: [EpisodeReference]) {
+        regular = precomputeEpisodeRefs(orderedSeriesChain(all, specials: false))
+        specials = precomputeEpisodeRefs(orderedSeriesChain(all, specials: true))
+    }
+
+    /// The chain `episodeId` belongs to; `nil` when the list does not know it.
+    func precomputed(for episodeId: String) -> (refs: [EpisodeRef], indexByID: [String: Int])? {
+        if regular.indexByID[episodeId] != nil { return regular }
+        if specials.indexByID[episodeId] != nil { return specials }
+        return nil
+    }
+}
+
+/// The refs to build an episode's navigation from — the SSOT every site that
+/// resolves ONE episode goes through (card menus, the library hero). The
+/// series-wide chain first; the season's own list when that request fails or
+/// does not know the episode, so a hiccup degrades to "navigation stops at
+/// the season" rather than to no navigation at all. Empty when both fail.
+func episodeNavigationRefs(
+    episodeId: String, seriesId: String, seasonId: String?,
+    api: any LibraryAPI, userId: String
+) async -> [EpisodeReference] {
+    if let all = try? await api.getSeriesEpisodeRefs(seriesId: seriesId, userId: userId) {
+        let chain = seriesEpisodeChain(containing: episodeId, in: all)
+        if !chain.isEmpty { return chain }
+    }
+    guard let seasonId else { return [] }
+    return (try? await api.getEpisodeRefs(seriesId: seriesId, seasonId: seasonId, userId: userId)) ?? []
+}
+
 /// Builds prev/next navigation from the lean ref list. Convenience mirror of
 /// the `[BaseItemDto]` overload above.
 func buildEpisodeNavigation(

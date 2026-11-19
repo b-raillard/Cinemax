@@ -369,11 +369,12 @@ enum CardEpisodeNavigationResolver {
             season = season ?? item.seasonID
         }
         guard let series, let season else { return nil }
-        // `getEpisodeRefs`: only prev/next is derived here, and that needs an
-        // ordered list of ids and titles — nothing the full episode DTO adds.
-        guard let episodes = try? await api.getEpisodeRefs(
-            seriesId: series, seasonId: season, userId: userId
-        ) else { return nil }
+        // The lean refs, never the full episode DTO: only prev/next is derived
+        // here. Series-wide, so the last episode of a season is followed by
+        // the first of the next one (`episodeNavigationRefs`).
+        let episodes = await episodeNavigationRefs(
+            episodeId: episodeId, seriesId: series, seasonId: season, api: api, userId: userId
+        )
 
         let nav = buildEpisodeNavigation(for: episodeId, in: episodes)
         // A one-episode season yields no navigator; handing the player an

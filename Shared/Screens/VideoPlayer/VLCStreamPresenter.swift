@@ -5515,13 +5515,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             """)
         cancelOpenWatchdog()
         nextUpCard?.hide()
-        if autoPlayNext, !nextUpCancelledForThisItem, let next = nextEpisode, episodeNavigator != nil {
+        let action = EpisodeEndPolicy.action(
+            autoPlayNext: autoPlayNext, nextUpCancelled: nextUpCancelledForThisItem,
+            hasNext: nextEpisode != nil, hasNavigator: episodeNavigator != nil
+        )
+        if action == .playNext, let next = nextEpisode {
             didReportEnd = false
             navigateToEpisode(next, isAutoplay: true)
             return
         }
         reporter?.reportStop()
-        if episodeNavigator != nil {
+        if action == .endOfSeries {
             showEndOfSeriesOverlay()
         } else {
             closePlayer(.system)

@@ -534,6 +534,36 @@ extension JellyfinAPIClient {
         }
     }
 
+    /// The whole series in ONE light request (`/Shows/{id}/Episodes` without a
+    /// season) — episode navigation must cross a season boundary, and a single
+    /// season's list ends the chain at that season's last episode. Same cache
+    /// discipline as `getEpisodeRefs` (no userData → outside the userData
+    /// sweep, 300 s; no rating filter, the chain must stay contiguous).
+    /// Virtual (missing) episodes are dropped: they cannot be played, so they
+    /// are no one's "next". Measured on Jellyfin 10.11 (2026-11-19): ~680 bytes
+    /// per episode, season-then-episode order, `ParentIndexNumber` and
+    /// `LocationType` present with no `fields`.
+    public func getSeriesEpisodeRefs(seriesId: String, userId: String) async throws -> [EpisodeReference] {
+        let cacheKey = "seriesepisoderefs-\(seriesId)-\(userId)"
+        let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
+        if let cached: [EpisodeReference] = cache.get(cacheKey) { return cached }
+        guard let client = getClient() else { throw JellyfinError.notConnected }
+        var params = Paths.GetEpisodesParameters(userID: userId, fields: [], enableUserData: false)
+        params.enableImages = false
+        do {
+            let response = try await client.send(Paths.getEpisodes(seriesID: seriesId, parameters: params))
+            let refs = (response.value.items ?? []).compactMap { item -> EpisodeReference? in
+                guard item.locationType != .virtual, let id = item.id else { return nil }
+                return EpisodeReference(id: id, name: item.name ?? "", season: item.parentIndexNumber)
+            }
+            cache.set(cacheKey, value: refs, ttl: 300, stamp: cacheStamp)
+            return refs
+        } catch {
+            notifyIfUnauthorized(error)
+            throw error
+        }
+    }
+
     public func getNextUp(seriesId: String, userId: String) async throws -> BaseItemDto? {
         // Short-TTL cache mirroring `getEpisodes`: a series-detail open fires
         // this alongside `getItem`/`getSeasons`, and the tvOS post-playback

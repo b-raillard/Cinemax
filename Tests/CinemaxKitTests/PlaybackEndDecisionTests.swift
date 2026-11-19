@@ -531,3 +531,30 @@ struct ReResolveGateTests {
                                                   engineStopped: false) == .armWatchdog(markStopped: false))
     }
 }
+
+/// Défaut du 2026-11-19 : « Vous avez terminé {série} » ne veut dire qu'une
+/// chose — il n'y a plus d'épisode à lire.
+@Suite("Fin d'épisode : enchaînement, carte de fin de série ou fermeture")
+struct EpisodeEndPolicyTests {
+
+    @Test("Un épisode suivant existe : jamais la carte de fin de série")
+    func neverTheCardWhileAnEpisodeRemains() {
+        #expect(EpisodeEndPolicy.action(autoPlayNext: true, nextUpCancelled: false,
+                                        hasNext: true, hasNavigator: true) == .playNext)
+        // Lecture automatique coupée, ou compte à rebours annulé : on ferme.
+        #expect(EpisodeEndPolicy.action(autoPlayNext: false, nextUpCancelled: false,
+                                        hasNext: true, hasNavigator: true) == .close)
+        #expect(EpisodeEndPolicy.action(autoPlayNext: true, nextUpCancelled: true,
+                                        hasNext: true, hasNavigator: true) == .close)
+    }
+
+    @Test("Dernier épisode disponible : la carte ; hors série : fermeture")
+    func theCardOnlyOnTheLastEpisode() {
+        #expect(EpisodeEndPolicy.action(autoPlayNext: true, nextUpCancelled: false,
+                                        hasNext: false, hasNavigator: true) == .endOfSeries)
+        #expect(EpisodeEndPolicy.action(autoPlayNext: false, nextUpCancelled: false,
+                                        hasNext: false, hasNavigator: true) == .endOfSeries)
+        #expect(EpisodeEndPolicy.action(autoPlayNext: true, nextUpCancelled: false,
+                                        hasNext: false, hasNavigator: false) == .close)
+    }
+}
