@@ -136,6 +136,14 @@ struct LoginScreen: View {
 
     // MARK: - tvOS / iPad Layout
 
+    private var showsCleartextNoticeInTitle: Bool {
+        #if os(tvOS)
+        PreAuthCleartextBanner.applies(to: appState.serverURL)
+        #else
+        false
+        #endif
+    }
+
     private var tvOSLayout: some View {
         ZStack {
             CinemaColor.surface.ignoresSafeArea()
@@ -172,11 +180,20 @@ struct LoginScreen: View {
                             .tracking(1)
                             .foregroundStyle(CinemaColor.onSurface)
 
-                        Text(loc.localized("login.subtitle"))
-                            .font(CinemaFont.body)
-                            .foregroundStyle(CinemaColor.onSurfaceVariant)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
+                        // On tvOS the panel already fills the screen's height:
+                        // the cleartext notice TAKES THE SUBTITLE'S PLACE rather
+                        // than adding a row, which pushed the wordmark above
+                        // half off-screen (simulator, 2026-11-19).
+                        if showsCleartextNoticeInTitle {
+                            PreAuthCleartextBanner(short: true)
+                                .padding(.top, CinemaSpacing.spacing2)
+                        } else {
+                            Text(loc.localized("login.subtitle"))
+                                .font(CinemaFont.body)
+                                .foregroundStyle(CinemaColor.onSurfaceVariant)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     // Fields
@@ -201,6 +218,11 @@ struct LoginScreen: View {
 
                         if let error = viewModel.errorMessage {
                             PreAuthErrorBanner(message: error)
+                        }
+
+                        // iPad (this layout too) has the room for its own row.
+                        if PreAuthCleartextBanner.applies(to: appState.serverURL), !showsCleartextNoticeInTitle {
+                            PreAuthCleartextBanner(short: true)
                         }
                     }
 
@@ -330,6 +352,10 @@ struct LoginScreen: View {
 
                     if let error = viewModel.errorMessage {
                         PreAuthErrorBanner(message: error)
+                    }
+
+                    if PreAuthCleartextBanner.applies(to: appState.serverURL) {
+                        PreAuthCleartextBanner(short: true)
                     }
                 }
                 .padding(CinemaSpacing.spacing4)

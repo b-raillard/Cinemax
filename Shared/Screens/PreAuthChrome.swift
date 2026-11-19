@@ -34,6 +34,63 @@ struct PreAuthErrorBanner: View {
     }
 }
 
+/// The « unencrypted connection » notice of the two pre-auth screens.
+///
+/// `ServerSetupScreen` shows it while the TYPED address starts with `http://`;
+/// `LoginScreen` shows it whenever the server actually in use is plain http
+/// (`applies(to:)`) — the only place that covers the automatic scheme-less
+/// `http://` retry of `ServerSetupViewModel.handshake`, where nothing typed
+/// ever said « http » and the password field came up with no notice at all
+/// (audit 2026-11-19, SEC-05).
+struct PreAuthCleartextBanner: View {
+    @Environment(LocalizationManager.self) private var loc
+    /// The login screen's short wording: its column has no room for the full
+    /// explanation (it pushed « Annuler l'ajout » under the home indicator).
+    var short = false
+
+    /// tvOS login: the title alone. Its panel already fills the screen's
+    /// height, and three more lines pushed « Annuler l'ajout » into the
+    /// overscan margin (seen on the simulator, 2026-11-19).
+    private var showsMessage: Bool {
+        #if os(tvOS)
+        !short
+        #else
+        true
+        #endif
+    }
+
+    /// Whether credentials typed for `serverURL` travel unencrypted.
+    nonisolated static func applies(to serverURL: URL?) -> Bool {
+        serverURL?.scheme?.lowercased() == "http"
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.shield.fill")
+                .foregroundStyle(Color.orange)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(loc.localized("server.httpWarning.title"))
+                    .font(CinemaFont.label(.medium).weight(.semibold))
+                    .foregroundStyle(CinemaColor.onSurface)
+                if showsMessage {
+                    Text(loc.localized(short ? "login.httpWarning.message" : "server.httpWarning.message"))
+                        .font(CinemaFont.label(.small))
+                        .foregroundStyle(CinemaColor.onSurfaceVariant)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: CinemaRadius.medium)
+                .fill(Color.orange.opacity(0.15))
+        )
+        .accessibilityElement(children: .combine)
+    }
+}
+
 /// A secondary text+glyph action under a pre-auth form: Quick Connect, network
 /// discovery, "how do I find my server?", the servers list, and every escape
 /// hatch out of an add-a-server flow.

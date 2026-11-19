@@ -1580,7 +1580,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 logger.notice("auto-skip type=\(segment.type?.rawValue ?? "?", privacy: .public) action=\(String(describing: action), privacy: .public) from=\(Int(currentTime), privacy: .public)s to=\(Int(end), privacy: .public)s")
                 switch action {
                 case .handOffToNext:
-                    if let next = nextEpisode { navigateToEpisode(next, isAutoplay: true) }
+                    if let next = nextEpisode {
+                        // The hand-off stands for « seek to the end, then
+                        // autoplay »: its stop must carry the END, like the
+                        // seek path's does, or an episode whose credits open
+                        // under 90 % stays unwatched (audit 2026-11-19, PL-12).
+                        // `reportStop` reads its position synchronously, so
+                        // the override is dropped at once: if the negotiation
+                        // fails, this episode plays on and reports its playhead.
+                        endedAtMs = Int64(lengthMs)
+                        navigateToEpisode(next, isAutoplay: true)
+                        endedAtMs = nil
+                    }
                 case .seekToEnd:
                     showSkipHUD(loc.localized(segment.type == .intro ? "player.autoSkipped.intro" : "player.autoSkipped.credits"), duration: 1.6)
                     userEngineSeek(ms: Int32(end * 1000), byUser: false)

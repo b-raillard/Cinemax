@@ -270,6 +270,15 @@ struct ServerSetupViewModelTests {
         }
     }
 
+    @Test("The login screen warns for the server in use, whatever was typed")
+    func cleartextBannerKeysOnTheServerInUse() {
+        // What the scheme-less retry leaves in `appState.serverURL`.
+        #expect(PreAuthCleartextBanner.applies(to: URL(string: "http://192.168.1.10:8096")))
+        #expect(PreAuthCleartextBanner.applies(to: URL(string: "HTTP://nas.local:8096/jellyfin")))
+        #expect(!PreAuthCleartextBanner.applies(to: URL(string: "https://movies.example.net")))
+        #expect(!PreAuthCleartextBanner.applies(to: nil))
+    }
+
     @Test("A scheme-less PUBLIC host whose https fails is never retried in cleartext")
     func publicHostNotDowngraded() async {
         let api = MockAPIClient()
