@@ -25,6 +25,14 @@ struct VLCEngineLogTests {
         #expect(!scrubbed.contains("abc123"))
     }
 
+    @Test("JSON request bodies lose their secret, password and Pw values")
+    func stripsRequestBodySecrets() {
+        #expect(LogScrubber.scrubbed(#"body {"Secret":"abc123"}"#) == #"body {"Secret":"***"}"#)
+        #expect(LogScrubber.scrubbed(#"body {"Username":"bob","Pw":"hunter2"}"#) == #"body {"Username":"bob","Pw":"***"}"#)
+        #expect(LogScrubber.scrubbed(#"{"CurrentPassword": "old one","NewPw":"new one"}"#)
+            == #"{"CurrentPassword": "***","NewPw":"***"}"#)
+    }
+
     @Test("token at end of message is stripped")
     func stripsTokenAtEnd() {
         let scrubbed = LogScrubber.scrubbed("access error: https://h/s?api_key=deadbeef")
