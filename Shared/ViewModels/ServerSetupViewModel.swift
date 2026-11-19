@@ -95,8 +95,12 @@ final class ServerSetupViewModel {
         // an existing entry instead of retyping it.
         // `ServerRegistry.upsert` dedups on the normalized URL regardless, so
         // the permissive branch still cannot create a duplicate entry.
-        if let existing = ServerRegistry.contains(url: url, in: appState.servers),
-           existing.hasUsableSession {
+        // A scheme-less address may land on its `http://` spelling (see
+        // `handshake`), so that spelling counts as « already added » too.
+        let fallbackURL = trimmed.contains("://") ? nil : Self.plainHTTPFallback(for: url)
+        if [url, fallbackURL].compactMap({ $0 }).contains(where: {
+            ServerRegistry.contains(url: $0, in: appState.servers)?.hasUsableSession == true
+        }) {
             errorMessage = loc.localized("server.alreadyAdded")
             return
         }
@@ -107,7 +111,7 @@ final class ServerSetupViewModel {
         pendingCertificateIsRotation = false
 
         do {
-            let info = try await appState.apiClient.connectToServer(url: url)
+            let (info, url) = try await handshake(url, schemeTyped: trimmed.contains("://"), appState: appState)
             // Legacy-mirror discipline: while ADDING a server the mirror still
             // describes the currently-active one, and the three items must stay
             // coherent. Writing `server_url` here would leave a kill-the-app
@@ -144,5 +148,60 @@ final class ServerSetupViewModel {
         }
 
         isConnecting = false
+    }
+
+    /// Connects to `url`; when the user typed no scheme and that `https://`
+    /// attempt fails, tries the same address over `http://` once — the usual
+    /// home server listens on plain `http://host:8096`, and the forced https
+    /// used to answer it with « Connexion au serveur impossible » (recette
+    /// 2026-11-17). Never downgrades a server that DID present a certificate
+    /// (the approval flow stays in charge), nor an address spelled with an
+    /// explicit scheme. A failed retry rethrows the https error, so the error
+    /// handling above is unchanged.
+    private func handshake(_ url: URL, schemeTyped: Bool, appState: AppState) async throws -> (ServerInfo, URL) {
+        do {
+            return (try await appState.apiClient.connectToServer(url: url), url)
+        } catch let httpsError {
+            guard !schemeTyped,
+                  Self.allowsPlainHTTPFallback(for: url),
+                  let httpURL = Self.plainHTTPFallback(for: url),
+                  !Self.presentedCertificate(httpsError, url: url) else { throw httpsError }
+            logger.info("https failed for a scheme-less address, retrying over http")
+            do {
+                return (try await appState.apiClient.connectToServer(url: httpURL), httpURL)
+            } catch {
+                throw httpsError
+            }
+        }
+    }
+
+    /// Whether a failed scheme-less address may be retried in cleartext: only a
+    /// home-network host — loopback, a private / link-local IP, a `.local`
+    /// name. A public hostname never is: on a hostile network, blocking 443
+    /// would otherwise downgrade the connection silently and send the password
+    /// unencrypted (security review of PR #369). Typing `http://` stays the
+    /// explicit way in. Internal so `ServerSetupViewModelTests` can lock it.
+    static func allowsPlainHTTPFallback(for url: URL) -> Bool {
+        guard let host = url.host(percentEncoded: false)?.lowercased() else { return false }
+        switch LocalNetworkAddress.kind(ofLiteral: host) {
+        case .loopbackIPv4, .loopbackIPv6: return true
+        default: return host == "localhost" || LocalNetworkAddress.isEligibleHost(host)
+        }
+    }
+
+    /// The `http://` spelling of a scheme-less `https://` attempt, normalized
+    /// like every stored URL. Internal so `ServerSetupViewModelTests` can lock it.
+    static func plainHTTPFallback(for url: URL) -> URL? {
+        guard url.scheme == "https",
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        components.scheme = "http"
+        return components.url.flatMap(ServerURLNormalizer.normalize)
+    }
+
+    /// Whether the https attempt reached a TLS server whose certificate was
+    /// refused — a leaf to approve, not a reason to fall back to cleartext.
+    private static func presentedCertificate(_ error: Error, url: URL) -> Bool {
+        guard isCertificateError(error), let key = ServerCertificateTrust.trustKey(for: url) else { return false }
+        return ServerTrustDelegate.shared.pendingApproval(forTrustKey: key) != nil
     }
 }

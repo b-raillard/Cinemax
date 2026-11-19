@@ -418,11 +418,7 @@ struct MainTabView: View {
                             // or the account change without the Pro. On the root
                             // only — a pushed page's leading slot is its back
                             // button, and the player hides the bar anyway.
-                            .toolbar {
-                                ToolbarItem(placement: .topBarLeading) {
-                                    AccountAvatarToolbarButton()
-                                }
-                            }
+                            .toolbar { AccountAvatarToolbarItem() }
                     }
                 } label: {
                     Label(tab.displayTitle(loc), systemImage: tab.icon)

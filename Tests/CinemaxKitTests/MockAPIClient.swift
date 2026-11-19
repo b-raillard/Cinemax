@@ -120,9 +120,27 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return info
     }
 
+    /// Answers `connectToServer(url:)` per URL when set (the scheme-less
+    /// https → http retry), instead of the uniform `shouldThrow`.
+    var connectHandler: (@Sendable (URL) async throws -> ServerInfo)?
+
+    /// Every URL `connectToServer(url:)` was asked for, in order.
+    private(set) var connectedURLs: [URL] = []
+
     func connectToServer(url: URL) async throws -> ServerInfo {
-        recordLock.withLock { connectCalled = true }
+        recordLock.withLock {
+            connectCalled = true
+            connectedURLs.append(url)
+        }
         await connectGate?.wait()
+        if let connectHandler {
+            let info = try await connectHandler(url)
+            recordLock.withLock {
+                identityURL = url
+                dialURL = nil
+            }
+            return info
+        }
         if shouldThrow { throw stubbedError }
         // The real client's contract: the identity moves, the dial resets.
         recordLock.withLock {

@@ -326,6 +326,7 @@ struct LoginScreen: View {
                         focusRequest: $passwordFocusRequested
                     )
                     .credentialField(.password) { submitLogin() }
+                    .id(Self.passwordFieldID)
 
                     if let error = viewModel.errorMessage {
                         PreAuthErrorBanner(message: error)
@@ -357,7 +358,10 @@ struct LoginScreen: View {
                 .frame(maxWidth: formMaxWidth)
                 .padding(.bottom, isShortLayout ? CinemaSpacing.spacing3 : CinemaSpacing.spacing6)
             }
-            .preAuthScroll(isShort: isShortLayout)
+            // « suivant » from the username moves focus with the keyboard
+            // already up, and nothing scrolled the password field out from
+            // under it — a closed iPhone Duo typed it blind (recette 2026-11-17).
+            .preAuthScroll(isShort: isShortLayout, revealing: passwordFocusRequested ? Self.passwordFieldID : nil)
 
             // Success toast
             if viewModel.showSuccess {
@@ -369,6 +373,9 @@ struct LoginScreen: View {
     /// Mobile form/button max width — matches the visual inset of ServerSetupScreen's
     /// `.padding(.horizontal, spacing4)` (22pt each side) on a standard 390–440pt iPhone.
     private var formMaxWidth: CGFloat { 350 }
+
+    /// Scroll target of the password field (`preAuthScroll(revealing:)`).
+    private static let passwordFieldID = "login.password"
 
     // MARK: - Shared Components
 

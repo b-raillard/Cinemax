@@ -133,18 +133,31 @@ struct AdminDashboardScreen: View {
     }
 
     @ViewBuilder
+    /// Label and value side by side; when the value does not fit beside the
+    /// label (a LAN address on an iPhone: « http://192.1....215.2:8096 »,
+    /// recette 2026-11-17) it goes UNDER the label, whole, instead of being
+    /// cut in the middle.
     private func infoRow(_ label: String, value: String) -> some View {
-        iOSSettingsRow {
-            HStack {
-                Text(label)
-                    .font(CinemaFont.label(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
-                Text(value)
-                    .font(CinemaFont.label(.medium))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+        let labelText = Text(label)
+            .font(CinemaFont.label(.large))
+            .foregroundStyle(CinemaColor.onSurface)
+        let valueText = Text(value)
+            .font(CinemaFont.label(.medium))
+            .foregroundStyle(CinemaColor.onSurfaceVariant)
+        return iOSSettingsRow {
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    labelText
+                    Spacer()
+                    valueText.lineLimit(1)
+                }
+                VStack(alignment: .leading, spacing: CinemaSpacing.spacing1) {
+                    labelText
+                    valueText
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }

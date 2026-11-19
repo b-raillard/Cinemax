@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-import CinemaxKit
+@testable import CinemaxKit
 @testable import Cinemax
 
 @MainActor
@@ -155,5 +155,133 @@ struct ServerSetupViewModelTests {
 
         #expect(vm.errorMessage != nil)
         #expect(!vm.isConnecting)
+    }
+
+    // MARK: - Scheme-less https → http retry (recette 2026-11-17)
+
+    @Test("A scheme-less address whose https fails is retried once over http")
+    func schemeLessRetriesOverHTTP() async {
+        let api = MockAPIClient()
+        api.connectHandler = { url in
+            guard url.scheme == "http" else { throw URLError(.secureConnectionFailed) }
+            return ServerInfo(name: "Bench", serverID: "b1", version: "10.11.0", url: url)
+        }
+        let keychain = MockKeychain()
+        let appState = makeAppState(api: api, keychain: keychain)
+        let vm = ServerSetupViewModel()
+        vm.serverURL = "localhost:8096"
+
+        await vm.connect(using: appState, loc: LocalizationManager())
+
+        #expect(api.connectedURLs.map(\.absoluteString) == ["https://localhost:8096", "http://localhost:8096"])
+        #expect(vm.errorMessage == nil)
+        #expect(appState.serverURL?.scheme == "http")
+        #expect(keychain.savedServerURL?.scheme == "http")
+    }
+
+    @Test("An address typed WITH a scheme is never retried on another one")
+    func explicitSchemeNotRetried() async {
+        let api = MockAPIClient()
+        api.connectHandler = { _ in throw URLError(.cannotConnectToHost) }
+        let vm = ServerSetupViewModel()
+        vm.serverURL = "https://localhost:8096"
+
+        await vm.connect(using: makeAppState(api: api), loc: LocalizationManager())
+
+        #expect(api.connectedURLs.count == 1)
+        #expect(vm.errorMessage != nil)
+    }
+
+    @Test("When both fail, the generic error stays and the server is not set")
+    func bothSchemesFail() async {
+        let api = MockAPIClient()
+        api.connectHandler = { _ in throw URLError(.cannotConnectToHost) }
+        let appState = makeAppState(api: api)
+        let vm = ServerSetupViewModel()
+        vm.serverURL = "nas.local:8096"
+
+        await vm.connect(using: appState, loc: LocalizationManager())
+
+        #expect(api.connectedURLs.count == 2)
+        #expect(vm.errorMessage == LocalizationManager().localized("server.connectFailed"))
+        #expect(!appState.hasServer)
+    }
+
+    @Test("A scheme-less address whose http spelling is already signed in is refused offline")
+    func schemeLessMatchesRegisteredHTTP() async {
+        let api = MockAPIClient()
+        let keychain = MockKeychain()
+        keychain.savedServers = [
+            ServerEntry(
+                name: "Bench",
+                url: ServerURLNormalizer.normalize("http://localhost:8096")!,
+                accessToken: "tok",
+                userId: "user1",
+                username: "U"
+            )
+        ]
+        let appState = makeAppState(api: api, keychain: keychain)
+        appState.loadServersFromKeychain()
+        let vm = ServerSetupViewModel()
+        vm.serverURL = "localhost:8096"
+
+        await vm.connect(using: appState, loc: LocalizationManager())
+
+        #expect(vm.errorMessage == LocalizationManager().localized("server.alreadyAdded"))
+        #expect(!api.connectCalled)
+    }
+
+    @Test("A scheme-less host that PRESENTED a certificate is never retried in cleartext")
+    func presentedCertificateNotDowngraded() async {
+        let key = "192.168.1.50:443"
+        ServerTrustDelegate.shared.recordPending(ServerCertificateSummary(
+            trustKey: key, host: "192.168.1.50", subject: "test", serialNumber: nil, fingerprint: "ab"
+        ))
+        defer { ServerTrustDelegate.shared.clearPending(forTrustKey: key) }
+        let api = MockAPIClient()
+        api.connectHandler = { _ in throw URLError(.serverCertificateUntrusted) }
+        let vm = ServerSetupViewModel()
+        vm.serverURL = "192.168.1.50"
+
+        await vm.connect(using: makeAppState(api: api), loc: LocalizationManager())
+
+        #expect(api.connectedURLs.count == 1)
+        #expect(vm.pendingCertificate?.fingerprint == "ab")
+    }
+
+    @Test("The http fallback keeps host, port and sub-path")
+    func plainHTTPFallbackSpelling() {
+        let https = ServerURLNormalizer.normalize("nas.local:8096/jellyfin")!
+        #expect(ServerSetupViewModel.plainHTTPFallback(for: https)?.absoluteString == "http://nas.local:8096/jellyfin")
+        #expect(ServerSetupViewModel.plainHTTPFallback(for: URL(string: "http://nas.local")!) == nil)
+    }
+
+    @Test("Only a home-network host may fall back to cleartext")
+    func cleartextFallbackIsHomeNetworkOnly() {
+        let allowed = ["localhost:8096", "127.0.0.1:8096", "[::1]:8096", "192.168.1.10:8096",
+                       "10.0.0.5", "172.20.1.2", "169.254.3.4", "[fd00::1]:8096", "nas.local:8096"]
+        let refused = ["movies.example.net", "jellyfin.example.com:8096", "8.8.8.8:8096",
+                       "100.64.1.1", "local", "example.local.net"]
+        for raw in allowed {
+            #expect(ServerSetupViewModel.allowsPlainHTTPFallback(for: ServerURLNormalizer.normalize(raw)!), "\(raw)")
+        }
+        for raw in refused {
+            #expect(!ServerSetupViewModel.allowsPlainHTTPFallback(for: ServerURLNormalizer.normalize(raw)!), "\(raw)")
+        }
+    }
+
+    @Test("A scheme-less PUBLIC host whose https fails is never retried in cleartext")
+    func publicHostNotDowngraded() async {
+        let api = MockAPIClient()
+        api.connectHandler = { _ in throw URLError(.cannotConnectToHost) }
+        let appState = makeAppState(api: api)
+        let vm = ServerSetupViewModel()
+        vm.serverURL = "movies.example.net"
+
+        await vm.connect(using: appState, loc: LocalizationManager())
+
+        #expect(api.connectedURLs.map(\.absoluteString) == ["https://movies.example.net"])
+        #expect(vm.errorMessage == LocalizationManager().localized("server.connectFailed"))
+        #expect(!appState.hasServer)
     }
 }

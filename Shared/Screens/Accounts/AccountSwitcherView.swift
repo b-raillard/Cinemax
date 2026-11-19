@@ -385,6 +385,25 @@ struct AccountSwitcherView: View {
     }
 }
 
+/// The avatar's toolbar item on every tab root (iOS, `MainTabView`): leading in a horizontal bar, and in the
+/// VERTICAL bar where the system draws one — the closed iPhone Duo's column under the clock and Wi-Fi,
+/// the place the system gives the back button (`axisBehavior(.verticalPreferred)`, iOS 27.1; owner's call,
+/// recette 2026-11-17). Elsewhere it is exactly the old leading item. The 27.0 SDK (CI) has no such API.
+struct AccountAvatarToolbarItem: ToolbarContent {
+    var body: some ToolbarContent {
+        #if NO_HINGE_API
+        ToolbarItem(placement: .topBarLeading) { AccountAvatarToolbarButton() }
+        #else
+        if #available(iOS 27.1, *) {
+            ToolbarItem(placement: .topBarLeading) { AccountAvatarToolbarButton() }
+                .axisBehavior(.verticalPreferred)
+        } else {
+            ToolbarItem(placement: .topBarLeading) { AccountAvatarToolbarButton() }
+        }
+        #endif
+    }
+}
+
 /// The avatar leading every tab root's navigation bar (iOS, `MainTabView`). A toolbar item: iOS 26 draws its
 /// Liquid Glass itself — never `.buttonStyle(.glass)` on it (root RULE).
 struct AccountAvatarToolbarButton: View {
