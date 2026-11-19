@@ -281,6 +281,61 @@ struct CardEpisodeNavigationTests {
         #expect(api.getEpisodesCallCount == 0)
     }
 
+    /// Série entièrement vue, relancée depuis sa carte : rien n'est « à
+    /// suivre », la cible reste la série. Elle part du premier épisode AVEC sa
+    /// navigation — sans quoi un épisode jouait, puis le lecteur se fermait.
+    @Test("Carte d'une série déjà vue : premier épisode, et la suite s'enchaîne")
+    func watchedSeriesCardStartsAtTheFirstEpisodeWithNavigation() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in
+            var item = BaseItemDto()
+            item.id = id
+            item.type = .series
+            return item
+        }
+        api.getSeriesEpisodeRefsHandler = { _ in
+            [EpisodeReference(id: "s1e1", name: "S1E1", season: 1),
+             EpisodeReference(id: "s1e2", name: "S1E2", season: 1),
+             EpisodeReference(id: "s2e1", name: "S2E1", season: 2)]
+        }
+
+        let nav = await CardEpisodeNavigationResolver.resolve(
+            episodeId: "series-1", seriesId: "series-1", seasonId: nil, api: api, userId: "u1"
+        )
+
+        #expect(nav?.episodeId == "s1e1")
+        let next = nav?.next?.id
+        #expect(next == "s1e2")
+        let afterSeasonEnd = nav?.navigator?("s1e2")?.1?.id
+        #expect(afterSeasonEnd == "s2e1")
+    }
+
+    @Test("Carte d'une série en cours dont le sondage a expiré : l'épisode à suivre, pas le premier")
+    func seriesCardPrefersNextUpOverTheOpeningEpisode() async {
+        let api = MockAPIClient()
+        api.getItemHandler = { id in
+            var item = BaseItemDto()
+            item.id = id
+            item.type = .series
+            return item
+        }
+        var nextUp = BaseItemDto()
+        nextUp.id = "s1e2"
+        api.stubbedNextUp = nextUp
+        api.getSeriesEpisodeRefsHandler = { _ in
+            [EpisodeReference(id: "s1e1", name: "S1E1", season: 1),
+             EpisodeReference(id: "s1e2", name: "S1E2", season: 1)]
+        }
+
+        let nav = await CardEpisodeNavigationResolver.resolve(
+            episodeId: "series-1", seriesId: "series-1", seasonId: nil, api: api, userId: "u1"
+        )
+
+        #expect(nav?.episodeId == "s1e2")
+        let prev = nav?.previous?.id
+        #expect(prev == "s1e1")
+    }
+
     @Test("Liste de la série en échec : repli sur la saison, la navigation reste")
     func seriesListFailureFallsBackToTheSeason() async {
         let api = MockAPIClient()   // sans handler, la liste de la série échoue

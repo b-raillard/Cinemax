@@ -94,6 +94,18 @@ func seriesEpisodeChain(containing episodeId: String, in all: [EpisodeReference]
     return orderedSeriesChain(all, specials: target.season == 0)
 }
 
+/// The episode a series opens on when nothing is « next up » — every episode
+/// watched, typically: a rewatch. The first episode of the first regular
+/// season (a special only when the series has nothing else).
+///
+/// The sites that start a SERIES resolve this themselves instead of handing
+/// the player the series id: the id plays the same episode (CinemaxKit's
+/// `resolvePlayableEpisode`), but with no navigation at all — one episode,
+/// then the player closed, on exactly the series one is watching again.
+func seriesOpeningEpisode(in all: [EpisodeReference]) -> EpisodeReference? {
+    orderedSeriesChain(all, specials: false).first ?? all.first
+}
+
 private func orderedSeriesChain(_ all: [EpisodeReference], specials: Bool) -> [EpisodeReference] {
     all.enumerated()
         .filter { ($0.element.season == 0) == specials }

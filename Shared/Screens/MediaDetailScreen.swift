@@ -1218,6 +1218,9 @@ struct MediaDetailScreen: View {
         let progress: Double
         let remainingMinutes: Int
         let nextEpisode: BaseItemDto?
+        /// The id prev/next is built for: the next-up episode, a collection's
+        /// member, or the opening episode of a series with nothing next up.
+        let navigationItemId: String?
     }
 
     private func resolvedPlayTarget(for item: BaseItemDto) -> ResolvedPlayTarget {
@@ -1240,15 +1243,24 @@ struct MediaDetailScreen: View {
         // rewatch stopped part-way, and resumes (see its doc).
         let showResume = CardPlayTargetResolver.isResumable(positionTicks: posTicks) && totalTicks > 0
 
+        // A series with nothing « next up » (watched to the end) opens on its
+        // first episode — as the EPISODE, so it carries its navigation and the
+        // rewatch chains (`seriesOpeningEpisode`). Until the series-wide list
+        // lands this is nil and the series id plays, as before.
+        let opening = isSeries && nextEp == nil
+            ? seriesOpeningEpisode(in: viewModel.seriesEpisodeRefs)
+            : nil
+
         return ResolvedPlayTarget(
-            itemId: nextEp?.id ?? item.id ?? "",
-            title: nextEp?.name ?? item.name ?? "",
+            itemId: nextEp?.id ?? opening?.id ?? item.id ?? "",
+            title: nextEp?.name ?? opening?.name ?? item.name ?? "",
             startSeconds: showResume ? posTicks.jellyfinSeconds : nil,
             startTicks: showResume ? posTicks : nil,
             showResume: showResume,
             progress: showResume ? min(1.0, Double(posTicks) / Double(totalTicks)) : 0,
             remainingMinutes: max(0, totalTicks - posTicks).jellyfinMinutes,
-            nextEpisode: nextEp
+            nextEpisode: nextEp,
+            navigationItemId: nextEp?.id ?? opening?.id
         )
     }
 
@@ -1441,12 +1453,10 @@ struct MediaDetailScreen: View {
         // the collection's members is what gives "Play all" its ⏮/⏭, its
         // autoplay-next and its end-of-set card, with NO second queue authority
         // beside it.
-        let epNav = nextEp.flatMap { ep -> (previous: EpisodeRef?, next: EpisodeRef?, navigator: EpisodeNavigator?)? in
-            guard let id = ep.id else { return nil }
-            if viewModel.resolvedType == .boxSet {
-                return buildEpisodeNavigation(for: id, in: viewModel.collectionChildren)
-            }
-            return episodeNavigation(for: id)
+        let epNav = target.navigationItemId.map { id in
+            viewModel.resolvedType == .boxSet
+                ? buildEpisodeNavigation(for: id, in: viewModel.collectionChildren)
+                : episodeNavigation(for: id)
         }
 
         let playSection = PlayActionButtonsSection(

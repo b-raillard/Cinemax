@@ -389,14 +389,14 @@ private struct CardMenuContent: View {
 
         #if os(tvOS)
         coordinator?.play(
-            itemId: target.itemId, title: target.title, startTime: startTime,
+            itemId: nav?.episodeId ?? target.itemId, title: target.title, startTime: startTime,
             previousEpisode: nav?.previous, nextEpisode: nav?.next,
             episodeNavigator: nav?.navigator,
             using: appState
         )
         #else
         cardActions?.present(playback: CardPlaybackRequest(
-            itemId: target.itemId, title: target.title, startTime: startTime,
+            itemId: nav?.episodeId ?? target.itemId, title: target.title, startTime: startTime,
             previousEpisode: nav?.previous, nextEpisode: nav?.next,
             episodeNavigator: nav?.navigator
         ))
@@ -409,12 +409,13 @@ private struct CardMenuContent: View {
     /// Only an episode has neighbours. A **series** card qualifies too when
     /// its next-up probe handed back an episode id (`target.itemId` then
     /// differs from the card's own): the resolver learns the season from that
-    /// id. When the probe instead fell through to the series id, the season
-    /// lookup comes back empty and this is one cached call spent on a `nil`.
+    /// id. When the probe instead fell through to the series id (nothing next
+    /// up — a series watched to the end), the resolver picks the episode to
+    /// open on and hands it back as `episodeId`, so the replay chains.
     private func resolvedEpisodeNavigation(for target: CardPlayTarget) async -> CardPlaybackNavigation? {
         guard let userId = appState.currentUserId else { return nil }
         let isEpisode = item.type == .episode
-        guard isEpisode || target.itemId != item.id else { return nil }
+        guard isEpisode || item.type == .series else { return nil }
         return await CardEpisodeNavigationResolver.resolve(
             episodeId: target.itemId,
             seriesId: isEpisode ? item.seriesId : item.id,

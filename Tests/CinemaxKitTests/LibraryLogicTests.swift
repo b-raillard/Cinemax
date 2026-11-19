@@ -210,6 +210,18 @@ struct EpisodeNavigationTests {
         #expect(SeriesEpisodeChains(wholeSeries).precomputed(for: "inconnu") == nil)
     }
 
+    /// « Si je regarde Arrow à nouveau, j'ai envie que mes épisodes
+    /// s'enchaînent » : une série sans « à suivre » s'ouvre sur son premier
+    /// épisode normal, jamais sur un hors-série listé avant lui.
+    @Test("Une série revue s'ouvre sur le premier épisode de la première saison")
+    func rewatchOpensOnTheFirstRegularEpisode() {
+        #expect(seriesOpeningEpisode(in: wholeSeries)?.id == "s1e1")
+        #expect(seriesNavigation("s1e1").next?.id == "s1e2")
+        let onlySpecials = [EpisodeReference(id: "sp-1", name: "", season: 0)]
+        #expect(seriesOpeningEpisode(in: onlySpecials)?.id == "sp-1")
+        #expect(seriesOpeningEpisode(in: []) == nil)
+    }
+
     @Test("Les saisons sont chaînées par numéro, l'ordre du serveur gardé dans la saison")
     func chainIsOrderedBySeasonNumber() {
         let shuffled = [
