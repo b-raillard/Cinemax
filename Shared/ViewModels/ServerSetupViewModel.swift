@@ -155,8 +155,8 @@ final class ServerSetupViewModel {
     /// home server listens on plain `http://host:8096`, and the forced https
     /// used to answer it with « Connexion au serveur impossible » (recette
     /// 2026-11-17). Never downgrades a server that DID present a certificate
-    /// (the approval flow stays in charge), nor an address spelled with an
-    /// explicit scheme. A failed retry rethrows the https error, so the error
+    /// (the approval flow stays in charge), an address spelled with an
+    /// explicit scheme, nor a host:port already known over https. A failed retry rethrows the https error, so the error
     /// handling above is unchanged.
     private func handshake(_ url: URL, schemeTyped: Bool, appState: AppState) async throws -> (ServerInfo, URL) {
         do {
@@ -164,6 +164,7 @@ final class ServerSetupViewModel {
         } catch let httpsError {
             guard !schemeTyped,
                   Self.allowsPlainHTTPFallback(for: url),
+                  !Self.isKnownOverHTTPS(url, servers: appState.servers),
                   let httpURL = Self.plainHTTPFallback(for: url),
                   !Self.presentedCertificate(httpsError, url: url) else { throw httpsError }
             logger.info("https failed for a scheme-less address, retrying over http")
@@ -186,6 +187,26 @@ final class ServerSetupViewModel {
         switch LocalNetworkAddress.kind(ofLiteral: host) {
         case .loopbackIPv4, .loopbackIPv6: return true
         default: return host == "localhost" || LocalNetworkAddress.isEligibleHost(host)
+        }
+    }
+
+    /// Whether this host:port has already been reached over TLS from this
+    /// device: a certificate approved for it, or a registered `https` entry
+    /// (its public or its LAN address). Such an address is never retried in
+    /// cleartext — on another network, whatever holds that address could reset
+    /// TLS, answer over http and receive the password (audit 2026-11-19,
+    /// SEC-06). Typing `http://` stays the explicit way in. Internal + the
+    /// `isPinned` seam so `ServerSetupViewModelTests` can lock it.
+    static func isKnownOverHTTPS(
+        _ url: URL, servers: [ServerEntry],
+        isPinned: (String) -> Bool = { ServerTrustDelegate.shared.isPinned(trustKey: $0) }
+    ) -> Bool {
+        guard let key = ServerCertificateTrust.trustKey(for: url) else { return false }
+        if isPinned(key) { return true }
+        return servers.contains { entry in
+            [entry.url, entry.localURL].compactMap { $0 }.contains {
+                $0.scheme?.lowercased() == "https" && ServerCertificateTrust.trustKey(for: $0) == key
+            }
         }
     }
 

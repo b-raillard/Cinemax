@@ -256,6 +256,22 @@ struct ServerSetupViewModelTests {
         #expect(ServerSetupViewModel.plainHTTPFallback(for: URL(string: "http://nas.local")!) == nil)
     }
 
+    @Test("An address already known over https never falls back to cleartext")
+    func knownHTTPSAddressKeepsTLS() {
+        let typed = ServerURLNormalizer.normalize("192.168.1.10:8920")!
+        let unpinned: (String) -> Bool = { _ in false }
+        let https = ServerEntry(url: URL(string: "https://192.168.1.10:8920")!)
+        let lan = ServerEntry(url: URL(string: "https://tv.example.net")!, localURL: URL(string: "https://192.168.1.10:8920")!)
+        let http = ServerEntry(url: URL(string: "http://192.168.1.10:8920")!)
+        let otherPort = ServerEntry(url: URL(string: "https://192.168.1.10:8921")!)
+
+        #expect(!ServerSetupViewModel.isKnownOverHTTPS(typed, servers: [], isPinned: unpinned))
+        #expect(!ServerSetupViewModel.isKnownOverHTTPS(typed, servers: [http, otherPort], isPinned: unpinned))
+        #expect(ServerSetupViewModel.isKnownOverHTTPS(typed, servers: [https], isPinned: unpinned))
+        #expect(ServerSetupViewModel.isKnownOverHTTPS(typed, servers: [lan], isPinned: unpinned))
+        #expect(ServerSetupViewModel.isKnownOverHTTPS(typed, servers: [], isPinned: { $0 == "192.168.1.10:8920" }))
+    }
+
     @Test("Only a home-network host may fall back to cleartext")
     func cleartextFallbackIsHomeNetworkOnly() {
         let allowed = ["localhost:8096", "127.0.0.1:8096", "[::1]:8096", "192.168.1.10:8096",

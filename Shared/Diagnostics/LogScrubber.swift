@@ -27,6 +27,10 @@ import Foundation
 ///   colon and optional spaces precede the value.
 /// - `token":` / `apikey":` / `api_key":` — a JSON body (`"AccessToken":"…"`,
 ///   what `/Users/AuthenticateByName` answers), whose value is quoted.
+/// - `secret":` / `pw":` / `password":` — the JSON bodies the app SENDS
+///   (Quick Connect, sign-in, a password change). No such line is logged
+///   today; the rule is there for the day one is (audit 2026-11-19, SEC-08).
+///   A password holding an escaped quote is masked up to that quote only.
 /// - `ApiKey%3D` / `api_key%3D` / `token%3D` — the same query items once
 ///   percent-encoded inside another URL (a redirect target, a `url=` parameter);
 ///   `%` ends such a value, a token never containing one (audit 2026-09-22, S11).
@@ -77,6 +81,9 @@ enum LogScrubber {
     private static let tokenMarkers = [
         "ApiKey=", "api_key=", "token=", "X-Emby-Token:", "X-MediaBrowser-Token:",
         "token\":", "apikey\":", "api_key\":",
+        // JSON request bodies: Quick Connect (`"Secret"`), sign-in (`"Pw"`),
+        // a password change (`"NewPw"`, `"CurrentPassword"`).
+        "secret\":", "pw\":", "password\":",
         "ApiKey%3D", "api_key%3D", "token%3D",
         // Seerr: the API key header, the session cookie, the Quick Connect secret.
         "X-Api-Key:", "connect.sid=", "secret=", "connect.sid%3D", "secret%3D"
