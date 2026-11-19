@@ -40,7 +40,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || '' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
-# Toolchain pins shared by the three Xcode legs (scripts/ci-xcode-setup.sh).
+# Toolchain pins shared by the four Xcode legs (scripts/ci-xcode-setup.sh).
 env:
   # Xcode: behaviour changes between Xcode releases are documented in CLAUDE.md
   # (a `sending`-closure error on 26.5 that 26.2 accepted), so the runner
@@ -65,7 +65,7 @@ env:
   XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
 
 # `Build & Test` used to be ONE serial job on one macOS runner (iOS tests,
-# tvOS tests, Release builds: 35–37 min measured 2026-11-13). It is now three
+# tvOS tests, Release builds: 35–37 min measured 2026-11-13). It is now four
 # parallel legs behind a cheap Linux `changes` job, and the job NAMED
 # `Build & Test` — the required check of branch protection — only aggregates
 # their results. Each leg has its own runner, hence its own DerivedData: the
@@ -268,15 +268,42 @@ jobs:
               2>&1 | xcbeautify
           done
 
+  # Its own leg since 2026-11-19 (audit CI-11): as the last step of `Release
+  # builds` it made that leg the longest of the three (955 s against 818 s for
+  # the iOS tests, latest green main run), so every PR waited for it. Here it
+  # compiles from scratch on its own runner instead of on the Release leg's
+  # DerivedData — more runner minutes, less waiting.
+  pro-preview-build:
+    name: PRO_PREVIEW build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Select Xcode, install xcodegen, generate the project
+        run: scripts/ci-xcode-setup.sh
+
+      - name: Cache SwiftPM
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+            .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Cinemax.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'Packages/CinemaxKit/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
       # A PRO_PREVIEW build (the TestFlight preview of the purchase) is only
       # ever compiled at archive time, so its `#if … PRO_PREVIEW` branches were
       # first seen there. One platform is enough to catch a compile error. The
       # step also proves the build carries its Info.plist mark and that
       # scripts/check-archive-sdk.sh refuses it — a preview build answers
       # « Pro launched » with no founders, and is never submitted for review.
-      # Kept in THIS leg, after the iOS Release build: it rebuilds on that
-      # DerivedData (3.3 min measured 2026-11-13), and its `find` of
-      # Cinemax.app reads this runner's products.
+      # Its `find` of Cinemax.app reads this runner's products: the only
+      # Release-iphonesimulator build on it is this one.
       - name: Build Release with PRO_PREVIEW (iOS)
         run: |
           set -o pipefail
@@ -312,7 +339,7 @@ jobs:
   # check as passing — and a cancelled run must report red, not skipped.
   build:
     name: Build & Test
-    needs: [changes, ios-tests, tvos-tests, release-builds]
+    needs: [changes, ios-tests, tvos-tests, release-builds, pro-preview-build]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -325,9 +352,10 @@ jobs:
           IOS: ${{ needs.ios-tests.result }}
           TVOS: ${{ needs.tvos-tests.result }}
           RELEASE: ${{ needs.release-builds.result }}
+          PREVIEW: ${{ needs.pro-preview-build.result }}
         run: |
           set -euo pipefail
-          echo "changes=$CHANGES code=$CODE ios-tests=$IOS tvos-tests=$TVOS release-builds=$RELEASE"
+          echo "changes=$CHANGES code=$CODE ios-tests=$IOS tvos-tests=$TVOS release-builds=$RELEASE pro-preview-build=$PREVIEW"
           if [ "$CHANGES" != success ]; then
             echo "::error::Detect code changes ended '$CHANGES'"; exit 1
           fi
@@ -337,7 +365,7 @@ jobs:
             *) echo "::error::Detect code changes gave code='$CODE'"; exit 1 ;;
           esac
           failed=0
-          for leg in "ios-tests=$IOS" "tvos-tests=$TVOS" "release-builds=$RELEASE"; do
+          for leg in "ios-tests=$IOS" "tvos-tests=$TVOS" "release-builds=$RELEASE" "pro-preview-build=$PREVIEW"; do
             if [ "${leg#*=}" != "$want" ]; then
               echo "::error::${leg%%=*} ended '${leg#*=}', expected '$want' (code=$CODE)"
               failed=1
