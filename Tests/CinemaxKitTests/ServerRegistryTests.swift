@@ -1368,3 +1368,22 @@ struct CachedUserOwnershipTests {
         #expect(!AppState.cachedUserBelongsElsewhere(cachedId: nil, currentId: "a"))
     }
 }
+
+/// Audit 2026-11-19 (PN-09) : un simple coup d'œil au Centre de contrôle
+/// relançait la relecture du compte et, derrière elle, toute la chaîne Seerr.
+@Suite("Retour au premier plan — ce que la session doit")
+struct ForegroundActionTests {
+    private let now = Date(timeIntervalSince1970: 1_000_000)
+
+    @Test("No background before it: a peek owes nothing")
+    func peek() {
+        #expect(AppState.foregroundAction(backgroundedAt: nil, now: now) == .none)
+    }
+
+    @Test("A short background refreshes the user, a long one re-validates the session")
+    func afterBackground() {
+        #expect(AppState.foregroundAction(backgroundedAt: now.addingTimeInterval(-20), now: now) == .refreshUser)
+        #expect(AppState.foregroundAction(backgroundedAt: now.addingTimeInterval(-60), now: now) == .refreshUser)
+        #expect(AppState.foregroundAction(backgroundedAt: now.addingTimeInterval(-61), now: now) == .revalidateSession)
+    }
+}

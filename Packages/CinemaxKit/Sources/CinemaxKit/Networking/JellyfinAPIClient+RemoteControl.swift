@@ -42,6 +42,12 @@ extension JellyfinAPIClient: RemoteControlAPI {
     /// 30 s, not the usual 10: nothing here is userData, so no mutator
     /// invalidates it, and a device waking up is allowed to take half a minute
     /// to make the button appear.
+    ///
+    /// `cached` governs the READ only: every successful answer is stored, an
+    /// uncached one included. Accueil polls this uncached every 20 s, and the
+    /// fiche opened right after was asking the server the same question again
+    /// (audit 2026-11-19, PN-08). An uncached caller still never reads the
+    /// store, so the sheet's rule above holds.
     public func getControllableSessions(userId: String, cached: Bool = false) async throws -> [SessionInfoDto] {
         let cacheKey = "controllable-sessions-\(userId)"
         let cacheStamp = cache.stamp()   // before the fetch: see APICache.stamp()
@@ -53,7 +59,7 @@ extension JellyfinAPIClient: RemoteControlAPI {
         )
         do {
             let response = try await client.send(Paths.getSessions(parameters: params))
-            if cached { cache.set(cacheKey, value: response.value, ttl: 30, stamp: cacheStamp) }
+            cache.set(cacheKey, value: response.value, ttl: 30, stamp: cacheStamp)
             return response.value
         } catch {
             notifyIfUnauthorized(error)

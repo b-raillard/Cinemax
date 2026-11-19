@@ -284,10 +284,12 @@ final class AppState {
             // LAN first: the route is decided before the session's first
             // request (bounded by the launch probe timeout, ~1 s).
             await launchRoute?.value
-            if let info = try? await self.apiClient.fetchServerInfo() {
-                self.serverInfo = info
-            }
+            // Side by side: neither reads the other's answer, and the user
+            // refresh is what starts the admin flag and the Seerr chain
+            // (audit 2026-11-19, PN-12).
+            async let info = try? self.apiClient.fetchServerInfo()
             await self.refreshCurrentUser()
+            if let info = await info { self.serverInfo = info }
         }
     }
 
@@ -343,6 +345,29 @@ final class AppState {
         } catch {
             // Network blip — keep last-known values.
         }
+    }
+
+    /// What a return to `.active` owes the session.
+    enum ForegroundAction: Sendable, Equatable {
+        /// No background came before it (a Control Center swipe, a banner, the
+        /// app switcher peeked at, the launch's own first `.active`).
+        case none
+        /// A short background: the token is not in question, the policy may be.
+        case refreshUser
+        /// A background long enough for the session to have been reaped.
+        case revalidateSession
+    }
+
+    /// `.inactive` → `.active` with no `.background` in between used to run the
+    /// user refresh — and through `onCurrentUserRefreshed` the Seerr reload, the
+    /// badge counts and the arrival check — for a mere peek; and a stamp left
+    /// in place by a short background made every later peek re-run it (audit
+    /// 2026-11-19, PN-09). The caller clears the stamp on every `.active`.
+    nonisolated static func foregroundAction(
+        backgroundedAt: Date?, now: Date, revalidateAfter: TimeInterval = 60
+    ) -> ForegroundAction {
+        guard let backgroundedAt else { return .none }
+        return now.timeIntervalSince(backgroundedAt) > revalidateAfter ? .revalidateSession : .refreshUser
     }
 
     /// Whether the cached user record is another account's. `nonisolated` +
