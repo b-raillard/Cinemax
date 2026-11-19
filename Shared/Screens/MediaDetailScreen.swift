@@ -1246,8 +1246,9 @@ struct MediaDetailScreen: View {
         // A series with nothing « next up » (watched to the end) opens on its
         // first episode — as the EPISODE, so it carries its navigation and the
         // rewatch chains (`seriesOpeningEpisode`). Until the series-wide list
-        // lands this is nil and the series id plays, as before.
-        let opening = isSeries && nextEp == nil
+        // lands, or when the next-up request FAILED, this is nil and the series
+        // id plays: `getPlaybackInfo` asks for next-up again.
+        let opening = isSeries && nextEp == nil && !viewModel.nextUpLoadFailed
             ? seriesOpeningEpisode(in: viewModel.seriesEpisodeRefs)
             : nil
 

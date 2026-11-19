@@ -64,6 +64,11 @@ final class MediaDetailViewModel {
     private(set) var seasonSwapCount = 0
     var selectedSeasonId: String?
     var nextUpEpisode: BaseItemDto?
+    /// The last next-up request THREW (as opposed to answering « nothing next
+    /// up »). The Play button then leaves the choice of episode to the
+    /// playback-time resolution, which asks again, instead of restarting the
+    /// series from its first episode on a network hiccup.
+    private(set) var nextUpLoadFailed = false
     /// Episodes from the next-up episode's season, when it differs from the currently displayed season.
     /// Used so episodeNavigation can build prev/next refs for the resume action button.
     var nextUpEpisodes: [BaseItemDto] = []
@@ -669,12 +674,21 @@ final class MediaDetailViewModel {
             }()
 
             let refreshedItem = try? await itemTask
-            let refreshedNextUp = try? await nextUpTask
+            let refreshedNextUp: BaseItemDto?
+            let nextUpFailed: Bool
+            do {
+                refreshedNextUp = try await nextUpTask
+                nextUpFailed = false
+            } catch {
+                refreshedNextUp = nil
+                nextUpFailed = true
+            }
             let refreshedEpisodes = await episodesTask
 
             guard loadGeneration == generation else { return }
             if let refreshedItem { item = refreshedItem }
             nextUpEpisode = refreshedNextUp
+            nextUpLoadFailed = nextUpFailed
             // Only onto the season they were fetched for: the user may have
             // switched season while this was in flight, and `selectSeason`'s
             // own generation does not cover this writer (audit 2026-09-22, B8).
@@ -1070,10 +1084,19 @@ final class MediaDetailViewModel {
         async let nextUpTask = apiClient.getNextUp(seriesId: seriesId, userId: userId)
 
         let loadedSeasons = try await seasonsTask
-        let loadedNextUp = try? await nextUpTask
+        let loadedNextUp: BaseItemDto?
+        let nextUpFailed: Bool
+        do {
+            loadedNextUp = try await nextUpTask
+            nextUpFailed = false
+        } catch {
+            loadedNextUp = nil
+            nextUpFailed = true
+        }
         guard loadGeneration == generation else { return }
         seasons = loadedSeasons
         nextUpEpisode = loadedNextUp
+        nextUpLoadFailed = nextUpFailed
 
         // Not `loadedSeasons.first` blindly: a fiche reached by an episode's id
         // (`cinemax://item/…` from the widget / Top Shelf, a search result, a

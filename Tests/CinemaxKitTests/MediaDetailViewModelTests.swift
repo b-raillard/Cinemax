@@ -387,6 +387,21 @@ struct MediaDetailViewModelTests {
         #expect(vm.episodeNavigationMap["ep-s1e1"]?.next?.id == "ep-s2e1")
     }
 
+    @Test("A failed next-up request is told apart from « nothing next up »")
+    func failedNextUpIsNotNothingNextUp() async {
+        let api = makeThreeSeasonAPI()
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        await vm.load(using: makeAppState(api: api), loc: LocalizationManager())
+        #expect(vm.nextUpEpisode == nil)
+        #expect(!vm.nextUpLoadFailed)
+
+        api.nextUpShouldThrow = true
+        let failing = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+        await failing.load(using: makeAppState(api: api), loc: LocalizationManager())
+        #expect(failing.nextUpEpisode == nil)
+        #expect(failing.nextUpLoadFailed)
+    }
+
     @Test("A fiche opened for an episode lands on that episode's season")
     func episodeFicheOpensOnEpisodeSeason() async {
         let api = makeThreeSeasonAPI()
