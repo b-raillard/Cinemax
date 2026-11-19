@@ -1460,6 +1460,7 @@ struct MediaDetailScreen: View {
             epPrev: epNav?.previous,
             epNext: epNav?.next,
             epNavigator: epNav?.navigator,
+            navigationRevision: viewModel.navigationRevision,
             // Only meaningful for multi-source items; `selectedSource` returns
             // nil otherwise and playback falls back to the ranked pick.
             mediaSourceId: selectedSource(item)?.id,
@@ -1898,6 +1899,7 @@ struct MediaDetailScreen: View {
                             epPrev: nav.previous,
                             epNext: nav.next,
                             epNavigator: nav.navigator,
+                            navigationRevision: viewModel.navigationRevision,
                             episodeThumbnailWidth: episodeThumbnailWidth,
                             episodeTitleFontSize: episodeTitleFontSize,
                             onSelectOverview: { episodeOverview = $0 }
@@ -1971,6 +1973,7 @@ struct MediaDetailScreen: View {
                                     epPrev: nav.previous,
                                     epNext: nav.next,
                                     epNavigator: nav.navigator,
+                                    navigationRevision: viewModel.navigationRevision,
                                     episodeTitleFontSize: episodeTitleFontSize,
                                     onSelectOverview: { episodeOverview = $0 },
                                     onToggleWatched: { ep in
@@ -2406,6 +2409,9 @@ private struct PlayActionButtonsSection: View, Equatable {
     let epPrev: EpisodeRef?
     let epNext: EpisodeRef?
     let epNavigator: EpisodeNavigator?
+    /// `MediaDetailViewModel.navigationRevision` — stands in for the navigator
+    /// in `==` (see there).
+    let navigationRevision: Int
     /// User's version pick for multi-source items; `nil` ⇒ ranked default.
     let mediaSourceId: String?
 
@@ -2423,9 +2429,9 @@ private struct PlayActionButtonsSection: View, Equatable {
 
     @Environment(ThemeManager.self) private var themeManager
 
-    // Equatable ignores the navigator closure — fresh closures that carry the
-    // same prev/next identity are treated as equal so the sub-view doesn't
-    // thrash when the parent rebuilds a functionally-identical navigator.
+    // The navigator closure cannot be compared; `navigationRevision` stands in
+    // for it, so a rebuilt chain (season → whole series) replaces the one this
+    // view was built with, while an unrelated parent re-render still skips it.
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.playItemId == rhs.playItemId
             && lhs.playTitle == rhs.playTitle
@@ -2436,6 +2442,7 @@ private struct PlayActionButtonsSection: View, Equatable {
             && lhs.remainingText == rhs.remainingText
             && lhs.epPrev?.id == rhs.epPrev?.id
             && lhs.epNext?.id == rhs.epNext?.id
+            && lhs.navigationRevision == rhs.navigationRevision
             && lhs.mediaSourceId == rhs.mediaSourceId
             && lhs.playLabel == rhs.playLabel
             && lhs.playFromBeginningLabel == rhs.playFromBeginningLabel

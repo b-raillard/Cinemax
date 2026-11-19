@@ -71,6 +71,13 @@ final class MediaDetailViewModel {
     /// lets an episode's prev/next cross a season boundary. Empty until it
     /// lands, or when the request failed: the maps then stop at the season.
     private(set) var seriesEpisodeRefs: [EpisodeReference] = []
+    /// Bumped on every rebuild of the navigation maps. The fiche's `Equatable`
+    /// sub-views (play buttons, episode rows / cards) compare it: they cannot
+    /// compare the navigator closure itself, and a mid-season episode has the
+    /// SAME prev/next ids in the season chain and in the series-wide one — so
+    /// without it they kept the season-only navigator they were first built
+    /// with, and the season's last episode ended on the end-of-series card.
+    private(set) var navigationRevision = 0
     /// The side task filling `seriesEpisodeRefs` (see `loadSeriesNavigation`).
     /// Internal so a test can await it instead of racing it.
     private(set) var seriesNavigationTask: Task<Void, Never>?
@@ -1197,6 +1204,7 @@ final class MediaDetailViewModel {
     /// season's own list stays underneath as the fallback (request failed, or
     /// an episode newer than the 300 s-cached series list).
     private func rebuildNavigationMaps() {
+        navigationRevision &+= 1
         var map = Self.makeNavigationMap(from: episodes)
         let chains = SeriesEpisodeChains(seriesEpisodeRefs)
         for ref in seriesEpisodeRefs {

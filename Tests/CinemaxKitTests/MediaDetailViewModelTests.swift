@@ -363,6 +363,30 @@ struct MediaDetailViewModelTests {
         #expect(vm.episodeNavigationMap["ep-s3e6"]?.navigator != nil)
     }
 
+    /// Recette Apple TV du 2026-11-19 : un épisode de milieu de saison a les
+    /// MÊMES voisins dans la chaîne de la saison et dans celle de la série, donc
+    /// les sous-vues `Equatable` de la fiche gardaient le navigateur de la
+    /// saison. Elles comparent cette révision à la place de la fermeture.
+    @Test("The navigation revision moves when the series-wide chain lands")
+    func navigationRevisionMovesWithTheSeriesChain() async {
+        let api = makeThreeSeasonAPI()
+        let latch = TestLatch()
+        api.getSeriesEpisodeRefsHandler = { _ in
+            await latch.wait()
+            return [EpisodeReference(id: "ep-s1e1", name: "S1E1", season: 1),
+                    EpisodeReference(id: "ep-s2e1", name: "S2E1", season: 2)]
+        }
+        let vm = MediaDetailViewModel(itemId: "series-1", itemType: .series)
+
+        await vm.load(using: makeAppState(api: api), loc: LocalizationManager())
+        let seasonOnly = vm.navigationRevision
+        latch.open()
+        await vm.seriesNavigationTask?.value
+
+        #expect(vm.navigationRevision != seasonOnly)
+        #expect(vm.episodeNavigationMap["ep-s1e1"]?.next?.id == "ep-s2e1")
+    }
+
     @Test("A fiche opened for an episode lands on that episode's season")
     func episodeFicheOpensOnEpisodeSeason() async {
         let api = makeThreeSeasonAPI()

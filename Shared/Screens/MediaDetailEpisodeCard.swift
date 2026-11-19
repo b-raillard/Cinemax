@@ -15,6 +15,9 @@ struct MediaDetailEpisodeCard: View, Equatable {
     let epPrev: EpisodeRef?
     let epNext: EpisodeRef?
     let epNavigator: EpisodeNavigator?
+    /// `MediaDetailViewModel.navigationRevision` — stands in for the navigator
+    /// in `==`, which cannot compare a closure.
+    let navigationRevision: Int
     let episodeTitleFontSize: CGFloat
     let onSelectOverview: (EpisodeOverviewItem) -> Void
     let onToggleWatched: (BaseItemDto) -> Void
@@ -41,6 +44,7 @@ struct MediaDetailEpisodeCard: View, Equatable {
                 && lhs.episode.premiereDate == rhs.episode.premiereDate
                 && lhs.epPrev?.id == rhs.epPrev?.id
                 && lhs.epNext?.id == rhs.epNext?.id
+                && lhs.navigationRevision == rhs.navigationRevision
                 && lhs.episodeTitleFontSize == rhs.episodeTitleFontSize
         }
     }
