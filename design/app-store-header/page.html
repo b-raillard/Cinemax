@@ -95,7 +95,7 @@ if (v === 'duo') {
   // (2007 × 2853, Simulator Cmd+S) is split at its midline across both panels.
   // Punchlines chosen 2026-10-08. `k` scales the headline for the longer ones.
   const DUO = {
-    en: { h: 'Put your films<br><em>on the table.</em>', s: 'Table mode for iPhone Duo.<br>Popcorn not included.',
+    en: { h: 'Put your movies<br><em>on the table.</em>', s: 'Table mode for iPhone Duo.<br>Popcorn not included.',
           badge: 'NEW · MADE FOR IPHONE DUO', k: 1 },
     fr: { h: 'JellyGlass se plie<br>en quatre.<br><em>L’iPhone Duo, en deux.</em>', s: 'Le mode table de l’iPhone Duo.<br>Pop-corn non fourni.',
           badge: 'NOUVEAU · CONÇU POUR L’IPHONE DUO', k: .78, ks: .68 },
@@ -140,5 +140,69 @@ if (v === 'duo') {
              background:linear-gradient(90deg,#2a2a2d,#8a8a90 30%,#5a5a60 70%,#2a2a2d)"></div></div>
      </div>
     </div>`;
+}
+
+if (v === 'eco') {
+  // « Everywhere, on every screen » (2026-10-08): the four devices together —
+  // Apple TV behind, iPad, folded iPhone Duo and iPhone in front — the same
+  // composition as the ecosystem screenshot plates (eco.html).
+  const ECO = {
+    en: { h: 'Everywhere,<br><em>on every screen.</em>', s: 'Pick up where you left off on any of them, or send the film to the big screen with “Play on…”.', k: 1 },
+    fr: { h: 'Partout,<br><em>sur tous les écrans.</em>', s: 'Reprenez où vous en étiez sur chacun, ou envoyez le film sur grand écran avec « Lire sur… ».', k: .82 },
+    de: { h: 'Überall,<br><em>auf jedem Bildschirm.</em>', s: 'Mach auf jedem Gerät da weiter, wo du warst – oder schick den Film mit „Abspielen auf …“ auf den großen Bildschirm.', k: .78 },
+  };
+  const t = ECO[lang], hdr = fmt === 'header';
+  const L = (n) => q.get(n) || `${n}-home-${lang}.png`;
+  const flat = (x, y, w, h, r, b, rot, file, z) => `
+    <div class="device" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${r}px;transform:rotate(${rot}deg);z-index:${z};
+         padding:${b}px;box-sizing:border-box;background:#050505;box-shadow:0 0 0 2px #2c2c2e,0 40px 100px rgba(0,0,0,.75)">
+      <img src="${src(file)}" style="border-radius:${Math.max(r - b, 3)}px;object-position:top"></div>`;
+  const duo = (x, y, w, z) => {
+    const ph = Math.round(w * 1426 / 2007), r = w * .085, b = w * .02;
+    const img = src(q.get('duo') || (lang === 'en' ? 'duo-table.png' : `duo-table-${lang}.png`));
+    const panel = (half) => `background:#000 url('${img}') 0 ${half === 'up' ? '0' : '100%'} / 100% 200% no-repeat;`;
+    return `
+    <div class="abs" style="left:${x - w * .15}px;top:${y + ph * 1.4}px;width:${w * 1.3}px;height:${ph * .5}px;border-radius:50%;background:rgba(0,0,0,.9);filter:blur(${w * .08}px);z-index:${z}"></div>
+    <div class="abs" style="left:${x}px;top:${y}px;width:${w}px;perspective:${w * 4.5}px;perspective-origin:50% -20%;z-index:${z}">
+     <div style="transform-style:preserve-3d;transform:rotateY(-14deg)">
+      <div style="position:relative;height:${ph}px;transform-origin:50% 100%;transform:rotateX(-9deg);border-radius:${r}px ${r}px 3px 3px;
+           padding:${b}px ${b}px 0;background:#0a0a0a;box-shadow:0 0 0 2px #46464a,0 0 0 3px #1c1c1e">
+        <div style="height:100%;border-radius:${r * .8}px ${r * .8}px 0 0;${panel('up')}"></div></div>
+      <div style="position:relative;height:${ph}px;transform-origin:50% 0;transform:rotateX(60deg);border-radius:3px 3px ${r}px ${r}px;
+           padding:0 ${b}px ${b}px;background:#0a0a0a;box-shadow:0 0 0 2px #46464a,0 0 0 3px #1c1c1e">
+        <div style="height:100%;border-radius:0 0 ${r * .8}px ${r * .8}px;${panel('down')}"></div>
+        <div style="position:absolute;left:-3px;right:-3px;top:-3px;height:5px;border-radius:3px;background:linear-gradient(90deg,#2a2a2d,#8a8a90 30%,#5a5a60 70%,#2a2a2d)"></div></div>
+     </div>
+    </div>`;
+  };
+  // Devices: header (1920 × 823) and search (1920 × 1280) share one layout, scaled.
+  // Positions are given for the header; the search format scales the group
+  // about its top-left corner (950, 96) and moves it down into the taller frame.
+  const S = hdr ? 1 : 1.06, OX = hdr ? 950 : 492, OY = hdr ? 96 : 520;
+  const at = (x, y) => [OX + (x - 950) * S, OY + (y - 96) * S];
+  const pills = (fs) => ['iPhone', 'iPad', 'iPhone Duo', 'Apple TV'].map(p => `<span class="pill" style="font-size:${fs}px">${p}</span>`).join('');
+  const [tx, ty] = at(1020, 96), [ix, iy] = at(950, 318), [px, py] = at(1660, 372), [dx, dy] = at(1290, 452);
+  stage.innerHTML = `
+    <div class="abs bg" style="background:
+         radial-gradient(ellipse 42% 62% at ${hdr ? 70 : 68}% ${hdr ? 46 : 48}%, rgba(76,175,130,.30), rgba(14,14,14,0) 70%),
+         radial-gradient(ellipse 70% 40% at 66% 104%, rgba(46,138,94,.16), rgba(14,14,14,0) 70%), #0E0E0E"></div>
+    ${hdr ? `
+    <div class="abs" style="left:150px;top:0;bottom:0;width:780px;z-index:9;display:flex;flex-direction:column;justify-content:center">
+      <div class="eyebrow">JELLYGLASS</div>
+      <h1 style="font-size:${96 * t.k}px;margin-top:22px;white-space:nowrap">${t.h}</h1>
+      <div class="sub" style="font-size:28px;margin-top:24px;max-width:720px">${t.s}</div>
+      <div class="pills" style="margin-top:32px">${pills(22)}</div>
+    </div>` : `
+    <div class="abs" style="left:0;right:0;top:96px;z-index:9;text-align:center">
+      <div class="eyebrow">JELLYGLASS</div>
+      <h1 style="font-size:${112 * t.k}px;margin-top:26px;white-space:nowrap">${t.h.replace('<br>', ' ')}</h1>
+      <div class="sub" style="font-size:34px;margin:24px auto 0;max-width:1150px">${t.s}</div>
+      <div class="pills" style="margin-top:34px;justify-content:center">${pills(28)}</div>
+    </div>`}
+    ${flat(tx, ty, 760 * S, 428 * S, 14, 9, -2, L('tv'), 1)}
+    <div class="abs" style="left:${tx + 330 * S}px;top:${ty + 432 * S}px;width:${110 * S}px;height:8px;border-radius:4px;background:linear-gradient(#2a2a2e,#141416);transform:rotate(-2deg)"></div>
+    ${flat(ix, iy, 300 * S, 400 * S, 24, 10, -5, L('ipad'), 3)}
+    ${flat(px, py, 172 * S, 374 * S, 30, 7, 6, L('iphone'), 3)}
+    ${duo(dx, dy, 230 * S, 4)}`;
 }
 </script></body></html>

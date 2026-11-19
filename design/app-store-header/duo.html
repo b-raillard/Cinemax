@@ -1,0 +1,118 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<!-- iPhone Duo screenshot planks (App Store Connect « iPhone Duo » slot, inner display
+     2007 × 2853): the same template as the iPhone series (shots.html — bloom, grain,
+     Instrument Sans, tilted device), on a 669 × 951 board rendered at scale 3 by
+     render.sh. Query: v=table|open|land, lang=fr|en|de, shot=<capture in $ASSETS>. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+html,body{margin:0;background:#07070A;font-family:'Instrument Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+.panel{position:relative;overflow:hidden;background:#07070A;width:669px;height:951px}
+.bloom{position:absolute;inset:0;background:
+ radial-gradient(115% 65% at 16% -6%,rgba(76,175,130,.26),rgba(76,175,130,0) 58%),
+ radial-gradient(85% 55% at 102% 8%,rgba(91,200,232,.14),rgba(91,200,232,0) 60%),
+ radial-gradient(120% 90% at 50% 120%,rgba(0,0,0,.65),rgba(0,0,0,0) 55%)}
+.grain{position:absolute;inset:0;opacity:.05;pointer-events:none;
+ background-image:radial-gradient(rgba(255,255,255,.7) .5px,transparent .6px);background-size:3px 3px}
+.dev{position:absolute;background:#000;overflow:hidden;
+ box-shadow:0 2px 0 rgba(255,255,255,.10) inset,0 40px 90px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.10)}
+.scr{position:absolute;overflow:hidden;background:#0E0E0E}
+.crease{position:absolute;pointer-events:none}
+.eyebrow{font-weight:700;text-transform:uppercase;color:#4CAF82}
+.head{margin:0;font-weight:700;color:#F5F4F1;letter-spacing:-.028em}
+.head em{font-style:normal;color:#4CAF82}
+.sub{margin:0;color:#8C8C8A;font-weight:400}
+.badge{display:inline-block;font-weight:700;letter-spacing:.08em;color:#4CAF82;border-radius:10px;
+ background:rgba(38,38,38,.78);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.half{position:relative;background:#000;box-shadow:0 0 0 1px rgba(255,255,255,.16),0 0 0 2px #111}
+</style></head>
+<body><div id="stage"></div>
+<script>
+const q = new URLSearchParams(location.search);
+const lang = q.get('lang') || 'en', v = q.get('v') || 'open';
+const TXT = {
+  table: {
+    // The approved punchlines of the 7th iPhone image (plank.html), word for word.
+    en: { e: 'Table mode', h: 'Put your movies<br><em>on the table.</em>', s: 'Table mode for iPhone Duo.<br>Popcorn not included.', b: 'NEW · MADE FOR IPHONE DUO' },
+    fr: { e: 'Mode table', h: 'JellyGlass se plie<br>en quatre.<br><em>L’iPhone Duo, en deux.</em>', s: 'Le mode table de l’iPhone Duo.<br>Pop-corn non fourni.', b: 'NOUVEAU · CONÇU POUR L’IPHONE DUO', k: .84 },
+    de: { e: 'Tischmodus', h: 'Klappt wie<br><em>im Kino.</em>', s: 'Der Tischmodus fürs iPhone Duo.<br>Popcorn nicht inbegriffen.', b: 'NEU · GEMACHT FÜRS IPHONE DUO' },
+  },
+  open: {
+    en: { e: 'iPhone Duo, open', h: 'Unfold it.<br>It’s a big screen.', s: 'Open it flat and the film fills the screen, in full quality, straight from your server.' },
+    fr: { e: 'iPhone Duo, déplié', h: 'Dépliez-le.<br>C’est un grand écran.', s: 'Ouvert à plat, le film remplit l’écran, en pleine qualité, tout droit de votre serveur.' },
+    de: { e: 'iPhone Duo, aufgeklappt', h: 'Aufklappen.<br>Großes Kino.', s: 'Ganz aufgeklappt füllt der Film den Bildschirm – in voller Qualität, direkt von deinem Server.' },
+  },
+  outer: {
+    en: { e: 'iPhone Duo, folded', h: 'Folded,<br>still a cinema.', s: 'Closed, the outer screen plays the film in landscape, with every control at hand.' },
+    fr: { e: 'iPhone Duo, plié', h: 'Plié,<br>c’est toujours du cinéma.', s: 'Fermé, l’écran extérieur lit le film en paysage, avec toutes les commandes sous la main.' },
+    de: { e: 'iPhone Duo, zugeklappt', h: 'Zugeklappt<br>immer noch Kino.', s: 'Zugeklappt spielt der Außenbildschirm den Film im Querformat ab – mit allen Bedienelementen.' },
+  },
+  land: {
+    en: { e: 'Folded or open', h: 'Folded or open,<br>it fits.', s: 'Portrait or landscape, folded or open: Home, detail pages and rows fit the iPhone Duo.' },
+    fr: { e: 'Plié ou déplié', h: 'Plié ou déplié,<br>tout s’ajuste.', s: 'En portrait ou en paysage, plié ou déplié : l’accueil, les fiches et les rangées s’ajustent à l’iPhone Duo.' },
+    de: { e: 'Zu- oder aufgeklappt', h: 'Zu oder auf,<br>alles passt.', s: 'Hoch oder quer, zu- oder aufgeklappt: Startseite, Detailseiten und Reihen passen sich dem iPhone Duo an.' },
+  },
+};
+const t = TXT[q.get('t') || v][lang]; // t= borrows another plate's text for this layout
+const src = (f) => `${q.get('dir')}/${f}`;
+const shot = (f) => f ? `<img src="${src(f)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top">` : '';
+// The fold runs across the middle of the inner display (portrait) — a faint crease.
+const crease = (dir) => dir === 'h'
+  ? `<div class="crease" style="left:0;right:0;top:calc(50% - 4px);height:8px;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.07) 45%,rgba(0,0,0,.28) 55%,rgba(0,0,0,0))"></div>`
+  : `<div class="crease" style="top:0;bottom:0;left:calc(50% - 4px);width:8px;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.07) 45%,rgba(0,0,0,.28) 55%,rgba(0,0,0,0))"></div>`;
+const text = `
+ <div style="position:absolute;left:54px;right:54px;top:70px;z-index:4">
+   <div class="eyebrow" style="font-size:15px;letter-spacing:.22em">${t.e}</div>
+   <h2 class="head" style="font-size:${56 * (t.k || 1)}px;line-height:1.02;margin-top:18px">${t.h}</h2>
+   <p class="sub" style="font-size:19.5px;line-height:1.42;margin-top:18px;max-width:${v === 'table' ? 520 : 500}px">${t.s}</p>
+   ${t.b ? `<div class="badge" style="font-size:14px;padding:9px 14px;margin-top:22px">${t.b}</div>` : ''}
+ </div>`;
+const ghost = `<div class="dev" style="width:423px;height:601px;border-radius:26px;left:362px;top:430px;transform:rotate(8deg);opacity:.42;filter:saturate(.7)"><div class="scr" style="inset:0;background:linear-gradient(170deg,#182028,#0E0E0E)"></div></div>`;
+let body = '';
+if (v === 'outer') {
+  document.getElementById('stage').innerHTML = `<div class="panel" style="width:678px;height:466px"><div class="bloom"></div>
+   <div style="position:absolute;left:40px;top:118px;width:236px;z-index:4">
+     <div class="eyebrow" style="font-size:10.5px;letter-spacing:.22em">${t.e}</div>
+     <h2 class="head" style="font-size:30px;line-height:1.04;margin-top:12px">${t.h}</h2>
+     <p class="sub" style="font-size:13px;line-height:1.45;margin-top:12px">${t.s}</p>
+   </div>
+   <div class="dev" style="width:356px;height:245px;border-radius:24px;left:296px;top:112px;transform:rotate(-3deg)">
+    <div class="scr" style="inset:7px;border-radius:20px">${shot(q.get('shot'))}</div>
+   </div>
+   <div class="grain"></div></div>`;
+  throw 'done';
+} else if (v === 'open') {
+  // Portrait inner display, 2007 × 2853 → 470 × 668, bezel 9, corners 30.
+  body = `${ghost}
+  <div class="dev" style="width:470px;height:668px;border-radius:30px;left:100px;top:318px;transform:rotate(-3deg)">
+   <div class="scr" style="inset:9px;border-radius:22px">${shot(q.get('shot'))}${crease('h')}</div>
+  </div>`;
+} else if (v === 'land') {
+  // Landscape inner display (2853 × 2007), bleeding off the right edge.
+  // No ghost device here: its lower edge showed as a hard line under the landscape Duo.
+  body = `
+  <div class="dev" style="width:690px;height:486px;border-radius:30px;left:44px;top:372px;transform:rotate(-3deg)">
+   <div class="scr" style="inset:9px;border-radius:22px">${shot(q.get('shot'))}${q.get('crease') === '0' ? '' : crease('v')}</div>
+  </div>`;
+} else {
+  // Half-folded on a table — the plank of plank.html, scaled to this board.
+  const img = src(q.get('shot') || 'duo-table.png');
+  const w = 400, ph = Math.round(w * 1426 / 2007), r = 34, b = 8;
+  const face = (half) => `position:absolute;inset:${half === 'up' ? `${b}px ${b}px 0` : `0 ${b}px ${b}px`};
+    border-radius:${half === 'up' ? `${r - b}px ${r - b}px 0 0` : `0 0 ${r - b}px ${r - b}px`};
+    background:#000 url('${img}') 0 ${half === 'up' ? '0' : '100%'} / 100% 200% no-repeat`;
+  const top = 372;
+  body = `
+  <div style="position:absolute;left:${(669 - w * 1.15) / 2}px;top:${top + ph * 1.45}px;width:${w * 1.15}px;height:${ph * .5}px;border-radius:50%;background:rgba(0,0,0,.9);filter:blur(34px)"></div>
+  <div style="position:absolute;left:${(669 - w) / 2 + 12}px;top:${top}px;width:${w}px;perspective:${w * 4.5}px;perspective-origin:50% -20%">
+   <div style="transform-style:preserve-3d;transform:rotateY(-12deg)">
+    <div class="half" style="height:${ph}px;border-radius:${r}px ${r}px 4px 4px;transform-origin:50% 100%;transform:rotateX(-9deg)"><div style="${face('up')}"></div></div>
+    <div class="half" style="height:${ph}px;border-radius:4px 4px ${r}px ${r}px;transform-origin:50% 0;transform:rotateX(58deg)">
+      <div style="${face('down')}"></div>
+      <div style="position:absolute;left:0;right:0;top:0;height:${ph * .16}px;background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,0))"></div>
+      <div style="position:absolute;left:-2px;right:-2px;top:-2px;height:5px;border-radius:3px;background:linear-gradient(90deg,#2a2a2d,#8a8a90 30%,#5a5a60 70%,#2a2a2d)"></div></div>
+   </div>
+  </div>`;
+}
+document.getElementById('stage').innerHTML = `<div class="panel"><div class="bloom"></div>${text}${body}<div class="grain"></div></div>`;
+</script></body></html>

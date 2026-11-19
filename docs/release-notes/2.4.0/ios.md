@@ -19,7 +19,7 @@ Merci d'utiliser JellyGlass. Rapports de bugs et suggestions : https://github.co
 ## English
 
 ```
-JellyGlass 2.4: put your films on the table.
+JellyGlass 2.4: put your movies on the table.
 
 • iPhone Duo: half-folded, the film stays on the top screen and the controls move to the bottom one, as big blocks that are easy to hit. A padlock keeps them on screen, and subtitles stay readable
 • iPhone Duo: Home, detail pages, rows and the sign-in screens fit the device folded or open, in portrait or landscape
