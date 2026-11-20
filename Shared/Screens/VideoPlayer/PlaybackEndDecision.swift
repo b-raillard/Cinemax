@@ -239,6 +239,43 @@ enum PlaybackRetryPolicy {
     }
 }
 
+// MARK: - Retries at the same place
+
+/// Bounds the retries a failure gets AT ONE PLACE in the film. `didRetry` is
+/// renewed by every confirmed open (`noteMediaOpened()`), which is right for a
+/// drop that comes back later in the film — and unbounded for one that comes
+/// back where it was: a truncated file whose container still announces the
+/// full length reopens fine, stops again at the same second, and retried for
+/// ever with no alert (audit PL-04, measured 2026-11-20 on a 10-minute film
+/// cut at 59 s: 6 retries in 150 s, the last minute replayed in a loop).
+/// Pure; the presenter asks it only when the decision is a retry. Locked by
+/// `RetryLoopGuardTests`.
+struct RetryLoopGuard: Equatable {
+    /// Two failures closer than this are the same place.
+    static let samePlaceMs: Int64 = 5_000
+    /// Retries allowed at one place before giving up — two, so a network that
+    /// drops twice in a row still recovers on its own.
+    static let retriesPerPlace = 2
+
+    private(set) var placeMs: Int64?
+    private(set) var retries = 0
+
+    /// Notes a failure about to be retried at `positionMs`; true when this
+    /// place has spent its retries and the presenter must give up instead.
+    /// A PAUSED player is never counted: its position cannot move, so two
+    /// cuts during one long pause are not a loop.
+    mutating func isSpent(at positionMs: Int64, paused: Bool) -> Bool {
+        guard !paused else { return false }
+        if let placeMs, abs(positionMs - placeMs) <= Self.samePlaceMs {
+            retries += 1
+        } else {
+            placeMs = positionMs
+            retries = 1
+        }
+        return retries > Self.retriesPerPlace
+    }
+}
+
 // MARK: - Rebuild in progress
 
 /// The one rebuild that re-negotiates a fresh PlaybackInfo for the current

@@ -612,6 +612,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     // P3: end-of-series / error
     private var didReportEnd = false
     private var didRetry = false
+    /// Retries spent at one place in the film — see `RetryLoopGuard`.
+    private var retryLoop = RetryLoopGuard()
     /// Set while an error retry sits between its failure and its `play()` (it
     /// awaits the proxy check, then the audio session — see
     /// `handlePlaybackError`): the attempt it replaces can still emit a late
@@ -4936,6 +4938,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             #endif
             self.seeks.cancelPending() // a queued skip must not seek the new episode
             self.didRetry = false
+            self.retryLoop = RetryLoopGuard() // another film, another count
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
             self.trackRestore = nil // another episode: its own defaults
@@ -5706,7 +5709,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         seeks.endSettle() // the media is being reloaded (or given up on)
         // The decision is pure and unit-tested (`PlaybackRetryPolicy`); this
         // method owns only its effects.
-        let decision = PlaybackRetryPolicy.decide(
+        var decision = PlaybackRetryPolicy.decide(
             didRetry: didRetry,
             errorAlertShowing: errorAlert != nil,
             retryPending: pendingRetryToken != nil,
@@ -5716,6 +5719,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             ),
             recoveryExhausted: recoveryExhausted
         )
+        // A failure that keeps coming back at the same place (a truncated
+        // file) would be retried for ever: every reopen renews `didRetry`.
+        if case .retry = decision,
+           retryLoop.isSpent(at: Int64(lastKnownPositionMs), paused: pauseIntended) {
+            logger.error("VLC error for \(self.itemId, privacy: .public) — failure \(self.retryLoop.retries, privacy: .public) at the same place, no more retries")
+            decision = .giveUp(releaseStickyProxy: usingProxy)
+        }
         let releaseStickyProxy: Bool
         switch decision {
         case .rebuildOnCurrentRoute:

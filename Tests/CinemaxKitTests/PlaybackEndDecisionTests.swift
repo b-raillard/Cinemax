@@ -263,6 +263,49 @@ struct NextUpCountdownPolicyTests {
     }
 }
 
+/// `RetryLoopGuard` — the bound on retries at one place in the film (audit
+/// PL-04: a truncated file reopened and stopped at the same second for ever).
+@Suite("Échec de lecture — même endroit")
+struct RetryLoopGuardTests {
+    /// The answers of a run of failures (`#expect` cannot hold a mutating call).
+    private func answers(_ loop: inout RetryLoopGuard, at positions: [Int64], paused: Bool = false) -> [Bool] {
+        positions.map { loop.isSpent(at: $0, paused: paused) }
+    }
+
+    @Test("two retries at one place, then no more")
+    func givesUpAtTheSamePlace() {
+        var loop = RetryLoopGuard()
+        // The measured loop: stops at 59,377 / 59,705 / 59,706 ms.
+        #expect(answers(&loop, at: [59_377, 59_705, 59_706]) == [false, false, true])
+    }
+
+    @Test("a drop that comes back after real progress is a new place")
+    func progressRenewsTheCount() {
+        var loop = RetryLoopGuard()
+        let further = 61_000 + RetryLoopGuard.samePlaceMs + 1
+        #expect(answers(&loop, at: [60_000, 61_000, further]) == [false, false, false])
+        #expect(loop.retries == 1)
+        // Backwards too: the user sought back before the next drop.
+        #expect(answers(&loop, at: [10_000]) == [false])
+        #expect(loop.retries == 1)
+    }
+
+    @Test("a paused player is never counted — its position cannot move")
+    func pausedIsNotALoop() {
+        var loop = RetryLoopGuard()
+        #expect(answers(&loop, at: Array(repeating: 42_000, count: 10), paused: true).allSatisfy { !$0 })
+        #expect(loop.retries == 0)
+        // Playing again, the count starts from nothing.
+        #expect(answers(&loop, at: [42_000, 42_000, 42_000]) == [false, false, true])
+    }
+
+    @Test("an open that never played fails at 0 and is bounded like any place")
+    func neverOpened() {
+        var loop = RetryLoopGuard()
+        #expect(answers(&loop, at: [0, 0, 0]) == [false, false, true])
+    }
+}
+
 /// `PlaybackRetryPolicy` — the decision half of `handlePlaybackError`, the
 /// zone the B2 / B5 / B9 regressions came from. The presenter only runs the
 /// effects of what this returns.
