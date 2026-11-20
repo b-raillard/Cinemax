@@ -26,6 +26,8 @@ struct AppIconChoice: Identifiable, Sendable, Equatable {
         case classic
         /// A « Nuit d'Halloween » variant.
         case halloween
+        /// The Christmas edition: the original logo with a hat and bulbs.
+        case christmas
         /// The logo in one accent colour (`AccentOption.accentDark`'s hue).
         case accent(AccentOption)
 
@@ -35,6 +37,7 @@ struct AppIconChoice: Identifiable, Sendable, Equatable {
             switch self {
             case .classic: "settings.appIcon.family.classic"
             case .halloween: "settings.appIcon.family.halloween"
+            case .christmas: "settings.appIcon.family.christmas"
             case .accent: "settings.appIcon.family.accent"
             }
         }
@@ -62,7 +65,7 @@ enum AppIconCatalogue {
     /// order: Classique, the three Halloween ones, then one per accent in
     /// `AccentOption` order (no rainbow — it has no hue to recolour with).
     /// The asset name is the thumbnail's minus « Preview ».
-    static let choices: [AppIconChoice] = [primary] + halloween + accents
+    static let choices: [AppIconChoice] = [primary] + halloween + christmas + accents
 
     /// A = bell pumpkin, tentacles potion (the PRIMARY icon until the user
     /// reverts it after 2 November — identical to Classique until then); B =
@@ -72,6 +75,13 @@ enum AppIconCatalogue {
         ("AppIconHalloweenPotion", "settings.appIcon.halloweenPotion"),
         ("AppIconHalloween", "settings.appIcon.halloween")
     ].map { AppIconChoice(alternateName: $0.0, labelKey: $0.1, previewImage: $0.0 + "Preview", family: .halloween) }
+
+    /// The original logo with a Santa hat and bulbs on its tentacles (the
+    /// PRIMARY icon of the December release — identical to Classique until
+    /// the primary goes back). Written by `design/noel/icones.py`.
+    static let christmas: [AppIconChoice] = [
+        AppIconChoice(alternateName: "AppIconChristmas", labelKey: "settings.appIcon.christmas", previewImage: "AppIconChristmasPreview", family: .christmas)
+    ]
 
     /// `AppIconRed` … `AppIconPink`, labelled with the accent's own name.
     static let accents: [AppIconChoice] = AccentOption.allCases.filter { $0 != .rainbow }.map { option in
@@ -90,12 +100,13 @@ enum AppIconCatalogue {
     static let sections: [AppIconSection] = [
         AppIconSection(titleKey: "settings.appIcon.section.classic", choices: [primary]),
         AppIconSection(titleKey: "settings.appIcon.section.halloween", choices: halloween),
+        AppIconSection(titleKey: "settings.appIcon.section.christmas", choices: christmas),
         AppIconSection(titleKey: "settings.appIcon.section.colors", choices: accents)
     ]
 
     /// Apple TV (design B): two groups, so the 5-column grid fills its rows.
     static let tvSections: [AppIconSection] = [
-        AppIconSection(titleKey: "settings.appIcon.section.editions", choices: [primary] + halloween),
+        AppIconSection(titleKey: "settings.appIcon.section.editions", choices: [primary] + halloween + christmas),
         AppIconSection(titleKey: "settings.appIcon.section.colors", choices: accents)
     ]
 
