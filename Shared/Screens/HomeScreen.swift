@@ -923,7 +923,6 @@ struct HomeScreen: View {
                 }
                 .heroBackdropBleed(clearInLightMode: true)
             }
-            .overlay(alignment: .top) { SeasonalHeroDecor() }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
                     let elsewhere = elsewhereEntry(for: item)
