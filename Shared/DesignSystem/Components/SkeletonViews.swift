@@ -142,7 +142,13 @@ struct MediaPageSkeleton: View {
         }
         // Static sketch — never scrollable, never interactive.
         .allowsHitTesting(false)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // `minWidth: 0` on purpose: the rows are ten fixed cards, far wider
+        // than the screen, and a frame with only a maximum reports its
+        // CONTENT's width. The skeleton then widened the screen's root stack,
+        // which pushed everything pinned to that stack's corners (the season's
+        // boughs) off-screen — and they slid back in from the sides when the
+        // skeleton left (owner's recording, 2026-11-20).
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
     }
 
