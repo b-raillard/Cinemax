@@ -91,6 +91,93 @@ struct HomeViewModelTests {
         #expect(vm.activeSessions.isEmpty)
     }
 
+    /// An account granted « Voir En direct », another account playing.
+    private func makeLiveRowFixture() -> (MockAPIClient, AppState) {
+        let api = MockAPIClient()
+        var other = SessionInfoDto()
+        other.id = "s-lea"
+        other.userID = "lea"
+        other.userName = "Léa"
+        var playing = BaseItemDto()
+        playing.id = "ep1"
+        playing.name = "L'hiver vient"
+        other.nowPlayingItem = playing
+        api.stubbedActiveSessions = [other]
+        let appState = makeAppState(api: api, userId: "bastien")
+        var user = UserDto()
+        user.id = "bastien"
+        user.name = "Bastien"
+        var policy = UserPolicy(authenticationProviderID: "", passwordResetProviderID: "")
+        policy.enableRemoteControlOfOtherUsers = true
+        user.policy = policy
+        appState.currentUser = user
+        return (api, appState)
+    }
+
+    // « En direct » showed someone at launch and on arriving on Accueil, and
+    // vanished on every pull-to-refresh (owner, 2026-11-20). Measured on the
+    // simulator against the bench, a real playing session: SwiftUI cancels
+    // the refresh's own task ~10 ms after it starts, every request then fails
+    // « annulé », and `try? … ?? []` turned that failure into « nobody is
+    // watching » — on a row `reload()` had already emptied up front.
+
+    @Test("A failed « En direct » fetch keeps the row — a failure is not « nobody is watching »")
+    func liveRowFailureKeepsWhatIsOnScreen() async {
+        let (api, appState) = makeLiveRowFixture()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        await vm.refreshLiveRow(using: appState)
+        #expect(vm.activeSessions.map(\.id) == ["s-lea"])
+
+        api.activeSessionsError = URLError(.cancelled)
+        await vm.refreshLiveRow(using: appState)
+
+        #expect(vm.activeSessions.map(\.id) == ["s-lea"])
+    }
+
+    @Test("Before the account is known, « En direct » asks nothing and writes nothing")
+    func liveRowUnknownAccountWritesNothing() async {
+        let (api, appState) = makeLiveRowFixture()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        await vm.refreshLiveRow(using: appState)
+        let asked = api.activeSessionsQueries.count
+
+        // Launch: the first load runs before `refreshCurrentUser` has answered
+        // (measured: admin=false, policy unknown) — that is « don't know yet »,
+        // not « may not see anyone ».
+        appState.currentUser = nil
+        await vm.refreshLiveRow(using: appState)
+
+        #expect(api.activeSessionsQueries.count == asked)
+        #expect(vm.activeSessions.map(\.id) == ["s-lea"])
+    }
+
+    @Test("A reload whose /Sessions fails keeps the row instead of emptying it")
+    func reloadKeepsTheLiveRowOnFailure() async {
+        let (api, appState) = makeLiveRowFixture()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        await vm.load(using: appState)
+        #expect(vm.activeSessions.map(\.id) == ["s-lea"])
+
+        api.activeSessionsError = URLError(.timedOut)
+        await vm.reload(using: appState)
+
+        #expect(vm.activeSessions.map(\.id) == ["s-lea"])
+    }
+
+    @Test("A reload survives the cancellation of the task that asked for it")
+    func reloadSurvivesItsCallersCancellation() async {
+        let (api, appState) = makeLiveRowFixture()
+        api.stubbedActiveSessions[0].id = "s-lea-2"
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        // What a pull-to-refresh does: SwiftUI cancels the refresh task right
+        // after it starts. The reload must run to its end regardless.
+        let refresh = Task { @MainActor in await vm.reload(using: appState) }
+        refresh.cancel()
+        await refresh.value
+
+        #expect(vm.activeSessions.map(\.id) == ["s-lea-2"])
+    }
+
     @Test("Recently Added leads with shows that got new episodes, then new titles")
     func recentlyAddedMergesBothSources() async {
         let shows = [makeItem(name: "Arrow"), makeItem(name: "Severance")]
