@@ -4062,9 +4062,76 @@ private final class CallCounter: @unchecked Sendable {
     func add() { lock.withLock { value += 1 } }
 }
 
+/// How many requests are inside the transport at once, and the most there
+/// ever were.
+private final class FlightGauge: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = 0
+    private var highest = 0
+    var peak: Int { lock.withLock { highest } }
+    func enter() { lock.withLock { current += 1; highest = max(highest, current) } }
+    func leave() { lock.withLock { current -= 1 } }
+}
+
 @MainActor
 @Suite("Seerr — performance")
 struct SeerrPerformanceTests {
+    @Test("a page of 20 titles is looked up 6 at a time, and every row still gets its title")
+    func titleLookupsAreBounded() async {
+        let ids = Array(101...120)
+        var routes: [String: [StubSeerrTransport.Reply]] = [
+            "/request": [requestPage(ids.map { requestJSON($0, tmdbId: $0) }, total: ids.count)]]
+        for id in ids { routes["/movie/\(id)"] = [movieReply(id, "Film \(id)")] }
+        let (session, _, transport) = await myRequestsWorld(routes: routes)
+        let limit = SeerrRequestTitles.maxConcurrentLookups
+        let gauge = FlightGauge()
+        // The first `limit` lookups wait for each other: the window really
+        // is that wide, and nothing past it may come in meanwhile.
+        let together = Barrier(limit)
+        transport.onRequest { path, _ in
+            guard path.hasPrefix("/movie/") else { return }
+            gauge.enter()
+            await together.arrive()
+            for _ in 0..<20 { await Task.yield() }
+            gauge.leave()
+        }
+
+        let model = SeerrMyRequestsModel()
+        await model.loadFirstPage(session: session)
+
+        #expect(gauge.peak == limit)
+        #expect(model.rows.map(\.title) == ids.map { "Film \($0)" })
+        #expect(model.rows.allSatisfy { !$0.isTitlePending })
+        #expect(!transport.exhausted)
+        print("PERF titles: lookups=\(ids.count) peak=\(gauge.peak)")
+    }
+
+    @Test("« Qui peut demander » reads 14 users 6 at a time, and keeps their order")
+    func activationLookupsAreBounded() async {
+        let names = (1...13).map { "U\($0)" }
+        let users = [jellyfinUser("ADMIN", "Admin")] + names.map { jellyfinUser($0, $0) }
+        var lookups = ["ADMIN": userReply(adminJSON)]
+        for name in names { lookups[name] = notFoundReply }
+        let world = await activationWorld(users: users, lookups: lookups)
+        let limit = SeerrRequestTitles.maxConcurrentLookups
+        let gauge = FlightGauge()
+        let together = Barrier(limit)
+        world.transport.onRequest { path, _ in
+            guard path.hasPrefix("/user/jellyfin/") else { return }
+            gauge.enter()
+            await together.arrive()
+            for _ in 0..<20 { await Task.yield() }
+            gauge.leave()
+        }
+
+        #expect(await world.model.load(appState: world.app, session: world.session))
+
+        #expect(gauge.peak == limit)
+        #expect(world.model.lines.map(\.id) == ["ADMIN"] + names)
+        #expect(!world.transport.exhausted)
+        print("PERF activation: users=\(users.count) peak=\(gauge.peak)")
+    }
+
     private func search(_ session: SeerrSession, isAutomatic: Bool = true) async -> MissingSection<SeerrTitle>? {
         await session.loadSection(isAutomatic: isAutomatic) { client, credential in
             try await client.search("dune", credential)

@@ -94,7 +94,7 @@ enum SeerrRequestTitles {
         let posterPath: String?
     }
 
-    /// One lookup per request, concurrently (at most a page's 20). `apply`
+    /// One lookup per request, `maxConcurrentLookups` at a time. `apply`
     /// gets each answer on the main actor as it lands — `nil` = unavailable:
     /// a failure costs that row its title, never the list. A lookup cancelled
     /// (the page was left, a newer load) is not reported: it is not a failure.
@@ -110,6 +110,10 @@ enum SeerrRequestTitles {
         let tmdbId: Int
     }
 
+    /// How many Seerr lookups one screen keeps in flight — the same window as
+    /// the library's genre rows (`MediaLibraryViewModel.concurrencyLimit`).
+    nonisolated static let maxConcurrentLookups = 6
+
     static func load(_ targets: [Target], session: SeerrSession, apply: (Int, Lookup?) -> Void) async {
         // A title already looked up is not asked again (`SeerrSession`'s
         // memo): « Actualiser » re-reads the lists, not forty titles.
@@ -124,7 +128,10 @@ enum SeerrRequestTitles {
         guard !unknown.isEmpty else { return }
         let snapshot = session.snapshot()
         await withTaskGroup(of: (Target, Lookup?).self) { group in
-            for target in unknown {
+            // A sliding window (audit PN-10): a page is 20 rows, and 20
+            // lookups at once each started their 10 s timeout together.
+            var queued = unknown.dropFirst(maxConcurrentLookups).makeIterator()
+            func start(_ target: Target) {
                 group.addTask {
                     let found = try? await session.perform { client, credential in
                         try await Self.lookUp(kind: target.kind, tmdbId: target.tmdbId, client: client, credential: credential)
@@ -132,7 +139,9 @@ enum SeerrRequestTitles {
                     return (target, found)
                 }
             }
+            for target in unknown.prefix(maxConcurrentLookups) { start(target) }
             for await (target, found) in group {
+                if let next = queued.next(), !Task.isCancelled { start(next) }
                 if found == nil, Task.isCancelled { continue }
                 if let found, let snapshot, session.isCurrent(snapshot) {
                     session.rememberTitle(found, kind: target.kind, tmdbId: target.tmdbId)
