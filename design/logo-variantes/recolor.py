@@ -92,6 +92,9 @@ AUBERGINE = [0x0C0A10, 0x15111C, 0x1D1726, 0x262033]
 HALLOWEEN_A = "halloween_cloche-citrouille_tentacules-potion"
 HALLOWEEN_B = "halloween_cloche-potion_tentacules-citrouille"
 HALLOWEEN_A_AUBERGINE = "halloween_cloche-citrouille_tentacules-potion_fond-aubergine"
+# « Noël » is not a recolouring: design/noel/icones.py writes the whole variant
+# (hat, bulbs, garland on the tvOS back layer). Installed like the others.
+NOEL = "noel"
 
 # Alternate app icons SHIPPED in the app (Réglages → Apparence → « Icône de
 # l'app », 2026-10-22): asset name — the `setAlternateIconName` argument, the
@@ -108,6 +111,7 @@ ALTERNATES = {
     "AppIconHalloweenPumpkin": HALLOWEEN_A,
     "AppIconHalloweenPotion": HALLOWEEN_B,
     "AppIconHalloween": HALLOWEEN_A_AUBERGINE,
+    "AppIconChristmas": NOEL,
     **{f"AppIcon{english}": accent for accent, english in ACCENT_ICON_NAMES.items()},
 }
 assert list(ACCENT_ICON_NAMES) == list(ACCENTS), "one icon per accent, in the accent order"
@@ -120,7 +124,7 @@ PREVIEW_SIDE, PREVIEW_TV_SIZE = 180, (400, 240)
 # The variants that can be the PRIMARY icon (scripts/seasonal-icon.py), plus the
 # alternates: each gets its previews under declinaisons/<variant>/AppIconPreview.imageset/,
 # so the seasonal swap carries the « Classique » (`nil`) thumbnail along.
-PREVIEWED = list(dict.fromkeys(["classique", HALLOWEEN_A] + list(ALTERNATES.values())))
+PREVIEWED = list(dict.fromkeys(["classique", HALLOWEEN_A, NOEL] + list(ALTERNATES.values())))
 
 CORNER_BOX = 260       # px (at 1024) searched for the painted white corner
 CORNER_GROW = 14       # px added around the white so the curved bevel goes too

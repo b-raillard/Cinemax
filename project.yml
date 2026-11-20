@@ -215,7 +215,7 @@ targets:
         # Alternate icons of Réglages → Apparence → « Icône de l'app » (Pro):
         # actool writes them into CFBundleIcons → CFBundleAlternateIcons. Same
         # names on tvOS; the list is `AppIconCatalogue` + recolor.py ALTERNATES.
-        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink"
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconChristmas AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink"
         # Lets a file shared by SOURCE with the widget extension reach app-only
         # symbols in the APP's copy while still compiling in the extension's —
         # see `ResumeControl.swift`. `$(inherited)` keeps DEBUG.
@@ -327,6 +327,7 @@ targets:
             - AppIconHalloweenPumpkin
             - AppIconHalloweenPotion
             - AppIconHalloween
+            - AppIconChristmas
             - AppIconRed
             - AppIconOrange
             - AppIconYellow
