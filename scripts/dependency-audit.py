@@ -64,6 +64,7 @@ LICENSE_PINS = {
 LICENSE_UNPINNED = {
     "libVLC": "embedded in SwiftVLC's libvlc.xcframework (see the binary artifacts table)",
     "Fraunces": "font file bundled in Resources/Fonts (OFL), seasonal title face",
+    "Cormorant Garamond": "font file bundled in Resources/Fonts (OFL, Latin subset), Christmas title face",
 }
 
 ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|(?:\s*<?([^|>]*)>?\s*\|)?\s*$")

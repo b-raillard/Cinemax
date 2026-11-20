@@ -75,6 +75,15 @@ struct SeasonPalette: Sendable, Equatable {
 struct SeasonFont: Sendable, Equatable {
     let postScriptName: String
     let fileName: String
+    /// The hero title in capitals (« Givre »'s engraved caps); `false` keeps
+    /// the title's own case (Halloween's italic « Nosferatu »).
+    var uppercase = false
+    /// Letter spacing of the hero title, as a fraction of its size; `nil`
+    /// keeps the tight −0.5 pt the italic faces were set with.
+    var tracking: CGFloat?
+    /// The face drawn this much larger than the size asked for: Cormorant's
+    /// small x-height read a size below the system black at the same points.
+    var sizeScale: CGFloat = 1
 }
 
 enum AmbianceEffect: String, Sendable, CaseIterable {
@@ -84,13 +93,14 @@ enum AmbianceEffect: String, Sendable, CaseIterable {
     case snow
 }
 
-/// A season's STILL decor, in the two top corners of the browsing screens'
-/// backdrop (`SeasonalTopDecor`, inside `SeasonalBackdrop`) — behind the content. Not an effect: nothing moves, so Reduce Motion
-/// leaves it; the « Animations d'ambiance » switch removes it.
+/// A season's STILL decor: in the corners of the screen (`SeasonalTopDecor`)
+/// and on the heroes' edges (`SeasonalHeroFrost`). Not an effect: nothing
+/// moves, so Reduce Motion leaves it; the « Animations d'ambiance » switch
+/// removes it.
 enum SeasonDecor: Sendable {
-    /// Fir boughs in the two top corners, glass balls, micro lights — rendered
-    /// by `design/noel/decor.py`, never drawn by hand.
-    case firBoughs
+    /// Frost on the window — a cold haze and ice feathers in the corners and
+    /// on the heroes' edges; the texture is rendered by `design/noel/givre.py`.
+    case frost
 }
 
 /// What a season paints BEHIND the browsing screens (`SeasonalBackdrop`).

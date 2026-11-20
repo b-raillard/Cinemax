@@ -41,50 +41,55 @@ enum SeasonalThemeCatalogue {
         backdrop: .nightSky
     )
 
-    /// « Sapin de Noël » — the design canvas « JellyGlass — Thème de Noël »,
-    /// board T10 (chosen 2026-11-20). Deep fir green, holly red; fir boughs on
-    /// the heroes, snow. The window wraps the New Year, to Epiphany.
+    /// « Givre » — the artifact « Noël JellyGlass » (theme Givre, chosen by the
+    /// owner on 2026-11-20, replacing « Sapin de Noël »): a film watched
+    /// through a frosted window while it snows outside. Midnight blue, ice
+    /// white, engraved serif capitals; frost in the corners and on the heroes'
+    /// edges, snow. The window wraps the New Year, to Epiphany.
     static let christmas = SeasonalTheme(
         id: "christmas",
         nameKey: "season.christmas.name",
         window: SeasonWindow(start: MonthDay(month: 12, day: 1), end: MonthDay(month: 1, day: 6)),
         dark: SeasonPalette(
-            surface: 0x07100C,                 // Sapin de nuit
-            surfaceContainerLowest: 0x040A07,  // derived
-            surfaceContainerLow: 0x0F1B15,
-            surfaceContainer: 0x17281F,
-            surfaceContainerHigh: 0x1F3529,
-            surfaceContainerHighest: 0x284433, // derived
-            surfaceVariant: 0x284433,          // derived
-            onSurface: 0xF5EFE4,               // Lin
-            onSurfaceVariant: 0xAEB9AE,
-            onSurfaceMuted: 0x93A094,          // derived
-            outline: 0x6F7D72,                 // derived (strokes only)
-            outlineVariant: 0x3C4D42           // derived (strokes only)
+            surface: 0x0A1220,                 // Nuit d'hiver
+            surfaceContainerLowest: 0x060C16,
+            surfaceContainerLow: 0x101B2C,
+            surfaceContainer: 0x172437,
+            surfaceContainerHigh: 0x1F2E45,
+            surfaceContainerHighest: 0x283A55,
+            surfaceVariant: 0x283A55,
+            onSurface: 0xEEF4FB,               // Glace
+            onSurfaceVariant: 0xB6C5D8,
+            onSurfaceMuted: 0x97A8BE,
+            outline: 0x6D7E96,                 // strokes only
+            outlineVariant: 0x34455E           // strokes only
         ),
-        // Light mode gets its own ground (owner, on device, 2026-11-20: the
-        // white page « ne va pas avec » the boughs and the garlands): linen.
+        // A snowy day: blue-white, the frost a whiter veil on it.
         light: SeasonPalette(
-            surface: 0xF3ECDD,                 // Lin
-            surfaceContainerLowest: 0xFBF6EC,
-            surfaceContainerLow: 0xECE4D2,
-            surfaceContainer: 0xE5DCC8,
-            surfaceContainerHigh: 0xDCD2BC,
-            surfaceContainerHighest: 0xD2C7AF,
-            surfaceVariant: 0xDCD2BC,
-            onSurface: 0x1B2A22,               // Sapin de nuit
-            onSurfaceVariant: 0x3F4B43,
-            onSurfaceMuted: 0x47534A,
-            outline: 0xA89E8A,                 // strokes only
-            outlineVariant: 0xC9BEA9           // strokes only
+            surface: 0xEDF2F8,                 // Neige
+            surfaceContainerLowest: 0xF8FAFD,
+            surfaceContainerLow: 0xE4EBF3,
+            surfaceContainer: 0xDCE4EE,
+            surfaceContainerHigh: 0xD2DCE8,
+            surfaceContainerHighest: 0xC7D3E1,
+            surfaceVariant: 0xD2DCE8,
+            onSurface: 0x13223A,               // Encre de nuit
+            onSurfaceVariant: 0x3A4A62,
+            onSurfaceMuted: 0x47566E,
+            outline: 0x9AA8BA,                 // strokes only
+            outlineVariant: 0xC3CEDB           // strokes only
         ),
+        // Ice white buttons with a navy label at night, navy ones by day.
         accent: AccentOption.Palette(
-            accentLight: 0x9E1F18, accentDark: 0xFF8A7A,     // Houx
-            containerLight: 0xC8392F, containerDark: 0xC8392F,
-            dimLight: 0x8E1D17, dimDark: 0xE0574A,
-            onAccentLight: 0xFFFFFF, onAccentDark: 0x2A0907
+            accentLight: 0x1F3A60, accentDark: 0xCFE1F6,
+            containerLight: 0x1F3A60, containerDark: 0xE6EFFA,
+            dimLight: 0x182E4D, dimDark: 0xA9C6E8,
+            onAccentLight: 0xFFFFFF, onAccentDark: 0x0F1D33
         ),
-        titleFont: SeasonFont(postScriptName: "Fraunces72pt-BlackItalic", fileName: "Fraunces-BlackItalic.ttf"),
+        titleFont: SeasonFont(
+            postScriptName: "CormorantGaramond-Bold", fileName: "CormorantGaramond-Bold.ttf",
+            uppercase: true, tracking: 0.08, sizeScale: 1.2
+        ),
         ambiance: [.snow, .focusGlow],
         // « Noël en famille »: TMDb has no Christmas genre, so the row is the
         // keyword `christmas` (read on TMDb for 34 titles, 2026-11-20: 21 of
@@ -99,7 +104,7 @@ enum SeasonalThemeCatalogue {
             requiresBoth: true
         ),
         backdrop: nil,
-        decor: .firBoughs,
+        decor: .frost,
         // « À demander pour Noël »: the same TMDb keyword, asked of Seerr
         // (measured on the bench, 2026-11-20: 198 films with the vote floor,
         // opening on Our Little Secret, That Christmas, Dear Santa).

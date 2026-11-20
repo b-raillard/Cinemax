@@ -1,22 +1,22 @@
 {
   "images": [
     {
-      "filename": "seasonfirright_universal@2x.png",
+      "filename": "seasonfrost_universal@2x.png",
       "idiom": "universal",
       "scale": "2x"
     },
     {
-      "filename": "seasonfirright_universal@3x.png",
+      "filename": "seasonfrost_universal@3x.png",
       "idiom": "universal",
       "scale": "3x"
     },
     {
-      "filename": "seasonfirright_tv@1x.png",
+      "filename": "seasonfrost_tv@1x.png",
       "idiom": "tv",
       "scale": "1x"
     },
     {
-      "filename": "seasonfirright_tv@2x.png",
+      "filename": "seasonfrost_tv@2x.png",
       "idiom": "tv",
       "scale": "2x"
     }
