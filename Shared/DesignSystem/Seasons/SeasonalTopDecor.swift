@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// A season's STILL decor in the two top corners of the screen — for
-/// « Sapin de Noël », fir boughs with their glass balls and micro lights.
-/// Two places: OVER the content on the tab roots that have a hero (Home, the
-/// libraries, as the last layer of their root stack: the boughs hang in front
-/// of the hero, as the owner asked on device), and inside `SeasonalBackdrop`, BEHIND the
-/// content, on every other browsing screen — where a bough in front would sit
-/// on the back button. The images are rendered by `design/noel/decor.py`.
+/// The season's STILL decor in the corners of the screen — for « Givre »,
+/// frost on the window: a cold haze and fine ice feathers that thicken toward
+/// the corners, as if the film were watched through a frosted pane. Two
+/// places: OVER the content on the tab roots that have a hero (Home, the
+/// libraries, as the last layer of their root stack) and inside
+/// `SeasonalBackdrop`, BEHIND the content, on every other browsing screen —
+/// where frost in front would sit on the back button. The texture is rendered
+/// by `design/noel/givre.py`.
 ///
 /// Nothing moves, so Reduce Motion keeps it; the « Animations d'ambiance »
 /// switch removes it (`\.seasonalAmbianceEnabled`). Not interactive, hidden
@@ -19,77 +20,95 @@ struct SeasonalTopDecor: View {
     #endif
 
     var body: some View {
-        if ambianceEnabled, SeasonalThemeCatalogue.theme(id: seasonID)?.decor == .firBoughs {
-            ZStack {
-                Image("SeasonFirLeft")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: cornerWidth)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .offset(x: -Self.outward)
-                Image("SeasonFirRight")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: cornerWidth)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .offset(x: Self.outward)
+        if ambianceEnabled, SeasonalThemeCatalogue.theme(id: seasonID)?.decor == .frost {
+            GeometryReader { geo in
+                // The corner radius follows the screen's size (CSS's
+                // `circle at 0 0` percentage, the artifact's reference).
+                let reference = ((geo.size.width * geo.size.width + geo.size.height * geo.size.height) / 2).squareRoot()
+                let top = reference * reach.top
+                let bottom = reference * reach.bottom
+                SeasonalFrostMaterial()
+                    .mask {
+                        ZStack {
+                            corner(.topLeading, radius: top)
+                            corner(.topTrailing, radius: top)
+                            if bottom > 0 {
+                                corner(.bottomLeading, radius: bottom)
+                                corner(.bottomTrailing, radius: bottom)
+                            }
+                        }
+                    }
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
         }
     }
 
-    /// How far each corner is pushed off its edge, so the two boughs leave
-    /// the middle of the navigation bar — the screen's title — free.
-    #if os(tvOS)
-    private static let outward: CGFloat = 0
-    #else
-    private static let outward: CGFloat = 0
-    #endif
-
-    /// The width of ONE corner image (its height follows: 260 × 230).
-    private var cornerWidth: CGFloat {
+    /// How far the frost reaches from the corners, as a fraction of the
+    /// screen's reference size. The iPhone keeps its bottom corners clear: the
+    /// tab bar sits there.
+    private var reach: (top: CGFloat, bottom: CGFloat) {
         #if os(tvOS)
-        800
+        (0.18, 0.14)
         #else
-        sizeClass == .regular ? 400 : 260
+        sizeClass == .regular ? (0.16, 0.12) : (0.22, 0)
         #endif
+    }
+
+    private func corner(_ point: UnitPoint, radius: CGFloat) -> some View {
+        RadialGradient(
+            stops: [
+                .init(color: .black, location: 0),
+                .init(color: .black.opacity(0.8), location: 0.35),
+                .init(color: .clear, location: 1)
+            ],
+            center: point, startRadius: 0, endRadius: radius
+        )
     }
 }
 
-/// Garlands of coloured fairy lights strung across a browsing screen's
-/// backdrop, BEHIND the content: they show in the gaps between the rows and
-/// in the margins. One swag (`SeasonGarland`, rendered by
-/// `design/noel/decor.py`) tiled across the width, at three heights.
-struct SeasonalGarlands: View {
+/// Frost on the edges of a hero's backdrop — the middle of the image stays
+/// clear, the frost gathers at the borders like on a cold window. An overlay
+/// of the backdrop, under the hero's text (`HomeScreen.heroSection`,
+/// `LibraryHeroSection`). Same switch as the corners.
+struct SeasonalHeroFrost: View {
     @Environment(\.seasonID) private var seasonID
     @Environment(\.seasonalAmbianceEnabled) private var ambianceEnabled
 
-    /// Where each garland hangs, as a fraction of the screen's height, and
-    /// how far it is slid sideways (a fraction of one swag) so the three do
-    /// not line up.
-    private static let lines: [(y: CGFloat, shift: CGFloat)] = [(0.13, 0), (0.44, 0.5), (0.74, 0.25)]
-
     var body: some View {
-        if ambianceEnabled, SeasonalThemeCatalogue.theme(id: seasonID)?.decor == .firBoughs {
-            GeometryReader { geo in
-                ForEach(Array(Self.lines.enumerated()), id: \.offset) { _, line in
-                    Image("SeasonGarland")
-                        .resizable(resizingMode: .tile)
-                        .frame(width: geo.size.width + Self.swag, height: Self.height)
-                        .offset(x: -Self.swag * line.shift, y: geo.size.height * line.y)
+        if ambianceEnabled, SeasonalThemeCatalogue.theme(id: seasonID)?.decor == .frost {
+            SeasonalFrostMaterial()
+                .mask {
+                    EllipticalGradient(
+                        stops: [.init(color: .clear, location: 0.64), .init(color: .black, location: 0.96)],
+                        center: UnitPoint(x: 0.62, y: 0.42),
+                        startRadiusFraction: 0, endRadiusFraction: 0.72
+                    )
                 }
-            }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
+}
 
-    #if os(tvOS)
-    private static let swag: CGFloat = 800
-    private static let height: CGFloat = 300
-    #else
-    private static let swag: CGFloat = 200
-    private static let height: CGFloat = 75
-    #endif
+/// The frost itself: a cold haze under the tiled ice texture
+/// (`SeasonFrost`). White frost on the light page would vanish; there the
+/// haze is a whiter veil and the texture shows at full strength.
+struct SeasonalFrostMaterial: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The haze is part of the decor's material, like the colours baked
+    /// into a rendered image — not a surface or text token.
+    private static let darkHaze = Color(red: 200 / 255, green: 222 / 255, blue: 250 / 255).opacity(0.16)
+    private static let lightHaze = Color(red: 1, green: 1, blue: 1).opacity(0.42)
+
+    var body: some View {
+        let dark = colorScheme == .dark
+        ZStack {
+            dark ? Self.darkHaze : Self.lightHaze
+            Image("SeasonFrost")
+                .resizable(resizingMode: .tile)
+                .opacity(dark ? 0.6 : 1)
+        }
+    }
 }

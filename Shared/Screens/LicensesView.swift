@@ -290,6 +290,12 @@ struct LicensesView: View {
                 url: "github.com/undercasetype/Fraunces",
                 text: "Copyright 2020 The Fraunces Project Authors (https://github.com/undercasetype/Fraunces)\n\nThis Font Software is licensed under the SIL Open Font License, Version 1.1.\nhttps://openfontlicense.org"
             ),
+            OSSLicense(
+                name: "Cormorant Garamond",
+                version: "4.004",
+                url: "github.com/CatharsisFonts/Cormorant",
+                text: "Copyright 2015 The Cormorant Project Authors (github.com/CatharsisFonts/Cormorant)\n\nThis Font Software is licensed under the SIL Open Font License, Version 1.1.\nhttps://openfontlicense.org"
+            ),
         ]
     }
 }
