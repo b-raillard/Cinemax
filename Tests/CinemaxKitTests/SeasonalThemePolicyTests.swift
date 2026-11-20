@@ -197,12 +197,15 @@ struct SeasonalThemePolicyTests {
         #expect(christmas.window.contains(date("2027-01-06T23:00:00Z"), calendar: paris) == false)
     }
 
-    @Test("Christmas: snow, fir boughs on the heroes, no night sky")
+    @Test("Christmas « Givre »: snow, frost, engraved capitals, a winter sky")
     func christmasDecor() {
         let christmas = SeasonalThemeCatalogue.christmas
         #expect(christmas.ambiance == [.snow, .focusGlow])
-        #expect(christmas.decor == .firBoughs)
-        #expect(christmas.backdrop == nil)
+        #expect(christmas.decor == .frost)
+        #expect(christmas.titleFont?.uppercase == true)
+        #expect(SeasonalThemeCatalogue.halloween.titleFont?.uppercase == false)
+        #expect(SeasonalThemeCatalogue.halloween.titleFont?.tracking == nil)
+        #expect(christmas.backdrop == .winterSky)
         #expect(SeasonalThemeCatalogue.halloween.decor == nil)
         // Still decor: the ambiance POLICY (motion) does not carry it.
         #expect(AmbiancePolicy.effects(theme: christmas, ambianceEnabled: true, motionEnabled: false).isEmpty)

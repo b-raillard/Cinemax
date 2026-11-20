@@ -95,7 +95,7 @@ struct MediaLibraryScreen: View {
         let loadingFromEmpty = viewModel.isLoading && !viewModel.hasPresentedContent
         let skeleton = revealClock.noting(skeletonVisible: loadingFromEmpty, motionEnabled: motionEnabled)
         ZStack {
-            SeasonalBackdrop(boughs: false).ignoresSafeArea()
+            SeasonalBackdrop(cornerDecor: false).ignoresSafeArea()
 
             if skeleton {
                 loadingView
@@ -107,7 +107,7 @@ struct MediaLibraryScreen: View {
                     .environment(\.contentRevealClock, revealClock)
             }
 
-            // The season's boughs, in FRONT of the hero (the backdrop's are off).
+            // The season's frost, in FRONT of the hero (the backdrop's is off).
             SeasonalTopDecor().ignoresSafeArea()
         }
         .animation(CinemaMotion.gated(CinemaMotion.skeletonFade, enabled: motionEnabled), value: skeleton)

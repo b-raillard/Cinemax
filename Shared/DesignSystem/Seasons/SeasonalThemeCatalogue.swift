@@ -41,50 +41,65 @@ enum SeasonalThemeCatalogue {
         backdrop: .nightSky
     )
 
-    /// « Sapin de Noël » — the design canvas « JellyGlass — Thème de Noël »,
-    /// board T10 (chosen 2026-11-20). Deep fir green, holly red; fir boughs on
-    /// the heroes, snow. The window wraps the New Year, to Epiphany.
+    /// « Givre » — the artifact « Noël JellyGlass » (theme Givre, chosen by the
+    /// owner on 2026-11-20, replacing « Sapin de Noël »): a film watched
+    /// through a frosted window while it snows outside. Night blue and frost
+    /// blue, swapping with the mode; engraved serif capitals; frost in the corners and on the heroes'
+    /// edges, snow. The window wraps the New Year, to Epiphany.
     static let christmas = SeasonalTheme(
         id: "christmas",
         nameKey: "season.christmas.name",
         window: SeasonWindow(start: MonthDay(month: 12, day: 1), end: MonthDay(month: 1, day: 6)),
+        // TWO colours that swap with the mode (owner, 2026-11-20: « bleu clair
+        // givré et bleu nuit … en alternant les couleurs »): Bleu nuit
+        // #0B1A2E is the night ground and the day's ink and buttons; Bleu
+        // givré #CFE2F5 is the day ground and the night's ink and buttons.
+        // Every other tone is a step of one of the two (13.2:1 between them).
         dark: SeasonPalette(
-            surface: 0x07100C,                 // Sapin de nuit
-            surfaceContainerLowest: 0x040A07,  // derived
-            surfaceContainerLow: 0x0F1B15,
-            surfaceContainer: 0x17281F,
-            surfaceContainerHigh: 0x1F3529,
-            surfaceContainerHighest: 0x284433, // derived
-            surfaceVariant: 0x284433,          // derived
-            onSurface: 0xF5EFE4,               // Lin
-            onSurfaceVariant: 0xAEB9AE,
-            onSurfaceMuted: 0x93A094,          // derived
-            outline: 0x6F7D72,                 // derived (strokes only)
-            outlineVariant: 0x3C4D42           // derived (strokes only)
+            surface: 0x0B1A2E,                 // Bleu nuit
+            surfaceContainerLowest: 0x07121F,
+            surfaceContainerLow: 0x112238,
+            surfaceContainer: 0x172B44,
+            surfaceContainerHigh: 0x1E3552,
+            surfaceContainerHighest: 0x274162,
+            surfaceVariant: 0x274162,
+            onSurface: 0xCFE2F5,               // Bleu givré
+            onSurfaceVariant: 0xA9C2DD,
+            onSurfaceMuted: 0x93ADCA,
+            outline: 0x5F7896,                 // strokes only
+            outlineVariant: 0x2E4664           // strokes only
         ),
-        // Light mode gets its own ground (owner, on device, 2026-11-20: the
-        // white page « ne va pas avec » the boughs and the garlands): linen.
+        // Never a white page (owner, 2026-11-20, « ne le laisse pas blanc »).
+        // Panels and cards are SNOW on the frost-blue ground (lighter than
+        // it, not deeper): frosted white glass rather than grey-blue slabs.
+        // `surfaceContainerLowest` is the exception, a step DEEPER: it is a
+        // page ground too (Réglages' landing), which must never turn white.
         light: SeasonPalette(
-            surface: 0xF3ECDD,                 // Lin
-            surfaceContainerLowest: 0xFBF6EC,
-            surfaceContainerLow: 0xECE4D2,
-            surfaceContainer: 0xE5DCC8,
-            surfaceContainerHigh: 0xDCD2BC,
-            surfaceContainerHighest: 0xD2C7AF,
-            surfaceVariant: 0xDCD2BC,
-            onSurface: 0x1B2A22,               // Sapin de nuit
-            onSurfaceVariant: 0x3F4B43,
-            onSurfaceMuted: 0x47534A,
-            outline: 0xA89E8A,                 // strokes only
-            outlineVariant: 0xC9BEA9           // strokes only
+            surface: 0xCFE2F5,                 // Bleu givré
+            surfaceContainerLowest: 0xC6DBF1,
+            surfaceContainerLow: 0xEDF4FC,
+            surfaceContainer: 0xE5EFFA,
+            surfaceContainerHigh: 0xDEEBF8,
+            surfaceContainerHighest: 0xD6E6F6,
+            surfaceVariant: 0xDEEBF8,
+            onSurface: 0x0B1A2E,               // Bleu nuit
+            onSurfaceVariant: 0x243A57,
+            onSurfaceMuted: 0x30486A,
+            outline: 0x7891B0,                 // strokes only
+            outlineVariant: 0x9CB6D3           // strokes only
         ),
+        // The buttons take the OTHER colour: frost on night, night on frost.
         accent: AccentOption.Palette(
-            accentLight: 0x9E1F18, accentDark: 0xFF8A7A,     // Houx
-            containerLight: 0xC8392F, containerDark: 0xC8392F,
-            dimLight: 0x8E1D17, dimDark: 0xE0574A,
-            onAccentLight: 0xFFFFFF, onAccentDark: 0x2A0907
+            accentLight: 0x0B1A2E, accentDark: 0xCFE2F5,
+            containerLight: 0x0B1A2E, containerDark: 0xCFE2F5,
+            dimLight: 0x1B2F4C, dimDark: 0xA9C2DD,
+            onAccentLight: 0xCFE2F5, onAccentDark: 0x0B1A2E,
+            containerLabelLight: 0xCFE2F5, containerLabelDark: 0x0B1A2E
         ),
-        titleFont: SeasonFont(postScriptName: "Fraunces72pt-BlackItalic", fileName: "Fraunces-BlackItalic.ttf"),
+        titleFont: SeasonFont(
+            postScriptName: "CormorantGaramond-Bold", fileName: "CormorantGaramond-Bold.ttf",
+            uppercase: true, tracking: 0.08, sizeScale: 1.2
+        ),
         ambiance: [.snow, .focusGlow],
         // « Noël en famille »: TMDb has no Christmas genre, so the row is the
         // keyword `christmas` (read on TMDb for 34 titles, 2026-11-20: 21 of
@@ -98,8 +113,8 @@ enum SeasonalThemeCatalogue {
             tagCandidates: ["christmas"],
             requiresBoth: true
         ),
-        backdrop: nil,
-        decor: .firBoughs,
+        backdrop: .winterSky,
+        decor: .frost,
         // « À demander pour Noël »: the same TMDb keyword, asked of Seerr
         // (measured on the bench, 2026-11-20: 198 films with the vote floor,
         // opening on Our Little Secret, That Christmas, Dear Santa).

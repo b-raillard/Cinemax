@@ -134,6 +134,7 @@ targets:
         # Seasonal title font (SeasonalThemeCatalogue → SeasonFont), OFL.
         UIAppFonts:
           - Fraunces-BlackItalic.ttf
+          - CormorantGaramond-Bold.ttf
         # Team prefix (e.g. "ABCDE12345.") injected at sign time. Read at
         # runtime to build the shared Keychain access group string without
         # hardcoding the team id. Keep in sync across all four targets.
@@ -288,6 +289,7 @@ targets:
         # Seasonal title font (SeasonalThemeCatalogue → SeasonFont), OFL.
         UIAppFonts:
           - Fraunces-BlackItalic.ttf
+          - CormorantGaramond-Bold.ttf
         # Team prefix injected at sign time — see iOS note. Used to build the
         # shared Keychain access group at runtime.
         AppIdentifierPrefix: $(AppIdentifierPrefix)

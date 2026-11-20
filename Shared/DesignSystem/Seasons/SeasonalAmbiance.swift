@@ -72,8 +72,8 @@ struct SeasonalAmbianceOverlay: View {
 /// posters and text stay clean. Out of season: exactly `CinemaColor.surface`.
 struct SeasonalBackdrop: View {
     /// `false` on a screen that draws `SeasonalTopDecor` itself, OVER its
-    /// content (Home, the libraries): the boughs are not painted twice.
-    var boughs = true
+    /// content (Home, the libraries): the frost is not painted twice.
+    var cornerDecor = true
     @Environment(\.seasonID) private var seasonID
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.motionEffectsEnabled) private var motionEnabled
@@ -89,13 +89,14 @@ struct SeasonalBackdrop: View {
             if theme?.backdrop == .nightSky {
                 NightSkyRepresentable(dark: colorScheme == .dark, twinkle: motionEnabled && ambianceEnabled)
             }
+            if theme?.backdrop == .winterSky, colorScheme == .light {
+                SeasonalWinterSky()
+            }
             if !effects.isEmpty {
                 AmbianceRepresentable(effects: effects, plane: .far)
             }
-            // The season's still decor: garlands across the page, and the
-            // boughs in the top corners like the cobwebs.
-            SeasonalGarlands()
-            if boughs { SeasonalTopDecor() }
+            // The season's still decor: frost in the corners, like the cobwebs.
+            if cornerDecor { SeasonalTopDecor() }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -367,10 +368,11 @@ final class AmbianceView: UIView {
     private func addSnow() {
         let emitter = CAEmitterLayer()
         emitter.emitterShape = .line
-        // White snow vanishes on the light surfaces: there it takes a cold
-        // blue-grey, a little more opaque.
+        // White snow vanishes on the light surfaces: there it takes a deeper
+        // cold blue, a little more opaque — the frost-blue ground of « Givre »
+        // swallowed the earlier blue-grey.
         let onLight = traitCollection.userInterfaceStyle == .light
-        let tint = onLight ? UIColor(red: 0.50, green: 0.62, blue: 0.78, alpha: 1) : UIColor.white
+        let tint = onLight ? UIColor(red: 0.27, green: 0.41, blue: 0.61, alpha: 1) : UIColor.white
         func cell(_ image: CGImage?, rate: Float, scale: CGFloat, velocity: CGFloat, alpha: CGFloat) -> CAEmitterCell {
             let c = CAEmitterCell()
             c.contents = image
