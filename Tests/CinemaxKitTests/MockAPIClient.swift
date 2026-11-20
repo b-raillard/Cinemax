@@ -278,12 +278,15 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return recordLock.withLock { stubbedUsers }
     }
     var stubbedActiveSessions: [SessionInfoDto] = []
+    /// Fails `/Sessions` alone, the rest of the mock answering normally.
+    var activeSessionsError: (any Error)?
     /// Every `getActiveSessions` call's `controllableByUserId`, in order —
     /// `nil` entries are the unfiltered (admin) shape.
     private(set) var activeSessionsQueries: [String?] = []
     func getActiveSessions(activeWithinSeconds: Int, controllableByUserId: String?) async throws -> [SessionInfoDto] {
         recordLock.withLock { activeSessionsQueries.append(controllableByUserId) }
         if shouldThrow { throw stubbedError }
+        if let error = recordLock.withLock({ activeSessionsError }) { throw error }
         return stubbedActiveSessions
     }
     func getDevices() async throws -> [DeviceInfoDto] { [] }
