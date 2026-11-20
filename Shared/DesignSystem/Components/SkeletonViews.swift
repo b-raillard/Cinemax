@@ -255,8 +255,10 @@ private struct ContentRevealModifier: ViewModifier {
             revealed: revealed, motionEnabled: motionEnabled, now: .now, revealStartedAt: clock?.startedAt
         )
         content
+            // A fade only. The blocks used to RISE 10 pt as well: on every tab
+            // change the whole page slid up over the skeleton and the backdrop —
+            // the owner found it « super bizarre » on device (2026-11-20).
             .opacity(hidden ? 0 : 1)
-            .offset(y: hidden ? 10 : 0)
             .onAppear {
                 guard !revealed else { return }
                 if hidden {
@@ -271,8 +273,8 @@ private struct ContentRevealModifier: ViewModifier {
 }
 
 extension View {
-    /// Rise-in after a skeleton; `step` orders the stagger (0 = hero). Apply
-    /// to the first screenful only.
+    /// Fade-in after a skeleton — no movement; `step` orders the stagger
+    /// (0 = hero). Apply to the first screenful only.
     func contentReveal(step: Int) -> some View {
         modifier(ContentRevealModifier(step: step))
     }
