@@ -92,7 +92,7 @@ struct MediaLibraryScreen: View {
         // The skeleton only while there is nothing to show: a reload over a
         // loaded library (pull-to-refresh) updates it in place — see
         // `HomeScreen.showsSkeleton`.
-        let loadingFromEmpty = viewModel.isLoading && viewModel.heroItem == nil && viewModel.genres.isEmpty
+        let loadingFromEmpty = viewModel.isLoading && !viewModel.hasPresentedContent
         let skeleton = revealClock.noting(skeletonVisible: loadingFromEmpty, motionEnabled: motionEnabled)
         ZStack {
             SeasonalBackdrop(boughs: false).ignoresSafeArea()
