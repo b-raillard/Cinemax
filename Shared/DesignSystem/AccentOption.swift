@@ -47,6 +47,13 @@ enum AccentOption: String, CaseIterable, Identifiable {
         let dimDark: UInt
         let onAccentLight: UInt
         let onAccentDark: UInt
+        /// The label ON the container, when a palette names it instead of
+        /// letting `AccentLabelContrast` pick white or near-black — a season
+        /// built on two colours that swap with the mode (« Givre »: night-blue
+        /// letters on a frost-blue button, frost-blue letters on a night-blue
+        /// one). `nil` for the picker accents.
+        var containerLabelLight: UInt?
+        var containerLabelDark: UInt?
     }
 
     var palette: Palette {
