@@ -107,6 +107,10 @@ enum SeasonDecor: Sendable {
 enum SeasonBackdrop: Sendable {
     /// Stars (dark mode), a few twinkling, cobwebs in the top corners.
     case nightSky
+    /// A winter sky in LIGHT mode — a pale sun in the top corner, the frost
+    /// blue deepening toward the bottom (`SeasonalWinterSky`).
+    /// Dark mode keeps the flat night ground the owner liked.
+    case winterSky
 }
 
 struct SeasonRow: Sendable, Equatable {

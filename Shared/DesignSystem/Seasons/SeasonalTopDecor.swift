@@ -102,13 +102,62 @@ struct SeasonalFrostMaterial: View {
     private static let darkHaze = Color(red: 0xCF / 255, green: 0xE2 / 255, blue: 0xF5 / 255).opacity(0.14)   // Bleu givré
     private static let lightHaze = Color(red: 1, green: 1, blue: 1).opacity(0.42)
 
+    /// Bleu nuit, for the light mode's relief.
+    private static let nightBlue = Color(red: 0x0B / 255, green: 0x1A / 255, blue: 0x2E / 255)
+
     var body: some View {
         let dark = colorScheme == .dark
         ZStack {
             dark ? Self.darkHaze : Self.lightHaze
+            if !dark {
+                // White crystals vanish on a pale page: in light mode each one
+                // casts a faint night-blue shadow a point below, so the frost
+                // reads in RELIEF, like ice on a window against a bright sky.
+                Image("SeasonFrost")
+                    .resizable(resizingMode: .tile)
+                    .colorMultiply(Self.nightBlue)
+                    .opacity(0.28)
+                    .offset(x: 0.8, y: 1.2)
+            }
             Image("SeasonFrost")
                 .resizable(resizingMode: .tile)
                 .opacity(dark ? 0.6 : 1)
         }
+    }
+}
+
+/// « Givre »'s light-mode ground: a winter sky behind the browsing screens —
+/// a pale sun glowing in the top corner, the frost blue deepening toward the
+/// bottom (never white where the rows sit: owner, « ne le laisse pas blanc »). Inside `SeasonalBackdrop`, behind everything;
+/// the flat `surface` stays under it for every screen without a backdrop.
+struct SeasonalWinterSky: View {
+    // The sky's tones are steps of Bleu givré #CFE2F5 — decor colours, like
+    // the frost's haze, not surface or text tokens.
+    private static let top = Color(red: 0xD6 / 255, green: 0xE7 / 255, blue: 0xF8 / 255)
+    private static let middle = Color(red: 0xC4 / 255, green: 0xDA / 255, blue: 0xF2 / 255)
+    private static let bottom = Color(red: 0xAC / 255, green: 0xC8 / 255, blue: 0xE7 / 255)
+    private static let sun = Color(red: 1, green: 1, blue: 1)
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                LinearGradient(
+                    stops: [
+                        .init(color: Self.top, location: 0),
+                        .init(color: Self.middle, location: 0.45),
+                        .init(color: Self.bottom, location: 1)
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+                RadialGradient(
+                    colors: [Self.sun.opacity(0.45), Self.sun.opacity(0.14), Self.sun.opacity(0)],
+                    center: UnitPoint(x: 0.82, y: 0.02),
+                    startRadius: 0,
+                    endRadius: max(geo.size.width, geo.size.height) * 0.55
+                )
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
