@@ -79,8 +79,8 @@ struct SeasonFont: Sendable, Equatable {
 
 enum AmbianceEffect: String, Sendable, CaseIterable {
     case bats, pumpkins, focusGlow
-    /// Snow crystals: small and sharp on the far plane, a few large soft ones
-    /// on the near plane (out of focus, like a lens would see them).
+    /// Snow crystals: small on the far plane, a few larger ones on the near
+    /// plane. Crystals only — no soft out-of-focus flake.
     case snow
 }
 
