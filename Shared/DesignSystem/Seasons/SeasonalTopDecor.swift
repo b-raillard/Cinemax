@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// A season's STILL decor on the top of a hero (Home, library): for
-/// « Sapin de Noël », fir boughs in the two top corners with their glass balls
-/// and micro lights. It belongs to the hero — it scrolls away with it and never
-/// sits on a navigation bar. The images are rendered by `design/noel/decor.py`.
+/// A season's STILL decor in the two top corners of a browsing screen's
+/// backdrop (`SeasonalBackdrop`) — where Halloween hangs its cobwebs: for
+/// « Sapin de Noël », fir boughs with their glass balls and micro lights.
+/// BEHIND the content, pinned to the very top of the screen: the page scrolls
+/// over it, and it never sits on a button. The images are rendered by
+/// `design/noel/decor.py`.
 ///
 /// Nothing moves, so Reduce Motion keeps it; the « Animations d'ambiance »
-/// switch removes it (`\.seasonalAmbianceEnabled`). Not interactive, hidden
-/// from VoiceOver.
-struct SeasonalHeroDecor: View {
+/// switch removes it (`\.seasonalAmbianceEnabled`).
+struct SeasonalTopDecor: View {
     @Environment(\.seasonID) private var seasonID
     @Environment(\.seasonalAmbianceEnabled) private var ambianceEnabled
     #if os(iOS)
@@ -29,17 +30,17 @@ struct SeasonalHeroDecor: View {
                     .frame(width: cornerWidth)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
         }
     }
 
-    /// The width of ONE corner image (its height follows: 260 × 230).
+    /// The width of ONE corner image (its height follows: 260 × 230). Sized to
+    /// the strip above the first content: status and navigation bar on iPhone
+    /// and iPad, the tab bar's band on Apple TV.
     private var cornerWidth: CGFloat {
         #if os(tvOS)
-        1040
+        480
         #else
-        sizeClass == .regular ? 380 : 260
+        sizeClass == .regular ? 240 : 150
         #endif
     }
 }

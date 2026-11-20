@@ -89,6 +89,8 @@ struct SeasonalBackdrop: View {
             if !effects.isEmpty {
                 AmbianceRepresentable(effects: effects, plane: .far)
             }
+            // The season's still decor, in the top corners like the cobwebs.
+            SeasonalTopDecor()
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
