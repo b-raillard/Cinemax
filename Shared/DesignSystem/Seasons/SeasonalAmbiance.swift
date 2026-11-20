@@ -364,17 +364,6 @@ final class AmbianceView: UIView {
         }.cgImage
     }()
 
-    /// A flake too close to be in focus: a soft white disc.
-    private static let snowBlur: CGImage? = {
-        let side: CGFloat = 64
-        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
-            let colors = [UIColor.white.withAlphaComponent(0.9).cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray
-            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0.15, 1]) else { return }
-            let centre = CGPoint(x: side / 2, y: side / 2)
-            ctx.cgContext.drawRadialGradient(gradient, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: side / 2, options: [])
-        }.cgImage
-    }()
-
     private func addSnow() {
         let emitter = CAEmitterLayer()
         emitter.emitterShape = .line
@@ -408,13 +397,10 @@ final class AmbianceView: UIView {
                 cell(Self.snowCrystal, rate: 1.0, scale: 0.16, velocity: 48, alpha: 0.7)
             ]
         case .near:
-            // In front of everything: a crystal now and then, and the odd
-            // flake so close that it is out of focus.
-            // (On a light page the soft one reads as a smudge: crystals only.)
-            let crystal = cell(Self.snowCrystal, rate: 0.4, scale: 0.24, velocity: 70, alpha: 0.75)
-            emitter.emitterCells = onLight
-                ? [crystal]
-                : [crystal, cell(Self.snowBlur, rate: 0.25, scale: 0.62, velocity: 95, alpha: 0.3)]
+            // In front of everything: a crystal now and then. (A soft
+            // out-of-focus disc fell with them at first: on device it read as
+            // halos sliding down the screen — removed, owner, 2026-11-20.)
+            emitter.emitterCells = [cell(Self.snowCrystal, rate: 0.4, scale: 0.24, velocity: 70, alpha: 0.75)]
         }
         emitter.beginTime = CACurrentMediaTime() - 12   // pre-warmed: already falling
         layer.addSublayer(emitter)
