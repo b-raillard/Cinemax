@@ -116,7 +116,7 @@ struct HomeScreen: View {
         // rows' `onAppear` (see `ContentRevealClock`).
         let skeleton = revealClock.noting(skeletonVisible: showsSkeleton, motionEnabled: motionEffects)
         ZStack {
-            SeasonalBackdrop().ignoresSafeArea()
+            SeasonalBackdrop(boughs: false).ignoresSafeArea()
 
             if skeleton {
                 loadingSkeleton
@@ -131,6 +131,9 @@ struct HomeScreen: View {
                 content
                     .environment(\.contentRevealClock, revealClock)
             }
+
+            // The season's boughs, in FRONT of the hero (the backdrop's are off).
+            SeasonalTopDecor().ignoresSafeArea()
         }
         .animation(CinemaMotion.gated(CinemaMotion.skeletonFade, enabled: motionEffects), value: skeleton)
         #if os(iOS)

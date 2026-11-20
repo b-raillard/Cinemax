@@ -62,9 +62,24 @@ enum SeasonalThemeCatalogue {
             outline: 0x6F7D72,                 // derived (strokes only)
             outlineVariant: 0x3C4D42           // derived (strokes only)
         ),
-        light: nil,
+        // Light mode gets its own ground (owner, on device, 2026-11-20: the
+        // white page « ne va pas avec » the boughs and the garlands): linen.
+        light: SeasonPalette(
+            surface: 0xF3ECDD,                 // Lin
+            surfaceContainerLowest: 0xFBF6EC,
+            surfaceContainerLow: 0xECE4D2,
+            surfaceContainer: 0xE5DCC8,
+            surfaceContainerHigh: 0xDCD2BC,
+            surfaceContainerHighest: 0xD2C7AF,
+            surfaceVariant: 0xDCD2BC,
+            onSurface: 0x1B2A22,               // Sapin de nuit
+            onSurfaceVariant: 0x3F4B43,
+            onSurfaceMuted: 0x47534A,
+            outline: 0xA89E8A,                 // strokes only
+            outlineVariant: 0xC9BEA9           // strokes only
+        ),
         accent: AccentOption.Palette(
-            accentLight: 0xB3261E, accentDark: 0xFF8A7A,     // Houx
+            accentLight: 0x9E1F18, accentDark: 0xFF8A7A,     // Houx
             containerLight: 0xC8392F, containerDark: 0xC8392F,
             dimLight: 0x8E1D17, dimDark: 0xE0574A,
             onAccentLight: 0xFFFFFF, onAccentDark: 0x2A0907

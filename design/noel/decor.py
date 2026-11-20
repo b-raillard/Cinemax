@@ -7,7 +7,9 @@ Rendu procédural (Pillow + numpy), jamais dessiné à la main : une tige, des
 rameaux, des milliers d'aiguilles ombrées, des boules de verre éclairées en haut
 à gauche, des micro-lumières. Écrit `SeasonFirLeft.imageset` et
 `SeasonFirRight.imageset` dans `Resources/Assets.xcassets` : iPhone / iPad en
-@2x et @3x (260 × 230 pt), Apple TV en @1x et @2x (1040 × 920 pt).
+@2x et @3x (260 × 230 pt), Apple TV en @1x et @2x (1040 × 920 pt) ; et
+`SeasonGarland.imageset`, UN feston de guirlande de couleurs qui se répète
+en largeur (200 × 75 pt, 800 × 300 pt sur Apple TV).
 Graines fixes : deux lancements donnent les mêmes images.
 """
 import json
@@ -154,6 +156,90 @@ def corner(side, sc):
     return out
 
 
+def catenary(x0, x1, y, sag, n=60):
+    return [(x0 + (x1 - x0) * u, y + sag * 4 * u * (1 - u)) for u in np.linspace(0, 1, n)]
+
+
+def string_lights(size, swags, per_swag, k, colours=(WARM,), bulb=5.0, seed=1):
+    """Fairy lights: a thin wire, small glass bulbs, a tight core and a wide bloom.
+    `swags` = [(x0, x1, y, sag)], sizes in px of the final image; `k` = supersampling."""
+    w, h = size
+    rnd = random.Random(seed)
+    wire = Image.new("L", (w * k, h * k), 0)
+    d = ImageDraw.Draw(wire)
+    bulbs = []
+    for (x0, x1, y, sag) in swags:
+        pts = catenary(x0, x1, y, sag)
+        d.line([(x * k, yy * k) for x, yy in pts], fill=255, width=max(1, int(bulb * 0.28 * k)))
+        for j in range(per_swag):
+            u = (j + 0.5 + rnd.uniform(-0.12, 0.12)) / per_swag
+            bulbs.append((x0 + (x1 - x0) * u, y + sag * 4 * u * (1 - u)))
+    out = solid(wire.resize((w, h), Image.LANCZOS), (58, 52, 44), 0.9)
+    for ci, colour in enumerate(colours):
+        core = Image.new("L", (w * k, h * k), 0)
+        dc = ImageDraw.Draw(core)
+        for i, (x, y) in enumerate(bulbs):
+            if i % len(colours) != ci:
+                continue
+            r = bulb * k
+            dc.ellipse([x * k - r * 0.75, y * k + r * 0.2, x * k + r * 0.75, y * k + r * 2.3], fill=255)
+        core = core.resize((w, h), Image.LANCZOS)
+        out = over(out, solid(blur(core, bulb * 5), colour, 1.6), solid(blur(core, bulb * 1.8), colour, 1.9),
+                   solid(core, colour, 1.0), solid(blur(core, 0.8), (255, 250, 236), 0.75))
+    sock = Image.new("L", (w * k, h * k), 0)
+    ds = ImageDraw.Draw(sock)
+    for (x, y) in bulbs:
+        ds.rectangle([x * k - bulb * 0.5 * k, y * k - bulb * 0.5 * k, x * k + bulb * 0.5 * k, y * k + bulb * 0.35 * k], fill=255)
+    return over(out, solid(sock.resize((w, h), Image.LANCZOS), (34, 30, 26), 1.0))
+
+
+GARLAND = ((255, 96, 96), (255, 205, 92), (104, 226, 146), (118, 188, 255))
+TILE = (400, 150)   # one swag, in @2x pixels at scale 1 (200 × 75 pt)
+
+
+def garland_tile(sc):
+    """ONE swag of coloured bulbs that tiles sideways: three are rendered and the
+    middle one kept, so every bulb's halo crosses the seam whole. The glass is
+    SATURATED (a white-hot bulb vanishes on the light theme's linen ground): a
+    coloured drop, a lighter heart, one small highlight, a soft halo."""
+    w, h = int(TILE[0] * sc), int(TILE[1] * sc)
+    k = 3
+    per = 4
+    r = 10 * sc
+    wire = Image.new("L", (w * 3 * k, h * k), 0)
+    dw = ImageDraw.Draw(wire)
+    bulbs = []
+    for i in range(3):
+        pts = catenary(i * w, (i + 1) * w, 20 * sc, 30 * sc)
+        dw.line([(x * k, y * k) for x, y in pts], fill=255, width=max(2, int(1.6 * sc * k)))
+        for j in range(per):
+            u = (j + 0.5) / per
+            bulbs.append((i * w + w * u, 20 * sc + 30 * sc * 4 * u * (1 - u), GARLAND[(i * per + j) % len(GARLAND)]))
+    out = solid(wire.resize((w * 3, h), Image.LANCZOS), (64, 88, 74), 0.95)
+    for colour in GARLAND:
+        glass = Image.new("L", (w * 3 * k, h * k), 0)
+        heart = Image.new("L", (w * 3 * k, h * k), 0)
+        shine = Image.new("L", (w * 3 * k, h * k), 0)
+        dg, dh, ds = ImageDraw.Draw(glass), ImageDraw.Draw(heart), ImageDraw.Draw(shine)
+        for (x, y, c) in bulbs:
+            if c != colour:
+                continue
+            dg.ellipse([(x - r * 0.72) * k, (y + r * 0.35) * k, (x + r * 0.72) * k, (y + r * 2.5) * k], fill=255)
+            dh.ellipse([(x - r * 0.36) * k, (y + r * 0.9) * k, (x + r * 0.30) * k, (y + r * 2.0) * k], fill=255)
+            ds.ellipse([(x - r * 0.40) * k, (y + r * 0.70) * k, (x - r * 0.12) * k, (y + r * 1.15) * k], fill=255)
+        glass, heart, shine = (m.resize((w * 3, h), Image.LANCZOS) for m in (glass, heart, shine))
+        deep = tuple(int(c * 0.86) for c in colour)
+        light = tuple(int(c + (255 - c) * 0.45) for c in colour)
+        out = over(out, solid(blur(glass, r * 1.6), colour, 1.25), solid(glass, deep, 1.0),
+                   solid(blur(heart, r * 0.25), light, 0.9), solid(blur(shine, 0.6 * sc), (255, 255, 255), 0.95))
+    caps = Image.new("L", (w * 3 * k, h * k), 0)
+    dc = ImageDraw.Draw(caps)
+    for (x, y, _) in bulbs:
+        dc.rounded_rectangle([(x - r * 0.42) * k, (y - r * 0.25) * k, (x + r * 0.42) * k, (y + r * 0.55) * k], radius=r * 0.12 * k, fill=255)
+    out = over(out, solid(caps.resize((w * 3, h), Image.LANCZOS), (30, 44, 36), 1.0))
+    return out.crop((w, 0, w * 2, h))
+
+
 def main():
     for side, name in (("left", "SeasonFirLeft"), ("right", "SeasonFirRight")):
         folder = os.path.join(ASSETS, name + ".imageset")
@@ -167,6 +253,17 @@ def main():
         with open(os.path.join(folder, "Contents.json"), "w") as f:
             json.dump({"images": images, "info": {"author": "xcode", "version": 1}}, f, indent=2)
             f.write("\n")
+    folder = os.path.join(ASSETS, "SeasonGarland.imageset")
+    os.makedirs(folder, exist_ok=True)
+    images = []
+    for idiom, scale, sc in (("universal", "2x", 1.0), ("universal", "3x", 1.5), ("tv", "1x", 2.0), ("tv", "2x", 4.0)):
+        filename = f"seasongarland_{idiom}@{scale}.png"
+        garland_tile(sc).save(os.path.join(folder, filename), optimize=True)
+        images.append({"filename": filename, "idiom": idiom, "scale": scale})
+        print(filename)
+    with open(os.path.join(folder, "Contents.json"), "w") as f:
+        json.dump({"images": images, "info": {"author": "xcode", "version": 1}}, f, indent=2)
+        f.write("\n")
 
 
 if __name__ == "__main__":
