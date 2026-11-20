@@ -71,6 +71,9 @@ struct SeasonalAmbianceOverlay: View {
 /// backdrop (night sky) with the FAR ambiance plane — behind the content, so
 /// posters and text stay clean. Out of season: exactly `CinemaColor.surface`.
 struct SeasonalBackdrop: View {
+    /// `false` on a screen that draws `SeasonalTopDecor` itself, OVER its
+    /// content (Home, the libraries): the boughs are not painted twice.
+    var boughs = true
     @Environment(\.seasonID) private var seasonID
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.motionEffectsEnabled) private var motionEnabled
@@ -89,8 +92,10 @@ struct SeasonalBackdrop: View {
             if !effects.isEmpty {
                 AmbianceRepresentable(effects: effects, plane: .far)
             }
-            // The season's still decor, in the top corners like the cobwebs.
-            SeasonalTopDecor()
+            // The season's still decor: garlands across the page, and the
+            // boughs in the top corners like the cobwebs.
+            SeasonalGarlands()
+            if boughs { SeasonalTopDecor() }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
