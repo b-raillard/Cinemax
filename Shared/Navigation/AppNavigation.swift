@@ -896,10 +896,10 @@ struct AppNavigation: View {
             // whole signed-in app — above the tabs and every pushed screen,
             // under sheets and the player; away from the calm zones. The far
             // plane is in each browsing screen's `SeasonalBackdrop`.
-            if appState.isAuthenticated, !seasonal.calmZone {
-                SeasonalAmbianceOverlay()
-                    .ignoresSafeArea()
-            }
+            // `calmZone` is read INSIDE the gate, never here: every move into or
+            // out of Search / Settings flips it, and reading it in this body
+            // re-evaluated the whole root on each of them (audit PU-04).
+            SeasonalNearAmbianceGate(seasonal: seasonal, isAuthenticated: appState.isAuthenticated)
         }
         // Toasts live in their OWN window above this one: an overlay here drew
         // underneath every sheet, cover and the player — see `ToastWindowHost`.
@@ -1295,5 +1295,22 @@ private struct RootLifecycleObservers: ViewModifier {
             // flag on each tick. Same nudge for the system switch.
             .onChange(of: motionEffects) { _, _ in motionEffectsDidChange() }
             .onChange(of: systemReduceMotion) { _, _ in motionEffectsDidChange() }
+    }
+}
+
+/// Shows the NEAR ambiance plane over the signed-in app, away from the calm
+/// zones. A view of its own so that `calmZone` — flipped by `MainTabView` on
+/// every move into or out of Search / Settings — invalidates THIS body and not
+/// `AppNavigation.body`. It takes the controller as a plain value: the overlay
+/// itself keeps reading only `\.seasonID` (see the seasons RULE).
+private struct SeasonalNearAmbianceGate: View {
+    let seasonal: SeasonalThemeController
+    let isAuthenticated: Bool
+
+    var body: some View {
+        if isAuthenticated, !seasonal.calmZone {
+            SeasonalAmbianceOverlay()
+                .ignoresSafeArea()
+        }
     }
 }
