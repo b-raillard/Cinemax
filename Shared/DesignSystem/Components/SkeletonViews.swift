@@ -142,7 +142,13 @@ struct MediaPageSkeleton: View {
         }
         // Static sketch — never scrollable, never interactive.
         .allowsHitTesting(false)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // `minWidth: 0` on purpose: the rows are ten fixed cards, far wider
+        // than the screen, and a frame with only a maximum reports its
+        // CONTENT's width. The skeleton then widened the screen's root stack,
+        // which pushed everything pinned to that stack's corners (the season's
+        // boughs) off-screen — and they slid back in from the sides when the
+        // skeleton left (owner's recording, 2026-11-20).
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
     }
 
@@ -255,8 +261,10 @@ private struct ContentRevealModifier: ViewModifier {
             revealed: revealed, motionEnabled: motionEnabled, now: .now, revealStartedAt: clock?.startedAt
         )
         content
+            // A fade only. The blocks used to RISE 10 pt as well: on every tab
+            // change the whole page slid up over the skeleton and the backdrop —
+            // the owner found it « super bizarre » on device (2026-11-20).
             .opacity(hidden ? 0 : 1)
-            .offset(y: hidden ? 10 : 0)
             .onAppear {
                 guard !revealed else { return }
                 if hidden {
@@ -271,8 +279,8 @@ private struct ContentRevealModifier: ViewModifier {
 }
 
 extension View {
-    /// Rise-in after a skeleton; `step` orders the stagger (0 = hero). Apply
-    /// to the first screenful only.
+    /// Fade-in after a skeleton — no movement; `step` orders the stagger
+    /// (0 = hero). Apply to the first screenful only.
     func contentReveal(step: Int) -> some View {
         modifier(ContentRevealModifier(step: step))
     }
