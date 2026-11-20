@@ -64,20 +64,21 @@ enum SeasonalThemeCatalogue {
             outline: 0x6D7E96,                 // strokes only
             outlineVariant: 0x34455E           // strokes only
         ),
-        // A snowy day: blue-white, the frost a whiter veil on it.
+        // A frosty winter day: an ICE-BLUE ground, never white (owner,
+        // 2026-11-20: « ne le laisse pas blanc »); the frost a whiter veil on it.
         light: SeasonPalette(
-            surface: 0xEDF2F8,                 // Neige
-            surfaceContainerLowest: 0xF8FAFD,
-            surfaceContainerLow: 0xE4EBF3,
-            surfaceContainer: 0xDCE4EE,
-            surfaceContainerHigh: 0xD2DCE8,
-            surfaceContainerHighest: 0xC7D3E1,
-            surfaceVariant: 0xD2DCE8,
-            onSurface: 0x13223A,               // Encre de nuit
-            onSurfaceVariant: 0x3A4A62,
-            onSurfaceMuted: 0x47566E,
-            outline: 0x9AA8BA,                 // strokes only
-            outlineVariant: 0xC3CEDB           // strokes only
+            surface: 0xD6E2F0,                 // Bleu glace
+            surfaceContainerLowest: 0xE6EEF7,
+            surfaceContainerLow: 0xCCD9EA,
+            surfaceContainer: 0xC3D2E5,
+            surfaceContainerHigh: 0xB9CADF,
+            surfaceContainerHighest: 0xAEC1D9,
+            surfaceVariant: 0xB9CADF,
+            onSurface: 0x101E34,               // Encre de nuit
+            onSurfaceVariant: 0x31415A,
+            onSurfaceMuted: 0x3C4C65,
+            outline: 0x8596AE,                 // strokes only
+            outlineVariant: 0xA9B9CE           // strokes only
         ),
         // Ice white buttons with a navy label at night, navy ones by day.
         accent: AccentOption.Palette(
