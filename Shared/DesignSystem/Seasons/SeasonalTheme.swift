@@ -84,8 +84,8 @@ enum AmbianceEffect: String, Sendable, CaseIterable {
     case snow
 }
 
-/// A season's STILL decor, laid over the top of the Home and library heroes
-/// (`SeasonalHeroDecor`). Not an effect: nothing moves, so Reduce Motion
+/// A season's STILL decor, in the two top corners of the browsing screens'
+/// backdrop (`SeasonalTopDecor`, inside `SeasonalBackdrop`) — behind the content. Not an effect: nothing moves, so Reduce Motion
 /// leaves it; the « Animations d'ambiance » switch removes it.
 enum SeasonDecor: Sendable {
     /// Fir boughs in the two top corners, glass balls, micro lights — rendered
