@@ -92,6 +92,9 @@ enum SeerrRequestTitles {
     struct Lookup: Sendable, Equatable {
         let title: String
         let posterPath: String?
+        /// A film's synopsis in the app's language (the season request row's
+        /// sheet); the request lists do not read it.
+        var overview: String?
     }
 
     /// One lookup per request, `maxConcurrentLookups` at a time. `apply`
@@ -156,18 +159,20 @@ enum SeerrRequestTitles {
     ) async throws -> Lookup? {
         let title: String
         let posterPath: String?
+        var overview: String?
         switch kind {
         case .movie:
             let movie = try await client.movie(tmdbId: tmdbId, credential)
             title = movie.title
             posterPath = movie.posterPath
+            overview = movie.overview
         case .tv:
             let series = try await client.tv(tmdbId: tmdbId, credential)
             title = series.name
             posterPath = series.posterPath
         }
         guard !title.isEmpty else { return nil }
-        return Lookup(title: title, posterPath: posterPath)
+        return Lookup(title: title, posterPath: posterPath, overview: overview)
     }
 }
 

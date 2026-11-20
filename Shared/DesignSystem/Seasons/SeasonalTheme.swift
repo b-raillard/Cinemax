@@ -124,6 +124,20 @@ struct SeasonRow: Sendable, Equatable {
     }
 }
 
+/// A season's SECOND Home row: films the library does not have, offered for
+/// request (« À demander pour Noël »). DATA only — the query is
+/// `SeasonRequests`', the gates are Seerr's (`Shared/Seerr/CLAUDE.md`).
+struct SeasonRequestRow: Sendable, Equatable {
+    let titleKey: String
+    /// The TMDb keyword the films carry (207317 = « christmas »).
+    let keywordId: Int
+    /// TMDb's vote-count floor: without one the newest-first list opens on
+    /// titles with 0 votes.
+    let minimumVotes: Int
+    /// TMDb genre ids left out (27 = Horror: « Terrifier 3 » came 6th).
+    let excludedGenreIds: Set<Int>
+}
+
 struct SeasonalTheme: Sendable, Equatable, Identifiable {
     let id: String
     let nameKey: String
@@ -138,6 +152,8 @@ struct SeasonalTheme: Sendable, Equatable, Identifiable {
     let row: SeasonRow?
     let backdrop: SeasonBackdrop?
     var decor: SeasonDecor?
+    /// `nil` (Halloween): the season offers nothing to request.
+    var requestRow: SeasonRequestRow?
 }
 
 /// Settings → Appearance (lot C, 2026-10-22): Automatique (the season whose

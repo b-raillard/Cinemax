@@ -11,6 +11,39 @@ public enum SeerrRequestFilter: String, Sendable {
     case all, pending, available
 }
 
+/// One page of `GET /discover/movies` narrowed to a TMDb keyword, newest
+/// release first. Pure: the query is built here so a test can read it.
+public struct SeerrKeywordDiscovery: Sendable, Equatable {
+    public let keywordId: Int
+    /// TMDb's `vote_count.gte`: without a floor the list opens on titles
+    /// nobody has heard of (0 votes).
+    public let minimumVotes: Int
+    /// `yyyy-MM-dd`, Gregorian: nothing released after that day.
+    public let releasedOnOrBefore: String
+    /// 1-based, TMDb's paging (20 per page).
+    public let page: Int
+
+    public init(keywordId: Int, minimumVotes: Int, releasedOnOrBefore: String, page: Int) {
+        self.keywordId = keywordId
+        self.minimumVotes = minimumVotes
+        self.releasedOnOrBefore = releasedOnOrBefore
+        self.page = page
+    }
+
+    /// NEVER a `language` item: on this route Seerr reads it as the films'
+    /// ORIGINAL language (measured on 3.5.1, 2026-11-20: `language=fr` turned
+    /// 198 Christmas films into the 8 shot in French).
+    public var queryItems: [URLQueryItem] {
+        [
+            URLQueryItem(name: "keywords", value: String(keywordId)),
+            URLQueryItem(name: "sortBy", value: "primary_release_date.desc"),
+            URLQueryItem(name: "primaryReleaseDateLte", value: releasedOnOrBefore),
+            URLQueryItem(name: "voteCountGte", value: String(minimumVotes)),
+            URLQueryItem(name: "page", value: String(max(1, page)))
+        ]
+    }
+}
+
 // MARK: - Endpoints
 
 extension SeerrClient {
@@ -124,6 +157,16 @@ extension SeerrClient {
             "/search",
             query: [URLQueryItem(name: "query", value: query), URLQueryItem(name: "page", value: String(page))],
             auth: .credential(credential), localized: true)
+    }
+
+    /// Films carrying a TMDb keyword (20 per page, with `totalPages`).
+    /// `localized: false` ON PURPOSE — see `SeerrKeywordDiscovery.queryItems`;
+    /// the titles come back in the Seerr user's own display language.
+    public func discoverMovies(
+        _ discovery: SeerrKeywordDiscovery, _ credential: SeerrCredential
+    ) async throws -> SeerrSearchPage {
+        try await get(
+            "/discover/movies", query: discovery.queryItems, auth: .credential(credential), localized: false)
     }
 
     public func movie(tmdbId: Int, _ credential: SeerrCredential) async throws -> SeerrTitle {

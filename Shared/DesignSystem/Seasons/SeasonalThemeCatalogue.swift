@@ -84,7 +84,16 @@ enum SeasonalThemeCatalogue {
             requiresBoth: true
         ),
         backdrop: nil,
-        decor: .firBoughs
+        decor: .firBoughs,
+        // « À demander pour Noël »: the same TMDb keyword, asked of Seerr
+        // (measured on the bench, 2026-11-20: 198 films with the vote floor,
+        // opening on Our Little Secret, That Christmas, Dear Santa).
+        requestRow: SeasonRequestRow(
+            titleKey: "season.christmas.requestRow",
+            keywordId: 207_317,
+            minimumVotes: 300,
+            excludedGenreIds: [27]
+        )
     )
 
     static let all: [SeasonalTheme] = [halloween, christmas]
