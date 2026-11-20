@@ -63,6 +63,7 @@ struct LibraryHeroSection: View {
                 }
                 .heroBackdropBleed(clearInLightMode: true)
             }
+            .overlay(alignment: .top) { SeasonalHeroDecor() }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroContentSpacing) {
                     HStack(spacing: 8) {

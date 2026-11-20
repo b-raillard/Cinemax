@@ -1418,6 +1418,9 @@
 "settings.seasonal.choice.off" = "Désactivé";
 "settings.seasonal.choice.halloween" = "Halloween";
 "settings.seasonal.choice.halloween.detail" = "Toute l'année";
+"season.christmas.name" = "Sapin de Noël";
+"settings.seasonal.choice.christmas" = "Noël";
+"settings.seasonal.choice.christmas.detail" = "Toute l'année";
 "settings.appIcon.title" = "Icône de l'app";
 "settings.appIcon.classic" = "Classique";
 "settings.appIcon.halloween" = "Aubergine";

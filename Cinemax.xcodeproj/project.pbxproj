@@ -328,6 +328,7 @@
 		5D88CC33F8334EF5E6CD5475 /* WatchTogetherLobby.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F56B5D815F6314968F0D02 /* WatchTogetherLobby.swift */; };
 		5D915E76B0DA26C390A2DEBA /* AdminApiKeysViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4306C11E79B9A2CFADC83D03 /* AdminApiKeysViewModel.swift */; };
 		5E08B306F6FB3DB8087C3ECC /* ProPurchasePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5819CDB3718D9D40A95FFC27 /* ProPurchasePolicy.swift */; };
+		5E696CF480C8D66318EDAF30 /* SeasonalHeroDecor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA67BD6C124AFD64751C44D /* SeasonalHeroDecor.swift */; };
 		5E7ACBD3F69CDD439BC407CD /* PreAuthChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56B5D2636A930296A6BD74ED /* PreAuthChrome.swift */; };
 		5E8410C6D81C3929C2E83BD3 /* AppUpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111D7559C3B4164DFE2D5AB3 /* AppUpdateChecker.swift */; };
 		5E8DE9281D3D11ADBEE71751 /* TrickplayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFAC463F8054600F3BCEB911 /* TrickplayController.swift */; };
@@ -599,6 +600,7 @@
 		AD8B2A84E1FA7469C83C5BE9 /* AuthedURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 192311DCC27E4999E2F70068 /* AuthedURLTests.swift */; };
 		AEA55ECFE44707FC8984F4CD /* ProComparisonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A90CCAD5C79313B3E82959 /* ProComparisonViews.swift */; };
 		AEAD595C48A7E4344A7EE9D9 /* HomeRailGatingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C5CDD49E43CC30C9E1866A0 /* HomeRailGatingTests.swift */; };
+		AFBAA8D2E9116BC855B7ABFF /* SeasonalHeroDecor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA67BD6C124AFD64751C44D /* SeasonalHeroDecor.swift */; };
 		B071C321CE9813C9E74195DD /* ProStoreKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E64CC4C2106783BCE3184B /* ProStoreKitTests.swift */; };
 		B0DF5ADBE87C53E570DA3791 /* AdminDashboardScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC3E912535197B53EEAEE7A /* AdminDashboardScreen.swift */; };
 		B10CBBF959D6393AD04A6B80 /* SeerrSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82FEEACBA26545504425AD67 /* SeerrSessionTests.swift */; };
@@ -1229,6 +1231,7 @@
 		BAF45837A14E93AA0A9739F5 /* SettingsTVAccentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTVAccentPicker.swift; sourceTree = "<group>"; };
 		BC748A6943207308BBA9C3BF /* SeerrRequestPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeerrRequestPresenter.swift; sourceTree = "<group>"; };
 		BC9B237028DF07917F35B879 /* SeasonalThemeCatalogue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalThemeCatalogue.swift; sourceTree = "<group>"; };
+		BCA67BD6C124AFD64751C44D /* SeasonalHeroDecor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalHeroDecor.swift; sourceTree = "<group>"; };
 		BCC43AE61EC4C83ED88C63C1 /* CinemaxTV.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CinemaxTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BD1F1F7CB8C870E4EE07D978 /* PersonDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonDetailScreen.swift; sourceTree = "<group>"; };
 		BE5214DD9F50345475DB6E05 /* DiagnosticsReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsReport.swift; sourceTree = "<group>"; };
@@ -1532,6 +1535,7 @@
 			isa = PBXGroup;
 			children = (
 				FF0D402F52BE3BFD8982C560 /* SeasonalAmbiance.swift */,
+				BCA67BD6C124AFD64751C44D /* SeasonalHeroDecor.swift */,
 				6354229D6092EEBD6DAD919C /* SeasonalSettingsText.swift */,
 				C71C62C18C28EFC1BA9F4CBA /* SeasonalTheme.swift */,
 				BC9B237028DF07917F35B879 /* SeasonalThemeCatalogue.swift */,
@@ -2820,6 +2824,7 @@
 				0A00CD0A7498CFF8FBB6A0E1 /* SeasonRowLoader.swift in Sources */,
 				7C9C58E59079EA2467FEDBA6 /* SeasonTrait.swift in Sources */,
 				3DE78A91DE79BE734A8FF5B6 /* SeasonalAmbiance.swift in Sources */,
+				AFBAA8D2E9116BC855B7ABFF /* SeasonalHeroDecor.swift in Sources */,
 				2810093D70829A8CC3E1C023 /* SeasonalSettingsText.swift in Sources */,
 				8BDB9C1786E43DF94E915686 /* SeasonalTheme.swift in Sources */,
 				594BFAE0E5378F92C85DE77E /* SeasonalThemeCatalogue.swift in Sources */,
@@ -3250,6 +3255,7 @@
 				A43404E8E7A18785492CFAC5 /* SeasonRowLoader.swift in Sources */,
 				FA3C232AAD4821CA7F0ECAC3 /* SeasonTrait.swift in Sources */,
 				30945A46BE44C9A2CC660A10 /* SeasonalAmbiance.swift in Sources */,
+				5E696CF480C8D66318EDAF30 /* SeasonalHeroDecor.swift in Sources */,
 				A723DFB8E6932A36313A3480 /* SeasonalSettingsText.swift in Sources */,
 				C97482DA24D2DFD0355B2D46 /* SeasonalTheme.swift in Sources */,
 				19C820C3E43CE5C5F9AA06AB /* SeasonalThemeCatalogue.swift in Sources */,

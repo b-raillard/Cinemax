@@ -41,7 +41,42 @@ enum SeasonalThemeCatalogue {
         backdrop: .nightSky
     )
 
-    static let all: [SeasonalTheme] = [halloween]
+    /// « Sapin de Noël » — the design canvas « JellyGlass — Thème de Noël »,
+    /// board T10 (chosen 2026-11-20). Deep fir green, holly red; fir boughs on
+    /// the heroes, snow. The window wraps the New Year, to Epiphany.
+    static let christmas = SeasonalTheme(
+        id: "christmas",
+        nameKey: "season.christmas.name",
+        window: SeasonWindow(start: MonthDay(month: 12, day: 1), end: MonthDay(month: 1, day: 6)),
+        dark: SeasonPalette(
+            surface: 0x07100C,                 // Sapin de nuit
+            surfaceContainerLowest: 0x040A07,  // derived
+            surfaceContainerLow: 0x0F1B15,
+            surfaceContainer: 0x17281F,
+            surfaceContainerHigh: 0x1F3529,
+            surfaceContainerHighest: 0x284433, // derived
+            surfaceVariant: 0x284433,          // derived
+            onSurface: 0xF5EFE4,               // Lin
+            onSurfaceVariant: 0xAEB9AE,
+            onSurfaceMuted: 0x93A094,          // derived
+            outline: 0x6F7D72,                 // derived (strokes only)
+            outlineVariant: 0x3C4D42           // derived (strokes only)
+        ),
+        light: nil,
+        accent: AccentOption.Palette(
+            accentLight: 0xB3261E, accentDark: 0xFF8A7A,     // Houx
+            containerLight: 0xC8392F, containerDark: 0xC8392F,
+            dimLight: 0x8E1D17, dimDark: 0xE0574A,
+            onAccentLight: 0xFFFFFF, onAccentDark: 0x2A0907
+        ),
+        titleFont: SeasonFont(postScriptName: "Fraunces72pt-BlackItalic", fileName: "Fraunces-BlackItalic.ttf"),
+        ambiance: [.snow, .focusGlow],
+        row: nil,
+        backdrop: nil,
+        decor: .firBoughs
+    )
+
+    static let all: [SeasonalTheme] = [halloween, christmas]
 
     private static let byID: [String: SeasonalTheme] =
         Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })

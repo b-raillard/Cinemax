@@ -58,7 +58,7 @@ struct SeasonalAmbianceOverlay: View {
         let effects = AmbiancePolicy.effects(
             theme: SeasonalThemeCatalogue.theme(id: seasonID),
             ambianceEnabled: ambianceEnabled, motionEnabled: motionEnabled
-        ).intersection([.bats, .pumpkins])
+        ).intersection([.bats, .pumpkins, .snow])
         if !effects.isEmpty {
             AmbianceRepresentable(effects: effects, plane: .near)
                 .allowsHitTesting(false)
@@ -80,7 +80,7 @@ struct SeasonalBackdrop: View {
         let theme = SeasonalThemeCatalogue.theme(id: seasonID)
         let effects = AmbiancePolicy.effects(
             theme: theme, ambianceEnabled: ambianceEnabled, motionEnabled: motionEnabled
-        ).intersection([.bats, .pumpkins])
+        ).intersection([.bats, .pumpkins, .snow])
         ZStack {
             CinemaColor.surface
             if theme?.backdrop == .nightSky {
@@ -111,6 +111,8 @@ final class AmbianceView: UIView {
     private(set) var batLayers: [CALayer] = []
     /// Pumpkins tumbling down from the top edge.
     private(set) var pumpkinEmitter: CAEmitterLayer?
+    /// Snow crystals falling from the top edge.
+    private(set) var snowEmitter: CAEmitterLayer?
     private let plane: AmbiancePlane
     private let clock: () -> TimeInterval
     private var effects: Set<AmbianceEffect> = []
@@ -204,6 +206,10 @@ final class AmbianceView: UIView {
         isUserInteractionEnabled = false
         clipsToBounds = true
         backgroundColor = .clear
+        // Snow is white at night and blue-grey on a light page: repaint on a mode change.
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _) in
+            if view.snowEmitter != nil { view.rebuild() }
+        }
     }
 
     @available(*, unavailable)
@@ -225,6 +231,7 @@ final class AmbianceView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         layoutPumpkins()
+        layoutSnow()
         if batsPending, bounds.width > 0 { launchBats() }
     }
 
@@ -235,10 +242,13 @@ final class AmbianceView: UIView {
         batLayers = []
         pumpkinEmitter?.removeFromSuperlayer()
         pumpkinEmitter = nil
+        snowEmitter?.removeFromSuperlayer()
+        snowEmitter = nil
         batsPending = false
         guard window != nil, !effects.isEmpty else { return }
         let elapsed = clock()
         if effects.contains(.pumpkins) { addPumpkins() }
+        if effects.contains(.snow) { addSnow() }
         if effects.contains(.bats) {
             batsPending = true
             if bounds.width > 0 { launchBats() }
@@ -246,11 +256,12 @@ final class AmbianceView: UIView {
         // Still in the opening: settle the pumpkins when it ends. (The extra
         // bats end on their own — `launchBats`.)
         let remaining = AmbiancePolicy.introDuration - elapsed
-        if remaining > 0, pumpkinEmitter != nil {
+        if remaining > 0, pumpkinEmitter != nil || snowEmitter != nil {
             calmTask = Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(remaining))
                 guard !Task.isCancelled else { return }
                 self?.layoutPumpkins()
+                self?.layoutSnow()
             }
         }
     }
@@ -309,6 +320,108 @@ final class AmbianceView: UIView {
         emitter.frame = bounds
         emitter.emitterPosition = CGPoint(x: bounds.midX, y: -60)
         emitter.emitterSize = CGSize(width: bounds.width * 1.05, height: 1)
+        emitter.birthRate = widthFactor * Float(AmbiancePolicy.density(elapsed: clock(), isTV: ambianceIsTV))
+        CATransaction.commit()
+    }
+
+    // MARK: Snow
+
+    /// A six-branch crystal, white, drawn once.
+    private static let snowCrystal: CGImage? = {
+        let side: CGFloat = 64
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 2
+        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { ctx in
+            let cg = ctx.cgContext
+            cg.translateBy(x: side / 2, y: side / 2)
+            cg.setStrokeColor(UIColor.white.cgColor)
+            cg.setLineCap(.round)
+            let radius = side * 0.44
+            for branch in 0..<6 {
+                cg.saveGState()
+                cg.rotate(by: .pi / 3 * CGFloat(branch))
+                cg.setLineWidth(2.4)
+                cg.move(to: .zero)
+                cg.addLine(to: CGPoint(x: 0, y: -radius))
+                cg.strokePath()
+                cg.setLineWidth(1.8)
+                for (at, length) in [(0.34, 0.30), (0.56, 0.24), (0.78, 0.15)] as [(CGFloat, CGFloat)] {
+                    for side in [-1.0, 1.0] as [CGFloat] {
+                        cg.move(to: CGPoint(x: 0, y: -radius * at))
+                        cg.addLine(to: CGPoint(x: side * radius * length * 0.87, y: -radius * at - radius * length * 0.5))
+                    }
+                }
+                cg.strokePath()
+                cg.restoreGState()
+            }
+        }.cgImage
+    }()
+
+    /// A flake too close to be in focus: a soft white disc.
+    private static let snowBlur: CGImage? = {
+        let side: CGFloat = 64
+        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { ctx in
+            let colors = [UIColor.white.withAlphaComponent(0.9).cgColor, UIColor.white.withAlphaComponent(0).cgColor] as CFArray
+            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0.15, 1]) else { return }
+            let centre = CGPoint(x: side / 2, y: side / 2)
+            ctx.cgContext.drawRadialGradient(gradient, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: side / 2, options: [])
+        }.cgImage
+    }()
+
+    private func addSnow() {
+        let emitter = CAEmitterLayer()
+        emitter.emitterShape = .line
+        // White snow vanishes on the light surfaces: there it takes a cold
+        // blue-grey, a little more opaque.
+        let onLight = traitCollection.userInterfaceStyle == .light
+        let tint = onLight ? UIColor(red: 0.50, green: 0.62, blue: 0.78, alpha: 1) : UIColor.white
+        func cell(_ image: CGImage?, rate: Float, scale: CGFloat, velocity: CGFloat, alpha: CGFloat) -> CAEmitterCell {
+            let c = CAEmitterCell()
+            c.contents = image
+            c.birthRate = rate
+            c.lifetime = Float(1500 / velocity)     // long enough to cross any screen
+            c.velocity = velocity
+            c.velocityRange = velocity * 0.3
+            c.emissionLongitude = .pi               // DOWN the screen (0 is up)
+            c.emissionRange = .pi / 9               // a little drift either way
+            c.yAcceleration = 3
+            c.spin = 0.25
+            c.spinRange = 0.8
+            c.scale = scale
+            c.scaleRange = scale * 0.45
+            c.color = tint.withAlphaComponent(min(1, alpha + (onLight ? 0.2 : 0))).cgColor
+            c.alphaRange = 0.2
+            return c
+        }
+        switch plane {
+        case .far:
+            // Far away: small sharp crystals, slow, behind the posters.
+            emitter.emitterCells = [
+                cell(Self.snowCrystal, rate: 2.2, scale: 0.10, velocity: 38, alpha: 0.55),
+                cell(Self.snowCrystal, rate: 1.0, scale: 0.16, velocity: 48, alpha: 0.7)
+            ]
+        case .near:
+            // In front of everything: a crystal now and then, and the odd
+            // flake so close that it is out of focus.
+            // (On a light page the soft one reads as a smudge: crystals only.)
+            let crystal = cell(Self.snowCrystal, rate: 0.4, scale: 0.24, velocity: 70, alpha: 0.75)
+            emitter.emitterCells = onLight
+                ? [crystal]
+                : [crystal, cell(Self.snowBlur, rate: 0.25, scale: 0.62, velocity: 95, alpha: 0.3)]
+        }
+        emitter.beginTime = CACurrentMediaTime() - 12   // pre-warmed: already falling
+        layer.addSublayer(emitter)
+        snowEmitter = emitter
+        layoutSnow()
+    }
+
+    private func layoutSnow() {
+        guard let emitter = snowEmitter else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        emitter.frame = bounds
+        emitter.emitterPosition = CGPoint(x: bounds.midX, y: -40)
+        emitter.emitterSize = CGSize(width: bounds.width * 1.1, height: 1)
         emitter.birthRate = widthFactor * Float(AmbiancePolicy.density(elapsed: clock(), isTV: ambianceIsTV))
         CATransaction.commit()
     }
