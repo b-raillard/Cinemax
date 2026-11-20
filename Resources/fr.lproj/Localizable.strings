@@ -1428,6 +1428,7 @@
 "settings.appIcon.halloween" = "Aubergine";
 "settings.appIcon.halloweenPumpkin" = "Citrouille";
 "settings.appIcon.halloweenPotion" = "Potion";
+"settings.appIcon.christmas" = "Noël";
 "settings.appIcon.locked" = "Réservée à JellyGlass Pro";
 "settings.appIcon.error" = "Impossible de changer l'icône";
 "settings.appIcon.caption.current" = "Icône actuelle";
@@ -1438,10 +1439,12 @@
 "settings.appIcon.proBanner.one" = "%d icône de plus avec JellyGlass Pro";
 "settings.appIcon.section.classic" = "Classique";
 "settings.appIcon.section.halloween" = "Halloween";
+"settings.appIcon.section.christmas" = "Noël";
 "settings.appIcon.section.colors" = "Couleurs";
 "settings.appIcon.section.editions" = "Éditions";
 "settings.appIcon.family.classic" = "Icône d'origine";
 "settings.appIcon.family.halloween" = "Halloween";
+"settings.appIcon.family.christmas" = "Noël";
 "settings.appIcon.family.accent" = "Couleur";
 "settings.appIcon.status.available" = "Appuyez pour l'utiliser";
 "settings.debug.forceSeason" = "Forcer « %@ »";

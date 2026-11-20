@@ -22,6 +22,7 @@ ASSETS = ROOT / "Resources/Assets.xcassets"
 DECLINAISONS = ROOT / "design/logo-variantes/declinaisons"
 VARIANTS = {
     "halloween": "halloween_cloche-citrouille_tentacules-potion",
+    "noel": "noel",
     "classique": "classique",
 }
 TV = "App Icon & Top Shelf Image.brandassets"
