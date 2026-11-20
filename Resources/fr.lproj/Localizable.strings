@@ -1419,6 +1419,7 @@
 "settings.seasonal.choice.halloween" = "Halloween";
 "settings.seasonal.choice.halloween.detail" = "Toute l'année";
 "season.christmas.name" = "Sapin de Noël";
+"season.christmas.row" = "Noël en famille";
 "settings.seasonal.choice.christmas" = "Noël";
 "settings.seasonal.choice.christmas.detail" = "Toute l'année";
 "settings.appIcon.title" = "Icône de l'app";

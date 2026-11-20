@@ -71,7 +71,18 @@ enum SeasonalThemeCatalogue {
         ),
         titleFont: SeasonFont(postScriptName: "Fraunces72pt-BlackItalic", fileName: "Fraunces-BlackItalic.ttf"),
         ambiance: [.snow, .focusGlow],
-        row: nil,
+        // « Noël en famille »: TMDb has no Christmas genre, so the row is the
+        // keyword `christmas` (read on TMDb for 34 titles, 2026-11-20: 21 of
+        // the 22 expected ones; `holiday` brings in Thanksgiving and Coco,
+        // `christmas party` Eyes Wide Shut) narrowed to the family genres —
+        // which also keeps Batman Returns and Terrifier out. Genre names in
+        // the three metadata languages the app ships in.
+        row: SeasonRow(
+            titleKey: "season.christmas.row",
+            genreCandidates: ["Family", "Familial", "Familie", "Animation", "Kids", "Enfants", "Kinder"],
+            tagCandidates: ["christmas"],
+            requiresBoth: true
+        ),
         backdrop: nil,
         decor: .firBoughs
     )

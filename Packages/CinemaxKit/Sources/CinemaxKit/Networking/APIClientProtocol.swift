@@ -261,8 +261,10 @@ public protocol LibraryAPI: Sendable {
     /// Newest-first items carrying ANY of `tags` — Jellyfin imports TMDb's
     /// keywords as tags (« halloween », « vampire »). Same filters as
     /// `getItems` (parental rating included), card fields, no count.
+    /// `genres` narrows it: the server ANDs `tags` with `genres` (any ONE of
+    /// them) — « Noël en famille » is `christmas` AND Family / Animation.
     func getTaggedItems(
-        userId: String, tags: [String], includeItemTypes: [BaseItemKind], limit: Int
+        userId: String, tags: [String], genres: [String]?, includeItemTypes: [BaseItemKind], limit: Int
     ) async throws -> [BaseItemDto]
     func getGenres(userId: String, parentId: String?, includeItemTypes: [BaseItemKind]?) async throws -> [String]
     func getUserViews(userId: String) async throws -> [BaseItemDto]

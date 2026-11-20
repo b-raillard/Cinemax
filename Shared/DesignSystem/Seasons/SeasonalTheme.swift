@@ -109,11 +109,18 @@ struct SeasonRow: Sendable, Equatable {
     /// files series under no « Horror » genre — « Mercredi » is « Mystère,
     /// Comédie » — so without them the row was films only.
     let tagCandidates: [String]
+    /// `false` (Halloween): the genre OR the keywords — two queries, merged.
+    /// `true` (« Noël en famille »): a keyword AND one of the genres, in ONE
+    /// query (the server ANDs `tags` with `genres`). The genres then only
+    /// NARROW the keyword: they are not the row's own, so Home keeps their
+    /// genre rows.
+    let requiresBoth: Bool
 
-    init(titleKey: String, genreCandidates: [String], tagCandidates: [String] = []) {
+    init(titleKey: String, genreCandidates: [String], tagCandidates: [String] = [], requiresBoth: Bool = false) {
         self.titleKey = titleKey
         self.genreCandidates = genreCandidates
         self.tagCandidates = tagCandidates
+        self.requiresBoth = requiresBoth
     }
 }
 

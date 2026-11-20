@@ -32,6 +32,36 @@ struct SeasonalHomeRowTests {
         #expect(api.getItemsQueries.contains { $0.genres == ["Horreur"] })
     }
 
+    @Test("« Noël en famille »: the keyword AND the family genres, in one query")
+    func narrowedRow() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Action", "Animation", "Familial"]
+        api.stubbedTaggedItems = [item("klaus"), item("dash", .series)]
+        let vm = HomeViewModel(defaults: defaults)
+        let christmas = SeasonalThemeCatalogue.christmas.row!
+        vm.setSeasonRow(christmas)
+        await vm.refreshSeasonRow(using: appState(api))
+        #expect(vm.seasonRowItems.map(\.id) == ["klaus", "dash"])
+        let queries = api.getItemsQueries.filter { $0.tags != nil }
+        #expect(queries.count == 1)
+        #expect(queries.first?.tags == ["christmas"])
+        #expect(queries.first?.genres == ["Animation", "Familial"])
+        // No genre-only query: the row is not « the family genre's newest ».
+        #expect(!api.getItemsQueries.contains { $0.tags == nil && $0.genres != nil })
+    }
+
+    @Test("« Noël en famille » hides when the server has none of its genres")
+    func narrowedRowWithoutGenres() async {
+        let api = MockAPIClient()
+        api.stubbedGenres = ["Action", "Drame"]
+        api.stubbedTaggedItems = [item("die-hard")]
+        let vm = HomeViewModel(defaults: defaults)
+        vm.setSeasonRow(SeasonalThemeCatalogue.christmas.row)
+        await vm.refreshSeasonRow(using: appState(api))
+        #expect(vm.seasonRowItems.isEmpty)
+        #expect(!api.getItemsQueries.contains { $0.tags != nil })
+    }
+
     @Test("No matching genre hides the row")
     func noMatchingGenreHidesTheRow() async {
         let api = MockAPIClient()

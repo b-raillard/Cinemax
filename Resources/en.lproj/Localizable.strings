@@ -1417,6 +1417,7 @@
 "settings.seasonal.choice.halloween" = "Halloween";
 "settings.seasonal.choice.halloween.detail" = "All year round";
 "season.christmas.name" = "Christmas Tree";
+"season.christmas.row" = "Family Christmas";
 "settings.seasonal.choice.christmas" = "Christmas";
 "settings.seasonal.choice.christmas.detail" = "All year round";
 "settings.appIcon.title" = "App icon";

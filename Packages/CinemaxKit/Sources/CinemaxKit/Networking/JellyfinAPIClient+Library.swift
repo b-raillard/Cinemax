@@ -125,11 +125,11 @@ extension JellyfinAPIClient {
     }
 
     public func getTaggedItems(
-        userId: String, tags: [String], includeItemTypes: [BaseItemKind], limit: Int
+        userId: String, tags: [String], genres: [String]?, includeItemTypes: [BaseItemKind], limit: Int
     ) async throws -> [BaseItemDto] {
         try await queryItems(
             userId: userId, includeItemTypes: includeItemTypes,
-            sortBy: [.dateCreated], sortOrder: [.descending], tags: tags,
+            sortBy: [.dateCreated], sortOrder: [.descending], genres: genres, tags: tags,
             limit: limit, enableTotalRecordCount: false, fieldSet: .card
         ).items
     }
