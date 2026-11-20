@@ -99,7 +99,7 @@ struct SeasonalFrostMaterial: View {
 
     /// The haze is part of the decor's material, like the colours baked
     /// into a rendered image — not a surface or text token.
-    private static let darkHaze = Color(red: 200 / 255, green: 222 / 255, blue: 250 / 255).opacity(0.16)
+    private static let darkHaze = Color(red: 0xCF / 255, green: 0xE2 / 255, blue: 0xF5 / 255).opacity(0.14)   // Bleu givré
     private static let lightHaze = Color(red: 1, green: 1, blue: 1).opacity(0.42)
 
     var body: some View {

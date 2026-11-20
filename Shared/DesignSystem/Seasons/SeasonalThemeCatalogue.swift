@@ -43,49 +43,54 @@ enum SeasonalThemeCatalogue {
 
     /// « Givre » — the artifact « Noël JellyGlass » (theme Givre, chosen by the
     /// owner on 2026-11-20, replacing « Sapin de Noël »): a film watched
-    /// through a frosted window while it snows outside. Midnight blue, ice
-    /// white, engraved serif capitals; frost in the corners and on the heroes'
+    /// through a frosted window while it snows outside. Night blue and frost
+    /// blue, swapping with the mode; engraved serif capitals; frost in the corners and on the heroes'
     /// edges, snow. The window wraps the New Year, to Epiphany.
     static let christmas = SeasonalTheme(
         id: "christmas",
         nameKey: "season.christmas.name",
         window: SeasonWindow(start: MonthDay(month: 12, day: 1), end: MonthDay(month: 1, day: 6)),
+        // TWO colours that swap with the mode (owner, 2026-11-20: « bleu clair
+        // givré et bleu nuit … en alternant les couleurs »): Bleu nuit
+        // #0B1A2E is the night ground and the day's ink and buttons; Bleu
+        // givré #CFE2F5 is the day ground and the night's ink and buttons.
+        // Every other tone is a step of one of the two (13.2:1 between them).
         dark: SeasonPalette(
-            surface: 0x0A1220,                 // Nuit d'hiver
-            surfaceContainerLowest: 0x060C16,
-            surfaceContainerLow: 0x101B2C,
-            surfaceContainer: 0x172437,
-            surfaceContainerHigh: 0x1F2E45,
-            surfaceContainerHighest: 0x283A55,
-            surfaceVariant: 0x283A55,
-            onSurface: 0xEEF4FB,               // Glace
-            onSurfaceVariant: 0xB6C5D8,
-            onSurfaceMuted: 0x97A8BE,
-            outline: 0x6D7E96,                 // strokes only
-            outlineVariant: 0x34455E           // strokes only
+            surface: 0x0B1A2E,                 // Bleu nuit
+            surfaceContainerLowest: 0x07121F,
+            surfaceContainerLow: 0x112238,
+            surfaceContainer: 0x172B44,
+            surfaceContainerHigh: 0x1E3552,
+            surfaceContainerHighest: 0x274162,
+            surfaceVariant: 0x274162,
+            onSurface: 0xCFE2F5,               // Bleu givré
+            onSurfaceVariant: 0xA9C2DD,
+            onSurfaceMuted: 0x93ADCA,
+            outline: 0x5F7896,                 // strokes only
+            outlineVariant: 0x2E4664           // strokes only
         ),
-        // A frosty winter day: an ICE-BLUE ground, never white (owner,
-        // 2026-11-20: « ne le laisse pas blanc »); the frost a whiter veil on it.
+        // Never a white page (owner, 2026-11-20, « ne le laisse pas blanc »).
         light: SeasonPalette(
-            surface: 0xD6E2F0,                 // Bleu glace
-            surfaceContainerLowest: 0xE6EEF7,
-            surfaceContainerLow: 0xCCD9EA,
-            surfaceContainer: 0xC3D2E5,
-            surfaceContainerHigh: 0xB9CADF,
-            surfaceContainerHighest: 0xAEC1D9,
-            surfaceVariant: 0xB9CADF,
-            onSurface: 0x101E34,               // Encre de nuit
-            onSurfaceVariant: 0x31415A,
-            onSurfaceMuted: 0x3C4C65,
-            outline: 0x8596AE,                 // strokes only
-            outlineVariant: 0xA9B9CE           // strokes only
+            surface: 0xCFE2F5,                 // Bleu givré
+            surfaceContainerLowest: 0xE3EFFA,
+            surfaceContainerLow: 0xC4D9EF,
+            surfaceContainer: 0xB9D1EA,
+            surfaceContainerHigh: 0xAEC8E4,
+            surfaceContainerHighest: 0xA2BFDD,
+            surfaceVariant: 0xAEC8E4,
+            onSurface: 0x0B1A2E,               // Bleu nuit
+            onSurfaceVariant: 0x243A57,
+            onSurfaceMuted: 0x30486A,
+            outline: 0x7891B0,                 // strokes only
+            outlineVariant: 0x9CB6D3           // strokes only
         ),
-        // Ice white buttons with a navy label at night, navy ones by day.
+        // The buttons take the OTHER colour: frost on night, night on frost.
         accent: AccentOption.Palette(
-            accentLight: 0x1F3A60, accentDark: 0xCFE1F6,
-            containerLight: 0x1F3A60, containerDark: 0xE6EFFA,
-            dimLight: 0x182E4D, dimDark: 0xA9C6E8,
-            onAccentLight: 0xFFFFFF, onAccentDark: 0x0F1D33
+            accentLight: 0x0B1A2E, accentDark: 0xCFE2F5,
+            containerLight: 0x0B1A2E, containerDark: 0xCFE2F5,
+            dimLight: 0x1B2F4C, dimDark: 0xA9C2DD,
+            onAccentLight: 0xCFE2F5, onAccentDark: 0x0B1A2E,
+            containerLabelLight: 0xCFE2F5, containerLabelDark: 0x0B1A2E
         ),
         titleFont: SeasonFont(
             postScriptName: "CormorantGaramond-Bold", fileName: "CormorantGaramond-Bold.ttf",

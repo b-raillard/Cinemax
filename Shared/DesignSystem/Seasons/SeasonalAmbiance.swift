@@ -365,10 +365,11 @@ final class AmbianceView: UIView {
     private func addSnow() {
         let emitter = CAEmitterLayer()
         emitter.emitterShape = .line
-        // White snow vanishes on the light surfaces: there it takes a cold
-        // blue-grey, a little more opaque.
+        // White snow vanishes on the light surfaces: there it takes a deeper
+        // cold blue, a little more opaque — the frost-blue ground of « Givre »
+        // swallowed the earlier blue-grey.
         let onLight = traitCollection.userInterfaceStyle == .light
-        let tint = onLight ? UIColor(red: 0.50, green: 0.62, blue: 0.78, alpha: 1) : UIColor.white
+        let tint = onLight ? UIColor(red: 0.27, green: 0.41, blue: 0.61, alpha: 1) : UIColor.white
         func cell(_ image: CGImage?, rate: Float, scale: CGFloat, velocity: CGFloat, alpha: CGFloat) -> CAEmitterCell {
             let c = CAEmitterCell()
             c.contents = image
