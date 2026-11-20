@@ -89,6 +89,9 @@ struct SeasonalBackdrop: View {
             if theme?.backdrop == .nightSky {
                 NightSkyRepresentable(dark: colorScheme == .dark, twinkle: motionEnabled && ambianceEnabled)
             }
+            if theme?.backdrop == .winterSky, colorScheme == .light {
+                SeasonalWinterSky()
+            }
             if !effects.isEmpty {
                 AmbianceRepresentable(effects: effects, plane: .far)
             }

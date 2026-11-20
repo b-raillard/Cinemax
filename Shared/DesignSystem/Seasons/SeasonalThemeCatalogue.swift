@@ -70,14 +70,18 @@ enum SeasonalThemeCatalogue {
             outlineVariant: 0x2E4664           // strokes only
         ),
         // Never a white page (owner, 2026-11-20, « ne le laisse pas blanc »).
+        // Panels and cards are SNOW on the frost-blue ground (lighter than
+        // it, not deeper): frosted white glass rather than grey-blue slabs.
+        // `surfaceContainerLowest` is the exception, a step DEEPER: it is a
+        // page ground too (Réglages' landing), which must never turn white.
         light: SeasonPalette(
             surface: 0xCFE2F5,                 // Bleu givré
-            surfaceContainerLowest: 0xE3EFFA,
-            surfaceContainerLow: 0xC4D9EF,
-            surfaceContainer: 0xB9D1EA,
-            surfaceContainerHigh: 0xAEC8E4,
-            surfaceContainerHighest: 0xA2BFDD,
-            surfaceVariant: 0xAEC8E4,
+            surfaceContainerLowest: 0xC6DBF1,
+            surfaceContainerLow: 0xEDF4FC,
+            surfaceContainer: 0xE5EFFA,
+            surfaceContainerHigh: 0xDEEBF8,
+            surfaceContainerHighest: 0xD6E6F6,
+            surfaceVariant: 0xDEEBF8,
             onSurface: 0x0B1A2E,               // Bleu nuit
             onSurfaceVariant: 0x243A57,
             onSurfaceMuted: 0x30486A,
@@ -98,7 +102,7 @@ enum SeasonalThemeCatalogue {
         ),
         ambiance: [.snow, .focusGlow],
         row: nil,
-        backdrop: nil,
+        backdrop: .winterSky,
         decor: .frost
     )
 
