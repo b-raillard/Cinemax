@@ -103,12 +103,17 @@ struct HomeScreen: View {
     /// sits in several rails at once — see `CardZoom`.
     @Namespace private var zoomNamespace
 
-    /// Skeleton during phase-1, and kept up while a phase-1-empty result is
-    /// still filling later phases — the all-empty state must only appear once
-    /// the *entire* load finishes, never as a mid-load flash (genre rows
-    /// populate after the hero/rails).
+    /// Skeleton while there is NOTHING to show yet: the first load, and a
+    /// phase-1-empty result still filling later phases — the all-empty state
+    /// must only appear once the *entire* load finishes, never as a mid-load
+    /// flash (genre rows populate after the hero/rails).
+    ///
+    /// A reload over content already on screen (pull-to-refresh) keeps that
+    /// content and updates it in place: swapping the whole page for the
+    /// skeleton and back made it vanish and jump under the refresh control —
+    /// the owner's screen recording, 2026-11-20.
     private var showsSkeleton: Bool {
-        viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded)
+        isHomeEmpty && (viewModel.isLoading || !viewModel.isFullyLoaded)
     }
 
     var body: some View {
