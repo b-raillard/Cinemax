@@ -258,6 +258,13 @@ final class AppState {
         self.hasServer = true
         self.accessToken = session.accessToken
         self.currentUserId = session.userID
+        // The ACTIVE account's look and cap live in the global keys; its
+        // snapshot is only written when it is left, so it is stale by now.
+        // Refresh it before the root's account observer reads it back
+        // (`AppNavigation.accountDidChange`), or the launch re-applied the look
+        // of the last switch over what the user chose since — light mode
+        // picked, app closed, reopened in dark (owner, 2026-11-21).
+        saveLeavingAccountSettings()
         self.isAuthenticated = true
 
         // The items just read back successfully, so it's safe to upgrade them
@@ -1299,7 +1306,8 @@ final class AppState {
 
     /// Saves the ACTIVE account's settings (age cap, accent, light / dark) under
     /// its key before an exit through the login screen (`beginAddServer`,
-    /// `beginReLogin`, `logout(.sessionExpired)`). `applyActiveServer` saves
+    /// `beginReLogin`, `logout(.sessionExpired)`), and at launch
+    /// (`restoreSession`), where the globals are the truth and the snapshot is not. `applyActiveServer` saves
     /// the account it leaves through `swap`; the login-screen path cannot
     /// (`upsertActiveEntry` swaps from `nil`, the account being already gone),
     /// and an account never saved came back with whatever cap was current —
