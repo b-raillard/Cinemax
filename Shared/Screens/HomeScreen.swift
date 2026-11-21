@@ -720,6 +720,14 @@ struct HomeScreen: View {
             #if os(iOS)
             .refreshable {
                 PlaylistPreviewStore.shared.invalidate()
+                // A Seerr that did not answer at launch is never asked again
+                // until the next foreground: in season, the pull asks it, or
+                // the request row stayed away (recette 2026-11-21, SR-4).
+                // Its own task: `.refreshable` cancels its own soon after the
+                // pull, which would cancel the probe.
+                if activeSeason?.requestRow != nil, !seerrVisible, let seerr {
+                    await Task { await seerr.reload(appState: appState) }.value
+                }
                 reloadSeasonRequests()
                 await viewModel.reload(using: appState)
             }
