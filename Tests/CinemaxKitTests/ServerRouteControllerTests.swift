@@ -519,6 +519,37 @@ struct ServerRouteControllerTests {
 
     // MARK: - Launch ordering
 
+    /// Light / dark, the accent and the cap chosen while an account is ACTIVE
+    /// live in the global keys; its snapshot is only refreshed when it is LEFT.
+    /// The launch then read that stale snapshot back over the user's choice:
+    /// light mode chosen, app closed, reopened in dark (owner, 2026-11-21).
+    @Test func restoreSessionKeepsTheLookChosenSinceTheLastSwitch() async {
+        let keychain = MockKeychain()
+        keychain.savedServers = [entry()]
+        keychain.savedActiveServerId = "E1"
+        keychain.savedServerURL = identity
+        keychain.savedSession = UserSession(userID: "U", username: "Alice", accessToken: "tok-E1", serverID: "S")
+        let defaults = UserDefaults.isolatedForTesting()
+        let key = ServerRegistry.accountKey(serverId: "E1", userId: "U")
+        // Parked when the account was last left: dark, green.
+        AccountSettingsStore.save(AccountSettingsSnapshot(maxContentAge: 0, accentColor: "green", darkMode: true),
+                                  for: key, defaults: defaults)
+        // Chosen since, while active: light, blue.
+        defaults.set(false, forKey: SettingsKey.darkMode)
+        defaults.set("blue", forKey: SettingsKey.accentColor)
+        let app = AppState(apiClient: MockAPIClient(), keychain: keychain)
+        app.settingsDefaults = defaults
+
+        await preservingSharedExtensionSession {
+            await app.restoreSession()
+        }
+
+        #expect(app.activeAccountKey == key)
+        let snapshot = AccountSettingsStore.load(for: key, defaults: defaults)
+        #expect(snapshot?.darkMode == false)
+        #expect(snapshot?.accentColor == "blue")
+    }
+
     /// The launch evaluation is recorded BEFORE `restoreSession` returns, so
     /// the UI's first loads (Home, the views, the socket), which ask right
     /// after, wait for the launch's apply instead of going out on the identity.
