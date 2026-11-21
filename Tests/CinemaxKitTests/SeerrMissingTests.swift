@@ -505,6 +505,27 @@ struct SeerrRequestFlowTests {
         }
     }
 
+    @Test("Seerr not answering is said as such, naming Seerr, and the card stays requestable")
+    func unreachableSaysTheServiceIsDown() async {
+        let bench = await requestBench()
+        bench.stub.enqueue(.failure(URLError(.cannotConnectToHost)))
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        await presenter.submit(
+            .movie(SeerrTitle(kind: .movie, tmdbId: 5, title: "Film")), selection: [],
+            session: bench.session, loc: loc, toasts: toasts)
+        #expect(presenter.badge(for: "movie-5", default: .request) == .request)
+        #expect(toasts.current?.title == loc.localized("seerr.request.failed"))
+        #expect(toasts.current?.message == loc.localized("seerr.request.unreachable"))
+        #expect(toasts.current?.message != loc.localized("error.generic"))
+        for language in ["fr", "en", "de"] {
+            let text = Bundle.localizedBundle(for: language)
+                .localizedString(forKey: "seerr.request.unreachable", value: nil, table: nil)
+            #expect(text != "seerr.request.unreachable", "\(language)")
+            #expect(text.contains("Seerr"), "\(language): \(text)")
+        }
+    }
+
     @Test("after a request, the badge reads the status Seerr answered, not the permissions")
     func badgeFollowsTheCreatedStatus() async {
         // The permissions say « an admin approves »; Seerr approved at once.

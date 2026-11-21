@@ -371,6 +371,17 @@ final class SeerrRequestPresenter {
         }
     }
 
+    /// The toast's second line when a request failed. Seerr not answering is
+    /// said as such — `userFacingMessage` only knows `NSURLError`s, so a
+    /// `SeerrError.unreachable` (the client's own transport mapping) used to
+    /// read « Une erreur est survenue » (recette 21/11, SR-1).
+    static func failureMessage(for error: Error, loc: LocalizationManager) -> String {
+        if case SeerrError.unreachable = error {
+            return loc.localized("seerr.request.unreachable")
+        }
+        return loc.userFacingMessage(for: error)
+    }
+
     private func report(_ outcomes: [Result], loc: LocalizationManager, toasts: ToastCenter) {
         let sent = outcomes.filter { $0.outcome == .sent }
         let duplicates = outcomes.filter { $0.outcome == .duplicate }
@@ -390,7 +401,7 @@ final class SeerrRequestPresenter {
             default:
                 toasts.error(
                     loc.localized("seerr.request.failed"),
-                    message: first.error.map { loc.userFacingMessage(for: $0) })
+                    message: first.error.map { Self.failureMessage(for: $0, loc: loc) })
             }
         } else if !duplicates.isEmpty {
             toasts.info(loc.localized("seerr.request.duplicate"))
