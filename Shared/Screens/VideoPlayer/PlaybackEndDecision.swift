@@ -242,16 +242,17 @@ enum PlaybackRetryPolicy {
     /// and the wake re-resolve reopen, in ms: the position the viewer is held
     /// at (`PlaybackReporter.heldPositionSeconds` — a resume seek not sent yet,
     /// a seek still settling, the last position while the clock is not to be
-    /// trusted), else the further of the clock and the last position reached.
-    /// Never the raw clock alone: a rebuilt media that stalls again before its
-    /// first time tick reads 0 with its resume seek still pending, and a
-    /// second rebuild from that 0 restarted the film from the beginning
-    /// (owner's iPad, 2026-11-21, DirectStream through a Cloudflare tunnel).
-    static func netRebuildFromMs(heldSeconds: Double?, clockMs: Int32, lastKnownMs: Int32) -> Int32 {
+    /// trusted), else the clock. Never the clock FIRST: a rebuilt media that
+    /// stalls again before its first time tick reads 0 with its resume seek
+    /// still pending, and a second rebuild from that 0 restarted the film from
+    /// the beginning (owner's iPad, 2026-11-21, DirectStream through a
+    /// Cloudflare tunnel). Not `lastKnownPositionMs` as a fallback: a user
+    /// seek back to the start that never landed leaves it at the old position.
+    static func netRebuildFromMs(heldSeconds: Double?, clockMs: Int32) -> Int32 {
         if let heldSeconds, heldSeconds.isFinite, heldSeconds > 0 {
             return Int32(min((heldSeconds * 1000).rounded(), Double(Int32.max)))
         }
-        return max(clockMs, lastKnownMs, 0)
+        return max(clockMs, 0)
     }
 }
 

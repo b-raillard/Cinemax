@@ -4743,8 +4743,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private var rebuildPositionMs: Int32 {
         PlaybackRetryPolicy.netRebuildFromMs(
             heldSeconds: pendingResumeSecondsForReport,
-            clockMs: currentMs,
-            lastKnownMs: lastKnownPositionMs
+            clockMs: currentMs
         )
     }
 

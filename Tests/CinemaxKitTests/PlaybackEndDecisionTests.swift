@@ -434,16 +434,16 @@ struct PlaybackRetryPolicyTests {
             endedAtMs: nil, pendingResumeSeconds: 817.302, settlingTargetMs: nil,
             engineClockReliable: true, lastKnownMs: 818_302
         )
-        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: held, clockMs: 0, lastKnownMs: 818_302) == 817_302)
+        #expect(held == 817.302)
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: held, clockMs: 0) == 817_302)
         // A re-anchor seek still settling: its target.
-        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: 507.836, clockMs: 0, lastKnownMs: 0) == 507_836)
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: 507.836, clockMs: 0) == 507_836)
         // Nothing held, clock healthy: the clock.
-        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: nil, clockMs: 1_200_000, lastKnownMs: 1_199_500) == 1_200_000)
-        // Nothing held, clock fallen back to 0: the last position reached.
-        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: nil, clockMs: 0, lastKnownMs: 818_302) == 818_302)
-        // A start at 0 stays at 0.
-        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: nil, clockMs: 0, lastKnownMs: 0) == 0)
-        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: .nan, clockMs: 4_000, lastKnownMs: 0) == 4_000)
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: nil, clockMs: 1_200_000) == 1_200_000)
+        // Nothing held and the clock at 0 (a seek back to the start, rebuilt):
+        // the start, not some older position.
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: nil, clockMs: 0) == 0)
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: .nan, clockMs: 4_000) == 4_000)
     }
 }
 
