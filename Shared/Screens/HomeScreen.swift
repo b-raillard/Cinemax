@@ -109,7 +109,7 @@ struct HomeScreen: View {
         // rows' `onAppear` (see `ContentRevealClock`).
         let skeleton = revealClock.noting(skeletonVisible: showsSkeleton, motionEnabled: motionEffects)
         ZStack {
-            SeasonalBackdrop().ignoresSafeArea()
+            SeasonalBackdrop(cornerDecor: false).ignoresSafeArea()
 
             if skeleton {
                 loadingSkeleton
@@ -124,6 +124,9 @@ struct HomeScreen: View {
                 content
                     .environment(\.contentRevealClock, revealClock)
             }
+
+            // The season's frost, in FRONT of the hero (the backdrop's is off).
+            SeasonalTopDecor().ignoresSafeArea()
         }
         .animation(CinemaMotion.gated(CinemaMotion.skeletonFade, enabled: motionEffects), value: skeleton)
         #if os(iOS)
@@ -923,6 +926,8 @@ struct HomeScreen: View {
                 }
                 .heroBackdropBleed(clearInLightMode: true)
             }
+            // The season's frost on the image's edges, under the text.
+            .overlay { SeasonalHeroFrost() }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
                     let elsewhere = elsewhereEntry(for: item)

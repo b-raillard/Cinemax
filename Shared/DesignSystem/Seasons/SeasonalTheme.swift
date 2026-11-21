@@ -75,16 +75,42 @@ struct SeasonPalette: Sendable, Equatable {
 struct SeasonFont: Sendable, Equatable {
     let postScriptName: String
     let fileName: String
+    /// The hero title in capitals (« Givre »'s engraved caps); `false` keeps
+    /// the title's own case (Halloween's italic « Nosferatu »).
+    var uppercase = false
+    /// Letter spacing of the hero title, as a fraction of its size; `nil`
+    /// keeps the tight −0.5 pt the italic faces were set with.
+    var tracking: CGFloat?
+    /// The face drawn this much larger than the size asked for: Cormorant's
+    /// small x-height read a size below the system black at the same points.
+    var sizeScale: CGFloat = 1
 }
 
 enum AmbianceEffect: String, Sendable, CaseIterable {
     case bats, pumpkins, focusGlow
+    /// Snow crystals: small on the far plane, a few larger ones on the near
+    /// plane. Crystals only — no soft out-of-focus flake.
+    case snow
+}
+
+/// A season's STILL decor: in the corners of the screen (`SeasonalTopDecor`)
+/// and on the heroes' edges (`SeasonalHeroFrost`). Not an effect: nothing
+/// moves, so Reduce Motion leaves it; the « Animations d'ambiance » switch
+/// removes it.
+enum SeasonDecor: Sendable {
+    /// Frost on the window — a cold haze and ice feathers in the corners and
+    /// on the heroes' edges; the texture is rendered by `design/noel/givre.py`.
+    case frost
 }
 
 /// What a season paints BEHIND the browsing screens (`SeasonalBackdrop`).
 enum SeasonBackdrop: Sendable {
     /// Stars (dark mode), a few twinkling, cobwebs in the top corners.
     case nightSky
+    /// A winter sky in LIGHT mode — a pale sun in the top corner, the frost
+    /// blue deepening toward the bottom (`SeasonalWinterSky`).
+    /// Dark mode keeps the flat night ground the owner liked.
+    case winterSky
 }
 
 struct SeasonRow: Sendable, Equatable {
@@ -118,6 +144,7 @@ struct SeasonalTheme: Sendable, Equatable, Identifiable {
     let ambiance: Set<AmbianceEffect>
     let row: SeasonRow?
     let backdrop: SeasonBackdrop?
+    var decor: SeasonDecor?
 }
 
 /// Settings → Appearance (lot C, 2026-10-22): Automatique (the season whose
@@ -129,19 +156,22 @@ struct SeasonalTheme: Sendable, Equatable, Identifiable {
 /// The Debug page's `debug.forcedSeason` beats all three.
 enum SeasonalSetting: String, Sendable, CaseIterable {
     case automatic, off
-    case halloween
+    case halloween, christmas
 
     /// The order of the Réglages choices.
     static let choices: [Self] = allCases
 
-    /// « Automatique » / « Désactivé » / « Halloween ».
+    /// « Automatique » / « Désactivé » / « Halloween » / « Noël ».
     var labelKey: String { "settings.seasonal.choice.\(rawValue)" }
+
+    /// « Toute l'année », under a forced season's name.
+    var detailKey: String { "\(labelKey).detail" }
 
     /// The catalogue season a forced choice names; `nil` for the two others.
     var forcedSeasonID: String? {
         switch self {
         case .automatic, .off: nil
-        case .halloween: rawValue
+        case .halloween, .christmas: rawValue
         }
     }
 

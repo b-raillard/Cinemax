@@ -254,7 +254,7 @@ struct IOSAppearanceDetailView: View {
                 } label: {
                     Text(loc.localized(choice.labelKey))
                     if choice.forcedSeasonID != nil {
-                        Text(loc.localized("settings.seasonal.choice.halloween.detail"))
+                        Text(loc.localized(choice.detailKey))
                     }
                     if choice == selected {
                         Image(systemName: "checkmark")

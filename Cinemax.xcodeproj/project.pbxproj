@@ -13,6 +13,7 @@
 		01058A5E8018344307CEA19B /* SettingsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9025B941E4912A05542646B1 /* SettingsKeys.swift */; };
 		0194BF784229471FC73187A2 /* AdminPlaybackScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54C56CCEB123ABB29AC4D2A8 /* AdminPlaybackScreen.swift */; };
 		01C9E480102E95C10CD5EDBD /* PlaybackEndDecisionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBE2E14250CD6922B3BBC473 /* PlaybackEndDecisionTests.swift */; };
+		01D0F160D67E357BF042E098 /* SeasonalTopDecor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B8EFF9AFF275CAC5A75DBFF /* SeasonalTopDecor.swift */; };
 		01D6AA05C7022D2487810F26 /* SyncPlayLeaveConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C2289CE44A66508B8670627 /* SyncPlayLeaveConfirmation.swift */; };
 		0321F0031546F4B1E715B90F /* SeasonalPaletteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4488B1840E82BB0065E338E1 /* SeasonalPaletteTests.swift */; };
 		036F818EFCE1E0D3FBF91C8B /* SettingsAppearanceView+iOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4368B442E0B7FC8828AB76E /* SettingsAppearanceView+iOS.swift */; };
@@ -32,6 +33,7 @@
 		07CA40C0BCDEEE6BE807AB52 /* ThemeManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7374AE02F868D2D154CF73D5 /* ThemeManagerTests.swift */; };
 		07D40F3147D08E05E2705B7C /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 678E44D384225A39AF7509B2 /* AppState.swift */; };
 		0841F9D7EE3B28EE9B891B8D /* ContentRatingClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8951C243BFBE22A2636F527 /* ContentRatingClassifier.swift */; };
+		0892C3A38592643BD73BAFCB /* CormorantGaramond-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 892DF66CF1F0B44A4FD99743 /* CormorantGaramond-Bold.ttf */; };
 		08D31BB8D66FC0F929D472A3 /* PersonDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD1F1F7CB8C870E4EE07D978 /* PersonDetailScreen.swift */; };
 		09D69F7BEC8C65724E087626 /* NowPlayingInfoController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01EB1E7DC341889FBAB7BE87 /* NowPlayingInfoController.swift */; };
 		0A00CD0A7498CFF8FBB6A0E1 /* SeasonRowLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6146FF8A513FF4E6474A8CC /* SeasonRowLoader.swift */; };
@@ -118,6 +120,7 @@
 		23F08C5E6904A507BF0E2C93 /* PosterPrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD74C7044AE82EE6BA3DDAB0 /* PosterPrefetcher.swift */; };
 		2590035AB6AEC75B266B4C1F /* PlaybackEndDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9AFFAB5E7CBF61850F4909B /* PlaybackEndDecision.swift */; };
 		259651448F09EF35B7C61B8A /* AccountUnlockSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 245AC9290B5C84E45108BE92 /* AccountUnlockSheet.swift */; };
+		25B1BC2AC7F241E4F42228F2 /* CormorantGaramond-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 892DF66CF1F0B44A4FD99743 /* CormorantGaramond-Bold.ttf */; };
 		268B258004F73D3E2701E314 /* FavoritesScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06DF659E53C9DB219FB06A7F /* FavoritesScreen.swift */; };
 		26FE32C915B9FA41BD2760A3 /* AdminCatalogScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67B4D9D3C1CDC4B248270077 /* AdminCatalogScreen.swift */; };
 		275FAAF5843484210BFE3EA1 /* SeerrRequestPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC748A6943207308BBA9C3BF /* SeerrRequestPresenter.swift */; };
@@ -672,6 +675,7 @@
 		C6E0C3AD2F43862B73C2A143 /* SeasonalTypography.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84AB014A3C1C0B27BC4DF487 /* SeasonalTypography.swift */; };
 		C6ECB352E613955A5A110A8E /* LibraryLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCB36F2BA2BA2F32157D2B57 /* LibraryLogicTests.swift */; };
 		C71D58C3EE1FD8D23F042C29 /* PreAuthChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56B5D2636A930296A6BD74ED /* PreAuthChrome.swift */; };
+		C7ECCE33CBA81926D6EB3487 /* SeasonalTopDecor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B8EFF9AFF275CAC5A75DBFF /* SeasonalTopDecor.swift */; };
 		C92B0465DE0CABB0CF8985C9 /* AppIconPickerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AA34FC63B2EA2BD9345DC0B /* AppIconPickerTests.swift */; };
 		C97482DA24D2DFD0355B2D46 /* SeasonalTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C71C62C18C28EFC1BA9F4CBA /* SeasonalTheme.swift */; };
 		CA3B2A0FBED8394AD6453A13 /* CardMenuOptimisticStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF37181D8DDD93D930FE74E7 /* CardMenuOptimisticStateTests.swift */; };
@@ -1115,6 +1119,7 @@
 		78921C2150C2BE34E40FF9A1 /* ProTierViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProTierViews.swift; sourceTree = "<group>"; };
 		78A064C067BC85456FB2FE3A /* AudioTrackPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTrackPolicy.swift; sourceTree = "<group>"; };
 		7A465A5F06A8149C5E3FB68E /* RemotePlaystateRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemotePlaystateRouter.swift; sourceTree = "<group>"; };
+		7B8EFF9AFF275CAC5A75DBFF /* SeasonalTopDecor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonalTopDecor.swift; sourceTree = "<group>"; };
 		7B900079191219FB59520FA9 /* MediaEntityID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaEntityID.swift; sourceTree = "<group>"; };
 		7BE68E13DFB8B379C9120338 /* ServerRouteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRouteController.swift; sourceTree = "<group>"; };
 		7CAB0FA6AFF4B2890CCFB6CA /* PlayerPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerPresentation.swift; sourceTree = "<group>"; };
@@ -1140,6 +1145,7 @@
 		8635A30F9E6F82CEC1D61220 /* PaginatedLoaderInterlockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaginatedLoaderInterlockTests.swift; sourceTree = "<group>"; };
 		87E3960725C47DF87C9D4987 /* VLCEngineLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VLCEngineLogTests.swift; sourceTree = "<group>"; };
 		89294A4325865302AB163A3C /* HeroBackdropImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroBackdropImage.swift; sourceTree = "<group>"; };
+		892DF66CF1F0B44A4FD99743 /* CormorantGaramond-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "CormorantGaramond-Bold.ttf"; sourceTree = "<group>"; };
 		8A3347166C6081B2040BB706 /* AdminScheduledTasksViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminScheduledTasksViewModel.swift; sourceTree = "<group>"; };
 		8AE5FB096BB1BE0581798DFD /* PosterCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PosterCard.swift; sourceTree = "<group>"; };
 		8B34A20D825429EC76C315C5 /* MediaEntityIDTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaEntityIDTests.swift; sourceTree = "<group>"; };
@@ -1537,6 +1543,7 @@
 				BC9B237028DF07917F35B879 /* SeasonalThemeCatalogue.swift */,
 				FE72D408E45F4A44348AE5E8 /* SeasonalThemeController.swift */,
 				756663BDEA8390301E8117E8 /* SeasonalThemePolicy.swift */,
+				7B8EFF9AFF275CAC5A75DBFF /* SeasonalTopDecor.swift */,
 				84AB014A3C1C0B27BC4DF487 /* SeasonalTypography.swift */,
 				9330A1B51ADCA7853DF7FE1A /* SeasonTrait.swift */,
 			);
@@ -1641,6 +1648,7 @@
 		6F2CDA19AD2F7F0090758F26 /* Fonts */ = {
 			isa = PBXGroup;
 			children = (
+				892DF66CF1F0B44A4FD99743 /* CormorantGaramond-Bold.ttf */,
 				6F57A383893FE04A69495009 /* Fraunces-BlackItalic.ttf */,
 			);
 			path = Fonts;
@@ -2406,6 +2414,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				9F7E13CC3312F27A84915032 /* Assets.xcassets in Resources */,
+				0892C3A38592643BD73BAFCB /* CormorantGaramond-Bold.ttf in Resources */,
 				F72DC196CFCA31A325880758 /* Fraunces-BlackItalic.ttf in Resources */,
 				0E311694DD10CE61A29C7E5D /* InfoPlist.strings in Resources */,
 				64406006E2A4AB13FDE38E19 /* Localizable.strings in Resources */,
@@ -2435,6 +2444,7 @@
 			files = (
 				3067F37BBC4A112F223D5B39 /* AppShortcuts.strings in Resources */,
 				2853B78C03BA5522E348B212 /* Assets.xcassets in Resources */,
+				25B1BC2AC7F241E4F42228F2 /* CormorantGaramond-Bold.ttf in Resources */,
 				559D6520F46915A619ACF77B /* Fraunces-BlackItalic.ttf in Resources */,
 				89BD7033117AAC2AD4EF269E /* InfoPlist.strings in Resources */,
 				C394E04E4C329F99F29E70D6 /* Localizable.strings in Resources */,
@@ -2825,6 +2835,7 @@
 				594BFAE0E5378F92C85DE77E /* SeasonalThemeCatalogue.swift in Sources */,
 				9C2C28E25BC0B5FA6C1C4D01 /* SeasonalThemeController.swift in Sources */,
 				870ED1B70E8234C2FDBEAD6E /* SeasonalThemePolicy.swift in Sources */,
+				C7ECCE33CBA81926D6EB3487 /* SeasonalTopDecor.swift in Sources */,
 				E88BC25DD9A4B069B282FC19 /* SeasonalTypography.swift in Sources */,
 				CCA01F1FD9DF944BFDEBD578 /* SeekCoalescer.swift in Sources */,
 				329C2104D5C6F3DEB74B09DB /* SeekMachine.swift in Sources */,
@@ -3255,6 +3266,7 @@
 				19C820C3E43CE5C5F9AA06AB /* SeasonalThemeCatalogue.swift in Sources */,
 				DEF222CC1CE5B8E900EDC7D8 /* SeasonalThemeController.swift in Sources */,
 				0FA139AA6DF7704853CEF41D /* SeasonalThemePolicy.swift in Sources */,
+				01D0F160D67E357BF042E098 /* SeasonalTopDecor.swift in Sources */,
 				C6E0C3AD2F43862B73C2A143 /* SeasonalTypography.swift in Sources */,
 				F9A891C275B494CA3A05BF0C /* SeekCoalescer.swift in Sources */,
 				7C04769DD57EAB5A1B9B7B92 /* SeekMachine.swift in Sources */,

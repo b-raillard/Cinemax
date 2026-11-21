@@ -1416,6 +1416,9 @@
 "settings.seasonal.choice.off" = "Off";
 "settings.seasonal.choice.halloween" = "Halloween";
 "settings.seasonal.choice.halloween.detail" = "All year round";
+"season.christmas.name" = "Frost";
+"settings.seasonal.choice.christmas" = "Frost";
+"settings.seasonal.choice.christmas.detail" = "All year round";
 "settings.appIcon.title" = "App icon";
 "settings.appIcon.classic" = "Classic";
 "settings.appIcon.halloween" = "Aubergine";

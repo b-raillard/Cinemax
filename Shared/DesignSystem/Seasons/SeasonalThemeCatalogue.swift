@@ -41,7 +41,72 @@ enum SeasonalThemeCatalogue {
         backdrop: .nightSky
     )
 
-    static let all: [SeasonalTheme] = [halloween]
+    /// « Givre » — the artifact « Noël JellyGlass » (theme Givre, chosen by the
+    /// owner on 2026-11-20, replacing « Sapin de Noël »): a film watched
+    /// through a frosted window while it snows outside. Night blue and frost
+    /// blue, swapping with the mode; engraved serif capitals; frost in the corners and on the heroes'
+    /// edges, snow. The window wraps the New Year, to Epiphany.
+    static let christmas = SeasonalTheme(
+        id: "christmas",
+        nameKey: "season.christmas.name",
+        window: SeasonWindow(start: MonthDay(month: 12, day: 1), end: MonthDay(month: 1, day: 6)),
+        // TWO colours that swap with the mode (owner, 2026-11-20: « bleu clair
+        // givré et bleu nuit … en alternant les couleurs »): Bleu nuit
+        // #0B1A2E is the night ground and the day's ink and buttons; Bleu
+        // givré #CFE2F5 is the day ground and the night's ink and buttons.
+        // Every other tone is a step of one of the two (13.2:1 between them).
+        dark: SeasonPalette(
+            surface: 0x0B1A2E,                 // Bleu nuit
+            surfaceContainerLowest: 0x07121F,
+            surfaceContainerLow: 0x112238,
+            surfaceContainer: 0x172B44,
+            surfaceContainerHigh: 0x1E3552,
+            surfaceContainerHighest: 0x274162,
+            surfaceVariant: 0x274162,
+            onSurface: 0xCFE2F5,               // Bleu givré
+            onSurfaceVariant: 0xA9C2DD,
+            onSurfaceMuted: 0x93ADCA,
+            outline: 0x5F7896,                 // strokes only
+            outlineVariant: 0x2E4664           // strokes only
+        ),
+        // Never a white page (owner, 2026-11-20, « ne le laisse pas blanc »).
+        // Panels and cards are SNOW on the frost-blue ground (lighter than
+        // it, not deeper): frosted white glass rather than grey-blue slabs.
+        // `surfaceContainerLowest` is the exception, a step DEEPER: it is a
+        // page ground too (Réglages' landing), which must never turn white.
+        light: SeasonPalette(
+            surface: 0xCFE2F5,                 // Bleu givré
+            surfaceContainerLowest: 0xC6DBF1,
+            surfaceContainerLow: 0xEDF4FC,
+            surfaceContainer: 0xE5EFFA,
+            surfaceContainerHigh: 0xDEEBF8,
+            surfaceContainerHighest: 0xD6E6F6,
+            surfaceVariant: 0xDEEBF8,
+            onSurface: 0x0B1A2E,               // Bleu nuit
+            onSurfaceVariant: 0x243A57,
+            onSurfaceMuted: 0x30486A,
+            outline: 0x7891B0,                 // strokes only
+            outlineVariant: 0x9CB6D3           // strokes only
+        ),
+        // The buttons take the OTHER colour: frost on night, night on frost.
+        accent: AccentOption.Palette(
+            accentLight: 0x0B1A2E, accentDark: 0xCFE2F5,
+            containerLight: 0x0B1A2E, containerDark: 0xCFE2F5,
+            dimLight: 0x1B2F4C, dimDark: 0xA9C2DD,
+            onAccentLight: 0xCFE2F5, onAccentDark: 0x0B1A2E,
+            containerLabelLight: 0xCFE2F5, containerLabelDark: 0x0B1A2E
+        ),
+        titleFont: SeasonFont(
+            postScriptName: "CormorantGaramond-Bold", fileName: "CormorantGaramond-Bold.ttf",
+            uppercase: true, tracking: 0.08, sizeScale: 1.2
+        ),
+        ambiance: [.snow, .focusGlow],
+        row: nil,
+        backdrop: .winterSky,
+        decor: .frost
+    )
+
+    static let all: [SeasonalTheme] = [halloween, christmas]
 
     private static let byID: [String: SeasonalTheme] =
         Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })

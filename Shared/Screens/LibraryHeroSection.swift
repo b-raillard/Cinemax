@@ -63,6 +63,8 @@ struct LibraryHeroSection: View {
                 }
                 .heroBackdropBleed(clearInLightMode: true)
             }
+            // The season's frost on the image's edges, under the text.
+            .overlay { SeasonalHeroFrost() }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroContentSpacing) {
                     HStack(spacing: 8) {
