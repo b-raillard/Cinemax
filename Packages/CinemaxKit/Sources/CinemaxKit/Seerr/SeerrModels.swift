@@ -371,10 +371,14 @@ public struct SeerrTitle: Sendable, Equatable, Decodable {
     public let overview: String?
     public let posterPath: String?
     public let mediaInfo: SeerrMediaInfo?
+    /// TMDb genre ids — list results carry them (`genreIds`: search,
+    /// discover); a details payload (`/movie/{id}`) does not: empty there.
+    public let genreIds: [Int]
 
     public init(
         kind: SeerrMediaKind, tmdbId: Int, title: String, year: Int? = nil,
-        overview: String? = nil, posterPath: String? = nil, mediaInfo: SeerrMediaInfo? = nil
+        overview: String? = nil, posterPath: String? = nil, mediaInfo: SeerrMediaInfo? = nil,
+        genreIds: [Int] = []
     ) {
         self.kind = kind
         self.tmdbId = tmdbId
@@ -383,10 +387,11 @@ public struct SeerrTitle: Sendable, Equatable, Decodable {
         self.overview = overview
         self.posterPath = posterPath
         self.mediaInfo = mediaInfo
+        self.genreIds = genreIds
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mediaType, id, title, name, releaseDate, firstAirDate, overview, posterPath, mediaInfo
+        case mediaType, id, title, name, releaseDate, firstAirDate, overview, posterPath, mediaInfo, genreIds
     }
 
     public init(from decoder: Decoder) throws {
@@ -417,6 +422,7 @@ public struct SeerrTitle: Sendable, Equatable, Decodable {
         posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
         // A malformed `mediaInfo` costs the title its status, not its place.
         mediaInfo = try? c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
+        genreIds = (try? c.decodeIfPresent([Int].self, forKey: .genreIds)) ?? []
     }
 }
 

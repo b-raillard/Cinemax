@@ -14,6 +14,9 @@ enum SeasonRowLoader {
     /// server, and the genre alone misses the series (see `SeasonRow`). Each
     /// fails on its own; empty when both do.
     static func items(for row: SeasonRow, limit: Int, userId: String, appState: AppState) async -> [BaseItemDto] {
+        if row.requiresBoth {
+            return await narrowedItems(for: row, limit: limit, userId: userId, appState: appState)
+        }
         async let tagged = taggedItems(tags: row.tagCandidates, limit: limit, userId: userId, appState: appState)
         async let byGenre = genreItems(candidates: row.genreCandidates, limit: limit, userId: userId, appState: appState)
         return SeasonRowMix.merge(tagged: await tagged, genre: await byGenre, limit: limit)
@@ -38,12 +41,28 @@ enum SeasonRowLoader {
         return response.items
     }
 
+    /// A keyword AND one of the genres, one query. No genre of the row on this
+    /// server, no keyword hit or a failure: empty, the row hides.
+    private static func narrowedItems(for row: SeasonRow, limit: Int, userId: String, appState: AppState) async -> [BaseItemDto] {
+        guard !row.tagCandidates.isEmpty,
+              let serverGenres = try? await appState.apiClient.getGenres(userId: userId, includeItemTypes: [.movie, .series])
+        else { return [] }
+        let genres = SeasonRowMatcher.matches(candidates: row.genreCandidates, in: serverGenres)
+        guard !genres.isEmpty,
+              let items = try? await appState.apiClient.getTaggedItems(
+                  userId: userId, tags: row.tagCandidates, genres: genres,
+                  includeItemTypes: [.movie, .series], limit: limit
+              )
+        else { return [] }
+        return SeasonRowMix.merge(tagged: items, genre: [], limit: limit)
+    }
+
     private static func taggedItems(
         tags: [String], limit: Int, userId: String, appState: AppState
     ) async -> [BaseItemDto] {
         guard !tags.isEmpty else { return [] }
         return (try? await appState.apiClient.getTaggedItems(
-            userId: userId, tags: tags, includeItemTypes: [.movie, .series], limit: limit
+            userId: userId, tags: tags, genres: nil, includeItemTypes: [.movie, .series], limit: limit
         )) ?? []
     }
 }

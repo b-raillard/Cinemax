@@ -83,6 +83,16 @@ enum SeasonRowMatcher {
         }
         return nil
     }
+
+    /// The server's spelling of EVERY candidate it carries, in the server's
+    /// order — what a `requiresBoth` row narrows its keyword with.
+    static func matches(candidates: [String], in serverGenres: [String]) -> [String] {
+        func fold(_ s: String) -> String {
+            s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+        }
+        let keys = Set(candidates.map(fold))
+        return serverGenres.filter { keys.contains(fold($0)) }
+    }
 }
 
 enum SeasonRowMix {

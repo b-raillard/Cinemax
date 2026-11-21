@@ -653,13 +653,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func getTaggedItems(
-        userId: String, tags: [String], includeItemTypes: [BaseItemKind], limit: Int
+        userId: String, tags: [String], genres: [String]?, includeItemTypes: [BaseItemKind], limit: Int
     ) async throws -> [BaseItemDto] {
         recordLock.withLock {
             getItemsQueries.append((
                 includeItemTypes: includeItemTypes, sortBy: [.dateCreated],
                 sortOrder: [.descending], isFavorite: nil, limit: limit,
-                enableTotalRecordCount: false, genres: nil,
+                enableTotalRecordCount: false, genres: genres,
                 tags: tags, filters: nil, fieldSet: .card
             ))
         }

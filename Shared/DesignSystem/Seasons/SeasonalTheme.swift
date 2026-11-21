@@ -123,12 +123,33 @@ struct SeasonRow: Sendable, Equatable {
     /// files series under no « Horror » genre — « Mercredi » is « Mystère,
     /// Comédie » — so without them the row was films only.
     let tagCandidates: [String]
+    /// `false` (Halloween): the genre OR the keywords — two queries, merged.
+    /// `true` (« Noël en famille »): a keyword AND one of the genres, in ONE
+    /// query (the server ANDs `tags` with `genres`). The genres then only
+    /// NARROW the keyword: they are not the row's own, so Home keeps their
+    /// genre rows.
+    let requiresBoth: Bool
 
-    init(titleKey: String, genreCandidates: [String], tagCandidates: [String] = []) {
+    init(titleKey: String, genreCandidates: [String], tagCandidates: [String] = [], requiresBoth: Bool = false) {
         self.titleKey = titleKey
         self.genreCandidates = genreCandidates
         self.tagCandidates = tagCandidates
+        self.requiresBoth = requiresBoth
     }
+}
+
+/// A season's SECOND Home row: films the library does not have, offered for
+/// request (« À demander pour Noël »). DATA only — the query is
+/// `SeasonRequests`', the gates are Seerr's (`Shared/Seerr/CLAUDE.md`).
+struct SeasonRequestRow: Sendable, Equatable {
+    let titleKey: String
+    /// The TMDb keyword the films carry (207317 = « christmas »).
+    let keywordId: Int
+    /// TMDb's vote-count floor: without one the newest-first list opens on
+    /// titles with 0 votes.
+    let minimumVotes: Int
+    /// TMDb genre ids left out (27 = Horror: « Terrifier 3 » came 6th).
+    let excludedGenreIds: Set<Int>
 }
 
 struct SeasonalTheme: Sendable, Equatable, Identifiable {
@@ -145,6 +166,8 @@ struct SeasonalTheme: Sendable, Equatable, Identifiable {
     let row: SeasonRow?
     let backdrop: SeasonBackdrop?
     var decor: SeasonDecor?
+    /// `nil` (Halloween): the season offers nothing to request.
+    var requestRow: SeasonRequestRow?
 }
 
 /// Settings → Appearance (lot C, 2026-10-22): Automatique (the season whose

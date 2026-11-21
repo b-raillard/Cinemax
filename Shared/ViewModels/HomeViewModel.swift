@@ -1421,8 +1421,10 @@ final class HomeViewModel {
         // (limit 10) — we bound the fetch, not the number of rows.
         // In season, the season row already shows this genre's newest titles
         // (same query): its genre row would repeat them a few rows down.
+        // (A `requiresBoth` row only narrows a keyword by its genres: it does
+        // not show a genre's newest titles, so every genre row stays.)
         let seasonGenre = seasonRowConfig.flatMap {
-            SeasonRowMatcher.match(candidates: $0.genreCandidates, in: sortedGenres)
+            $0.requiresBoth ? nil : SeasonRowMatcher.match(candidates: $0.genreCandidates, in: sortedGenres)
         }
         let picked = HomeGenrePreferences.effectiveGenres(available: sortedGenres, in: defaults)
             .filter { $0 != seasonGenre }
