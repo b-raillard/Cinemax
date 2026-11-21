@@ -505,7 +505,7 @@ struct SeerrRequestFlowTests {
         }
     }
 
-    @Test("Seerr not answering is said as such, without naming it, and the card stays requestable")
+    @Test("Seerr not answering is said as such, naming Seerr, and the card stays requestable")
     func unreachableSaysTheServiceIsDown() async {
         let bench = await requestBench()
         bench.stub.enqueue(.failure(URLError(.cannotConnectToHost)))
@@ -522,7 +522,7 @@ struct SeerrRequestFlowTests {
             let text = Bundle.localizedBundle(for: language)
                 .localizedString(forKey: "seerr.request.unreachable", value: nil, table: nil)
             #expect(text != "seerr.request.unreachable", "\(language)")
-            #expect(!text.contains("Seerr"), "\(language): \(text)")
+            #expect(text.contains("Seerr"), "\(language): \(text)")
         }
     }
 
