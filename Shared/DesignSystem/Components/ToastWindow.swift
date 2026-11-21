@@ -59,6 +59,17 @@ final class ToastWindowInstallerView: UIView {
         #endif
         overlay.isHidden = false
         toastWindow = overlay
+        #if os(iOS)
+        // The status bar is answered by THIS window (it lies above the app's),
+        // forwarding to the app's top controller — whose answer follows the
+        // app window's style. A switch in Réglages → Apparence re-asks while
+        // the app window still has the OLD style (this window's override lands
+        // first), and nothing asks again once the app window has changed: the
+        // glyphs stayed white over a light app until relaunch. Re-ask then.
+        window?.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak host] (_: UIWindow, _: UITraitCollection) in
+            host?.setNeedsStatusBarAppearanceUpdate()
+        }
+        #endif
     }
 }
 
