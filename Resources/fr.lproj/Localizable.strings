@@ -1712,6 +1712,7 @@
 "seerr.request.forbidden.fix" = "Tes droits ou ton quota ne le permettent pas. Demande à l'admin de vérifier tes droits de demande.";
 "seerr.request.noSeasons" = "Aucune saison à demander";
 "seerr.request.failed" = "La demande n'a pas abouti";
+"seerr.request.unreachable" = "Le service de demandes ne répond pas pour le moment. Réessaie dans un instant.";
 "seerr.request.next.auto" = "Le téléchargement démarre tout de suite.";
 "seerr.request.next.approval" = "L'admin doit d'abord valider ta demande. On te prévient dès qu'elle arrive.";
 "seerr.request.kind.movie" = "Film";
