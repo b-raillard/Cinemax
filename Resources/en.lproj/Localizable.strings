@@ -1710,7 +1710,7 @@
 "seerr.request.forbidden.fix" = "Your permissions or quota do not allow it. Ask the admin to check your request permissions.";
 "seerr.request.noSeasons" = "No season to request";
 "seerr.request.failed" = "The request did not go through";
-"seerr.request.unreachable" = "The request service isn't answering right now. Try again in a moment.";
+"seerr.request.unreachable" = "Seerr isn't answering right now. Try again in a moment.";
 "seerr.request.next.auto" = "The download starts right away.";
 "seerr.request.next.approval" = "The admin has to approve your request; you will be told when it arrives.";
 "seerr.request.kind.movie" = "Movie";

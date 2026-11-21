@@ -1710,7 +1710,7 @@
 "seerr.request.forbidden.fix" = "Deine Berechtigungen oder dein Kontingent erlauben es nicht. Bitte den Admin, deine Anfrageberechtigungen zu prüfen.";
 "seerr.request.noSeasons" = "Keine Staffel zum Anfragen";
 "seerr.request.failed" = "Die Anfrage ist nicht durchgegangen";
-"seerr.request.unreachable" = "Der Anfragedienst antwortet gerade nicht. Versuch es gleich noch einmal.";
+"seerr.request.unreachable" = "Seerr antwortet gerade nicht. Versuch es gleich noch einmal.";
 "seerr.request.next.auto" = "Der Download startet sofort.";
 "seerr.request.next.approval" = "Der Admin muss deine Anfrage freigeben; du wirst benachrichtigt, sobald sie da ist.";
 "seerr.request.kind.movie" = "Film";
