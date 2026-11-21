@@ -1723,6 +1723,7 @@
 "seerr.badge.request" = "Demander";
 "seerr.badge.pending" = "En attente";
 "seerr.badge.processing" = "En préparation";
+"seerr.badge.processing.short" = "Préparation";
 "seerr.badge.declined" = "Refusée";
 "seerr.missing.title" = "Pas encore dans ta bibliothèque";
 "seerr.missing.a11y" = "%@, pas encore dans ta bibliothèque, %@";

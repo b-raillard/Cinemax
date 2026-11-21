@@ -1721,6 +1721,7 @@
 "seerr.badge.request" = "Request";
 "seerr.badge.pending" = "Pending";
 "seerr.badge.processing" = "Preparing";
+"seerr.badge.processing.short" = "Preparing";
 "seerr.badge.declined" = "Declined";
 "seerr.missing.title" = "Not in your library yet";
 "seerr.missing.a11y" = "%@, not in your library yet, %@";

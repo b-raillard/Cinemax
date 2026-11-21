@@ -54,21 +54,13 @@ struct MissingTitleCard: View {
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
-                    Text(badgeLabel)
-                        .font(CinemaFont.label(.medium))
-                        .foregroundStyle(badge == .request ? themeManager.accent : secondaryText)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .padding(.horizontal, posterURL == nil ? 0 : CinemaSpacing.spacing2)
-                        .padding(.vertical, posterURL == nil ? 0 : 5)
-                        .background {
-                            // Over a poster the badge takes its own pill: on the
-                            // veil alone « Demander » read 1.5–3.7:1 (UX-01).
-                            if posterURL != nil {
-                                Capsule().fill(CinemaColor.surfaceContainerLowest.opacity(Self.badgePillOpacity))
-                            }
-                        }
-                        .layoutPriority(1)
+                    // A short label rather than a truncated one: « En préparati… »
+                    // on a phone card (recette 2026-11-21, SR-2).
+                    ViewThatFits(in: .horizontal) {
+                        badgeText(badgeLabel)
+                        badgeText(badge.shortLabel(loc))
+                    }
+                    .layoutPriority(1)
                 }
                 .padding(CinemaSpacing.spacing3)
             }
@@ -97,6 +89,23 @@ struct MissingTitleCard: View {
     }
 
     private var badgeLabel: String { badge.label(loc) }
+
+    private func badgeText(_ text: String) -> some View {
+        Text(text)
+            .font(CinemaFont.label(.medium))
+            .foregroundStyle(badge == .request ? themeManager.accent : secondaryText)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, posterURL == nil ? 0 : CinemaSpacing.spacing2)
+            .padding(.vertical, posterURL == nil ? 0 : 5)
+            .background {
+                // Over a poster the badge takes its own pill: on the
+                // veil alone « Demander » read 1.5–3.7:1 (UX-01).
+                if posterURL != nil {
+                    Capsule().fill(CinemaColor.surfaceContainerLowest.opacity(Self.badgePillOpacity))
+                }
+            }
+    }
 }
 
 /// A missing title as the tappable card of a list mixing films and series —
@@ -147,6 +156,13 @@ extension SeerrBadge {
         case .processing: loc.localized("seerr.badge.processing")
         case .declined: loc.localized("seerr.badge.declined")
         }
+    }
+
+    /// The label when the full one does not fit the card — only « En
+    /// préparation » has a shorter form; VoiceOver keeps the full one.
+    @MainActor
+    func shortLabel(_ loc: LocalizationManager) -> String {
+        self == .processing ? loc.localized("seerr.badge.processing.short") : label(loc)
     }
 }
 
