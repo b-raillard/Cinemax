@@ -4,11 +4,18 @@ import CinemaxKit
 /// « À demander pour Noël » — a season's films the library does not have,
 /// offered for request. Pure: who sees the row, what is asked, what is kept.
 enum SeasonRequests {
-    /// How many cards the Home row draws; its « Tout voir » pages on.
-    static let rowLimit = 16
-    /// Pages asked in a row while each brings no NEW card (all horror, all
-    /// owned, all seen): without it a page filtered to nothing would leave no
-    /// card to appear, so the grid's load-more would never fire again.
+    /// How many cards the Home row draws — and how many the FIRST pass reads
+    /// pages for: a library that already holds most of the season's films
+    /// keeps a handful per page of 20 (5 on the owner's server, 2026-11-21:
+    /// « mets-en au moins 20 »). Its « Tout voir » pages on.
+    static let rowLimit = 20
+    /// Pages the first pass may read to fill the row (120 films before the
+    /// filter): bounded, so a library holding nearly everything still answers.
+    static let maxPagesFirstPass = 6
+    /// Pages a later pass (the grid's load-more) asks in a row while each
+    /// brings no NEW card (all horror, all owned, all seen): without it a page
+    /// filtered to nothing would leave no card to appear, so the grid's
+    /// load-more would never fire again.
     static let maxPagesPerPass = 3
 
     /// The row to load and draw, or `nil`: the resolved season has one, the
@@ -134,8 +141,10 @@ final class SeasonRequestsModel {
         for task in titleTasks { await task.value }
     }
 
-    /// Reads pages until one brings a new card, the list ends, or
-    /// `maxPagesPerPass` were asked. A failure ends the pass: the first one
+    /// Reads pages until the row is full (`rowLimit` cards, first pass) or a
+    /// page brought a new card (load-more), the list ends, or the pass's page
+    /// budget is spent (`maxPagesFirstPass` / `maxPagesPerPass`). Each page's
+    /// cards are published as they land. A failure ends the pass: the first one
     /// leaves the row absent, a later one leaves the grid as it is (the next
     /// card to appear asks again — at once `.hidden` while Seerr is down).
     private func readPages(pass: Int, isFirst: Bool) async {
@@ -149,7 +158,10 @@ final class SeasonRequestsModel {
         // A refresh: the cards on screen stay until the first answer.
         var replaces = isFirst && !titles.isEmpty
         var asked = 0
-        while asked < SeasonRequests.maxPagesPerPass, hasMore {
+        let budget = isFirst ? SeasonRequests.maxPagesFirstPass : SeasonRequests.maxPagesPerPass
+        // The first pass fills the row; a load-more stops at its first new card.
+        let wanted = isFirst ? SeasonRequests.rowLimit : titles.count + 1
+        while asked < budget, hasMore {
             let page = nextPage
             let discovery = SeasonRequests.discovery(for: row, page: page, today: today())
             let answer = await seerr.loadSection(deadline: deadline) { client, credential in
@@ -176,7 +188,7 @@ final class SeasonRequestsModel {
             guard !fresh.isEmpty else { continue }
             titles.append(contentsOf: fresh)
             localize(fresh, seerr: seerr, pass: pass)
-            break
+            if titles.count >= wanted { break }
         }
         isLoadingMore = false
     }
