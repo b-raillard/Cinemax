@@ -5,15 +5,23 @@ import CinemaxKit
 /// item. A single large `film` SF Symbol centered on `surfaceContainerLow`, with
 /// a soft accent radial wash from the top-trailing corner. Designed to sit
 /// underneath `CinemaGradient.heroOverlay` (the bottom fade keeps title/buttons
-/// legible — same visual contract as a real backdrop).
+/// legible — same visual contract as a real backdrop). A season whose light
+/// mode stands on a winter sky (« Givre ») paints that sky here instead: its
+/// `surfaceContainerLow` is snow, and a hero of snow read as a white page
+/// (recette 2026-11-21, C2).
 struct BackdropFallbackView: View {
     @Environment(ThemeManager.self) private var themeManager
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.seasonID) private var seasonID
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                CinemaColor.surfaceContainerLow
+                if colorScheme == .light, SeasonalThemeCatalogue.theme(id: seasonID)?.backdrop == .winterSky {
+                    SeasonalWinterSky()
+                } else {
+                    CinemaColor.surfaceContainerLow
+                }
 
                 RadialGradient(
                     colors: [themeManager.accent.opacity(accentOpacity), .clear],
