@@ -1211,7 +1211,7 @@ struct SeasonRequestRowTests {
     @Test("First page: filtered, then each card takes the app-language title and poster")
     func firstPageIsLocalised() async {
         let bench = await requestBench()
-        bench.stub.enqueue(page([film(1, genres: [27]), film(2, status: 5), film(3, status: 2)], totalPages: 4))
+        bench.stub.enqueue(page([film(1, genres: [27]), film(2, status: 5), film(3, status: 2)], totalPages: 1))
         bench.stub.enqueue(details(3))
         let model = model(bench.session)
         model.load(row)
@@ -1231,19 +1231,20 @@ struct SeasonRequestRowTests {
     @Test("Paging: a page that brings no card asks the next; the last page ends it; ids never repeat")
     func paging() async {
         let bench = await requestBench()
-        bench.session.rememberTitle(.init(title: "FR 1", posterPath: nil), kind: .movie, tmdbId: 1)
-        bench.session.rememberTitle(.init(title: "FR 9", posterPath: nil), kind: .movie, tmdbId: 9)
+        for id in [1, 9] {
+            bench.session.rememberTitle(.init(title: "FR \(id)", posterPath: nil), kind: .movie, tmdbId: id)
+        }
+        // The first pass reads on to fill the row: page 2 holds horror and a
+        // film already listed, page 3 a new one, and it is the last.
         bench.stub.enqueue(page([film(1)], totalPages: 3))
+        bench.stub.enqueue(page([film(8, genres: [27]), film(1)], totalPages: 3))
+        bench.stub.enqueue(page([film(9)], totalPages: 3))
         let model = model(bench.session)
         model.load(row)
         await model.settle()
-        // Page 2 holds horror and a film already listed; page 3 a new one.
-        bench.stub.enqueue(page([film(8, genres: [27]), film(1)], totalPages: 3))
-        bench.stub.enqueue(page([film(9)], totalPages: 3))
-        model.loadMoreIfNeeded(onAppearOf: "movie-1")
-        await model.settle()
         #expect(model.titles(for: bench.session.snapshot()).map(\.title.title) == ["FR 1", "FR 9"])
         #expect(!model.isLoadingMore)
+        // Past the last page the grid asks nothing more.
         let sent = bench.stub.requests.count
         model.loadMoreIfNeeded(onAppearOf: "movie-9")
         await model.settle()
@@ -1253,6 +1254,49 @@ struct SeasonRequestRowTests {
                 .queryItems?.first { $0.name == "page" }?.value
         }
         #expect(pages == ["1", "2", "3"])
+    }
+
+    @Test("The first pass fills the row to 20 across pages, then stops; the grid's load-more goes one page further")
+    func firstPassFillsTheRow() async {
+        let bench = await requestBench()
+        for id in 1...40 {
+            bench.session.rememberTitle(.init(title: "FR \(id)", posterPath: nil), kind: .movie, tmdbId: id)
+        }
+        // A library that holds most of the season: 8 new films per page of 20.
+        func ownedPage(_ ids: ClosedRange<Int>, owned: Int) -> StubSeerrTransport.Reply {
+            page(ids.map { film($0) } + (0..<owned).map { film(1_000 + $0 * 7 + ids.lowerBound, status: 5) }, totalPages: 9)
+        }
+        bench.stub.enqueue(ownedPage(1...8, owned: 12))
+        bench.stub.enqueue(ownedPage(9...16, owned: 12))
+        bench.stub.enqueue(ownedPage(17...24, owned: 12))
+        let model = model(bench.session)
+        model.load(row)
+        await model.settle()
+        #expect(SeasonRequests.rowLimit == 20)
+        #expect(model.titles(for: bench.session.snapshot()).map(\.title.tmdbId) == Array(1...24))
+        // Three pages read for the row, never a fourth.
+        #expect(bench.stub.requests.dropFirst(2).count == 3)
+        // The grid: ONE more page, at its first new card.
+        bench.stub.enqueue(ownedPage(25...32, owned: 12))
+        model.loadMoreIfNeeded(onAppearOf: "movie-24")
+        await model.settle()
+        #expect(model.titles(for: bench.session.snapshot()).count == 32)
+        #expect(bench.stub.requests.dropFirst(2).count == 4)
+    }
+
+    @Test("The first pass gives up after its page budget, with what it found")
+    func firstPassBudget() async {
+        let bench = await requestBench()
+        bench.session.rememberTitle(.init(title: "FR 1", posterPath: nil), kind: .movie, tmdbId: 1)
+        bench.stub.enqueue(page([film(1)], totalPages: 50))
+        for index in 1..<SeasonRequests.maxPagesFirstPass {
+            bench.stub.enqueue(page([film(500 + index, status: 5)], totalPages: 50))
+        }
+        let model = model(bench.session)
+        model.load(row)
+        await model.settle()
+        #expect(model.titles(for: bench.session.snapshot()).map(\.title.tmdbId) == [1])
+        #expect(bench.stub.requests.dropFirst(2).count == SeasonRequests.maxPagesFirstPass)
     }
 
     @Test("A refresh keeps the cards until the new page lands, and for good when it fails")
