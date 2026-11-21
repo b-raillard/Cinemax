@@ -423,6 +423,28 @@ struct PlaybackRetryPolicyTests {
         #expect(PlaybackRetryPolicy.rebuildFromMs(lastKnownPositionMs: 0, startTime: 1834.5) == 1_834_500)
         #expect(PlaybackRetryPolicy.rebuildFromMs(lastKnownPositionMs: 800, startTime: nil) == 0)
     }
+
+    /// iPad du propriétaire, 21/11 : reconstruction à 817 s, le nouveau média
+    /// s'ouvre puis se fige avant son premier tic — horloge à 0, saut de
+    /// reprise jamais parti — et l'image figée reconstruisait « @ 0s » : le
+    /// film repartait du début.
+    @Test("a rebuild net reopens at the held position, never at a clock still reading 0")
+    func netRebuildPosition() {
+        let held = PlaybackReporter.heldPositionSeconds(
+            endedAtMs: nil, pendingResumeSeconds: 817.302, settlingTargetMs: nil,
+            engineClockReliable: true, lastKnownMs: 818_302
+        )
+        #expect(held == 817.302)
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: held, clockMs: 0) == 817_302)
+        // A re-anchor seek still settling: its target.
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: 507.836, clockMs: 0) == 507_836)
+        // Nothing held, clock healthy: the clock.
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: nil, clockMs: 1_200_000) == 1_200_000)
+        // Nothing held and the clock at 0 (a seek back to the start, rebuilt):
+        // the start, not some older position.
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: nil, clockMs: 0) == 0)
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: .nan, clockMs: 4_000) == 4_000)
+    }
 }
 
 /// La position jugée à l'arrêt. Mesuré le 2026-09-27 (« Le Rouge et le Noir »

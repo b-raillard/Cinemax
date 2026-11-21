@@ -1337,7 +1337,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             DiagnosticsUploader.send(reason: clockMoved ? "picture-stall" : "playback-freeze", engine: "vlc")
             // Surfacing: a refused negotiation otherwise left a frozen picture
             // under an endless spinner, with no alert (M6-07).
-            _ = reResolveAndResume(from: currentMs, surfacingFailure: true)
+            _ = reResolveAndResume(from: rebuildPositionMs, surfacingFailure: true)
         }
     }
 
@@ -1426,7 +1426,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // Before the rebuild, which resets the counters the document describes.
         DiagnosticsUploader.send(reason: "feed-stall-relay", engine: "vlc")
         StreamTransportPolicy.shared.noteDirectPlaybackFailed()
-        if !rebuildSpendingRecovery(from: currentMs) {
+        if !rebuildSpendingRecovery(from: rebuildPositionMs) {
             logger.error("feed-stall relay failover refused (no recovery left, or a rebuild is running)")
             giveUpAfterSpentRecovery("feed-stall-relay")
         }
@@ -1457,7 +1457,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // this line is otherwise written where nobody can read it, and the
         // re-anchor is what resets the counters it describes.
         DiagnosticsUploader.send(reason: "feed-stall", engine: "vlc")
-        seeks.engineSeek(max(0, currentMs - 1000))
+        // From the held position, not the clock: on a rebuilt media whose
+        // resume seek has not left, the clock reads 0, and that 0 — now the
+        // settling target — was what the escalation's rebuild then took.
+        seeks.engineSeek(max(0, rebuildPositionMs - 1000))
         scheduleFeedReanchorWatchdog(readBytesAtReanchor: stats?.readBytes)
     }
 
@@ -1481,7 +1484,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 feed-stall re-anchor did not restore the feed \
                 (read=\(now, privacy: .public)) — rebuilding
                 """)
-            if !self.rebuildSpendingRecovery(from: self.currentMs) {
+            if !self.rebuildSpendingRecovery(from: self.rebuildPositionMs) {
                 logger.error("feed-stall escalation refused (no recovery left, or a rebuild is running)")
                 self.giveUpAfterSpentRecovery("feed-stall-escalation")
             }
@@ -4734,6 +4737,16 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         )
     }
 
+    /// Where a rebuild net, a feed re-anchor and the wake path take the
+    /// viewer back to — the reports' held position, never the raw clock (see
+    /// `PlaybackRetryPolicy.netRebuildFromMs`).
+    private var rebuildPositionMs: Int32 {
+        PlaybackRetryPolicy.netRebuildFromMs(
+            heldSeconds: pendingResumeSecondsForReport,
+            clockMs: currentMs
+        )
+    }
+
     /// Repaints presence, the waiting overlay and any arrival/departure line.
     /// Driven by the controller's `onSessionChanged`, so it covers joining and
     /// leaving mid-playback as well as the initial state.
@@ -5958,7 +5971,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         switch player.state {
         case .playing, .paused, .buffering, .opening:
             didBackgroundWhilePlaying = true
-            positionAtBackgroundMs = currentMs
+            positionAtBackgroundMs = rebuildPositionMs
             backgroundedAt = Date()
         default:
             didBackgroundWhilePlaying = false
