@@ -1178,7 +1178,7 @@ struct SeasonRequestRowTests {
         #expect(SeasonalThemeCatalogue.halloween.requestRow == nil)
         let christmas = SeasonalThemeCatalogue.christmas.requestRow
         #expect(christmas?.keywordId == 207_317)
-        #expect(christmas?.minimumVotes == 300)
+        #expect(christmas?.minimumVotes == 50)
         #expect(christmas?.excludedGenreIds == [27])
         #expect(christmas?.titleKey == "season.christmas.requestRow")
     }
