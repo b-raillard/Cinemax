@@ -30,15 +30,19 @@ public struct SeerrKeywordDiscovery: Sendable, Equatable {
         self.page = page
     }
 
-    /// NEVER a `language` item: on this route Seerr reads it as the films'
+    /// `language` is ALWAYS `all`: on this route Seerr reads it as the films'
     /// ORIGINAL language (measured on 3.5.1, 2026-11-20: `language=fr` turned
-    /// 198 Christmas films into the 8 shot in French).
+    /// 198 Christmas films into the 8 shot in French), and left out it falls
+    /// back to the server's « Discover language » setting — `fr` on the
+    /// owner's Seerr (3.5.2, 2026-11-22): 8 films, 5 not owned, against 199
+    /// with `all`. The app's language never goes here.
     public var queryItems: [URLQueryItem] {
         [
             URLQueryItem(name: "keywords", value: String(keywordId)),
             URLQueryItem(name: "sortBy", value: "primary_release_date.desc"),
             URLQueryItem(name: "primaryReleaseDateLte", value: releasedOnOrBefore),
             URLQueryItem(name: "voteCountGte", value: String(minimumVotes)),
+            URLQueryItem(name: "language", value: "all"),
             URLQueryItem(name: "page", value: String(max(1, page)))
         ]
     }
