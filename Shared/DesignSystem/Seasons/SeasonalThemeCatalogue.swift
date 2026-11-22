@@ -115,13 +115,16 @@ enum SeasonalThemeCatalogue {
         ),
         backdrop: .winterSky,
         decor: .frost,
-        // « À demander pour Noël »: the same TMDb keyword, asked of Seerr
-        // (measured on the bench, 2026-11-20: 198 films with the vote floor,
-        // opening on Our Little Secret, That Christmas, Dear Santa).
+        // « À demander pour Noël »: the same TMDb keyword, asked of Seerr.
+        // Vote floor 50, not 300 (owner 2026-11-22, « pas de films de Noël
+        // depuis 2024 »): a Christmas film is a few weeks old when its season
+        // comes, and none of 2025 reached 300 votes (best: 289) — 50 opens on
+        // the November 2026 releases. Older films under 100 votes sit far down
+        // the list, which is newest first.
         requestRow: SeasonRequestRow(
             titleKey: "season.christmas.requestRow",
             keywordId: 207_317,
-            minimumVotes: 300,
+            minimumVotes: 50,
             excludedGenreIds: [27]
         )
     )
