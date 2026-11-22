@@ -719,9 +719,12 @@ struct HomeScreen: View {
                 // until the next foreground: in season, the pull asks it, or
                 // the request row stayed away (recette 2026-11-21, SR-4).
                 // Its own task: `.refreshable` cancels its own soon after the
-                // pull, which would cancel the probe.
+                // pull, which would cancel the probe. NOT awaited: a Seerr
+                // that does not answer held the pull for its whole timeout
+                // before Home even started (owner, 2026-11-22). Coming back,
+                // it moves `seasonRowsKey`, whose `onChange` loads the row.
                 if activeSeason?.requestRow != nil, !seerrVisible, let seerr {
-                    await Task { await seerr.reload(appState: appState) }.value
+                    Task { await seerr.reload(appState: appState) }
                 }
                 reloadSeasonRequests()
                 await viewModel.reload(using: appState)
