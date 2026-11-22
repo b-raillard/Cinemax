@@ -4194,6 +4194,33 @@ struct SeerrPerformanceTests {
         #expect(await search(session) == .loaded([]))
     }
 
+    @Test("a network change asks again a Seerr that did not answer, and only that one")
+    func networkChangeAsksADownSeerrAgain() async {
+        let transport = RoutedSeerrTransport([
+            "/settings/public": [settingsReply, .failure(URLError(.timedOut)), settingsReply],
+            "/auth/me": [userReply(), userReply()],
+            "/search": [searchReply],
+        ])
+        let storage = MockKeychain()
+        storage.saveSeerrSessions(["S1|A": bound("abc")])
+        let (app, _) = signedIn()
+        let session = makeSession(transport, storage: storage, following: app)
+        await session.reload(appState: app)
+
+        // Answering: a network change asks it nothing.
+        let answered = transport.requests.count
+        await session.networkChanged(appState: app)
+        #expect(transport.requests.count == answered)
+
+        await session.reload(appState: app)
+        #expect(session.isDown)
+
+        // Down (Wi-Fi → 4G with a LAN address, say): asked again at once.
+        await session.networkChanged(appState: app)
+        #expect(!session.isDown)
+        #expect(await search(session) == .loaded([]))
+    }
+
     @Test("an explicit call that is answered ends the wait too")
     func anAnsweredCallClearsDown() async throws {
         let transport = RoutedSeerrTransport([
