@@ -132,6 +132,16 @@ extension SeerrClient {
         return details.title
     }
 
+    /// The request fiche's details (cast, runtime, rating, trailer, services):
+    /// the same `/movie/{id}` or `/tv/{id}`, read whole, in the app's language.
+    public func titleDetails(
+        kind: SeerrMediaKind, tmdbId: Int, _ credential: SeerrCredential
+    ) async throws -> SeerrTitleDetails {
+        try await get(
+            kind == .movie ? "/movie/\(tmdbId)" : "/tv/\(tmdbId)", query: [], auth: .credential(credential),
+            localized: true)
+    }
+
     public func tv(tmdbId: Int, _ credential: SeerrCredential) async throws -> SeerrTVDetails {
         try await get("/tv/\(tmdbId)", query: [], auth: .credential(credential), localized: true)
     }

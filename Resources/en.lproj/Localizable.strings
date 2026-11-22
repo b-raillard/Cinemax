@@ -1755,6 +1755,21 @@
 "seerr.searchPrompt.body" = "Your server uses Seerr for requests. Sign in once with your Jellyfin account: nothing to type.";
 "seerr.searchPrompt.later" = "Later";
 "seerr.request.seasonsUnavailable" = "Couldn't load the seasons";
+
+// Request fiche (mini-fiche B, 2026-11-22)
+"seerr.fiche.close" = "Close";
+"seerr.fiche.infos" = "Details";
+"seerr.fiche.directedBy" = "Director";
+"seerr.fiche.createdBy" = "Created by";
+"seerr.fiche.release" = "Release";
+"seerr.fiche.firstAired" = "First aired";
+"seerr.fiche.runtime" = "Runtime";
+"seerr.fiche.episodeRuntime" = "Episode length";
+"seerr.fiche.originalLanguage" = "Original language";
+"seerr.fiche.originalTitle" = "Original title";
+"seerr.fiche.streaming" = "Also on";
+"seerr.fiche.votes" = "TMDb · %@ votes";
+"seerr.fiche.votes.one" = "TMDb · %@ vote";
 "seerr.settings.section.myRequests" = "My requests";
 "seerr.myRequests.empty" = "No requests yet";
 "seerr.myRequests.titleUnavailable" = "Title unavailable";

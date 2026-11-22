@@ -80,12 +80,26 @@ extension SeerrSession {
 enum SeerrImages {
     /// Seerr's image proxy (sub-path kept) when `cacheImages`, TMDb otherwise.
     static func posterURL(path: String?, seerrBase: URL, cacheImages: Bool) -> URL? {
+        url(path: path, size: "w300", seerrBase: seerrBase, cacheImages: cacheImages)
+    }
+
+    /// The request fiche's hero (TMDb's 1280 px backdrop).
+    static func backdropURL(path: String?, seerrBase: URL, cacheImages: Bool) -> URL? {
+        url(path: path, size: "w1280", seerrBase: seerrBase, cacheImages: cacheImages)
+    }
+
+    /// A cast member's portrait (the 80 pt `CastCircle`, @3x).
+    static func profileURL(path: String?, seerrBase: URL, cacheImages: Bool) -> URL? {
+        url(path: path, size: "w185", seerrBase: seerrBase, cacheImages: cacheImages)
+    }
+
+    private static func url(path: String?, size: String, seerrBase: URL, cacheImages: Bool) -> URL? {
         guard let path, !path.isEmpty else { return nil }
         let suffix = path.hasPrefix("/") ? path : "/" + path
         if cacheImages {
-            return SeerrAddress.endpoint("/imageproxy/tmdb/t/p/w300" + suffix, on: seerrBase)
+            return SeerrAddress.endpoint("/imageproxy/tmdb/t/p/\(size)" + suffix, on: seerrBase)
         }
-        return URL(string: "https://image.tmdb.org/t/p/w300" + suffix)
+        return URL(string: "https://image.tmdb.org/t/p/\(size)" + suffix)
     }
 }
 
