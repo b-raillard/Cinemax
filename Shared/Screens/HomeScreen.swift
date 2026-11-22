@@ -341,6 +341,8 @@ struct HomeScreen: View {
         Task {
             prefetcher.reset()
             await viewModel.reload(using: appState)
+            // `reload` returns after phase 1; the genre rows' posters too.
+            await viewModel.reloadTask?.value
             prefetchCardImages()
         }
     }
