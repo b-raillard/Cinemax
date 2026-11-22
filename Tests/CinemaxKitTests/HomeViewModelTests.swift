@@ -160,8 +160,34 @@ struct HomeViewModelTests {
 
         api.activeSessionsError = URLError(.timedOut)
         await vm.reload(using: appState)
+        await vm.reloadTask?.value
 
         #expect(vm.activeSessions.map(\.id) == ["s-lea"])
+    }
+
+    @Test("A reload returns once the top rails are back, phase 2 still filling in")
+    func reloadReturnsAfterPhaseOne() async {
+        let (api, appState) = makeLiveRowFixture()
+        let vm = HomeViewModel(defaults: .isolatedForTesting())
+        await vm.load(using: appState)
+        #expect(vm.activeSessions.map(\.id) == ["s-lea"], "pré-condition")
+
+        api.stubbedResumeItems = [makeItem(name: "Inception")]
+        api.stubbedActiveSessions[0].id = "s-lea-2"
+        let gate = TestLatch()
+        api.activeSessionsGate = gate
+        // The pull's spinner: it must not wait for « En direct » (held open).
+        await vm.reload(using: appState)
+
+        #expect(vm.resumeItems.map(\.name) == ["Inception"])
+        #expect(!vm.isLoading)
+        #expect(!vm.isFullyLoaded)
+        #expect(vm.activeSessions.map(\.id) == ["s-lea"])
+
+        gate.open()
+        await vm.reloadTask?.value
+        #expect(vm.isFullyLoaded)
+        #expect(vm.activeSessions.map(\.id) == ["s-lea-2"])
     }
 
     @Test("A reload survives the cancellation of the task that asked for it")
@@ -174,6 +200,7 @@ struct HomeViewModelTests {
         let refresh = Task { @MainActor in await vm.reload(using: appState) }
         refresh.cancel()
         await refresh.value
+        await vm.reloadTask?.value
 
         #expect(vm.activeSessions.map(\.id) == ["s-lea-2"])
     }

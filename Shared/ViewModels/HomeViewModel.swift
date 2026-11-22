@@ -396,16 +396,57 @@ final class HomeViewModel {
     /// for pull-to-refresh and `.cinemaxShouldRefreshCatalogue` — bypasses the
     /// `hasLoaded` guard.
     ///
-    /// Runs on a task of its OWN, awaited: a pull-to-refresh's task is
-    /// cancelled by SwiftUI about 10 ms after it starts (measured on the
-    /// simulator, 2026-11-20 — every request then failed « annulé », on `main`
-    /// as on the theme branches), so a load run inside it fetched nothing.
-    /// The spinner still waits for the end.
+    /// Runs on a task of its OWN: a pull-to-refresh's task is cancelled by
+    /// SwiftUI about 10 ms after it starts (measured on the simulator,
+    /// 2026-11-20 — every request then failed « annulé », on `main` as on the
+    /// theme branches), so a load run inside it fetched nothing.
+    ///
+    /// Returns once PHASE 1 has landed (hero + the top rails — `isLoading`
+    /// back to false), not at the end of the load: awaiting the whole of it
+    /// kept the spinner up through the genre fan-out, « En direct », « Parce
+    /// que vous avez vu » and the episode-nav fetches — seconds behind a
+    /// tunnel (owner, 2026-11-22). The rest keeps filling in below, as on a
+    /// first load; `reloadTask` is that load, for the tests.
     ///
     /// No pre-clear of « En direct » either: the row stays as it is until its
     /// own fresh answer, like every other row of a refresh.
     func reload(using appState: AppState) async {
-        await Task { await self.load(using: appState) }.value
+        let gate = PhaseOneGate()
+        phaseOneGate = gate
+        let task = Task {
+            await self.load(using: appState)
+            gate.open()
+        }
+        reloadTask = task
+        await gate.wait()
+    }
+
+    /// The load the last `reload` started — awaited by tests that check what
+    /// phase 2 left behind.
+    @ObservationIgnored private(set) var reloadTask: Task<Void, Never>?
+    /// Opened when the current load's phase 1 lands (or the load ends).
+    @ObservationIgnored private var phaseOneGate: PhaseOneGate?
+
+    /// Main-actor one-shot: `wait()` returns once `open()` has been called.
+    @MainActor private final class PhaseOneGate {
+        private var isOpen = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        func open() {
+            guard !isOpen else { return }
+            isOpen = true
+            waiters.forEach { $0.resume() }
+            waiters = []
+        }
+        func wait() async {
+            guard !isOpen else { return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+    }
+
+    /// Phase 1 of the CURRENT load is on screen: a waiting `reload` returns.
+    private func phaseOneLanded() {
+        phaseOneGate?.open()
+        phaseOneGate = nil
     }
 
     /// Internal (not private) so `HomeViewModelTests` can drive it directly
@@ -656,6 +697,7 @@ final class HomeViewModel {
             loadFailure = firstError ?? URLError(.unknown)
             isLoading = false
             isFullyLoaded = true
+            phaseOneLanded()
             return
         }
         loadFailure = nil
@@ -665,6 +707,8 @@ final class HomeViewModel {
         // in below off their own `@Observable` slices (the nav maps only gate the
         // in-player prev/next buttons — nothing on the initial paint).
         isLoading = false
+        // …and a pull-to-refresh lets go of its spinner here.
+        phaseOneLanded()
 
         // Genre rows + active sessions depend on nothing from the episode-nav
         // phase below — run them concurrently with the navigation builds (each

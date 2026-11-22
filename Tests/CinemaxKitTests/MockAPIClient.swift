@@ -283,8 +283,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     /// Every `getActiveSessions` call's `controllableByUserId`, in order —
     /// `nil` entries are the unfiltered (admin) shape.
     private(set) var activeSessionsQueries: [String?] = []
+    /// Holds `getActiveSessions` open until opened — keeps Home's phase 2 in
+    /// flight (« En direct ») so a test can see a reload return before it.
+    var activeSessionsGate: TestLatch?
+
     func getActiveSessions(activeWithinSeconds: Int, controllableByUserId: String?) async throws -> [SessionInfoDto] {
         recordLock.withLock { activeSessionsQueries.append(controllableByUserId) }
+        if let activeSessionsGate { await activeSessionsGate.wait() }
         if shouldThrow { throw stubbedError }
         if let error = recordLock.withLock({ activeSessionsError }) { throw error }
         return stubbedActiveSessions
