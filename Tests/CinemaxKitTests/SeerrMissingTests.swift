@@ -1172,14 +1172,14 @@ struct SeasonRequestRowTests {
         #expect(SeasonRequests.row(season: nil, rowSwitch: true, seerrVisible: true) == nil)
     }
 
-    @Test("The query: keyword, newest first, released by today, the vote floor, the page — never a language")
+    @Test("The query: keyword, newest first, released by today, the vote floor, every original language, the page")
     func query() {
         let items = SeasonRequests.discovery(for: row, page: 3, today: "2026-11-20").queryItems
-        #expect(items.map(\.name) == ["keywords", "sortBy", "primaryReleaseDateLte", "voteCountGte", "page"])
-        #expect(items.map(\.value) == ["207317", "primary_release_date.desc", "2026-11-20", "300", "3"])
+        #expect(items.map(\.name) == ["keywords", "sortBy", "primaryReleaseDateLte", "voteCountGte", "language", "page"])
+        #expect(items.map(\.value) == ["207317", "primary_release_date.desc", "2026-11-20", "300", "all", "3"])
     }
 
-    @Test("The client sends no `language` on discover, whatever the app's language")
+    @Test("Discover sends `language=all`, never the app's language")
     func noLanguageOnDiscover() async throws {
         let stub = StubSeerrTransport([page([], totalPages: 1)])
         let client = SeerrClient(baseURL: URL(string: "http://192.168.1.20:5055")!, languageCode: "fr", transport: stub)
@@ -1187,9 +1187,9 @@ struct SeasonRequestRowTests {
             SeasonRequests.discovery(for: row, page: 1, today: "2026-11-20"), .session(cookie: "abc"))
         let url = try #require(stub.requests.first?.url)
         #expect(url.path == "/api/v1/discover/movies")
-        let names = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.map(\.name) ?? []
-        #expect(!names.contains("language"))
-        #expect(names.contains("keywords"))
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(items.filter { $0.name == "language" }.map(\.value) == ["all"])
+        #expect(items.contains { $0.name == "keywords" })
     }
 
     @Test("Kept: films, no excluded genre, not in the library; a requested one keeps its badge")
