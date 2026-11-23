@@ -242,24 +242,17 @@ extension SeerrRequestSheet {
 
     // MARK: Loading
 
-    /// One read per opening, never automatic (`isAutomatic: false`: a fiche
-    /// the user opened asks even a Seerr that just failed). A failure, the
-    /// deadline or an account change leave `details` nil.
+    /// One read per opening (`SeerrRequestFiche.loadDetails`); a failure,
+    /// the deadline or an account change leave `details` nil.
     func loadFicheDetails() async {
         guard details == nil, let title = leadTitle else { return }
-        let kind = title.kind
-        let tmdbId = title.tmdbId
-        let answer = await session.loadSection(isAutomatic: false) { client, credential in
-            [try await client.titleDetails(kind: kind, tmdbId: tmdbId, credential)]
-        }
-        if case .loaded(let found)? = answer, let first = found.first {
-            details = first
+        if let found = await SeerrRequestFiche.loadDetails(of: title, session: session) {
+            details = found
         }
     }
 
     private func ficheImageURL(_ path: String?, _ build: (String?, URL, Bool) -> URL?) -> URL? {
-        guard let base = session.client?.baseURL else { return nil }
-        return build(path, base, session.publicSettings?.cacheImages ?? false)
+        SeerrRequestFiche.imageURL(path, build, session: session)
     }
 }
 

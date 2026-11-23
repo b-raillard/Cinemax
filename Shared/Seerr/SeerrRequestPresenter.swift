@@ -427,28 +427,31 @@ struct SeerrRequestPresentation: ViewModifier {
 
     func body(content: Content) -> some View {
         #if os(tvOS)
-        content.confirmationDialog(
-            dialogTitle,
-            isPresented: Binding(get: { presenter.draft(for: host) != nil }, set: { if !$0 { presenter.draft = nil } }),
-            titleVisibility: .visible,
-            presenting: presenter.draft(for: host)
-        ) { draft in
-            let partial = session.publicSettings?.partialRequestsEnabled ?? true
-            let selection = SeerrRequestPresenter.effectiveSelection(
-                draft, draft.defaultSelection(partial: partial), partial: partial)
-            Button(SeerrRequestPresenter.actionTitle(for: draft, selection: selection, loc: loc)) {
-                Task { await presenter.submit(draft, selection: selection, session: session, loc: loc, toasts: toasts) }
-            }
-            // A season pill / card preselects its own season: with nothing to
-            // tick on tvOS, the others are one more button (« Demander les
-            // saisons 4 à 6 »).
-            if case .series(_, let seasons, _) = draft, selection != Set(seasons) {
-                Button(SeerrRequestPresenter.seasonsActionTitle(seasons, loc: loc)) {
-                    Task { await presenter.submit(draft, selection: Set(seasons), session: session, loc: loc, toasts: toasts) }
+        // A film or a series opens the full-screen fiche (owner's choice
+        // TV-1, 2026-11-23); a saga's « Demander les N » keeps the dialog.
+        content
+            .confirmationDialog(
+                dialogTitle,
+                isPresented: Binding(get: { filmsDraft != nil }, set: { if !$0 { presenter.draft = nil } }),
+                titleVisibility: .visible,
+                presenting: filmsDraft
+            ) { draft in
+                let selection = SeerrRequestPresenter.effectiveSelection(
+                    draft, draft.defaultSelection(partial: true), partial: true)
+                Button(SeerrRequestPresenter.actionTitle(for: draft, selection: selection, loc: loc)) {
+                    Task { await presenter.submit(draft, selection: selection, session: session, loc: loc, toasts: toasts) }
                 }
+                Button(loc.localized("action.cancel"), role: .cancel) {}
             }
-            Button(loc.localized("action.cancel"), role: .cancel) {}
-        }
+            .fullScreenCover(item: Binding(get: { ficheDraft }, set: { if $0 == nil { presenter.draft = nil } })) { draft in
+                SeerrRequestTVFiche(draft: draft)
+                    .environment(appState)
+                    .environment(themeManager)
+                    .environment(loc)
+                    .environment(toasts)
+                    .environment(session)
+                    .environment(presenter)
+            }
         #else
         content.sheet(item: Binding(get: { presenter.draft(for: host) }, set: { presenter.draft = $0 })) { draft in
             SeerrRequestSheet(draft: draft)
@@ -463,12 +466,20 @@ struct SeerrRequestPresentation: ViewModifier {
     }
 
     #if os(tvOS)
+    private var filmsDraft: SeerrRequestDraft? {
+        guard let draft = presenter.draft(for: host), case .films = draft else { return nil }
+        return draft
+    }
+
+    private var ficheDraft: SeerrRequestDraft? {
+        guard let draft = presenter.draft(for: host) else { return nil }
+        if case .films = draft { return nil }
+        return draft
+    }
+
     private var dialogTitle: String {
-        switch presenter.draft {
-        case .movie(let title), .series(let title, _, _): title.title
-        case .films(let titles): loc.counted("seerr.request.films.header", titles.count)
-        case nil: ""
-        }
+        guard case .films(let titles)? = filmsDraft else { return "" }
+        return loc.counted("seerr.request.films.header", titles.count)
     }
     #endif
 }

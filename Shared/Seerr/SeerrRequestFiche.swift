@@ -91,6 +91,32 @@ enum SeerrRequestFiche {
         return Array(kept.prefix(3))
     }
 
+    /// The fiche's one read per opening — the title's `/movie` or `/tv` whole —,
+    /// shared by the iOS sheet and the tvOS fiche. Never automatic
+    /// (`isAutomatic: false`: a fiche the user opened asks even a Seerr that
+    /// just failed). A failure, the deadline or an account change answer nil,
+    /// and the fiche then shows what the card knew.
+    @MainActor
+    static func loadDetails(of title: SeerrTitle, session: SeerrSession) async -> SeerrTitleDetails? {
+        let kind = title.kind
+        let tmdbId = title.tmdbId
+        let answer = await session.loadSection(isAutomatic: false) { client, credential in
+            [try await client.titleDetails(kind: kind, tmdbId: tmdbId, credential)]
+        }
+        if case .loaded(let found)? = answer { return found.first }
+        return nil
+    }
+
+    /// A TMDb image path through `SeerrImages` (Seerr's proxy when it caches
+    /// images), nil without a signed-in Seerr.
+    @MainActor
+    static func imageURL(
+        _ path: String?, _ build: (String?, URL, Bool) -> URL?, session: SeerrSession
+    ) -> URL? {
+        guard let base = session.client?.baseURL else { return nil }
+        return build(path, base, session.publicSettings?.cacheImages ?? false)
+    }
+
     /// `yyyy-MM-dd`, read in UTC — the day TMDb gives, whatever the time zone.
     nonisolated static func releaseDate(_ text: String?) -> Date? {
         guard let text, text.count == 10 else { return nil }
