@@ -163,7 +163,7 @@ struct SeerrRequestTVFiche: View {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             CinemaButton(
                 title: SeerrRequestPresenter.actionTitle(for: draft, selection: effective, loc: loc),
-                style: .accent, icon: "plus", isLoading: sending
+                style: .accent, isLoading: sending
             ) { send() }
             // A set width: `fixedSize` let the title shrink (« Demander la
             // saison 1 » smaller than « Demander ce film », simulator).
