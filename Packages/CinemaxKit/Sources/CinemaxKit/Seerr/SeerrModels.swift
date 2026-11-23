@@ -59,13 +59,16 @@ public struct SeerrPublicSettings: Sendable, Equatable, Decodable {
     public let partialRequestsEnabled: Bool
     public let enableSpecialEpisodes: Bool
     public let cacheImages: Bool
+    /// « Streaming region » (Paramètres → Général), ISO 3166-1; `nil` when
+    /// the admin left it on « all regions » (empty string on the wire).
+    public let streamingRegion: String?
 
     public var isJellyfin: Bool { mediaServerType == 2 }
 
     public init(
         mediaServerType: Int, mediaServerLogin: Bool = true, newPlexLogin: Bool = false,
         partialRequestsEnabled: Bool = true, enableSpecialEpisodes: Bool = false,
-        cacheImages: Bool = false
+        cacheImages: Bool = false, streamingRegion: String? = nil
     ) {
         self.mediaServerType = mediaServerType
         self.mediaServerLogin = mediaServerLogin
@@ -73,11 +76,12 @@ public struct SeerrPublicSettings: Sendable, Equatable, Decodable {
         self.partialRequestsEnabled = partialRequestsEnabled
         self.enableSpecialEpisodes = enableSpecialEpisodes
         self.cacheImages = cacheImages
+        self.streamingRegion = streamingRegion
     }
 
     private enum CodingKeys: String, CodingKey {
         case mediaServerType, mediaServerLogin, newPlexLogin
-        case partialRequestsEnabled, enableSpecialEpisodes, cacheImages
+        case partialRequestsEnabled, enableSpecialEpisodes, cacheImages, streamingRegion
     }
 
     public init(from decoder: Decoder) throws {
@@ -88,6 +92,8 @@ public struct SeerrPublicSettings: Sendable, Equatable, Decodable {
         partialRequestsEnabled = try c.decodeIfPresent(Bool.self, forKey: .partialRequestsEnabled) ?? true
         enableSpecialEpisodes = try c.decodeIfPresent(Bool.self, forKey: .enableSpecialEpisodes) ?? false
         cacheImages = try c.decodeIfPresent(Bool.self, forKey: .cacheImages) ?? false
+        let region = (try? c.decodeIfPresent(String.self, forKey: .streamingRegion))
+        streamingRegion = region.flatMap { $0.isEmpty ? nil : $0.uppercased() }
     }
 }
 

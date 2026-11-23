@@ -479,15 +479,20 @@ struct SeerrRequestPresentation: ViewModifier {
 struct SeerrRequestSheet: View {
     let draft: SeerrRequestDraft
 
-    @Environment(\.dismiss) private var dismiss
-    @Environment(ThemeManager.self) private var themeManager
-    @Environment(LocalizationManager.self) private var loc
+    // Internal, not private: the film / series mini-fiche is drawn by an
+    // extension in `Views/SeerrRequestFicheView.swift`.
+    @Environment(\.dismiss) var dismiss
+    @Environment(ThemeManager.self) var themeManager
+    @Environment(LocalizationManager.self) var loc
     @Environment(ToastCenter.self) private var toasts
-    @Environment(SeerrSession.self) private var session
+    @Environment(SeerrSession.self) var session
     @Environment(SeerrRequestPresenter.self) private var presenter
 
     @State private var selection: Set<Int>
-    @State private var sending = false
+    @State var sending = false
+    /// The fiche's `/movie` or `/tv` read whole; nil until it answered (and
+    /// for good when it did not — the fiche then shows what the card knew).
+    @State var details: SeerrTitleDetails?
 
     init(draft: SeerrRequestDraft) {
         self.draft = draft
@@ -495,6 +500,16 @@ struct SeerrRequestSheet: View {
     }
 
     var body: some View {
+        // A film or a series gets the mini-fiche (owner's choice B,
+        // 2026-11-22); a saga's « Demander les N » keeps the list of ticks.
+        if case .films = draft {
+            listBody
+        } else {
+            ficheBody
+        }
+    }
+
+    private var listBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
@@ -521,17 +536,17 @@ struct SeerrRequestSheet: View {
     }
 
     /// The ticks are hidden without partial requests: everything goes.
-    private var effective: Set<Int> {
+    var effective: Set<Int> {
         SeerrRequestPresenter.effectiveSelection(
             draft, selection, partial: session.publicSettings?.partialRequestsEnabled ?? true)
     }
 
-    private var canSend: Bool {
+    var canSend: Bool {
         if case .movie = draft { return !sending }
         return !effective.isEmpty && !sending
     }
 
-    private var leadTitle: SeerrTitle? {
+    var leadTitle: SeerrTitle? {
         switch draft {
         case .movie(let title), .series(let title, _, _): title
         case .films(let titles): titles.first
@@ -587,7 +602,7 @@ struct SeerrRequestSheet: View {
     }
 
     @ViewBuilder
-    private var choices: some View {
+    var choices: some View {
         switch draft {
         case .movie:
             EmptyView()
@@ -632,7 +647,7 @@ struct SeerrRequestSheet: View {
     }
 
     @ViewBuilder
-    private var nextStep: some View {
+    var nextStep: some View {
         if case .connected(let user) = session.connection {
             let kind = leadTitle?.kind ?? .movie
             Text(loc.localized(SeerrRequestPresenter.nextStepKey(permissions: user.permissions, kind: kind)))
@@ -641,7 +656,7 @@ struct SeerrRequestSheet: View {
         }
     }
 
-    private func send() {
+    func send() {
         sending = true
         let chosen = effective
         Task {
