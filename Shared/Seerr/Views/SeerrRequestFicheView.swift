@@ -32,6 +32,10 @@ extension SeerrRequestSheet {
         .background(CinemaColor.surface.ignoresSafeArea())
         .overlay(alignment: .topLeading) { ficheCloseButton }
         .presentationDetents([.large])
+        // iPad: the tall page sheet, not the small centred form sheet — that
+        // one floated mid-screen over the search, its edges lost in the dark
+        // page around it (owner, 2026-11-23). iPhone: unchanged.
+        .presentationSizing(.page)
         .presentationDragIndicator(.visible)
         .task(id: draft.id) { await loadFicheDetails() }
     }
