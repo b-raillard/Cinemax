@@ -124,11 +124,17 @@ struct VideoPlayerView: View {
 
         do {
             let bitrate = render4K ? 120_000_000 : 20_000_000
+            // The account's track choices, merged in while the stream
+            // negotiates (bounded) — the player reads the device's copy.
+            async let tracksSynced: Void = TrackPreferenceSync.pull(
+                api: appState.apiClient, userId: userId, store: TrackPreferenceStore(defaults: .standard)
+            )
             let info: PlaybackInfo
             if !forceNativeAVPlayer {
                 // Default online path: VLC DirectPlays the raw file (no server
                 // transcode → no freeze, 4K/HEVC/Dolby Vision preserved).
                 let vlcInfo = try await negotiate(userId: userId, bitrate: bitrate, engine: .vlc)
+                await tracksSynced
                 guard !Task.isCancelled else {
                     abandonNegotiation(vlcInfo)
                     return
@@ -152,6 +158,7 @@ struct VideoPlayerView: View {
                 return
             } else {
                 info = try await negotiate(userId: userId, bitrate: bitrate, engine: .native)
+                await tracksSynced
                 guard !Task.isCancelled else {
                     abandonNegotiation(info)
                     return

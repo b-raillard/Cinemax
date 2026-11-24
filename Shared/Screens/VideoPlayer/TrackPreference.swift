@@ -88,18 +88,31 @@ enum TrackPreferencePolicy {
     }
 }
 
-/// One `UserDefaults` entry (`player.trackPreferences`) holding every
-/// title's choice, keyed by account AND title (the series id for an episode,
-/// the item id for a film) — a shared Apple TV holds several accounts.
-/// Bounded: past `limit` titles the oldest choice goes.
+/// The device's copy (`player.trackPreferences` in `UserDefaults`), read at
+/// every opening so the player never waits on the network: every title's
+/// choice keyed by account AND title (the series id for an episode, the item
+/// id for a film) — a shared Apple TV holds several accounts. The account's
+/// copy on the server (`TrackPreferenceSync`) is merged into it before each
+/// playback and receives every pick. Bounded per account: past `limit`
+/// titles the oldest choice goes.
 struct TrackPreferenceStore {
     static let key = "player.trackPreferences"
-    static let limit = 200
+    static let limit = 500
 
     let defaults: UserDefaults
 
     func preference(userId: String, titleId: String) -> TrackPreference? {
         all()[Self.entryKey(userId: userId, titleId: titleId)]
+    }
+
+    /// Every title of one account, keyed by title id.
+    func entries(userId: String) -> [String: TrackPreference] {
+        let prefix = userId + "/"
+        var result: [String: TrackPreference] = [:]
+        for (key, value) in all() where key.hasPrefix(prefix) {
+            result[String(key.dropFirst(prefix.count))] = value
+        }
+        return result
     }
 
     func recordAudio(_ audio: TrackPreference.Audio, userId: String, titleId: String, now: Date = .now) {
@@ -108,6 +121,16 @@ struct TrackPreferenceStore {
 
     func recordSubtitle(_ subtitle: TrackPreference.Subtitle, userId: String, titleId: String, now: Date = .now) {
         update(userId: userId, titleId: titleId, now: now) { $0.subtitle = subtitle }
+    }
+
+    /// Takes in the account's copy from the server: per title, the newer
+    /// choice wins (`TrackPreferenceSync.merged`).
+    func absorb(_ remote: [String: TrackPreference], userId: String) {
+        let merged = TrackPreferenceSync.merged(entries(userId: userId), remote, limit: Self.limit)
+        guard merged != entries(userId: userId) else { return }
+        var all = all().filter { !$0.key.hasPrefix(userId + "/") }
+        for (titleId, value) in merged { all[Self.entryKey(userId: userId, titleId: titleId)] = value }
+        save(all)
     }
 
     private func update(
@@ -119,10 +142,16 @@ struct TrackPreferenceStore {
         change(&entry)
         entry.updatedAt = now
         entries[key] = entry
-        if entries.count > Self.limit {
-            let oldest = entries.sorted { $0.value.updatedAt < $1.value.updatedAt }.prefix(entries.count - Self.limit)
+        let prefix = userId + "/"
+        let mine = entries.filter { $0.key.hasPrefix(prefix) }
+        if mine.count > Self.limit {
+            let oldest = mine.sorted { $0.value.updatedAt < $1.value.updatedAt }.prefix(mine.count - Self.limit)
             for (stale, _) in oldest { entries[stale] = nil }
         }
+        save(entries)
+    }
+
+    private func save(_ entries: [String: TrackPreference]) {
         guard let data = try? JSONEncoder().encode(entries) else { return }
         defaults.set(data, forKey: Self.key)
     }
@@ -135,4 +164,97 @@ struct TrackPreferenceStore {
     }
 
     private static func entryKey(userId: String, titleId: String) -> String { "\(userId)/\(titleId)" }
+}
+
+/// The account's copy of the choices, so the iPhone, the iPad and the Apple TV
+/// signed in to one account share them: the DisplayPreferences entity
+/// `jellyglass-tracks` (client `jellyglass`), one JSON value
+/// `[titleId: TrackPreference]` under `titles`. Its own entity, like
+/// `NextUpHiddenList`'s: a write replaces the whole entity.
+///
+/// Never on the path of a frame: the player reads the device's copy.
+/// `pull` runs beside the stream negotiation (bounded by `pullTimeout`) and
+/// merges the account's copy in; `push` follows every pick. Both merge per
+/// title, newer wins, so two devices writing close together keep both
+/// titles — a same-title race keeps the later pick. A failed read or write
+/// changes nothing: the device's copy plays on, and the next push carries it.
+@MainActor
+enum TrackPreferenceSync {
+    nonisolated static let preferencesId = "jellyglass-tracks"
+    nonisolated static let client = "jellyglass"
+    nonisolated static let preferenceKey = "titles"
+    nonisolated static let pullTimeout: Duration = .seconds(2)
+
+    /// Pushes queued behind one another: each is a read-modify-write.
+    private static var pushTail: Task<Void, Never>?
+
+    /// Merges the account's copy into the device's; gives up after
+    /// `pullTimeout` (the device's copy then decides this opening).
+    static func pull(api: any UserPreferencesAPI, userId: String, store: TrackPreferenceStore) async {
+        let remote = await withTaskGroup(of: [String: TrackPreference]?.self) { group in
+            group.addTask {
+                guard let dto = try? await api.getDisplayPreferences(
+                    id: preferencesId, client: client, userId: userId
+                ) else { return nil }
+                return decode(dto.customPrefs?[preferenceKey])
+            }
+            group.addTask {
+                try? await Task.sleep(for: pullTimeout)
+                return nil
+            }
+            let first = (await group.next()).flatMap { $0 }
+            group.cancelAll()
+            return first
+        }
+        if let remote { store.absorb(remote, userId: userId) }
+    }
+
+    /// Writes the device's copy of this account into the account's, after
+    /// reading it back (another device may have written since).
+    static func push(api: any UserPreferencesAPI, userId: String, store: TrackPreferenceStore) {
+        let previous = pushTail
+        pushTail = Task { @MainActor in
+            await previous?.value
+            guard let dto = try? await api.getDisplayPreferences(
+                id: preferencesId, client: client, userId: userId
+            ) else { return }
+            let remote = decode(dto.customPrefs?[preferenceKey])
+            let merged = merged(store.entries(userId: userId), remote, limit: TrackPreferenceStore.limit)
+            store.absorb(merged, userId: userId)
+            guard merged != remote, let value = encode(merged) else { return }
+            var next = dto
+            var prefs = next.customPrefs ?? [:]
+            prefs[preferenceKey] = value
+            next.customPrefs = prefs
+            next.id = preferencesId
+            next.client = client
+            try? await api.updateDisplayPreferences(next, id: preferencesId, client: client, userId: userId)
+        }
+    }
+
+    /// Per title, the newer `updatedAt` wins; past `limit` the oldest go.
+    nonisolated static func merged(
+        _ local: [String: TrackPreference], _ remote: [String: TrackPreference], limit: Int
+    ) -> [String: TrackPreference] {
+        var result = remote
+        for (titleId, mine) in local where (result[titleId]?.updatedAt ?? .distantPast) < mine.updatedAt {
+            result[titleId] = mine
+        }
+        guard result.count > limit else { return result }
+        let kept = result.sorted { $0.value.updatedAt > $1.value.updatedAt }.prefix(limit)
+        return Dictionary(uniqueKeysWithValues: kept.map { ($0.key, $0.value) })
+    }
+
+    /// Anything unreadable is an empty copy, never an error.
+    nonisolated static func decode(_ value: String?) -> [String: TrackPreference] {
+        guard let data = value?.data(using: .utf8),
+              let entries = try? JSONDecoder().decode([String: TrackPreference].self, from: data)
+        else { return [:] }
+        return entries
+    }
+
+    nonisolated static func encode(_ entries: [String: TrackPreference]) -> String? {
+        guard let data = try? JSONEncoder().encode(entries) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
 }

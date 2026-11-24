@@ -93,4 +93,53 @@ struct TrackPreferenceTests {
         #expect(store.preference(userId: "u", titleId: "s1") != nil)
         #expect(store.preference(userId: "u", titleId: "s\(TrackPreferenceStore.limit)") != nil)
     }
+
+    // MARK: Account sync
+
+    private func pref(_ language: String, at seconds: Double) -> TrackPreference {
+        TrackPreference(
+            audio: .init(language: language, label: language, codec: "aac"),
+            subtitle: .off,
+            updatedAt: Date(timeIntervalSince1970: seconds)
+        )
+    }
+
+    @Test("per title, the newer choice wins; titles from both sides are kept")
+    func mergeNewestWins() {
+        let local = ["s1": pref("eng", at: 20), "s2": pref("fra", at: 5)]
+        let remote = ["s1": pref("fra", at: 10), "s2": pref("eng", at: 30), "s3": pref("deu", at: 1)]
+        let merged = TrackPreferenceSync.merged(local, remote, limit: 500)
+        #expect(merged["s1"]?.audio?.language == "eng")
+        #expect(merged["s2"]?.audio?.language == "eng")
+        #expect(merged["s3"]?.audio?.language == "deu")
+    }
+
+    @Test("past the limit, the oldest titles go")
+    func mergeIsBounded() {
+        let local = ["a": pref("eng", at: 1), "b": pref("eng", at: 3)]
+        let remote = ["c": pref("eng", at: 2)]
+        let merged = TrackPreferenceSync.merged(local, remote, limit: 2)
+        #expect(Set(merged.keys) == ["b", "c"])
+    }
+
+    @Test("the stored value round-trips; anything unreadable is an empty copy")
+    func encodingRoundTrips() {
+        let entries = ["s1": pref("eng", at: 20)]
+        #expect(TrackPreferenceSync.decode(TrackPreferenceSync.encode(entries)) == entries)
+        #expect(TrackPreferenceSync.decode("not json").isEmpty)
+        #expect(TrackPreferenceSync.decode(nil).isEmpty)
+    }
+
+    @Test("absorbing the account's copy touches that account only")
+    func absorbIsPerAccount() {
+        let store = TrackPreferenceStore(defaults: .isolatedForTesting())
+        store.recordSubtitle(.off, userId: "u1", titleId: "s1", now: Date(timeIntervalSince1970: 50))
+        store.recordSubtitle(.off, userId: "u2", titleId: "s1", now: Date(timeIntervalSince1970: 50))
+        store.absorb(["s1": pref("fra", at: 10), "s9": pref("eng", at: 10)], userId: "u1")
+        #expect(store.preference(userId: "u1", titleId: "s1")?.audio == nil) // the newer local one stays
+        #expect(store.preference(userId: "u1", titleId: "s9")?.audio?.language == "eng")
+        #expect(store.preference(userId: "u2", titleId: "s9") == nil)
+        #expect(store.entries(userId: "u2").count == 1)
+    }
 }
+

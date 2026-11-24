@@ -81,12 +81,18 @@ final class VideoPlayerCoordinator {
                 // Never negotiate on a route about to be abandoned: a LAN probe
                 // in flight (bounded by its own timeout) decides the base.
                 await ServerRouteController.shared.awaitPendingProbe()
+                // The account's track choices, merged in while the stream
+                // negotiates (bounded) — the player reads the device's copy.
+                async let tracksSynced: Void = TrackPreferenceSync.pull(
+                    api: apiClient, userId: userId, store: TrackPreferenceStore(defaults: .standard)
+                )
                 let info = try await apiClient.getPlaybackInfo(
                     itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine,
                     mediaSourceId: CardPlayTargetResolver.sourceToOpen(
                         itemId: itemId, explicitSourceId: mediaSourceId, startTime: startTime
                     )
                 )
+                await tracksSynced
                 #if DEBUG
                 logger.info("tvOS play: engine=\(engine.rawValue), method=\(info.playMethod.rawValue), url=\(redactedURL(info.url))")
                 #endif

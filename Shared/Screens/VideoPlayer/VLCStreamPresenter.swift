@@ -37,7 +37,7 @@ final class VLCStreamPresenter: NSObject {
     private let title: String
     private let startTime: Double?
     private let loc: LocalizationManager
-    private let apiClient: any PlaybackAPI & LibraryAPI & ServerAPI
+    private let apiClient: any PlaybackAPI & LibraryAPI & ServerAPI & UserPreferencesAPI
     private let userId: String
     private let autoPlayNext: Bool
     private let previousEpisode: EpisodeRef?
@@ -66,7 +66,7 @@ final class VLCStreamPresenter: NSObject {
         previousEpisode: EpisodeRef?,
         nextEpisode: EpisodeRef?,
         episodeNavigator: EpisodeNavigator?,
-        apiClient: any PlaybackAPI & LibraryAPI & ServerAPI,
+        apiClient: any PlaybackAPI & LibraryAPI & ServerAPI & UserPreferencesAPI,
         userId: String,
         autoPlayNext: Bool,
         maxBitrate: Int,
@@ -225,7 +225,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     private let titleText: String
     private let episodeNavigator: EpisodeNavigator?
-    private let apiClient: any PlaybackAPI & LibraryAPI & ServerAPI
+    private let apiClient: any PlaybackAPI & LibraryAPI & ServerAPI & UserPreferencesAPI
     private let userId: String
     private let autoPlayNext: Bool
     /// The `render4K`-derived bitrate ceiling the negotiation uses — reused on
@@ -725,7 +725,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     init(
         itemId: String, info: PlaybackInfo, title: String, startTime: Double?,
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
-        episodeNavigator: EpisodeNavigator?, apiClient: any PlaybackAPI & LibraryAPI & ServerAPI,
+        episodeNavigator: EpisodeNavigator?, apiClient: any PlaybackAPI & LibraryAPI & ServerAPI & UserPreferencesAPI,
         userId: String, autoPlayNext: Bool, maxBitrate: Int, imageBuilder: ImageURLBuilder,
         loc: LocalizationManager, onDismiss: (() -> Void)?
     ) {
@@ -4375,6 +4375,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// Records a pick for the title being played.
     private func rememberForTitle(_ write: (TrackPreferenceStore, String, String) -> Void) {
         write(titleTracks, userId, trackMemoryId)
+        // The account's copy, so the user's other devices get it too.
+        TrackPreferenceSync.push(api: apiClient, userId: userId, store: titleTracks)
     }
 
     /// One line describing which audio track opened and why. Codec and
