@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import CinemaxKit
+import JellyfinAPI
 @testable import Cinemax
 
 /// The tracks a media opens on: remembered choice, account languages, app
@@ -179,4 +180,16 @@ struct TrackDefaultsPolicyTests {
         #expect(decision.audio == 1)
         #expect(decision.subtitle == .ordinal(0) && decision.subtitleReason == .interface)
     }
+
+    @Test("a changed playback language refreshes the cached user")
+    func languageChangeRefreshesUser() {
+        var config = UserConfiguration()
+        config.subtitleMode = .default
+        let before = UserDto(configuration: config, id: "u1", name: "Léa")
+        config.subtitleMode = .smart
+        let after = UserDto(configuration: config, id: "u1", name: "Léa")
+        #expect(!AppState.sameVisibleUser(after, before))
+        #expect(AppState.sameVisibleUser(before, before))
+    }
 }
+

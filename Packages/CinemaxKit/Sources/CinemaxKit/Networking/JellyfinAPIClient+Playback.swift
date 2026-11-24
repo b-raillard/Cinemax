@@ -878,6 +878,12 @@ extension JellyfinAPIClient {
         SubtitleProfile(format: "dvdsub", method: .embed),
     ]
 
+    /// The forced-transcode profile's list: the embed-only one it always had —
+    /// external delivery is for DirectPlay, where the player attaches the files.
+    fileprivate static let _vlcTranscodeSubtitleProfiles: [SubtitleProfile] = _vlcSubtitleProfiles.filter {
+        $0.method != .external
+    }
+
     /// Broad-DirectPlay profile for the VLC engine — Jellyfin serves the raw
     /// file with no transcode (4K / HEVC 10-bit / Dolby Vision preserved).
     static func buildVLCDeviceProfile(maxBitrate: Int = 40_000_000) -> DeviceProfile {
@@ -897,7 +903,7 @@ extension JellyfinAPIClient {
         DeviceProfile(
             directPlayProfiles: [],
             maxStreamingBitrate: maxBitrate,
-            subtitleProfiles: _vlcSubtitleProfiles,
+            subtitleProfiles: _vlcTranscodeSubtitleProfiles,
             transcodingProfiles: _vlcTranscodingProfiles
         )
     }

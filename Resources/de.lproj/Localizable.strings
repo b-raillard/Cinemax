@@ -733,6 +733,7 @@
 "settings.interface" = "Oberfläche";
 "settings.playback" = "Wiedergabe";
 "settings.playback.languages" = "Sprachen";
+"settings.playback.languages.none" = "Keine";
 "settings.interface.menu" = "Hauptmenü";
 "settings.interface.library" = "Mediathek";
 

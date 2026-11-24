@@ -733,6 +733,7 @@
 "settings.interface" = "Interface";
 "settings.playback" = "Playback";
 "settings.playback.languages" = "Languages";
+"settings.playback.languages.none" = "None";
 "settings.interface.menu" = "Main Menu";
 "settings.interface.library" = "Library";
 

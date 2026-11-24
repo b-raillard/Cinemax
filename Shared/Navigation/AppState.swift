@@ -378,14 +378,20 @@ final class AppState {
         return cachedId != currentId
     }
 
-    /// The fields of the signed-in user the UI actually reads (name, avatar,
-    /// policy), plus its id. `nonisolated` + static: a pure comparison.
+    /// The fields of the signed-in user the app actually reads (name, avatar,
+    /// policy, and the playback languages the player applies —
+    /// `TrackDefaultsPolicy`), plus its id. Without the languages, a change made
+    /// in Lecture → Langues (or on another client) never reached the player:
+    /// this guard kept the stale configuration forever. `nonisolated` + static:
+    /// a pure comparison.
     nonisolated static func sameVisibleUser(_ fresh: UserDto, _ current: UserDto?) -> Bool {
         guard let current else { return false }
         return fresh.id == current.id
             && fresh.name == current.name
             && fresh.primaryImageTag == current.primaryImageTag
             && fresh.policy == current.policy
+            && UserPlaybackPreferences(configuration: fresh.configuration)
+                == UserPlaybackPreferences(configuration: current.configuration)
     }
 
     /// Users eligible for the quick-switch surfaces (`UserSwitchSheet` grid +

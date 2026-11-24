@@ -313,6 +313,7 @@
 "settings.interface" = "Interface";
 "settings.playback" = "Lecture";
 "settings.playback.languages" = "Langues";
+"settings.playback.languages.none" = "Aucune";
 "settings.interface.menu" = "Menu principal";
 "settings.interface.library" = "Bibliothèque";
 

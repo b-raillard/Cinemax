@@ -285,6 +285,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// A remembered subtitle whose track libVLC had not listed yet on the
     /// `.tracksChanged` that applied the defaults; selected as soon as it is.
     private var pendingRememberedSubtitleOrdinal: Int?
+    /// Bumped wherever `info` is replaced (episode nav, wake rebuild): an iOS
+    /// picker opened while the next episode was negotiating — `navGeneration`
+    /// already bumped — still lists the outgoing episode's tracks.
+    private var mediaToken = 0
     #if os(iOS)
     private var pipController: PiPController?
     private let pipButton = UIButton(type: .system)
@@ -3856,10 +3860,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // in that window has already swapped the media, and the row's track
         // object would then select (and remember for the series) a track of
         // the NEXT episode. Its rows address the episode they were built for.
-        let generation = navGeneration
+        let generation = (navGeneration, mediaToken)
         for opt in options {
             sheet.addAction(UIAlertAction(title: opt.title + (opt.selected ? "  ✓" : ""), style: .default) { [weak self] _ in
-                if self?.navGeneration == generation { opt.action() }
+                if let self, (self.navGeneration, self.mediaToken) == generation { opt.action() }
                 self?.endPicker()
             })
         }
@@ -4308,10 +4312,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 player.selectedAudioTrack = player.audioTracks[audio]
             }
             if let subtitle = kept.subtitle {
-                // Not listed yet on this `.tracksChanged`: leave the engine's
-                // choice rather than read "unknown" as "off".
+                // Not listed yet on this `.tracksChanged` (an attached file
+                // comes later): selected as soon as it is.
                 if subtitle < player.subtitleTracks.count {
                     player.selectedSubtitleTrack = player.subtitleTracks[subtitle]
+                } else {
+                    pendingRememberedSubtitleOrdinal = subtitle
                 }
             } else {
                 player.selectedSubtitleTrack = nil
@@ -4375,8 +4381,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         info.subtitleTracks.filter { !$0.isExternal } + externalSubtitles
     }
 
+    /// The external files attached to libVLC — none on a forced HLS
+    /// transcode, which keeps its pre-2026-11-24 subtitle handling (the
+    /// transcode profile offers no external delivery).
     private var externalSubtitles: [MediaTrackInfo] {
-        info.subtitleTracks.filter { $0.isExternal && $0.deliveryURL != nil }
+        guard info.playMethod != .transcode else { return [] }
+        return info.subtitleTracks.filter { $0.isExternal && $0.deliveryURL != nil }
     }
 
     /// Attaches the external subtitle files to `media` before it plays, through
@@ -4401,7 +4411,15 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     private func applyPendingRememberedSubtitleIfListed() {
         guard let ordinal = pendingRememberedSubtitleOrdinal, ordinal < player.subtitleTracks.count else { return }
         pendingRememberedSubtitleOrdinal = nil
-        switchSubtitle(to: player.subtitleTracks[ordinal])
+        let track = player.subtitleTracks[ordinal]
+        // While the resume seek is still to go out or settling, the clock reads
+        // near 0: a re-anchor there would restart a resumed film from the top.
+        // That seek re-delivers the captions anyway.
+        if startSeekPending || seeks.isSettling {
+            player.selectedSubtitleTrack = track
+        } else {
+            switchSubtitle(to: track)
+        }
     }
 
     /// The title a pick is remembered for: the SERIES of an episode (every
@@ -4410,6 +4428,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// Records a pick for the title being played.
     private func rememberForTitle(_ write: (TrackPreferenceStore, String, String) -> Void) {
+        // A forced transcode carries ONE audio track (the server's pick) and
+        // its own subtitle mapping: a pick there names no track of the file,
+        // and must not reach the next episodes.
+        guard info.playMethod != .transcode else { return }
         write(titleTracks, userId, trackMemoryId)
         // The account's copy, so the user's other devices get it too.
         TrackPreferenceSync.push(api: apiClient, userId: userId, store: titleTracks)
@@ -5038,6 +5060,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             guard !self.isTearingDown, gen == self.navGeneration else { return }
             self.itemId = ref.id
             self.info = vlcInfo
+            self.mediaToken += 1
             self.startTime = nil
             self.didSeekToStart = true // new episode starts at 0
             self.pauseIntended = false // a paused episode does not open the next one paused
@@ -5909,6 +5932,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 }
                 media.addOption(":network-caching=8000")
                 self.attachExternalSubtitles(to: media)
+                // A fresh media opens on libVLC's own track defaults (possibly
+                // a silent TrueHD): keep the tracks in use, as the wake rebuild
+                // does — same media, so the ordinals still name them — else let
+                // the cascade decide again.
+                if self.didApplyServerTrackDefaults, !self.player.audioTracks.isEmpty {
+                    self.trackRestore = (
+                        audio: self.player.selectedAudioTrack.flatMap { self.player.audioTracks.firstIndex(of: $0) },
+                        subtitle: self.player.selectedSubtitleTrack.flatMap { self.player.subtitleTracks.firstIndex(of: $0) }
+                    )
+                }
+                self.didApplyServerTrackDefaults = false
+                self.pendingRememberedSubtitleOrdinal = nil
                 self.recordPlaybackDiagnostics()
                 // A drop AFTER playback began (HTTP/2 RST on a proxied
                 // server, transient blip): resume where it dropped instead
@@ -6235,6 +6270,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             // the server's CPU, which makes the *new* stream stutter.
             self.releaseServerSession(self.info)
             self.info = fresh
+            self.mediaToken += 1
             self.startTime = resumeAtSeconds > 1 ? resumeAtSeconds : nil
             self.didSeekToStart = (self.startTime == nil)   // re-arm seek-to-resume
             self.hasValidTime = false

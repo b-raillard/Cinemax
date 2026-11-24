@@ -7,11 +7,13 @@ import CinemaxKit
 /// with a region (`fr-FR`). `und`, `mul`… and nothing at all are « unknown ».
 enum LanguageKey {
     private static let undefined: Set<String> = ["und", "unknown", "undetermined", "mul", "zxx", "mis"]
-    /// ISO 639-2/B codes Foundation reads only in their /T form.
+    /// ISO 639-2/B codes Foundation reads only in their /T form, plus a few
+    /// codes servers emit that it does not reduce (`nob`, `pob`).
     private static let bibliographic: [String: String] = [
         "alb": "sq", "arm": "hy", "baq": "eu", "bur": "my", "chi": "zh", "cze": "cs", "dut": "nl",
         "fre": "fr", "geo": "ka", "ger": "de", "gre": "el", "ice": "is", "mac": "mk", "mao": "mi",
-        "may": "ms", "per": "fa", "rum": "ro", "slo": "sk", "tib": "bo", "wel": "cy"
+        "may": "ms", "per": "fa", "rum": "ro", "slo": "sk", "tib": "bo", "wel": "cy",
+        "nob": "nb", "nno": "nn", "nor": "no", "pob": "pt"
     ]
 
     static func of(_ code: String?) -> String? {

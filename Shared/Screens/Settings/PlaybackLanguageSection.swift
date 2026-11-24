@@ -23,12 +23,38 @@ struct PlaybackLanguageSection: View {
             rows
                 .disabled(!model.preferencesLoaded)
                 .opacity(model.preferencesLoaded ? 1 : 0.6)
-            Text(loc.localized(model.loadFailed ? "profile.preferences.unavailable" : "profile.preferences.hint"))
-                .font(CinemaFont.dynamicLabel(.small))
-                .foregroundStyle(model.loadFailed ? CinemaColor.error : CinemaColor.onSurfaceVariant)
-                .padding(.horizontal, CinemaSpacing.spacing2)
+            footnote
         }
         .task { await model.load(using: appState) }
+    }
+
+    /// The hint, or — when the read failed — why the rows are dimmed. On tvOS
+    /// it is FOCUSABLE prose while the rows are disabled: they take no focus,
+    /// and focus is the only thing that scrolls a tvOS page, so without it a
+    /// failed read left the whole section and its message below the screen.
+    @ViewBuilder
+    private var footnote: some View {
+        let text = Text(loc.localized(model.loadFailed ? "profile.preferences.unavailable" : "profile.preferences.hint"))
+            .font(CinemaFont.dynamicLabel(.small))
+        #if os(tvOS)
+        Group {
+            if model.loadFailed {
+                text.foregroundStyle(CinemaColor.error)
+            } else {
+                text
+            }
+        }
+        .tvFocusableProse()
+        // Only while the rows are disabled: with them focusable, the last row
+        // already scrolls this one-liner into view, and a focus stop on a
+        // hint would be a dead press.
+        .focusable(!model.preferencesLoaded)
+        .padding(.horizontal, CinemaSpacing.spacing2)
+        #else
+        text
+            .foregroundStyle(model.loadFailed ? CinemaColor.error : CinemaColor.onSurfaceVariant)
+            .padding(.horizontal, CinemaSpacing.spacing2)
+        #endif
     }
 
     @ViewBuilder
@@ -110,7 +136,9 @@ struct PlaybackLanguageSection: View {
         // server's culture list offers two (`fr`): match them by language.
         let current = options.first { $0.0 == selectedCode }
             ?? options.first { !$0.0.isEmpty && LanguageKey.of($0.0) == LanguageKey.of(selectedCode) }
-        let value = current?.1 ?? selectedCode
+        // « No preference » reads « Aucune » in the row (two lines at the
+        // standard size otherwise); the list keeps the full wording.
+        let value = current?.0.isEmpty == true ? loc.localized("settings.playback.languages.none") : (current?.1 ?? selectedCode)
         let code = current?.0 ?? selectedCode
         #if os(tvOS)
         LanguageTVPickerRow(

@@ -187,6 +187,9 @@ enum TrackPreferenceSync {
 
     /// Pushes queued behind one another: each is a read-modify-write.
     private static var pushTail: Task<Void, Never>?
+    /// A push is queued and has not started: a new pick needs no push of its
+    /// own — that one reads the device's copy when it runs, newest pick in.
+    private static var pushQueued = false
 
     /// Merges the account's copy into the device's; gives up after
     /// `pullTimeout` (the device's copy then decides this opening).
@@ -212,9 +215,12 @@ enum TrackPreferenceSync {
     /// Writes the device's copy of this account into the account's, after
     /// reading it back (another device may have written since).
     static func push(api: any UserPreferencesAPI, userId: String, store: TrackPreferenceStore) {
+        guard !pushQueued else { return }
+        pushQueued = true
         let previous = pushTail
         pushTail = Task { @MainActor in
             await previous?.value
+            pushQueued = false
             guard let dto = try? await api.getDisplayPreferences(
                 id: preferencesId, client: client, userId: userId
             ) else { return }

@@ -83,9 +83,10 @@ final class VideoPlayerCoordinator {
                 await ServerRouteController.shared.awaitPendingProbe()
                 // The account's track choices, merged in while the stream
                 // negotiates (bounded) — the player reads the device's copy.
-                async let tracksSynced: Void = TrackPreferenceSync.pull(
-                    api: apiClient, userId: userId, store: TrackPreferenceStore(defaults: .standard)
-                )
+                // VLC only: the native engine keeps the server's picks.
+                async let tracksSynced: Void = useVLC
+                    ? TrackPreferenceSync.pull(api: apiClient, userId: userId, store: TrackPreferenceStore(defaults: .standard))
+                    : ()
                 let info = try await apiClient.getPlaybackInfo(
                     itemId: itemId, userId: userId, maxBitrate: bitrate, engine: engine,
                     mediaSourceId: CardPlayTargetResolver.sourceToOpen(
