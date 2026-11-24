@@ -272,6 +272,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// TV onto the server's default track (audit 2026-09-22, B5). `subtitle`
     /// nil = off. Consumed by the next `applyServerTrackDefaultsIfNeeded`.
     private var trackRestore: (audio: Int?, subtitle: Int?)?
+    /// The tracks picked BY HAND in an episode of a series, applied to the
+    /// next ones (`SeriesTrackPreference`) — after `trackRestore`, before the
+    /// server's defaults.
+    private let seriesTracks = SeriesTrackPreferenceStore(defaults: .standard)
+    /// A remembered subtitle whose track libVLC had not listed yet on the
+    /// `.tracksChanged` that applied the defaults; selected as soon as it is.
+    private var pendingSeriesSubtitleOrdinal: Int?
     #if os(iOS)
     private var pipController: PiPController?
     private let pipButton = UIButton(type: .system)
@@ -1097,6 +1104,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     self.onEngineStateChanged(state)
                 case .tracksChanged:
                     self.applyServerTrackDefaultsIfNeeded()
+                    self.applyPendingSeriesSubtitleIfListed()
                     #if os(iOS)
                     self.updateMirror()   // the aspect is known now
                     // The deck's subtitle / audio blocks: SwiftVLC's
@@ -4041,6 +4049,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #endif
         let anchor = currentMs
         player.selectedAudioTrack = track
+        if let ordinal = player.audioTracks.firstIndex(of: track), ordinal < info.audioTracks.count {
+            rememberForSeries { $0.recordAudio(SeriesTrackPolicy.audio(info.audioTracks[ordinal]), userId: $1, seriesId: $2) }
+        }
         guard mediaConfirmedOpen, lengthMs > 0 else { return }
         logger.notice("CINEMAX-AUDIO ▸ changement de piste, réancrage à \(anchor, privacy: .public) ms")
         seeks.engineSeek(anchor)
@@ -4054,7 +4065,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// OFF re-anchors nothing: there is no data to recover, and a freeze on
     /// the way out would be a cost with no benefit.
     private func selectSubtitleTrack(_ track: Track?) {
+        pendingSeriesSubtitleOrdinal = nil // the viewer's pick wins over a remembered one still waiting
         guard player.selectedSubtitleTrack != track else { return }
+        if let track {
+            if let ordinal = player.subtitleTracks.firstIndex(of: track), ordinal < info.subtitleTracks.count {
+                rememberForSeries {
+                    $0.recordSubtitle(SeriesTrackPolicy.subtitle(info.subtitleTracks[ordinal]), userId: $1, seriesId: $2)
+                }
+            }
+        } else {
+            rememberForSeries { $0.recordSubtitle(.off, userId: $1, seriesId: $2) }
+        }
+        switchSubtitle(to: track)
+    }
+
+    /// The switch itself, shared by a pick and a remembered track listed late.
+    private func switchSubtitle(to track: Track?) {
         #if os(iOS)
         defer { refreshTabletopValues() }
         #endif
@@ -4280,10 +4306,17 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return
         }
 
+        // What the viewer picked by hand earlier in this series, when this
+        // episode carries a matching track; else the server's defaults.
+        let remembered = info.seriesId.flatMap { seriesTracks.preference(userId: userId, seriesId: $0) }
+        let rememberedAudio = remembered?.audio.flatMap {
+            SeriesTrackPolicy.audioOrdinal(for: $0, in: info.audioTracks)
+        }
+
         // NOT `info.selectedAudioIndex` verbatim: the server's default can be a
         // TrueHD track, which this engine renders as silence on Apple. See
         // `AudioTrackPolicy`.
-        let chosen = AudioTrackPolicy.defaultOrdinal(
+        let chosen = rememberedAudio ?? AudioTrackPolicy.defaultOrdinal(
             tracks: info.audioTracks,
             serverDefaultId: info.selectedAudioIndex
         )
@@ -4294,9 +4327,22 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // wrong one reaches the user as SILENCE with no other trace. Without it
         // a remote log cannot even answer "did the guard run?" — which is
         // exactly the question a build sent out for testing raises.
-        logAudioTrackChoice(applied: chosen)
+        logAudioTrackChoice(applied: chosen, fromSeries: rememberedAudio != nil)
 
-        if let wantSub = info.selectedSubtitleIndex, wantSub >= 0,
+        if let wanted = remembered?.subtitle,
+           let choice = SeriesTrackPolicy.subtitleChoice(for: wanted, in: info.subtitleTracks) {
+            switch choice {
+            case .off:
+                player.selectedSubtitleTrack = nil
+            case .ordinal(let ordinal) where ordinal < player.subtitleTracks.count:
+                player.selectedSubtitleTrack = player.subtitleTracks[ordinal]
+            case .ordinal(let ordinal):
+                // Not listed yet on this `.tracksChanged`.
+                player.selectedSubtitleTrack = nil
+                pendingSeriesSubtitleOrdinal = ordinal
+            }
+            logger.notice("CINEMAX-SUBS ▸ préférence de la série appliquée : \(String(describing: choice), privacy: .public)")
+        } else if let wantSub = info.selectedSubtitleIndex, wantSub >= 0,
            let ordinal = info.subtitleTracks.firstIndex(where: { $0.id == wantSub }),
            ordinal < player.subtitleTracks.count {
             player.selectedSubtitleTrack = player.subtitleTracks[ordinal]
@@ -4305,9 +4351,24 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
     }
 
+    /// A remembered subtitle selected once libVLC lists it (see
+    /// `pendingSeriesSubtitleOrdinal`), re-anchored like a pick when the media
+    /// is already playing.
+    private func applyPendingSeriesSubtitleIfListed() {
+        guard let ordinal = pendingSeriesSubtitleOrdinal, ordinal < player.subtitleTracks.count else { return }
+        pendingSeriesSubtitleOrdinal = nil
+        switchSubtitle(to: player.subtitleTracks[ordinal])
+    }
+
+    /// Records a pick for the series being played; nothing outside a series.
+    private func rememberForSeries(_ write: (SeriesTrackPreferenceStore, String, String) -> Void) {
+        guard let seriesId = info.seriesId else { return }
+        write(seriesTracks, userId, seriesId)
+    }
+
     /// One line describing which audio track opened and why. Codec and
     /// language only — no URL, no token, nothing user-identifying.
-    private func logAudioTrackChoice(applied: Int?) {
+    private func logAudioTrackChoice(applied: Int?, fromSeries: Bool) {
         let serverDefault = info.selectedAudioIndex
         let catalogue = info.audioTracks.enumerated()
             .map { "[\($0.offset)] id=\($0.element.id) \($0.element.codec ?? "?")/\($0.element.language ?? "?")" }
@@ -4316,7 +4377,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if let applied, applied < info.audioTracks.count {
             let track = info.audioTracks[applied]
             appliedDescription = "[\(applied)] \(track.codec ?? "?")/\(track.language ?? "?")"
-            if let serverDefault, serverDefault != track.id {
+            if fromSeries {
+                appliedDescription += " (choix gardé pour la série)"
+            } else if let serverDefault, serverDefault != track.id {
                 appliedDescription += " (REMPLACE le défaut serveur — codec muet sur Apple)"
             }
         }
@@ -4412,6 +4475,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         hasValidTime = false
         didApplyServerTrackDefaults = false
         trackRestore = nil
+        pendingSeriesSubtitleOrdinal = nil
         seeks.cancelPending()
         beginOpenLoading()
         mediaLengthMs = 0
@@ -4941,7 +5005,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.retryLoop = RetryLoopGuard() // another film, another count
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
-            self.trackRestore = nil // another episode: its own defaults
+            // Another episode: the server's defaults, unless the viewer picked
+            // tracks by hand earlier in the series (`SeriesTrackPreference`).
+            self.trackRestore = nil
+            self.pendingSeriesSubtitleOrdinal = nil
             self.mediaLengthMs = 0
             // Per-file state: the countdown card baked in the old "next" title,
             // and delays compensate per-file mux drift. Speed persists.
@@ -6127,6 +6194,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             self.didRetry = false
             self.didReportEnd = false
             self.didApplyServerTrackDefaults = false
+            self.pendingSeriesSubtitleOrdinal = nil
             // Only when the server kept the source: another version's ordinals
             // would name different tracks.
             self.trackRestore = (fresh.mediaSourceId == keptSourceId) ? keptTracks : nil

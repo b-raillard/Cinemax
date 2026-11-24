@@ -226,7 +226,8 @@ extension JellyfinAPIClient {
                     selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
                     selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
                     authToken: nil, // token already embedded in Jellyfin's HLS URL
-                    liveStreamId: mediaSource.liveStreamID
+                    liveStreamId: mediaSource.liveStreamID,
+                    seriesId: item.seriesID
                 )
             }
         }
@@ -275,7 +276,8 @@ extension JellyfinAPIClient {
             authToken: token,
             sourceContainer: mediaSource.container,
             liveStreamId: mediaSource.liveStreamID,
-            sourceSizeBytes: mediaSource.size.map(Int64.init)
+            sourceSizeBytes: mediaSource.size.map(Int64.init),
+            seriesId: item.seriesID
         )
     }
 
@@ -651,7 +653,10 @@ extension JellyfinAPIClient {
             .compactMap { s in
                 guard let idx = s.index else { return nil }
                 let label = s.displayTitle ?? s.language ?? "Track \(idx)"
-                return MediaTrackInfo(id: idx, label: label, isDefault: s.isDefault ?? false, isForced: s.isForced ?? false)
+                return MediaTrackInfo(
+                    id: idx, label: label, isDefault: s.isDefault ?? false, isForced: s.isForced ?? false,
+                    codec: s.codec, language: s.language
+                )
             }
         return (audio, subtitles)
     }
