@@ -49,7 +49,7 @@ enum SeasonalThemeCatalogue {
     static let christmas = SeasonalTheme(
         id: "christmas",
         nameKey: "season.christmas.name",
-        window: SeasonWindow(start: MonthDay(month: 12, day: 1), end: MonthDay(month: 1, day: 6)),
+        window: SeasonWindow(start: MonthDay(month: 11, day: 25), end: MonthDay(month: 1, day: 6)),
         // TWO colours that swap with the mode (owner, 2026-11-20: « bleu clair
         // givré et bleu nuit … en alternant les couleurs »): Bleu nuit
         // #0B1A2E is the night ground and the day's ink and buttons; Bleu

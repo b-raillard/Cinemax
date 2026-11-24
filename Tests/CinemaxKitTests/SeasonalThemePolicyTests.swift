@@ -186,12 +186,12 @@ struct SeasonalThemePolicyTests {
         #expect(asked == [.halloween])
     }
 
-    @Test("Christmas runs from 1 December to 6 January, across the New Year")
+    @Test("Christmas runs from 25 November to 6 January, across the New Year")
     func christmasWindow() {
         let paris = calendar("Europe/Paris")
         let christmas = SeasonalThemeCatalogue.christmas
-        #expect(christmas.window.contains(date("2026-11-30T22:59:59Z"), calendar: paris) == false)
-        #expect(christmas.window.contains(date("2026-11-30T23:00:00Z"), calendar: paris) == true)
+        #expect(christmas.window.contains(date("2026-11-24T22:59:59Z"), calendar: paris) == false)
+        #expect(christmas.window.contains(date("2026-11-24T23:00:00Z"), calendar: paris) == true)
         #expect(christmas.window.contains(date("2026-12-31T23:30:00Z"), calendar: paris) == true)
         #expect(christmas.window.contains(date("2027-01-06T22:59:59Z"), calendar: paris) == true)
         #expect(christmas.window.contains(date("2027-01-06T23:00:00Z"), calendar: paris) == false)
