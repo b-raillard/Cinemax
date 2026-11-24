@@ -580,6 +580,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// restarting at 0 (the initial resume-seek has already fired by then, so
     /// `startTime` alone wouldn't re-seek). See `handlePlaybackError`.
     private var lastKnownPositionMs: Int32 = 0
+    /// The position an unexpected `.stopped` was judged at, handed to the
+    /// error path (`PlaybackRetryPolicy.failurePositionMs`): the settle window
+    /// it read is gone by then.
+    private var failureStopPositionMs: Int64?
     /// Where the film ended, set by the `.ended` decision: SwiftVLC zeroes its
     /// clock on `.stopped`, so the stop report must not read it. Reset by
     /// `beginOpenLoading()`. See `PlaybackReporter.heldPositionSeconds`.
@@ -4615,6 +4619,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// decision is `ReResolveGate`'s, unit-tested.
     private func handleEngineFailure(_ what: String) {
         guard reResolve.admitsEngineFailure else {
+            failureStopPositionMs = nil
             logger.notice("\(what, privacy: .public) ignored — a re-resolve is already recovering this media")
             return
         }
@@ -5613,6 +5618,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     VLC stopped \(Int64(self.lengthMs) - stopPositionMs, privacy: .public)ms short of the end \
                     for \(self.itemId, privacy: .public) — treating as a stream failure
                     """)
+                failureStopPositionMs = stopPositionMs
                 handleEngineFailure("stop")
             case .ignore:
                 break
@@ -5855,6 +5861,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// net found the shared budget spent, so this gives up without a retry.
     private func handlePlaybackError(recoveryExhausted: Bool = false) {
         cancelOpenWatchdog()
+        // Where it failed — read BEFORE the settle window is dropped. Both the
+        // loop guard and the retry's resume read `lastKnownPositionMs`.
+        lastKnownPositionMs = PlaybackRetryPolicy.failurePositionMs(
+            stopPositionMs: failureStopPositionMs,
+            settlingTargetMs: seeks.settlingTargetMs,
+            lastKnownMs: lastKnownPositionMs
+        )
+        failureStopPositionMs = nil
         seeks.endSettle() // the media is being reloaded (or given up on)
         // The decision is pure and unit-tested (`PlaybackRetryPolicy`); this
         // method owns only its effects.

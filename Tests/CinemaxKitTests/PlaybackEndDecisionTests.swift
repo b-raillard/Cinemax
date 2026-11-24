@@ -290,6 +290,23 @@ struct RetryLoopGuardTests {
         #expect(loop.retries == 1)
     }
 
+    @Test("a retry that dies during its resume seek fails at the seek's target")
+    func failureDuringResumeSeekIsAtItsTarget() {
+        // The measured loop (2026-11-24): resume seek to 59 812 ms on a
+        // cue-less truncated MKV, the engine still reading 5 174 ms.
+        #expect(PlaybackRetryPolicy.failurePositionMs(stopPositionMs: 59_812, settlingTargetMs: nil, lastKnownMs: 5_174) == 59_812)
+        #expect(PlaybackRetryPolicy.failurePositionMs(stopPositionMs: nil, settlingTargetMs: 59_812, lastKnownMs: 5_174) == 59_812)
+        #expect(PlaybackRetryPolicy.failurePositionMs(stopPositionMs: nil, settlingTargetMs: nil, lastKnownMs: 41_000) == 41_000)
+        // Fed to the guard, the three failures are one place: it gives up.
+        var loop = RetryLoopGuard()
+        let positions = [Int64(59_812), 59_812, 59_731].map {
+            Int64(PlaybackRetryPolicy.failurePositionMs(stopPositionMs: $0, settlingTargetMs: nil, lastKnownMs: 5_174))
+        }
+        #expect(answers(&loop, at: positions) == [false, false, true])
+        // And the retry resumes at the cut, not at 5 s.
+        #expect(PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: 59_812) == 59.812)
+    }
+
     @Test("a paused player is never counted — its position cannot move")
     func pausedIsNotALoop() {
         var loop = RetryLoopGuard()
