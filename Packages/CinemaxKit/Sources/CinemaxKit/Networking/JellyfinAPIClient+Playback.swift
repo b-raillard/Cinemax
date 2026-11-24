@@ -206,6 +206,26 @@ extension JellyfinAPIClient {
             #endif
         }
 
+        // The VLC profile offers EXTERNAL delivery for text subtitles so a `.srt`
+        // beside the media plays directly (the player attaches it). But on a
+        // transcode the server then serves the EMBEDDED subtitles as external
+        // files too — measured 2026-11-24, a bitrate-capped MKV: no burn-in, and
+        // each one extracted from the whole file first (2 min 13 on a 19 GB
+        // MKV, 13/11). A transcode therefore re-negotiates once with the
+        // transcode profile, embed-only, which burns them in as before.
+        if engine == .vlc, !forcedTranscode, mediaSource.transcodingURL != nil,
+           (mediaSource.mediaStreams ?? []).contains(where: {
+               $0.type == .subtitle && $0.isExternal != true && $0.deliveryMethod == .external
+           }) {
+            if let transcoded = try? await _getPlaybackInfo(
+                itemId: effectiveItemId, userId: userId, maxBitrate: maxBitrate,
+                audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex,
+                engine: engine, mediaSourceId: mediaSource.id ?? mediaSourceId, forceTranscode: true
+            ), transcoded.playMethod == .transcode {
+                return transcoded
+            }
+        }
+
         // Step 4: Build stream URL (same logic as Swiftfin's streamURL)
 
         // Option A: Server returned a transcoding URL — use it directly

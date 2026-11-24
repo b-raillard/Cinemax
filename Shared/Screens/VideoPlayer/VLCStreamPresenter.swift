@@ -4324,7 +4324,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             }
             let audioLabel = kept.audio.map { String($0) } ?? "-"
             let subtitleLabel = kept.subtitle.map { String($0) } ?? "off"
-            logger.notice("CINEMAX-AUDIO ▸ réveil : pistes conservées audio=\(audioLabel, privacy: .public) sous-titres=\(subtitleLabel, privacy: .public)")
+            logger.notice("CINEMAX-AUDIO ▸ réouverture : pistes conservées audio=\(audioLabel, privacy: .public) sous-titres=\(subtitleLabel, privacy: .public)")
             return
         }
 
@@ -5933,15 +5933,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                 media.addOption(":network-caching=8000")
                 self.attachExternalSubtitles(to: media)
                 // A fresh media opens on libVLC's own track defaults (possibly
-                // a silent TrueHD): keep the tracks in use, as the wake rebuild
-                // does — same media, so the ordinals still name them — else let
-                // the cascade decide again.
-                if self.didApplyServerTrackDefaults, !self.player.audioTracks.isEmpty {
-                    self.trackRestore = (
-                        audio: self.player.selectedAudioTrack.flatMap { self.player.audioTracks.firstIndex(of: $0) },
-                        subtitle: self.player.selectedSubtitleTrack.flatMap { self.player.subtitleTracks.firstIndex(of: $0) }
-                    )
-                }
+                // a silent TrueHD): let `applyServerTrackDefaultsIfNeeded` decide
+                // again on it — the cascade, so a remembered pick or the
+                // account's language comes back (seen on the bench: English kept
+                // across every retry of a cut file, where libVLC took French).
                 self.didApplyServerTrackDefaults = false
                 self.pendingRememberedSubtitleOrdinal = nil
                 self.recordPlaybackDiagnostics()
