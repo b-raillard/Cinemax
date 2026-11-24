@@ -46,6 +46,10 @@ public struct PlaybackInfo: Sendable {
     /// input for the rest of the playback (a short trailer buffers whole), so
     /// without this the watchdog would read that as a dead feed.
     public let sourceSizeBytes: Int64?
+    /// The series of the episode being played, nil for anything else (and for
+    /// the fallback that never negotiates). Keys the per-series audio /
+    /// subtitle choice the player remembers (`SeriesTrackPreference`).
+    public let seriesId: String?
 
     public init(
         url: URL,
@@ -59,7 +63,8 @@ public struct PlaybackInfo: Sendable {
         authToken: String?,
         sourceContainer: String? = nil,
         liveStreamId: String? = nil,
-        sourceSizeBytes: Int64? = nil
+        sourceSizeBytes: Int64? = nil,
+        seriesId: String? = nil
     ) {
         self.url = url
         self.playSessionId = playSessionId
@@ -73,5 +78,6 @@ public struct PlaybackInfo: Sendable {
         self.sourceContainer = sourceContainer
         self.liveStreamId = liveStreamId
         self.sourceSizeBytes = sourceSizeBytes
+        self.seriesId = seriesId
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import JellyfinAPI
 
 /// One of the server's known languages, as the preference pickers offer it.
 ///
@@ -48,6 +49,23 @@ public struct UserPlaybackPreferences: Sendable, Equatable {
         case none = "None"
 
         public var id: String { rawValue }
+    }
+
+    /// Read from the user's `UserConfiguration` (the server spells « no
+    /// preference » as an empty string, this model as `nil`); `nil` when the
+    /// configuration is unknown — never read that as « no preference ».
+    public init?(configuration: UserConfiguration?) {
+        guard let configuration else { return nil }
+        func normalized(_ value: String?) -> String? {
+            guard let value, !value.isEmpty else { return nil }
+            return value
+        }
+        self.init(
+            audioLanguage: normalized(configuration.audioLanguagePreference),
+            subtitleLanguage: normalized(configuration.subtitleLanguagePreference),
+            subtitleMode: configuration.subtitleMode
+                .flatMap { SubtitleMode(rawValue: $0.rawValue) } ?? .defaultTrack
+        )
     }
 
     public init(

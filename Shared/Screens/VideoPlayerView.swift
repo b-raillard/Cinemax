@@ -128,7 +128,17 @@ struct VideoPlayerView: View {
             if !forceNativeAVPlayer {
                 // Default online path: VLC DirectPlays the raw file (no server
                 // transcode → no freeze, 4K/HEVC/Dolby Vision preserved).
+                // The account's track choices (VLC only — the native engine
+                // keeps the server's picks), merged in while the stream
+                // negotiates, bounded; after the LAN probe, like `negotiate`, so
+                // it never dials a route about to be dropped.
+                let api = appState.apiClient
+                await ServerRouteController.shared.awaitPendingProbe()
+                async let tracksSynced: Void = TrackPreferenceSync.pull(
+                    api: api, userId: userId, store: TrackPreferenceStore(defaults: .standard)
+                )
                 let vlcInfo = try await negotiate(userId: userId, bitrate: bitrate, engine: .vlc)
+                await tracksSynced
                 guard !Task.isCancelled else {
                     abandonNegotiation(vlcInfo)
                     return
@@ -143,6 +153,7 @@ struct VideoPlayerView: View {
                     apiClient: appState.apiClient, userId: userId,
                     autoPlayNext: autoPlayNextEpisode, maxBitrate: bitrate,
                     imageBuilder: appState.imageBuilder, loc: loc,
+                    accountPreferences: UserPlaybackPreferences(configuration: appState.currentUser?.configuration),
                     onDismiss: { reviewPrompt?.playerDidClose(); dismiss() }
                 )
                 v.onPlaybackStarted = onPlaybackStarted

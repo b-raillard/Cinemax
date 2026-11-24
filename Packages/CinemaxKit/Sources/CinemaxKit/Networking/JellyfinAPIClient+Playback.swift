@@ -206,6 +206,26 @@ extension JellyfinAPIClient {
             #endif
         }
 
+        // The VLC profile offers EXTERNAL delivery for text subtitles so a `.srt`
+        // beside the media plays directly (the player attaches it). But on a
+        // transcode the server then serves the EMBEDDED subtitles as external
+        // files too — measured 2026-11-24, a bitrate-capped MKV: no burn-in, and
+        // each one extracted from the whole file first (2 min 13 on a 19 GB
+        // MKV, 13/11). A transcode therefore re-negotiates once with the
+        // transcode profile, embed-only, which burns them in as before.
+        if engine == .vlc, !forcedTranscode, mediaSource.transcodingURL != nil,
+           (mediaSource.mediaStreams ?? []).contains(where: {
+               $0.type == .subtitle && $0.isExternal != true && $0.deliveryMethod == .external
+           }) {
+            if let transcoded = try? await _getPlaybackInfo(
+                itemId: effectiveItemId, userId: userId, maxBitrate: maxBitrate,
+                audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex,
+                engine: engine, mediaSourceId: mediaSource.id ?? mediaSourceId, forceTranscode: true
+            ), transcoded.playMethod == .transcode {
+                return transcoded
+            }
+        }
+
         // Step 4: Build stream URL (same logic as Swiftfin's streamURL)
 
         // Option A: Server returned a transcoding URL — use it directly
@@ -215,7 +235,7 @@ extension JellyfinAPIClient {
                 #if DEBUG
                 Self.logPlaybackDecision(method: "transcode", item: item, source: mediaSource, url: url)
                 #endif
-                let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource)
+                let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource, serverURL: serverURL)
                 return PlaybackInfo(
                     url: url,
                     playSessionId: playSessionId,
@@ -226,7 +246,8 @@ extension JellyfinAPIClient {
                     selectedAudioIndex: audioStreamIndex ?? mediaSource.defaultAudioStreamIndex,
                     selectedSubtitleIndex: subtitleStreamIndex ?? mediaSource.defaultSubtitleStreamIndex,
                     authToken: nil, // token already embedded in Jellyfin's HLS URL
-                    liveStreamId: mediaSource.liveStreamID
+                    liveStreamId: mediaSource.liveStreamID,
+                    seriesId: item.seriesID
                 )
             }
         }
@@ -262,7 +283,7 @@ extension JellyfinAPIClient {
         #if DEBUG
         Self.logPlaybackDecision(method: "directStream", item: item, source: mediaSource, url: url)
         #endif
-        let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource)
+        let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource, serverURL: serverURL)
         return PlaybackInfo(
             url: url,
             playSessionId: playSessionId,
@@ -275,7 +296,8 @@ extension JellyfinAPIClient {
             authToken: token,
             sourceContainer: mediaSource.container,
             liveStreamId: mediaSource.liveStreamID,
-            sourceSizeBytes: mediaSource.size.map(Int64.init)
+            sourceSizeBytes: mediaSource.size.map(Int64.init),
+            seriesId: item.seriesID
         )
     }
 
@@ -630,7 +652,9 @@ extension JellyfinAPIClient {
     }
 
     /// Extracts audio and subtitle track info from a media source's stream list.
-    fileprivate static func extractTracks(from source: MediaSourceInfo) -> (audio: [MediaTrackInfo], subtitles: [MediaTrackInfo]) {
+    fileprivate static func extractTracks(
+        from source: MediaSourceInfo, serverURL: URL
+    ) -> (audio: [MediaTrackInfo], subtitles: [MediaTrackInfo]) {
         let streams = source.mediaStreams ?? []
         let audio: [MediaTrackInfo] = streams
             .filter { $0.type == .audio }
@@ -651,7 +675,11 @@ extension JellyfinAPIClient {
             .compactMap { s in
                 guard let idx = s.index else { return nil }
                 let label = s.displayTitle ?? s.language ?? "Track \(idx)"
-                return MediaTrackInfo(id: idx, label: label, isDefault: s.isDefault ?? false, isForced: s.isForced ?? false)
+                return MediaTrackInfo(
+                    id: idx, label: label, isDefault: s.isDefault ?? false, isForced: s.isForced ?? false,
+                    codec: s.codec, language: s.language, isExternal: s.isExternal ?? false,
+                    deliveryURL: externalSubtitleURL(s, serverURL: serverURL)
+                )
             }
         return (audio, subtitles)
     }
@@ -822,8 +850,42 @@ extension JellyfinAPIClient {
             videoCodec: "hevc,h264"
         ),
     ]
+    /// The file the server serves for an EXTERNAL subtitle (a `.srt` beside
+    /// the media), absolute — the player attaches it to libVLC as a slave.
+    /// Same base-path join as `TranscodingUrl`'s.
+    fileprivate static func externalSubtitleURL(_ stream: MediaStream, serverURL: URL) -> URL? {
+        guard stream.isExternal == true, stream.deliveryMethod == .external,
+              let path = stream.deliveryURL, !path.isEmpty else { return nil }
+        // An absolute URL is kept only on the server's own origin: the player
+        // may fetch it through the loopback proxy, which attaches the
+        // account's token — never to another host.
+        if path.lowercased().hasPrefix("http") {
+            guard let absolute = URL(string: path), sameOrigin(absolute, serverURL) else { return nil }
+            return absolute
+        }
+        return URL(string: serverURL.absoluteString.trimmingCharacters(in: ["/"]) + path)
+    }
+
+    fileprivate static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
+        func port(_ url: URL) -> Int? { url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80) }
+        return lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+            && lhs.host?.lowercased() == rhs.host?.lowercased()
+            && port(lhs) == port(rhs)
+    }
+
     // VLC renders embedded text subtitles itself; image subs delivered as-is.
+    // Text formats are also accepted as EXTERNAL files: without it the server
+    // could only deliver a `.srt` beside the media by burning it into a full
+    // transcode — which it did whenever it picked that file as the default
+    // subtitle (measured on the bench, 2026-11-24). The player attaches them
+    // to libVLC itself (`VLCStreamPresenter.attachExternalSubtitles`).
     fileprivate static let _vlcSubtitleProfiles: [SubtitleProfile] = [
+        SubtitleProfile(format: "srt", method: .external),
+        SubtitleProfile(format: "subrip", method: .external),
+        SubtitleProfile(format: "ass", method: .external),
+        SubtitleProfile(format: "ssa", method: .external),
+        SubtitleProfile(format: "vtt", method: .external),
+        SubtitleProfile(format: "webvtt", method: .external),
         SubtitleProfile(format: "ass",    method: .embed),
         SubtitleProfile(format: "ssa",    method: .embed),
         SubtitleProfile(format: "srt",    method: .embed),
@@ -835,6 +897,12 @@ extension JellyfinAPIClient {
         SubtitleProfile(format: "dvbsub", method: .embed),
         SubtitleProfile(format: "dvdsub", method: .embed),
     ]
+
+    /// The forced-transcode profile's list: the embed-only one it always had —
+    /// external delivery is for DirectPlay, where the player attaches the files.
+    fileprivate static let _vlcTranscodeSubtitleProfiles: [SubtitleProfile] = _vlcSubtitleProfiles.filter {
+        $0.method != .external
+    }
 
     /// Broad-DirectPlay profile for the VLC engine — Jellyfin serves the raw
     /// file with no transcode (4K / HEVC 10-bit / Dolby Vision preserved).
@@ -855,7 +923,7 @@ extension JellyfinAPIClient {
         DeviceProfile(
             directPlayProfiles: [],
             maxStreamingBitrate: maxBitrate,
-            subtitleProfiles: _vlcSubtitleProfiles,
+            subtitleProfiles: _vlcTranscodeSubtitleProfiles,
             transcodingProfiles: _vlcTranscodingProfiles
         )
     }

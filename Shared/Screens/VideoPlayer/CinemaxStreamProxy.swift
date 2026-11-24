@@ -351,6 +351,12 @@ final class CinemaxStreamProxy: @unchecked Sendable {
     /// libVLC turns the master's `main.m3u8?…` into `/s/<id>/main.m3u8?…` by
     /// itself. Dropping the name (the old `/s/<id>` form) is precisely why HLS
     /// could not be proxied.
+    /// Registrations kept, oldest out. 32, not 6, since 2026-11-24: an open
+    /// registers its stream AND each external subtitle file attached to it
+    /// (`VLCStreamPresenter.attachExternalSubtitles`), and a film with six
+    /// `.srt` beside it evicted its own stream before libVLC asked for it.
+    static let targetLimit = 32
+
     func localURL(for target: URL, token: String?) -> URL? {
         let port: UInt16? = stateLock.withLock { listenerPort }
         guard let port else {
@@ -362,7 +368,7 @@ final class CinemaxStreamProxy: @unchecked Sendable {
         stateLock.withLock {
             targets[id] = (origin, token)
             targetOrder.append(id)
-            if targetOrder.count > 6 { targets[targetOrder.removeFirst()] = nil }
+            if targetOrder.count > Self.targetLimit { targets[targetOrder.removeFirst()] = nil }
         }
         var local = URLComponents()
         local.scheme = "http"

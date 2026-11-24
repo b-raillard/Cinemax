@@ -115,7 +115,7 @@ enum AudioTrackPolicy {
 
     /// Primary subtag, lowercased — servers report `fre`, `fr`, `fr-FR` for the
     /// same thing. Same normalization as `RemoteImageCatalog`.
-    private static func normalized(_ code: String?) -> String? {
+    static func normalized(_ code: String?) -> String? {
         guard let code else { return nil }
         let primary = code.split(separator: "-").first.map(String.init) ?? code
         let trimmed = primary.trimmingCharacters(in: .whitespaces).lowercased()
