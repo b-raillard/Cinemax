@@ -715,6 +715,8 @@ extension SettingsScreen {
         VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
             tvToggleList(playbackToggleRows)
             tvSleepTimerRow
+            PlaybackLanguageSection()
+                .padding(.top, CinemaSpacing.spacing4)
         }
     }
 

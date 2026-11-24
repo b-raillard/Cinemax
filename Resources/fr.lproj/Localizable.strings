@@ -312,6 +312,7 @@
 "debug.skipToEnd" = "⏭ Aller à la fin (Debug)";
 "settings.interface" = "Interface";
 "settings.playback" = "Lecture";
+"settings.playback.languages" = "Langues";
 "settings.interface.menu" = "Menu principal";
 "settings.interface.library" = "Bibliothèque";
 

@@ -732,6 +732,7 @@
 "debug.skipToEnd" = "⏭ Skip to end (Debug)";
 "settings.interface" = "Interface";
 "settings.playback" = "Playback";
+"settings.playback.languages" = "Languages";
 "settings.interface.menu" = "Main Menu";
 "settings.interface.library" = "Library";
 

@@ -836,8 +836,21 @@ extension JellyfinAPIClient {
     fileprivate static func externalSubtitleURL(_ stream: MediaStream, serverURL: URL) -> URL? {
         guard stream.isExternal == true, stream.deliveryMethod == .external,
               let path = stream.deliveryURL, !path.isEmpty else { return nil }
-        if path.lowercased().hasPrefix("http") { return URL(string: path) }
+        // An absolute URL is kept only on the server's own origin: the player
+        // may fetch it through the loopback proxy, which attaches the
+        // account's token — never to another host.
+        if path.lowercased().hasPrefix("http") {
+            guard let absolute = URL(string: path), sameOrigin(absolute, serverURL) else { return nil }
+            return absolute
+        }
         return URL(string: serverURL.absoluteString.trimmingCharacters(in: ["/"]) + path)
+    }
+
+    fileprivate static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
+        func port(_ url: URL) -> Int? { url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80) }
+        return lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+            && lhs.host?.lowercased() == rhs.host?.lowercased()
+            && port(lhs) == port(rhs)
     }
 
     // VLC renders embedded text subtitles itself; image subs delivered as-is.

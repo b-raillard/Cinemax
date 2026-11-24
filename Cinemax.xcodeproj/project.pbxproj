@@ -162,6 +162,7 @@
 		30945A46BE44C9A2CC660A10 /* SeasonalAmbiance.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0D402F52BE3BFD8982C560 /* SeasonalAmbiance.swift */; };
 		310D172DE17EC3F22A5DFA95 /* ChipEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94FA6A5683705668178431E2 /* ChipEditor.swift */; };
 		3130BB68B43604CB9F31F65A /* PlaybackReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 017C266BB19FE6F0097A03A7 /* PlaybackReporter.swift */; };
+		314505CFE081D4EE8D74FB70 /* PlaybackLanguageSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D57476C445D48D82C0F1CF1 /* PlaybackLanguageSection.swift */; };
 		31515E2177896D6C0B3EC858 /* SettingsTVLanguagePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4EBD3E46649C6D2B2201E5F /* SettingsTVLanguagePicker.swift */; };
 		31C5C9858B6AB90079199B98 /* Fixtures in Resources */ = {isa = PBXBuildFile; fileRef = B24D9A92B2BDADFB669CDF12 /* Fixtures */; };
 		329C2104D5C6F3DEB74B09DB /* SeekMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE4576D10F6594A5DE8B4B50 /* SeekMachine.swift */; };
@@ -668,6 +669,7 @@
 		C41DF599074B445580E8324A /* SettingsTVAccentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAF45837A14E93AA0A9739F5 /* SettingsTVAccentPicker.swift */; };
 		C51575856DEC351E4CBE462A /* AdminScheduledTasksViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A3347166C6081B2040BB706 /* AdminScheduledTasksViewModel.swift */; };
 		C51AFD44282A386F105B8A37 /* ProComparisonViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A90CCAD5C79313B3E82959 /* ProComparisonViews.swift */; };
+		C52199A06EE8C89D056D9F21 /* PlaybackLanguageSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D57476C445D48D82C0F1CF1 /* PlaybackLanguageSection.swift */; };
 		C57AF8D68109237A53D4ED1E /* CardLabelLocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D584410BAFEC8C152E9D4530 /* CardLabelLocalizationTests.swift */; };
 		C5C3810A18222D30E7BA422E /* LibraryHeroSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40DF377C72F0695AEC1CB0D6 /* LibraryHeroSection.swift */; };
 		C5D36C26403F925F329F9896 /* VLCStreamPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D742BCF96212F6A06B3E40 /* VLCStreamPresenter.swift */; };
@@ -966,6 +968,7 @@
 		1A8D608812AC294C43A35C14 /* QuickConnectAuthorizeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickConnectAuthorizeSheet.swift; sourceTree = "<group>"; };
 		1AF53DB0B4A692BAD98BBAAF /* ProScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProScreen.swift; sourceTree = "<group>"; };
 		1B57183A10839E3056C3659D /* WhatsNewCatalogue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewCatalogue.swift; sourceTree = "<group>"; };
+		1D57476C445D48D82C0F1CF1 /* PlaybackLanguageSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackLanguageSection.swift; sourceTree = "<group>"; };
 		1D977BE54A1BC7487E1FF16D /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/AppShortcuts.strings; sourceTree = "<group>"; };
 		1D9D106D905EBC261B40B6C9 /* SeerrMissingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeerrMissingTests.swift; sourceTree = "<group>"; };
 		1E8DDA2E395A546CDBD89187 /* SeekMachineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeekMachineTests.swift; sourceTree = "<group>"; };
@@ -1566,6 +1569,7 @@
 				F9D01599D90904C2EF5B69CE /* MenuSettingsScreen+tvOS.swift */,
 				4531575F193750E1D90B91BD /* ParentalLockController.swift */,
 				934666447A353D684EE45584 /* ParentalLockGate.swift */,
+				1D57476C445D48D82C0F1CF1 /* PlaybackLanguageSection.swift */,
 				FD0C43CA3D49096228A2EF89 /* RequestsSettingsScreen.swift */,
 				63D7DC7BAA11FED48DBD8B29 /* SeerrAccountPage.swift */,
 				C4368B442E0B7FC8828AB76E /* SettingsAppearanceView+iOS.swift */,
@@ -2791,6 +2795,7 @@
 				D64C3AD31EC5F1CC8C2197F7 /* PlayLink.swift in Sources */,
 				58C2EA8BFD76178A3C136879 /* PlaybackAudioSession.swift in Sources */,
 				DA783F0CE6B25E1147F929D9 /* PlaybackEndDecision.swift in Sources */,
+				314505CFE081D4EE8D74FB70 /* PlaybackLanguageSection.swift in Sources */,
 				3130BB68B43604CB9F31F65A /* PlaybackReporter.swift in Sources */,
 				639E4690DF2F3E200BD575AA /* PlayerAccessibility.swift in Sources */,
 				1B2805729588F4621128103B /* PlayerEngineSurface.swift in Sources */,
@@ -3224,6 +3229,7 @@
 				38D0284F287A35C7FC3D4858 /* PlayLink.swift in Sources */,
 				8C794CCA1418032941AACE7B /* PlaybackAudioSession.swift in Sources */,
 				2590035AB6AEC75B266B4C1F /* PlaybackEndDecision.swift in Sources */,
+				C52199A06EE8C89D056D9F21 /* PlaybackLanguageSection.swift in Sources */,
 				0A93FBC398B8FD4F94C93E8D /* PlaybackReporter.swift in Sources */,
 				4A39E4761A2F9A8BA2D95814 /* PlayerAccessibility.swift in Sources */,
 				5161F45BA36B61BBB1648ADA /* PlayerEngineSurface.swift in Sources */,
