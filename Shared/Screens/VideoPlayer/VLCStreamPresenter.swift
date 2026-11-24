@@ -45,6 +45,7 @@ final class VLCStreamPresenter: NSObject {
     private let episodeNavigator: EpisodeNavigator?
     private let imageBuilder: ImageURLBuilder
     private let onDismiss: (() -> Void)?
+    private let accountPreferences: UserPlaybackPreferences?
     private let _initialItemId: String
     /// The `render4K`-derived ceiling the INITIAL play negotiated with. Carried
     /// so the wake re-resolve re-uses the SAME ceiling — otherwise it falls back
@@ -72,9 +73,11 @@ final class VLCStreamPresenter: NSObject {
         maxBitrate: Int,
         imageBuilder: ImageURLBuilder,
         loc: LocalizationManager,
+        accountPreferences: UserPlaybackPreferences?,
         onDismiss: (() -> Void)?
     ) {
         self.title = title
+        self.accountPreferences = accountPreferences
         self.startTime = startTime
         self.previousEpisode = previousEpisode
         self.nextEpisode = nextEpisode
@@ -116,7 +119,7 @@ final class VLCStreamPresenter: NSObject {
             previousEpisode: previousEpisode, nextEpisode: nextEpisode,
             episodeNavigator: episodeNavigator, apiClient: apiClient, userId: userId,
             autoPlayNext: autoPlayNext, maxBitrate: maxBitrate,
-            imageBuilder: imageBuilder, loc: loc, onDismiss: onDismiss
+            imageBuilder: imageBuilder, loc: loc, accountPreferences: accountPreferences, onDismiss: onDismiss
         )
         vc.onPlaybackStarted = onPlaybackStarted
         vc.modalPresentationStyle = .overFullScreen
@@ -276,6 +279,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// applied at every opening of it (`TrackPreference`), after
     /// `trackRestore`, before the server's defaults.
     private let titleTracks = TrackPreferenceStore(defaults: .standard)
+    /// The account's audio / subtitle languages and subtitle mode (Profile),
+    /// step 2 of the cascade; nil = not known yet, the server then decides.
+    private let accountPreferences: UserPlaybackPreferences?
     /// A remembered subtitle whose track libVLC had not listed yet on the
     /// `.tracksChanged` that applied the defaults; selected as soon as it is.
     private var pendingRememberedSubtitleOrdinal: Int?
@@ -727,10 +733,11 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         previousEpisode: EpisodeRef?, nextEpisode: EpisodeRef?,
         episodeNavigator: EpisodeNavigator?, apiClient: any PlaybackAPI & LibraryAPI & ServerAPI & UserPreferencesAPI,
         userId: String, autoPlayNext: Bool, maxBitrate: Int, imageBuilder: ImageURLBuilder,
-        loc: LocalizationManager, onDismiss: (() -> Void)?
+        loc: LocalizationManager, accountPreferences: UserPlaybackPreferences?, onDismiss: (() -> Void)?
     ) {
         self.itemId = itemId
         self.info = info
+        self.accountPreferences = accountPreferences
         self.titleText = title
         self.startTime = startTime
         self.previousEpisode = previousEpisode
@@ -3975,7 +3982,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     }
 
     private func displayLabel(forSubtitleOrdinal i: Int, track: Track) -> String {
-        if i < info.subtitleTracks.count { return info.subtitleTracks[i].label }
+        if i < vlcSubtitleTracks.count { return vlcSubtitleTracks[i].label }
         if let lang = track.language, !lang.isEmpty { return "\(track.name) (\(lang))" }
         return track.name
     }
@@ -4075,9 +4082,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         pendingRememberedSubtitleOrdinal = nil // the viewer's pick wins over a remembered one still waiting
         // Remembered even when unchanged, like the audio: a confirmation.
         if let track {
-            if let ordinal = player.subtitleTracks.firstIndex(of: track), ordinal < info.subtitleTracks.count {
+            if let ordinal = player.subtitleTracks.firstIndex(of: track), ordinal < vlcSubtitleTracks.count {
                 rememberForTitle {
-                    $0.recordSubtitle(TrackPreferencePolicy.subtitle(info.subtitleTracks[ordinal]), userId: $1, titleId: $2)
+                    $0.recordSubtitle(TrackPreferencePolicy.subtitle(vlcSubtitleTracks[ordinal]), userId: $1, titleId: $2)
                 }
             }
         } else {
@@ -4314,50 +4321,54 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             return
         }
 
-        // What the viewer picked by hand for this series or film, when this
-        // media carries a matching track; else the server's defaults.
-        let remembered = titleTracks.preference(userId: userId, titleId: trackMemoryId)
-        let rememberedAudio = remembered?.audio.flatMap {
-            TrackPreferencePolicy.audioOrdinal(for: $0, in: info.audioTracks)
-        }
-
-        // NOT `info.selectedAudioIndex` verbatim: the server's default can be a
-        // TrueHD track, which this engine renders as silence on Apple. See
-        // `AudioTrackPolicy`.
-        let chosen = rememberedAudio ?? AudioTrackPolicy.defaultOrdinal(
-            tracks: info.audioTracks,
-            serverDefaultId: info.selectedAudioIndex
-        )
-        if let ordinal = chosen, ordinal < player.audioTracks.count {
+        // The cascade (`TrackDefaultsPolicy`): the choice remembered for this
+        // series or film, the account's languages, the app's, the file's
+        // default, the first audible track. A forced HLS transcode carries the
+        // audio the server picked at negotiation (libVLC sees one track), so it
+        // keeps the server's picks — the cascade cannot apply there.
+        let isTranscode = info.playMethod == .transcode
+        let decision = TrackDefaultsPolicy.decide(.init(
+            audioTracks: info.audioTracks,
+            subtitleTracks: vlcSubtitleTracks,
+            remembered: isTranscode ? nil : titleTracks.preference(userId: userId, titleId: trackMemoryId),
+            account: isTranscode ? nil : accountPreferences,
+            interfaceLanguage: loc.languageCode,
+            serverAudioId: info.selectedAudioIndex,
+            serverSubtitleId: info.selectedSubtitleIndex
+        ))
+        if let ordinal = decision.audio, ordinal < player.audioTracks.count {
             player.selectedAudioTrack = player.audioTracks[ordinal]
         }
         // Permanent, because this decision is invisible from the outside and a
         // wrong one reaches the user as SILENCE with no other trace. Without it
         // a remote log cannot even answer "did the guard run?" — which is
         // exactly the question a build sent out for testing raises.
-        logAudioTrackChoice(applied: chosen, remembered: rememberedAudio != nil)
+        logAudioTrackChoice(applied: decision.audio, reason: isTranscode ? "transcodage — choix du serveur" : decision.audioReason.rawValue)
 
-        if let wanted = remembered?.subtitle,
-           let choice = TrackPreferencePolicy.subtitleChoice(for: wanted, in: info.subtitleTracks) {
-            switch choice {
-            case .off:
-                player.selectedSubtitleTrack = nil
-            case .ordinal(let ordinal) where ordinal < player.subtitleTracks.count:
-                player.selectedSubtitleTrack = player.subtitleTracks[ordinal]
-            case .ordinal(let ordinal):
-                // Not listed yet on this `.tracksChanged`.
-                player.selectedSubtitleTrack = nil
-                pendingRememberedSubtitleOrdinal = ordinal
-            }
-            logger.notice("CINEMAX-SUBS ▸ choix gardé pour ce titre appliqué : \(String(describing: choice), privacy: .public)")
-        } else if let wantSub = info.selectedSubtitleIndex, wantSub >= 0,
-           let ordinal = info.subtitleTracks.firstIndex(where: { $0.id == wantSub }),
-           ordinal < player.subtitleTracks.count {
-            player.selectedSubtitleTrack = player.subtitleTracks[ordinal]
-        } else {
+        switch decision.subtitle {
+        case .off:
             player.selectedSubtitleTrack = nil
+        case .ordinal(let ordinal) where ordinal < player.subtitleTracks.count:
+            player.selectedSubtitleTrack = player.subtitleTracks[ordinal]
+        case .ordinal(let ordinal):
+            // Not listed yet on this `.tracksChanged`.
+            player.selectedSubtitleTrack = nil
+            pendingRememberedSubtitleOrdinal = ordinal
         }
+        let subtitleSummary: String
+        switch decision.subtitle {
+        case .off: subtitleSummary = "aucun"
+        case .ordinal(let ordinal):
+            let track = vlcSubtitleTracks[ordinal]
+            subtitleSummary = "[\(ordinal)] \(track.language ?? "?")\(track.isForced ? " forcés" : "")"
+        }
+        logger.notice("CINEMAX-SUBS ▸ \(subtitleSummary, privacy: .public) (\(decision.subtitleReason.rawValue, privacy: .public))")
     }
+
+    /// The subtitles libVLC actually lists, in its order: Jellyfin's list minus
+    /// the external files (listed FIRST by the server, never loaded by libVLC
+    /// — keeping them shifted every ordinal by one).
+    private var vlcSubtitleTracks: [MediaTrackInfo] { info.subtitleTracks.filter { !$0.isExternal } }
 
     /// A remembered subtitle selected once libVLC lists it (see
     /// `pendingRememberedSubtitleOrdinal`), re-anchored like a pick when the media
@@ -4381,7 +4392,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
 
     /// One line describing which audio track opened and why. Codec and
     /// language only — no URL, no token, nothing user-identifying.
-    private func logAudioTrackChoice(applied: Int?, remembered: Bool) {
+    private func logAudioTrackChoice(applied: Int?, reason: String) {
         let serverDefault = info.selectedAudioIndex
         let catalogue = info.audioTracks.enumerated()
             .map { "[\($0.offset)] id=\($0.element.id) \($0.element.codec ?? "?")/\($0.element.language ?? "?")" }
@@ -4390,11 +4401,8 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         if let applied, applied < info.audioTracks.count {
             let track = info.audioTracks[applied]
             appliedDescription = "[\(applied)] \(track.codec ?? "?")/\(track.language ?? "?")"
-            if remembered {
-                appliedDescription += " (choix gardé pour ce titre)"
-            } else if let serverDefault, serverDefault != track.id {
-                appliedDescription += " (REMPLACE le défaut serveur — codec muet sur Apple)"
-            }
+            appliedDescription += " (\(reason))"
+            if !AudioTrackPolicy.isAudible(track) { appliedDescription += " — MUET sur Apple" }
         }
         let summary = "défaut serveur=" + String(describing: serverDefault)
             + " appliqué=" + appliedDescription

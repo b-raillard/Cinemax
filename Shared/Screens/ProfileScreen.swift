@@ -612,6 +612,9 @@ final class ProfileModel {
             self.preferences = next
             do {
                 try await appState.apiClient.updateUserConfiguration(userId: userId, preferences: next)
+                // The player reads these from `appState.currentUser`: refresh it,
+                // or the change waits for the next foreground.
+                await appState.refreshCurrentUser()
                 return .saved
             } catch {
                 logger.error("Preference save failed: \(error.localizedDescription, privacy: .public)")

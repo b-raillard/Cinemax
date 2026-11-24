@@ -149,6 +149,7 @@ struct VideoPlayerView: View {
                     apiClient: appState.apiClient, userId: userId,
                     autoPlayNext: autoPlayNextEpisode, maxBitrate: bitrate,
                     imageBuilder: appState.imageBuilder, loc: loc,
+                    accountPreferences: UserPlaybackPreferences(configuration: appState.currentUser?.configuration),
                     onDismiss: { reviewPrompt?.playerDidClose(); dismiss() }
                 )
                 v.onPlaybackStarted = onPlaybackStarted

@@ -104,6 +104,7 @@ final class VideoPlayerCoordinator {
                         apiClient: apiClient, userId: userId,
                         autoPlayNext: autoPlayNextEpisode, maxBitrate: bitrate,
                         imageBuilder: appState.imageBuilder, loc: loc,
+                        accountPreferences: UserPlaybackPreferences(configuration: appState.currentUser?.configuration),
                         onDismiss: { [weak self] in
                             guard let self, self.currentGeneration == generation else { return }
                             self.vlcPresenter = nil

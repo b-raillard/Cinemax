@@ -655,7 +655,7 @@ extension JellyfinAPIClient {
                 let label = s.displayTitle ?? s.language ?? "Track \(idx)"
                 return MediaTrackInfo(
                     id: idx, label: label, isDefault: s.isDefault ?? false, isForced: s.isForced ?? false,
-                    codec: s.codec, language: s.language
+                    codec: s.codec, language: s.language, isExternal: s.isExternal ?? false
                 )
             }
         return (audio, subtitles)

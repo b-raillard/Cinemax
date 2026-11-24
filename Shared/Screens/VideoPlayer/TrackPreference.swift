@@ -48,11 +48,11 @@ enum TrackPreferencePolicy {
     /// is taken instead, else the server's default. Among the candidates of
     /// the same language, the same label wins, then the same codec.
     static func audioOrdinal(for wanted: TrackPreference.Audio, in tracks: [MediaTrackInfo]) -> Int? {
-        let language = AudioTrackPolicy.normalized(wanted.language)
+        let language = LanguageKey.of(wanted.language)
         let candidates = tracks.indices.filter { index in
             let track = tracks[index]
             guard AudioTrackPolicy.isAudible(track) else { return false }
-            if let language { return AudioTrackPolicy.normalized(track.language) == language }
+            if let language { return LanguageKey.of(track.language) == language }
             return track.label == wanted.label
         }
         return candidates.first(where: { tracks[$0].label == wanted.label })
@@ -73,11 +73,11 @@ enum TrackPreferencePolicy {
         case .off:
             return .off
         case .track(let rawLanguage, let isForced, let label):
-            let language = AudioTrackPolicy.normalized(rawLanguage)
+            let language = LanguageKey.of(rawLanguage)
             let candidates = tracks.indices.filter { index in
                 let track = tracks[index]
                 guard track.isForced == isForced else { return false }
-                if let language { return AudioTrackPolicy.normalized(track.language) == language }
+                if let language { return LanguageKey.of(track.language) == language }
                 return track.label == label
             }
             guard let ordinal = candidates.first(where: { tracks[$0].label == label }) ?? candidates.first else {
