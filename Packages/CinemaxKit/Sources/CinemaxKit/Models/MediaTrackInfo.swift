@@ -23,6 +23,9 @@ public struct MediaTrackInfo: Identifiable, Equatable, Sendable {
     /// never loads them — the VLC player leaves them out of its ordinal
     /// mapping (`VLCStreamPresenter.vlcSubtitleTracks`).
     public let isExternal: Bool
+    /// Where the server serves an external subtitle file (absolute), when it
+    /// offered it for external delivery; nil for everything else.
+    public let deliveryURL: URL?
 
     public init(
         id: Int,
@@ -31,7 +34,8 @@ public struct MediaTrackInfo: Identifiable, Equatable, Sendable {
         isForced: Bool,
         codec: String? = nil,
         language: String? = nil,
-        isExternal: Bool = false
+        isExternal: Bool = false,
+        deliveryURL: URL? = nil
     ) {
         self.id = id
         self.label = label
@@ -40,5 +44,6 @@ public struct MediaTrackInfo: Identifiable, Equatable, Sendable {
         self.codec = codec
         self.language = language
         self.isExternal = isExternal
+        self.deliveryURL = deliveryURL
     }
 }

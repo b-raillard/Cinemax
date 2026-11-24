@@ -215,7 +215,7 @@ extension JellyfinAPIClient {
                 #if DEBUG
                 Self.logPlaybackDecision(method: "transcode", item: item, source: mediaSource, url: url)
                 #endif
-                let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource)
+                let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource, serverURL: serverURL)
                 return PlaybackInfo(
                     url: url,
                     playSessionId: playSessionId,
@@ -263,7 +263,7 @@ extension JellyfinAPIClient {
         #if DEBUG
         Self.logPlaybackDecision(method: "directStream", item: item, source: mediaSource, url: url)
         #endif
-        let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource)
+        let (audioTracks, subtitleTracks) = Self.extractTracks(from: mediaSource, serverURL: serverURL)
         return PlaybackInfo(
             url: url,
             playSessionId: playSessionId,
@@ -632,7 +632,9 @@ extension JellyfinAPIClient {
     }
 
     /// Extracts audio and subtitle track info from a media source's stream list.
-    fileprivate static func extractTracks(from source: MediaSourceInfo) -> (audio: [MediaTrackInfo], subtitles: [MediaTrackInfo]) {
+    fileprivate static func extractTracks(
+        from source: MediaSourceInfo, serverURL: URL
+    ) -> (audio: [MediaTrackInfo], subtitles: [MediaTrackInfo]) {
         let streams = source.mediaStreams ?? []
         let audio: [MediaTrackInfo] = streams
             .filter { $0.type == .audio }
@@ -655,7 +657,8 @@ extension JellyfinAPIClient {
                 let label = s.displayTitle ?? s.language ?? "Track \(idx)"
                 return MediaTrackInfo(
                     id: idx, label: label, isDefault: s.isDefault ?? false, isForced: s.isForced ?? false,
-                    codec: s.codec, language: s.language, isExternal: s.isExternal ?? false
+                    codec: s.codec, language: s.language, isExternal: s.isExternal ?? false,
+                    deliveryURL: externalSubtitleURL(s, serverURL: serverURL)
                 )
             }
         return (audio, subtitles)
@@ -827,8 +830,29 @@ extension JellyfinAPIClient {
             videoCodec: "hevc,h264"
         ),
     ]
+    /// The file the server serves for an EXTERNAL subtitle (a `.srt` beside
+    /// the media), absolute — the player attaches it to libVLC as a slave.
+    /// Same base-path join as `TranscodingUrl`'s.
+    fileprivate static func externalSubtitleURL(_ stream: MediaStream, serverURL: URL) -> URL? {
+        guard stream.isExternal == true, stream.deliveryMethod == .external,
+              let path = stream.deliveryURL, !path.isEmpty else { return nil }
+        if path.lowercased().hasPrefix("http") { return URL(string: path) }
+        return URL(string: serverURL.absoluteString.trimmingCharacters(in: ["/"]) + path)
+    }
+
     // VLC renders embedded text subtitles itself; image subs delivered as-is.
+    // Text formats are also accepted as EXTERNAL files: without it the server
+    // could only deliver a `.srt` beside the media by burning it into a full
+    // transcode — which it did whenever it picked that file as the default
+    // subtitle (measured on the bench, 2026-11-24). The player attaches them
+    // to libVLC itself (`VLCStreamPresenter.attachExternalSubtitles`).
     fileprivate static let _vlcSubtitleProfiles: [SubtitleProfile] = [
+        SubtitleProfile(format: "srt", method: .external),
+        SubtitleProfile(format: "subrip", method: .external),
+        SubtitleProfile(format: "ass", method: .external),
+        SubtitleProfile(format: "ssa", method: .external),
+        SubtitleProfile(format: "vtt", method: .external),
+        SubtitleProfile(format: "webvtt", method: .external),
         SubtitleProfile(format: "ass",    method: .embed),
         SubtitleProfile(format: "ssa",    method: .embed),
         SubtitleProfile(format: "srt",    method: .embed),

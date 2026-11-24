@@ -1077,6 +1077,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // while the picture is still running. Costs proportionally more
         // initial buffering; matches the retry path's network-caching.
         media.addOption(":network-caching=8000")
+        attachExternalSubtitles(to: media)
         return media
     }
 
@@ -4365,10 +4366,34 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         logger.notice("CINEMAX-SUBS ▸ \(subtitleSummary, privacy: .public) (\(decision.subtitleReason.rawValue, privacy: .public))")
     }
 
-    /// The subtitles libVLC actually lists, in its order: Jellyfin's list minus
-    /// the external files (listed FIRST by the server, never loaded by libVLC
-    /// — keeping them shifted every ordinal by one).
-    private var vlcSubtitleTracks: [MediaTrackInfo] { info.subtitleTracks.filter { !$0.isExternal } }
+    /// The subtitles libVLC actually lists, in its order: the embedded streams,
+    /// then the external files `attachExternalSubtitles` attached as slaves.
+    /// Jellyfin lists those files FIRST, which shifted every ordinal by one
+    /// while libVLC never saw them; a file the server offered no URL for is
+    /// left out.
+    private var vlcSubtitleTracks: [MediaTrackInfo] {
+        info.subtitleTracks.filter { !$0.isExternal } + externalSubtitles
+    }
+
+    private var externalSubtitles: [MediaTrackInfo] {
+        info.subtitleTracks.filter { $0.isExternal && $0.deliveryURL != nil }
+    }
+
+    /// Attaches the external subtitle files to `media` before it plays, through
+    /// the loopback proxy when the stream itself goes through it (a pinned or
+    /// black-holed host libVLC cannot reach directly). Low priority: the track
+    /// SELECTION stays `applyServerTrackDefaultsIfNeeded`'s.
+    private func attachExternalSubtitles(to media: Media) {
+        for track in externalSubtitles {
+            guard let delivery = track.deliveryURL else { continue }
+            let url = usingProxy ? (proxiedURLIfUsable(for: delivery, token: info.authToken) ?? delivery) : delivery
+            do {
+                try media.addSlave(from: url, type: .subtitle, priority: 0)
+            } catch {
+                logger.error("CINEMAX-SUBS ▸ fichier externe non attaché (\(track.language ?? "?", privacy: .public))")
+            }
+        }
+    }
 
     /// A remembered subtitle selected once libVLC lists it (see
     /// `pendingRememberedSubtitleOrdinal`), re-anchored like a pick when the media
@@ -5883,6 +5908,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
                     return
                 }
                 media.addOption(":network-caching=8000")
+                self.attachExternalSubtitles(to: media)
                 self.recordPlaybackDiagnostics()
                 // A drop AFTER playback began (HTTP/2 RST on a proxied
                 // server, transient blip): resume where it dropped instead
