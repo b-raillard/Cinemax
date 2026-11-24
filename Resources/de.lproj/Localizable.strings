@@ -1341,6 +1341,14 @@
 "whatsNew.seerrRequests.body" = "Ein Film oder eine Serie fehlt in deiner Bibliothek? Such danach: „Anfragen“ schickt ihn an deinen Admin, und JellyGlass sagt dir Bescheid, sobald er da ist. Dein Admin schaltet Seerr unter Einstellungen → Seerr ein.";
 "whatsNew.missingEpisodes.title" = "Fehlende Folgen*";
 "whatsNew.missingEpisodes.body" = "In einer unvollständigen Staffel erscheinen die fehlenden Folgen an ihrem Platz, mit ihrem Bild. Ein Knopf meldet sie deinem Admin, der sie in Seerr wiederfindet.";
+"whatsNew.christmasFrost.title" = "Weihnachten im Frost";
+"whatsNew.christmasFrost.body" = "Bis zum 6. Januar überzieht sich die App mit Frost: Nachtblau, gravierte Titel, Eisblumen in den Bildschirmecken und fallender Schnee. Auf der Startseite eine Reihe „Weihnachten mit der Familie“ und Filme, die du dir zu Weihnachten wünschen kannst*. Nach den Feiertagen ist alles wieder wie vorher.";
+"whatsNew.christmasFrostTV.title" = "Weihnachten im Frost";
+"whatsNew.christmasFrostTV.body" = "Bis zum 6. Januar überzieht sich die App mit Frost: Nachtblau, gravierte Titel, Eisblumen in den Bildschirmecken und fallender Schnee, dazu eine Reihe „Weihnachten mit der Familie“ auf der Startseite. Nach den Feiertagen ist alles wieder wie vorher.";
+"whatsNew.rememberedTracks.title" = "Deine Sprachen folgen der Serie";
+"whatsNew.rememberedTracks.body" = "Wähl Ton und Untertitel einmal: JellyGlass behält sie für die ganze Serie, und ein fortgesetzter Film startet in den gewählten Sprachen, auf all deinen Geräten. Deine bevorzugten Sprachen stellst du unter Einstellungen → Wiedergabe → Sprachen ein.";
+"whatsNew.requestFiche.title" = "Erst ansehen, dann anfragen*";
+"whatsNew.requestFiche.body" = "Ein anfragbarer Titel öffnet jetzt seine eigene Seite: Bild, Inhalt, Besetzung und Infos, damit du weißt, was du anfragst, bevor du es abschickst.";
 "whatsNew.footnote.seerr" = "* Erfordert einen Seerr-Server";
 "whatsNew.accounts.title" = "Wer schaut?";
 "whatsNew.accounts.body" = "Jeder behält sein eigenes Konto auf demselben Gerät, mit eigenem Fortschritt und eigenen Einstellungen. Dein Avatar oben links wechselt zwischen ihnen, und ein Code kann jedes Konto schützen.";

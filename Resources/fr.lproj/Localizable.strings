@@ -1343,6 +1343,14 @@
 "whatsNew.seerrRequests.body" = "Un film ou une série absent de votre bibliothèque ? Cherchez-le : « Demander » l’envoie à votre admin, et JellyGlass vous prévient quand il arrive. Votre admin active Seerr dans Réglages → Seerr.";
 "whatsNew.missingEpisodes.title" = "Les épisodes manquants*";
 "whatsNew.missingEpisodes.body" = "Dans une saison incomplète, les épisodes absents apparaissent à leur place, avec leur image. Un bouton les signale à votre admin, qui les retrouve dans Seerr.";
+"whatsNew.christmasFrost.title" = "Noël sous le givre";
+"whatsNew.christmasFrost.body" = "Jusqu'au 6 janvier, l'app se couvre de givre : bleu nuit, titres gravés, givre aux coins de l'écran et neige qui tombe. À l'accueil, une rangée « Noël en famille », et des films à demander pour Noël*. Après les fêtes, tout redevient comme avant.";
+"whatsNew.christmasFrostTV.title" = "Noël sous le givre";
+"whatsNew.christmasFrostTV.body" = "Jusqu'au 6 janvier, l'app se couvre de givre : bleu nuit, titres gravés, givre aux coins de l'écran et neige qui tombe, avec une rangée « Noël en famille » à l'accueil. Après les fêtes, tout redevient comme avant.";
+"whatsNew.rememberedTracks.title" = "Vos langues suivent la série";
+"whatsNew.rememberedTracks.body" = "Choisissez l'audio et les sous-titres une fois : JellyGlass les garde pour toute la série, et un film repris s'ouvre dans les langues choisies, sur tous vos appareils. Vos langues préférées se règlent dans Réglages → Lecture → Langues.";
+"whatsNew.requestFiche.title" = "Voir avant de demander*";
+"whatsNew.requestFiche.body" = "Un titre à demander s'ouvre maintenant sur sa fiche : image, résumé, distribution et infos, pour savoir ce que vous demandez avant de l'envoyer.";
 "whatsNew.footnote.seerr" = "* Nécessite un serveur Seerr";
 "whatsNew.accounts.title" = "Qui regarde ?";
 "whatsNew.accounts.body" = "Chacun garde son compte sur le même appareil, avec ses reprises et ses réglages. Votre avatar, en haut à gauche, passe de l’un à l’autre, et un code peut protéger chaque compte.";

@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// The four 2.6.0 motifs, which MOVE: drawn on the same 100 × 100 grid and in
-/// the same ink as `MotifCanvas`, from the approved 2.6.0 mockup's SVG, each
-/// looping its own small story. With Motion Effects off or Reduce Motion they
+/// The four 2.6.0 motifs and the two 2.8.0 ones, which MOVE: drawn on the same
+/// 100 × 100 grid and in the same ink as `MotifCanvas`, from the approved
+/// mockups' SVG (« Nouveautés 2.6.0 », « Nouveautés 2.8.0 »), each looping
+/// its own small story. With Motion Effects off or Reduce Motion they
 /// rest on the static drawing (`MotifMotion` at `nil`). The halo is drawn
 /// around them by `WhatsNewIllustrationView`, like every motif.
 struct WhatsNewAnimatedMotif: View {
@@ -127,6 +128,55 @@ enum MotifMotion {
         }
     }
 
+    // MARK: « Vos langues suivent la série » (2.8.0) — 5 s, ease-out
+
+    /// The audio + subtitle pills of the three episodes, top first: they
+    /// pop onto the first, then drop onto the next two.
+    static let tracksPeriod: Double = 5
+    static let tracksDelays: [Double] = [0, 0, 0.45]
+
+    static func tracks(at elapsed: Double?) -> [Layer] {
+        guard let elapsed else { return tracksDelays.map { _ in Layer() } }
+        return tracksDelays.enumerated().map { index, delay in
+            let q = due(elapsed, delay: delay, period: tracksPeriod)
+            if index == 0 {
+                return Layer(opacity: ease(q, [(0, 0), (0.08, 0), (0.16, 1), (1, 1)]),
+                             scale: ease(q, [(0, 0.6), (0.08, 0.6), (0.16, 1.08), (0.22, 1), (1, 1)]))
+            }
+            // CSS translateY(-150 %) of the 11-unit pill row, then a 6 % overshoot.
+            return Layer(opacity: ease(q, [(0, 0), (0.22, 0), (0.34, 1), (1, 1)]),
+                         dy: ease(q, [(0, -16.5), (0.22, -16.5), (0.34, 0.66), (0.40, 0), (1, 0)]))
+        }
+    }
+
+    // MARK: « Voir avant de demander » (2.8.0) — 5 s, ease-out
+
+    struct Fiche: Equatable {
+        var sheet = Layer()
+        var cast = [Layer(), Layer(), Layer()]
+        var pill = Layer()
+    }
+
+    static let fichePeriod: Double = 5
+    static let castDelays: [Double] = [0, 0.2, 0.4]
+
+    static func fiche(at elapsed: Double?) -> Fiche {
+        guard let elapsed else { return Fiche() }
+        let p = phase(elapsed, period: fichePeriod)
+        let cast = castDelays.map { delay -> Layer in
+            let q = due(elapsed, delay: delay, period: fichePeriod)
+            return Layer(opacity: ease(q, [(0, 0), (0.30, 0), (0.40, 1), (1, 1)]),
+                         scale: ease(q, [(0, 0.4), (0.30, 0.4), (0.40, 1.1), (0.46, 1), (1, 1)]))
+        }
+        return Fiche(
+            // CSS translateY(22 %) of the 78-unit sheet.
+            sheet: Layer(opacity: ease(p, [(0, 0), (0.06, 0), (0.26, 1), (1, 1)]),
+                         dy: ease(p, [(0, 17.16), (0.06, 17.16), (0.26, 0), (1, 0)])),
+            cast: cast,
+            pill: Layer(opacity: ease(p, [(0, 0), (0.52, 0), (0.60, 1), (1, 1)]),
+                        scale: ease(p, [(0, 0.6), (0.52, 0.6), (0.60, 1.06), (0.66, 1), (0.74, 0.9), (0.80, 1), (1, 1)])))
+    }
+
     // MARK: Clock
 
     /// Where `time` falls in a loop of `period` seconds, 0 ..< 1.
@@ -161,7 +211,47 @@ private struct MotifMotionDrawing {
         case .missingEpisodes: missing(MotifMotion.missing(at: elapsed), &ctx)
         case .localAddress: home(MotifMotion.home(at: elapsed), &ctx)
         case .episodeQuality: quality(MotifMotion.tags(at: elapsed), &ctx)
+        case .rememberedTracks: tracks(MotifMotion.tracks(at: elapsed), &ctx)
+        case .requestFiche: fiche(MotifMotion.fiche(at: elapsed), &ctx)
         default: break
+        }
+    }
+
+    /// Three episodes of one show; the audio pill (accent) and the subtitle
+    /// pill land on the first, then on the next two.
+    private func tracks(_ rows: [MotifMotion.Layer], _ ctx: inout GraphicsContext) {
+        for (pills, y) in zip(rows, [16.0, 42, 68] as [CGFloat]) {
+            rect(&ctx, box(10, y, 30, 18), 4, ink.tileHigh)
+            triangle(&ctx, [CGPoint(x: 22, y: y + 5.5), CGPoint(x: 29, y: y + 9), CGPoint(x: 22, y: y + 12.5)], ink.mark, 0.5)
+            layer(&ctx, pills, around: CGPoint(x: 68, y: y + 9)) { g in
+                rect(&g, box(46, y + 3.5, 22, 11), 5.5, ink.accent)
+                rect(&g, box(52, y + 7.5, 10, 3), 1.5, ink.text)
+                rect(&g, box(72, y + 3.5, 18, 11), 5.5, ink.tile)
+                rect(&g, box(76.5, y + 7.5, 9, 3), 1.5, ink.mark, 0.6)
+            }
+        }
+    }
+
+    /// A request card opens into its page: backdrop, title, the cast one by
+    /// one, then the accent « Demander » pill is pressed.
+    private func fiche(_ pose: MotifMotion.Fiche, _ ctx: inout GraphicsContext) {
+        rect(&ctx, box(8, 38, 16, 24), 3, ink.tileHigh)
+        layer(&ctx, pose.sheet, around: CGPoint(x: 60, y: 51)) { g in
+            rect(&g, box(30, 12, 60, 78), 8, ink.tile)
+            rect(&g, box(30, 12, 60, 28), 8, ink.tileHigh)
+            rect(&g, box(30, 32, 60, 8), 0, ink.tileHigh)
+            triangle(&g, [CGPoint(x: 55, y: 20), CGPoint(x: 64, y: 26), CGPoint(x: 55, y: 32)], ink.mark, 0.45)
+            rect(&g, box(36, 45, 32, 4), 2, ink.text, 0.8)
+            rect(&g, box(36, 52, 22, 3), 1.5, ink.mark, 0.45)
+        }
+        for (face, x) in zip(pose.cast, [41.0, 53, 65] as [CGFloat]) {
+            layer(&ctx, face, around: CGPoint(x: x, y: 64)) { g in
+                dot(&g, x, 64, 4.5, ink.tileHigh)
+            }
+        }
+        layer(&ctx, pose.pill, around: CGPoint(x: 53, y: 79)) { g in
+            rect(&g, box(36, 74, 34, 10), 5, ink.accent)
+            rect(&g, box(43, 77.5, 20, 3), 1.5, ink.text)
         }
     }
 

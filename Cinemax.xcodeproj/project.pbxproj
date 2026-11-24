@@ -709,6 +709,7 @@
 		CD087ACC17110EF35BCAE4A8 /* IdentifyResultsGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74AE99230CEB07F7CC4FCCFA /* IdentifyResultsGridView.swift */; };
 		CD497EE6A51D51F42BBF57B6 /* SeerrPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFBC25AB7BC83A9798D56571 /* SeerrPolicyTests.swift */; };
 		CD8E6C6DE6EC7575C36BE5DB /* CinemaxStreamProxy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16B604F5FE24467521C25021 /* CinemaxStreamProxy.swift */; };
+		CD91E6809950607DF2908347 /* WhatsNewFrostScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9171B9FC9F6F1483DB1352F4 /* WhatsNewFrostScene.swift */; };
 		CDF34FF264E8F135FDC4A706 /* DiagnosticsExportRows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97840C240F2E6935526A2E18 /* DiagnosticsExportRows.swift */; };
 		CE17365839F203B1BB0A34F9 /* ToastCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5610FD34CD71B2F9E4D65FC6 /* ToastCenter.swift */; };
 		CECD6F0550D4470ABD17BD82 /* HomeViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69FA0DC94A5D41FE4D6DC0A2 /* HomeViewModelTests.swift */; };
@@ -854,6 +855,7 @@
 		FB1668964FB3B0CCF483EADC /* DeepLinkRouteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7EA60E10D3E173579C547E /* DeepLinkRouteTests.swift */; };
 		FB6FC7ADD24BFD093F9D6098 /* NativeVideoPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07FE737816B4F86FC1A9D144 /* NativeVideoPresenter.swift */; };
 		FC1B2E5E3AD07540A82FD198 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 7245AC0008EF86CB3AF4972B /* PrivacyInfo.xcprivacy */; };
+		FC4C13475441558DE6705031 /* WhatsNewFrostScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9171B9FC9F6F1483DB1352F4 /* WhatsNewFrostScene.swift */; };
 		FC6B6A1BA6A5010E7D845B0C /* TrackDefaultsPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B2895240C9071ED5F758F3 /* TrackDefaultsPolicy.swift */; };
 		FC977C55710C5DEB48C5A122 /* TVButtonStyles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F4ACBF04D222D92DA5953B /* TVButtonStyles.swift */; };
 		FCD6516F86DDAFE26B843E08 /* AdminApiKeysTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61714AC7F3CC3943BC414EF6 /* AdminApiKeysTests.swift */; };
@@ -1191,6 +1193,7 @@
 		90638C59FBF1F214D0C2923B /* EntitlementState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntitlementState.swift; sourceTree = "<group>"; };
 		90AE2E16EF76909D68C221A7 /* ExtensionServerRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionServerRoute.swift; sourceTree = "<group>"; };
 		90C4EAEE97333D74D6523155 /* LiveSessionsRowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveSessionsRowTests.swift; sourceTree = "<group>"; };
+		9171B9FC9F6F1483DB1352F4 /* WhatsNewFrostScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewFrostScene.swift; sourceTree = "<group>"; };
 		929537FA4254CCBD87E276B3 /* ErrorStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorStateView.swift; sourceTree = "<group>"; };
 		929D38B2AC05484F55B68508 /* FavoritesViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesViewModelTests.swift; sourceTree = "<group>"; };
 		9330A1B51ADCA7853DF7FE1A /* SeasonTrait.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonTrait.swift; sourceTree = "<group>"; };
@@ -1452,6 +1455,7 @@
 				51BE513AABC2888804BBF3AF /* WhatsNewAnimatedMotifs.swift */,
 				1B57183A10839E3056C3659D /* WhatsNewCatalogue.swift */,
 				2E6ABA2067D1592776041CEF /* WhatsNewDuoScene.swift */,
+				9171B9FC9F6F1483DB1352F4 /* WhatsNewFrostScene.swift */,
 				EB7FA28DFA0088FAC846EED1 /* WhatsNewHalloweenScene.swift */,
 				73B67ACF04B1FFE9E01F4782 /* WhatsNewIllustration.swift */,
 				5E19706AD8199FD7B1BDF875 /* WhatsNewPolicy.swift */,
@@ -2954,6 +2958,7 @@
 				620051DBE3D61B38E5836F50 /* WhatsNewAnimatedMotifs.swift in Sources */,
 				3ED7BC82385E90F72DE07604 /* WhatsNewCatalogue.swift in Sources */,
 				9EF88DCE280B7911F2FBD125 /* WhatsNewDuoScene.swift in Sources */,
+				FC4C13475441558DE6705031 /* WhatsNewFrostScene.swift in Sources */,
 				2FE46B13F4BCB62EEB66B345 /* WhatsNewHalloweenScene.swift in Sources */,
 				CAA9FDA459FB87E7B3F367AB /* WhatsNewIllustration.swift in Sources */,
 				5387266807C86D4BE2FC1828 /* WhatsNewPolicy.swift in Sources */,
@@ -3396,6 +3401,7 @@
 				53021C9179D274C84516B833 /* WhatsNewAnimatedMotifs.swift in Sources */,
 				CF9B70C7595EA08B2F235061 /* WhatsNewCatalogue.swift in Sources */,
 				6F71626045F4B7E8EDC99876 /* WhatsNewDuoScene.swift in Sources */,
+				CD91E6809950607DF2908347 /* WhatsNewFrostScene.swift in Sources */,
 				C20E16BB64AFF1A1C12F0D7E /* WhatsNewHalloweenScene.swift in Sources */,
 				3C2B94112906A6D51E669730 /* WhatsNewIllustration.swift in Sources */,
 				71448B532787D84CB37C5B41 /* WhatsNewPolicy.swift in Sources */,
@@ -3499,7 +3505,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2.7.0;
+				CURRENT_PROJECT_VERSION = 2.8.0;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -3518,7 +3524,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 2.7.0;
+				MARKETING_VERSION = 2.8.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -3769,7 +3775,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2.7.0;
+				CURRENT_PROJECT_VERSION = 2.8.0;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -3782,7 +3788,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 2.7.0;
+				MARKETING_VERSION = 2.8.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
