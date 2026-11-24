@@ -3844,9 +3844,14 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         return
         #else
         let sheet = UIAlertController(title: title, message: nil, preferredStyle: .actionSheet)
+        // A sheet's action runs once its dismissal animation ends; a ⏭ pressed
+        // in that window has already swapped the media, and the row's track
+        // object would then select (and remember for the series) a track of
+        // the NEXT episode. Its rows address the episode they were built for.
+        let generation = navGeneration
         for opt in options {
             sheet.addAction(UIAlertAction(title: opt.title + (opt.selected ? "  ✓" : ""), style: .default) { [weak self] _ in
-                opt.action()
+                if self?.navGeneration == generation { opt.action() }
                 self?.endPicker()
             })
         }
