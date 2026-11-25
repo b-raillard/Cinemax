@@ -35,8 +35,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "2.7.0"
-    CURRENT_PROJECT_VERSION: "2.7.0"
+    MARKETING_VERSION: "2.8.0"
+    CURRENT_PROJECT_VERSION: "2.8.1"
     # Distribution signing: Xcode auto-creates an "iOS App Store" / "tvOS App
     # Store" provisioning profile on first archive once DEVELOPMENT_TEAM is set.
     # It is deliberately NOT set here: set it per machine (Xcode › Signing &
@@ -134,6 +134,7 @@ targets:
         # Seasonal title font (SeasonalThemeCatalogue → SeasonFont), OFL.
         UIAppFonts:
           - Fraunces-BlackItalic.ttf
+          - CormorantGaramond-Bold.ttf
         # Team prefix (e.g. "ABCDE12345.") injected at sign time. Read at
         # runtime to build the shared Keychain access group string without
         # hardcoding the team id. Keep in sync across all four targets.
@@ -215,7 +216,7 @@ targets:
         # Alternate icons of Réglages → Apparence → « Icône de l'app » (Pro):
         # actool writes them into CFBundleIcons → CFBundleAlternateIcons. Same
         # names on tvOS; the list is `AppIconCatalogue` + recolor.py ALTERNATES.
-        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink"
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIconHalloweenPumpkin AppIconHalloweenPotion AppIconHalloween AppIconChristmas AppIconRed AppIconOrange AppIconYellow AppIconGreen AppIconCyan AppIconBlue AppIconIndigo AppIconPurple AppIconPink"
         # Lets a file shared by SOURCE with the widget extension reach app-only
         # symbols in the APP's copy while still compiling in the extension's —
         # see `ResumeControl.swift`. `$(inherited)` keeps DEBUG.
@@ -288,6 +289,7 @@ targets:
         # Seasonal title font (SeasonalThemeCatalogue → SeasonFont), OFL.
         UIAppFonts:
           - Fraunces-BlackItalic.ttf
+          - CormorantGaramond-Bold.ttf
         # Team prefix injected at sign time — see iOS note. Used to build the
         # shared Keychain access group at runtime.
         AppIdentifierPrefix: $(AppIdentifierPrefix)
@@ -327,6 +329,7 @@ targets:
             - AppIconHalloweenPumpkin
             - AppIconHalloweenPotion
             - AppIconHalloween
+            - AppIconChristmas
             - AppIconRed
             - AppIconOrange
             - AppIconYellow

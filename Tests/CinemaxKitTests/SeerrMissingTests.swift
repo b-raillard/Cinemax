@@ -505,6 +505,27 @@ struct SeerrRequestFlowTests {
         }
     }
 
+    @Test("Seerr not answering is said as such, naming Seerr, and the card stays requestable")
+    func unreachableSaysTheServiceIsDown() async {
+        let bench = await requestBench()
+        bench.stub.enqueue(.failure(URLError(.cannotConnectToHost)))
+        let presenter = SeerrRequestPresenter()
+        let toasts = ToastCenter()
+        await presenter.submit(
+            .movie(SeerrTitle(kind: .movie, tmdbId: 5, title: "Film")), selection: [],
+            session: bench.session, loc: loc, toasts: toasts)
+        #expect(presenter.badge(for: "movie-5", default: .request) == .request)
+        #expect(toasts.current?.title == loc.localized("seerr.request.failed"))
+        #expect(toasts.current?.message == loc.localized("seerr.request.unreachable"))
+        #expect(toasts.current?.message != loc.localized("error.generic"))
+        for language in ["fr", "en", "de"] {
+            let text = Bundle.localizedBundle(for: language)
+                .localizedString(forKey: "seerr.request.unreachable", value: nil, table: nil)
+            #expect(text != "seerr.request.unreachable", "\(language)")
+            #expect(text.contains("Seerr"), "\(language): \(text)")
+        }
+    }
+
     @Test("after a request, the badge reads the status Seerr answered, not the permissions")
     func badgeFollowsTheCreatedStatus() async {
         // The permissions say « an admin approves »; Seerr approved at once.
@@ -1121,5 +1142,235 @@ struct SeerrMissingEpisodesTests {
         ])
         let info = try JSONDecoder().decode(SeerrMediaInfo.self, from: Data(#"{"id":77,"status":4}"#.utf8))
         #expect(info.id == 77)
+    }
+}
+
+// MARK: - The season's request row (« À demander pour Noël »)
+
+@Suite("Season request row")
+@MainActor
+struct SeasonRequestRowTests {
+    private let row = SeasonRequestRow(titleKey: "t", keywordId: 207_317, minimumVotes: 300, excludedGenreIds: [27])
+
+    private func page(_ results: [String], totalPages: Int) -> StubSeerrTransport.Reply {
+        .response(status: 200, body: #"{"page":1,"totalPages":\#(totalPages),"results":[\#(results.joined(separator: ","))]}"#)
+    }
+
+    private func film(_ id: Int, genres: [Int] = [35], status: Int? = nil, type: String = "movie") -> String {
+        let info = status.map { #","mediaInfo":{"status":\#($0)}"# } ?? ""
+        return #"{"id":\#(id),"mediaType":"\#(type)","title":"EN \#(id)","releaseDate":"2024-11-27","genreIds":\#(genres),"posterPath":"/en\#(id).jpg"\#(info)}"#
+    }
+
+    private func details(_ id: Int) -> StubSeerrTransport.Reply {
+        .response(status: 200, body: #"{"id":\#(id),"title":"FR \#(id)","posterPath":"/fr\#(id).jpg","overview":"Résumé \#(id)"}"#)
+    }
+
+    private func model(_ session: SeerrSession, allows: Bool = true) -> SeasonRequestsModel {
+        let model = SeasonRequestsModel()
+        model.seerr = session
+        model.allowsSeerr = { allows }
+        model.today = { "2026-11-20" }
+        return model
+    }
+
+    @Test("Christmas carries the row as data; Halloween has none")
+    func catalogue() {
+        #expect(SeasonalThemeCatalogue.halloween.requestRow == nil)
+        let christmas = SeasonalThemeCatalogue.christmas.requestRow
+        #expect(christmas?.keywordId == 207_317)
+        #expect(christmas?.minimumVotes == 50)
+        #expect(christmas?.excludedGenreIds == [27])
+        #expect(christmas?.titleKey == "season.christmas.requestRow")
+    }
+
+    @Test("The row needs its season, the season row's switch and a visible Seerr")
+    func whoSeesTheRow() {
+        let christmas = SeasonalThemeCatalogue.christmas
+        #expect(SeasonRequests.row(season: christmas, rowSwitch: true, seerrVisible: true) == christmas.requestRow)
+        #expect(SeasonRequests.row(season: christmas, rowSwitch: false, seerrVisible: true) == nil)
+        #expect(SeasonRequests.row(season: christmas, rowSwitch: true, seerrVisible: false) == nil)
+        #expect(SeasonRequests.row(season: SeasonalThemeCatalogue.halloween, rowSwitch: true, seerrVisible: true) == nil)
+        #expect(SeasonRequests.row(season: nil, rowSwitch: true, seerrVisible: true) == nil)
+    }
+
+    @Test("The query: keyword, newest first, released by today, the vote floor, every original language, the page")
+    func query() {
+        let items = SeasonRequests.discovery(for: row, page: 3, today: "2026-11-20").queryItems
+        #expect(items.map(\.name) == ["keywords", "sortBy", "primaryReleaseDateLte", "voteCountGte", "language", "page"])
+        #expect(items.map(\.value) == ["207317", "primary_release_date.desc", "2026-11-20", "300", "all", "3"])
+    }
+
+    @Test("Discover sends `language=all`, never the app's language")
+    func noLanguageOnDiscover() async throws {
+        let stub = StubSeerrTransport([page([], totalPages: 1)])
+        let client = SeerrClient(baseURL: URL(string: "http://192.168.1.20:5055")!, languageCode: "fr", transport: stub)
+        _ = try await client.discoverMovies(
+            SeasonRequests.discovery(for: row, page: 1, today: "2026-11-20"), .session(cookie: "abc"))
+        let url = try #require(stub.requests.first?.url)
+        #expect(url.path == "/api/v1/discover/movies")
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #expect(items.filter { $0.name == "language" }.map(\.value) == ["all"])
+        #expect(items.contains { $0.name == "keywords" })
+    }
+
+    @Test("Kept: films, no excluded genre, not in the library; a requested one keeps its badge")
+    func filter() {
+        let candidates = [
+            SeerrTitle(kind: .movie, tmdbId: 1, title: "A", genreIds: [35, 10_751]),
+            SeerrTitle(kind: .movie, tmdbId: 2, title: "Terrifier", genreIds: [27]),
+            SeerrTitle(kind: .movie, tmdbId: 3, title: "Mixed", genreIds: [35, 27]),
+            SeerrTitle(kind: .tv, tmdbId: 4, title: "Series", genreIds: [35]),
+            SeerrTitle(kind: .movie, tmdbId: 5, title: "Owned", mediaInfo: SeerrMediaInfo(status: .available, requests: [])),
+            SeerrTitle(kind: .movie, tmdbId: 6, title: "Asked", mediaInfo: SeerrMediaInfo(status: .pending, requests: [])),
+            SeerrTitle(kind: .movie, tmdbId: 7, title: "No genres"),
+        ]
+        let kept = SeasonRequests.titles(candidates, row: row)
+        #expect(kept.map(\.title.tmdbId) == [1, 6, 7])
+        #expect(kept.map(\.badge) == [.request, .pending, .request])
+    }
+
+    @Test("First page: filtered, then each card takes the app-language title and poster")
+    func firstPageIsLocalised() async {
+        let bench = await requestBench()
+        bench.stub.enqueue(page([film(1, genres: [27]), film(2, status: 5), film(3, status: 2)], totalPages: 1))
+        bench.stub.enqueue(details(3))
+        let model = model(bench.session)
+        model.load(row)
+        await model.settle()
+        let titles = model.titles(for: bench.session.snapshot())
+        #expect(titles.map(\.title.tmdbId) == [3])
+        #expect(titles.first?.title.title == "FR 3")
+        #expect(titles.first?.title.posterPath == "/fr3.jpg")
+        #expect(titles.first?.title.overview == "Résumé 3")
+        #expect(titles.first?.badge == .pending)
+        // The list, then ONE lookup — nothing for the two cards left out.
+        #expect(bench.stub.requests.dropFirst(2).compactMap(\.url?.path) == ["/api/v1/discover/movies", "/api/v1/movie/3"])
+        // Another account's snapshot draws nothing.
+        #expect(model.titles(for: nil).isEmpty)
+    }
+
+    @Test("Paging: a page that brings no card asks the next; the last page ends it; ids never repeat")
+    func paging() async {
+        let bench = await requestBench()
+        for id in [1, 9] {
+            bench.session.rememberTitle(.init(title: "FR \(id)", posterPath: nil), kind: .movie, tmdbId: id)
+        }
+        // The first pass reads on to fill the row: page 2 holds horror and a
+        // film already listed, page 3 a new one, and it is the last.
+        bench.stub.enqueue(page([film(1)], totalPages: 3))
+        bench.stub.enqueue(page([film(8, genres: [27]), film(1)], totalPages: 3))
+        bench.stub.enqueue(page([film(9)], totalPages: 3))
+        let model = model(bench.session)
+        model.load(row)
+        await model.settle()
+        #expect(model.titles(for: bench.session.snapshot()).map(\.title.title) == ["FR 1", "FR 9"])
+        #expect(!model.isLoadingMore)
+        // Past the last page the grid asks nothing more.
+        let sent = bench.stub.requests.count
+        model.loadMoreIfNeeded(onAppearOf: "movie-9")
+        await model.settle()
+        #expect(bench.stub.requests.count == sent)
+        let pages = bench.stub.requests.dropFirst(2).compactMap { request in
+            request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?
+                .queryItems?.first { $0.name == "page" }?.value
+        }
+        #expect(pages == ["1", "2", "3"])
+    }
+
+    @Test("The first pass fills the row to 20 across pages, then stops; the grid's load-more goes one page further")
+    func firstPassFillsTheRow() async {
+        let bench = await requestBench()
+        for id in 1...40 {
+            bench.session.rememberTitle(.init(title: "FR \(id)", posterPath: nil), kind: .movie, tmdbId: id)
+        }
+        // A library that holds most of the season: 8 new films per page of 20.
+        func ownedPage(_ ids: ClosedRange<Int>, owned: Int) -> StubSeerrTransport.Reply {
+            page(ids.map { film($0) } + (0..<owned).map { film(1_000 + $0 * 7 + ids.lowerBound, status: 5) }, totalPages: 9)
+        }
+        bench.stub.enqueue(ownedPage(1...8, owned: 12))
+        bench.stub.enqueue(ownedPage(9...16, owned: 12))
+        bench.stub.enqueue(ownedPage(17...24, owned: 12))
+        let model = model(bench.session)
+        model.load(row)
+        await model.settle()
+        #expect(SeasonRequests.rowLimit == 20)
+        #expect(model.titles(for: bench.session.snapshot()).map(\.title.tmdbId) == Array(1...24))
+        // Three pages read for the row, never a fourth.
+        #expect(bench.stub.requests.dropFirst(2).count == 3)
+        // The grid: ONE more page, at its first new card.
+        bench.stub.enqueue(ownedPage(25...32, owned: 12))
+        model.loadMoreIfNeeded(onAppearOf: "movie-24")
+        await model.settle()
+        #expect(model.titles(for: bench.session.snapshot()).count == 32)
+        #expect(bench.stub.requests.dropFirst(2).count == 4)
+    }
+
+    @Test("The first pass gives up after its page budget, with what it found")
+    func firstPassBudget() async {
+        let bench = await requestBench()
+        bench.session.rememberTitle(.init(title: "FR 1", posterPath: nil), kind: .movie, tmdbId: 1)
+        bench.stub.enqueue(page([film(1)], totalPages: 50))
+        for index in 1..<SeasonRequests.maxPagesFirstPass {
+            bench.stub.enqueue(page([film(500 + index, status: 5)], totalPages: 50))
+        }
+        let model = model(bench.session)
+        model.load(row)
+        await model.settle()
+        #expect(model.titles(for: bench.session.snapshot()).map(\.title.tmdbId) == [1])
+        #expect(bench.stub.requests.dropFirst(2).count == SeasonRequests.maxPagesFirstPass)
+    }
+
+    @Test("A refresh keeps the cards until the new page lands, and for good when it fails")
+    func refreshKeepsWhatIsOnScreen() async {
+        let bench = await requestBench()
+        for id in [1, 2] {
+            bench.session.rememberTitle(.init(title: "FR \(id)", posterPath: nil), kind: .movie, tmdbId: id)
+        }
+        bench.stub.enqueue(page([film(1)], totalPages: 1))
+        let model = model(bench.session)
+        model.load(row)
+        await model.settle()
+        // A failed refresh: the row stays.
+        bench.stub.enqueue(.response(status: 500, body: "{}"))
+        model.load(row)
+        #expect(model.titles(for: bench.session.snapshot()).map(\.title.tmdbId) == [1])
+        await model.settle()
+        #expect(model.titles(for: bench.session.snapshot()).map(\.title.tmdbId) == [1])
+        // One that answers replaces the list — it does not append to it.
+        bench.stub.enqueue(page([film(2)], totalPages: 1))
+        model.load(row)
+        #expect(model.titles(for: bench.session.snapshot()).map(\.title.tmdbId) == [1])
+        await model.settle()
+        #expect(model.titles(for: bench.session.snapshot()).map(\.title.tmdbId) == [2])
+    }
+
+    @Test("No row, or Seerr not visible: nothing is asked")
+    func nothingAskedWithoutTheGates() async {
+        let bench = await requestBench()
+        let hidden = model(bench.session, allows: false)
+        hidden.load(row)
+        await hidden.settle()
+        let outOfSeason = model(bench.session)
+        outOfSeason.load(nil)
+        await outOfSeason.settle()
+        #expect(bench.stub.requests.count == 2)
+        #expect(hidden.titles(for: bench.session.snapshot()).isEmpty)
+    }
+
+    @Test("A failure leaves the row absent, and a newer load wins over an older one")
+    func failureAndSupersededLoad() async {
+        let bench = await requestBench()
+        bench.stub.enqueue(.response(status: 500, body: "{}"))
+        let model = model(bench.session)
+        model.load(row)
+        await model.settle()
+        #expect(model.titles(for: bench.session.snapshot()).isEmpty)
+
+        bench.session.rememberTitle(.init(title: "FR 1", posterPath: nil), kind: .movie, tmdbId: 1)
+        bench.stub.enqueue(page([film(1)], totalPages: 1))
+        model.load(row)
+        model.load(nil)     // the season's switch went off before the answer
+        await model.settle()
+        #expect(model.titles(for: bench.session.snapshot()).isEmpty)
     }
 }

@@ -75,16 +75,42 @@ struct SeasonPalette: Sendable, Equatable {
 struct SeasonFont: Sendable, Equatable {
     let postScriptName: String
     let fileName: String
+    /// The hero title in capitals (« Givre »'s engraved caps); `false` keeps
+    /// the title's own case (Halloween's italic « Nosferatu »).
+    var uppercase = false
+    /// Letter spacing of the hero title, as a fraction of its size; `nil`
+    /// keeps the tight −0.5 pt the italic faces were set with.
+    var tracking: CGFloat?
+    /// The face drawn this much larger than the size asked for: Cormorant's
+    /// small x-height read a size below the system black at the same points.
+    var sizeScale: CGFloat = 1
 }
 
 enum AmbianceEffect: String, Sendable, CaseIterable {
     case bats, pumpkins, focusGlow
+    /// Snow crystals: small on the far plane, a few larger ones on the near
+    /// plane. Crystals only — no soft out-of-focus flake.
+    case snow
+}
+
+/// A season's STILL decor: in the corners of the screen (`SeasonalTopDecor`)
+/// and on the heroes' edges (`SeasonalHeroFrost`). Not an effect: nothing
+/// moves, so Reduce Motion leaves it; the « Animations d'ambiance » switch
+/// removes it.
+enum SeasonDecor: Sendable {
+    /// Frost on the window — a cold haze and ice feathers in the corners and
+    /// on the heroes' edges; the texture is rendered by `design/noel/givre.py`.
+    case frost
 }
 
 /// What a season paints BEHIND the browsing screens (`SeasonalBackdrop`).
 enum SeasonBackdrop: Sendable {
     /// Stars (dark mode), a few twinkling, cobwebs in the top corners.
     case nightSky
+    /// A winter sky in LIGHT mode — a pale sun in the top corner, the frost
+    /// blue deepening toward the bottom (`SeasonalWinterSky`).
+    /// Dark mode keeps the flat night ground the owner liked.
+    case winterSky
 }
 
 struct SeasonRow: Sendable, Equatable {
@@ -97,12 +123,33 @@ struct SeasonRow: Sendable, Equatable {
     /// files series under no « Horror » genre — « Mercredi » is « Mystère,
     /// Comédie » — so without them the row was films only.
     let tagCandidates: [String]
+    /// `false` (Halloween): the genre OR the keywords — two queries, merged.
+    /// `true` (« Noël en famille »): a keyword AND one of the genres, in ONE
+    /// query (the server ANDs `tags` with `genres`). The genres then only
+    /// NARROW the keyword: they are not the row's own, so Home keeps their
+    /// genre rows.
+    let requiresBoth: Bool
 
-    init(titleKey: String, genreCandidates: [String], tagCandidates: [String] = []) {
+    init(titleKey: String, genreCandidates: [String], tagCandidates: [String] = [], requiresBoth: Bool = false) {
         self.titleKey = titleKey
         self.genreCandidates = genreCandidates
         self.tagCandidates = tagCandidates
+        self.requiresBoth = requiresBoth
     }
+}
+
+/// A season's SECOND Home row: films the library does not have, offered for
+/// request (« À demander pour Noël »). DATA only — the query is
+/// `SeasonRequests`', the gates are Seerr's (`Shared/Seerr/CLAUDE.md`).
+struct SeasonRequestRow: Sendable, Equatable {
+    let titleKey: String
+    /// The TMDb keyword the films carry (207317 = « christmas »).
+    let keywordId: Int
+    /// TMDb's vote-count floor: without one the newest-first list opens on
+    /// titles with 0 votes.
+    let minimumVotes: Int
+    /// TMDb genre ids left out (27 = Horror: « Terrifier 3 » came 6th).
+    let excludedGenreIds: Set<Int>
 }
 
 struct SeasonalTheme: Sendable, Equatable, Identifiable {
@@ -118,6 +165,9 @@ struct SeasonalTheme: Sendable, Equatable, Identifiable {
     let ambiance: Set<AmbianceEffect>
     let row: SeasonRow?
     let backdrop: SeasonBackdrop?
+    var decor: SeasonDecor?
+    /// `nil` (Halloween): the season offers nothing to request.
+    var requestRow: SeasonRequestRow?
 }
 
 /// Settings → Appearance (lot C, 2026-10-22): Automatique (the season whose
@@ -129,19 +179,22 @@ struct SeasonalTheme: Sendable, Equatable, Identifiable {
 /// The Debug page's `debug.forcedSeason` beats all three.
 enum SeasonalSetting: String, Sendable, CaseIterable {
     case automatic, off
-    case halloween
+    case halloween, christmas
 
     /// The order of the Réglages choices.
     static let choices: [Self] = allCases
 
-    /// « Automatique » / « Désactivé » / « Halloween ».
+    /// « Automatique » / « Désactivé » / « Halloween » / « Noël ».
     var labelKey: String { "settings.seasonal.choice.\(rawValue)" }
+
+    /// « Toute l'année », under a forced season's name.
+    var detailKey: String { "\(labelKey).detail" }
 
     /// The catalogue season a forced choice names; `nil` for the two others.
     var forcedSeasonID: String? {
         switch self {
         case .automatic, .off: nil
-        case .halloween: rawValue
+        case .halloween, .christmas: rawValue
         }
     }
 

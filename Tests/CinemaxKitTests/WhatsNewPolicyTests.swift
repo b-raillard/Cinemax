@@ -449,3 +449,80 @@ struct WhatsNew260Tests {
         #expect(home.led == 1)
     }
 }
+
+/// The 2.8.0 reel (owner's choices in the mockup « Nouveautés 2.8.0 »,
+/// 2026-11-24): Givre offered on both apps — the Apple TV page without the
+/// Seerr row —, the remembered tracks, the Seerr request fiche.
+@Suite("Nouveautés 2.8.0")
+struct WhatsNew280Tests {
+    @Test("La 2.8.0 sur iPhone : Givre avec Seerr, langues gardées, mini-fiche")
+    func shipped280iOS() {
+        let pages = WhatsNewCatalogue.pages(since: ServerVersion(2, 7, 0), upTo: ServerVersion(2, 8, 0), platform: .iOS)
+        #expect(pages.map(\.id) == ["christmasFrost", "rememberedTracks", "requestFiche"])
+        #expect(pages.map(\.footnoteKey) == ["whatsNew.footnote.seerr", nil, "whatsNew.footnote.seerr"])
+    }
+
+    @Test("La 2.8.0 sur Apple TV : Givre sans note Seerr, langues gardées, mini-fiche")
+    func shipped280tvOS() {
+        let pages = WhatsNewCatalogue.pages(since: ServerVersion(2, 7, 0), upTo: ServerVersion(2, 8, 0), platform: .tvOS)
+        #expect(pages.map(\.id) == ["christmasFrostTV", "rememberedTracks", "requestFiche"])
+        #expect(pages.map(\.footnoteKey) == [nil, nil, "whatsNew.footnote.seerr"])
+    }
+
+    @Test("Les deux pages Givre proposent la saison de Noël", arguments: [WhatsNewPlatform.iOS, .tvOS])
+    func givreOffer(platform: WhatsNewPlatform) {
+        let first = WhatsNewCatalogue.pages(since: ServerVersion(2, 7, 0), upTo: ServerVersion(2, 8, 0), platform: platform).first
+        #expect(first?.offer == .seasonalTheme(id: "christmas"))
+        #expect(first?.illustration == .christmasFrost)
+    }
+
+    @Test("Dans la saison le 28 novembre : « Activer » change l'app tout de suite, sans annonce")
+    func givreInSeasonAtRelease() {
+        var paris = Calendar(identifier: .gregorian)
+        paris.timeZone = TimeZone(identifier: "Europe/Paris")!
+        let release = ISO8601DateFormatter().date(from: "2026-11-28T10:00:00Z")!
+        #expect(SeasonalOffer.startsLater(SeasonalThemeCatalogue.christmas, on: release, calendar: paris) == nil)
+    }
+
+    @Test("Sans animations, les deux motifs et la scène sont au repos")
+    func restIsStill() {
+        #expect(MotifMotion.tracks(at: nil).allSatisfy { $0 == MotifMotion.Layer() })
+        #expect(MotifMotion.fiche(at: nil) == MotifMotion.Fiche())
+        for flake in FrostSceneMotion.flakes { #expect(FrostSceneMotion.fallY(flake, time: nil) == flake.y) }
+        #expect(FrostSceneMotion.sway(nil, period: 6, phase: 0) == 0)
+        #expect(FrostSceneMotion.twinkle(nil, phase: 1) == 1)
+    }
+
+    @Test("Les pistes se posent sur le 1er épisode, puis tombent sur les suivants")
+    func tracksOrder() {
+        let popped = MotifMotion.tracks(at: 0.2 * MotifMotion.tracksPeriod)
+        #expect(popped[0].opacity == 1)
+        #expect(popped[1].opacity == 0 && popped[2].opacity == 0)
+        #expect(popped[1].dy < 0)
+        let landed = MotifMotion.tracks(at: 0.5 * MotifMotion.tracksPeriod)
+        #expect(landed[1].opacity == 1 && landed[1].dy == 0)
+        #expect(landed[2].opacity > 0)
+    }
+
+    @Test("La fiche monte, puis la distribution, puis « Demander » s'enfonce")
+    func ficheOrder() {
+        let risen = MotifMotion.fiche(at: 0.28 * MotifMotion.fichePeriod)
+        #expect(risen.sheet.opacity == 1 && risen.sheet.dy == 0)
+        #expect(risen.cast.allSatisfy { $0.opacity == 0 })
+        #expect(risen.pill.opacity == 0)
+        let pressed = MotifMotion.fiche(at: 0.74 * MotifMotion.fichePeriod)
+        #expect(abs(pressed.pill.scale - 0.9) < 0.001)
+        #expect(pressed.cast.allSatisfy { $0.opacity == 1 })
+    }
+
+    @Test("Un cristal qui tombe reste dans la bande de chute et revient par le haut")
+    func flakesWrap() {
+        for flake in FrostSceneMotion.flakes {
+            for time in [0.0, 3.3, 17.9, 1_000_000.5] {
+                let y = FrostSceneMotion.fallY(flake, time: time)
+                #expect(y >= FrostSceneMotion.fallTop && y < FrostSceneMotion.fallTop + FrostSceneMotion.fallSpan)
+            }
+        }
+        #expect(FrostSceneMotion.stars.count == 46 && FrostSceneMotion.flakes.count == 30)
+    }
+}

@@ -173,6 +173,17 @@ final class SeerrSession {
     func noteUnreachable() { downUntil = now().addingTimeInterval(Self.downCooldown) }
     func noteAnswered() { if downUntil != nil { downUntil = nil } }
 
+    /// The network changed (Wi-Fi ⇄ cellular, another Wi-Fi): a Seerr that
+    /// did not answer on the last one — typically a LAN-only address seen from
+    /// outside — may on this one, so its wait is forgotten and it is asked
+    /// again at once. One that answered is left alone (`downUntil == nil`:
+    /// no failure since its last answer, the cooldown's expiry included).
+    func networkChanged(appState: AppState) async {
+        guard downUntil != nil else { return }
+        downUntil = nil
+        await reload(appState: appState)
+    }
+
     @ObservationIgnored private let storage: any SeerrSecretStorage
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let transport: any SeerrTransport

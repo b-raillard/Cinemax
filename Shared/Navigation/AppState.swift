@@ -258,6 +258,13 @@ final class AppState {
         self.hasServer = true
         self.accessToken = session.accessToken
         self.currentUserId = session.userID
+        // The ACTIVE account's look and cap live in the global keys; its
+        // snapshot is only written when it is left, so it is stale by now.
+        // Refresh it before the root's account observer reads it back
+        // (`AppNavigation.accountDidChange`), or the launch re-applied the look
+        // of the last switch over what the user chose since — light mode
+        // picked, app closed, reopened in dark (owner, 2026-11-21).
+        saveLeavingAccountSettings()
         self.isAuthenticated = true
 
         // The items just read back successfully, so it's safe to upgrade them
@@ -378,14 +385,20 @@ final class AppState {
         return cachedId != currentId
     }
 
-    /// The fields of the signed-in user the UI actually reads (name, avatar,
-    /// policy), plus its id. `nonisolated` + static: a pure comparison.
+    /// The fields of the signed-in user the app actually reads (name, avatar,
+    /// policy, and the playback languages the player applies —
+    /// `TrackDefaultsPolicy`), plus its id. Without the languages, a change made
+    /// in Lecture → Langues (or on another client) never reached the player:
+    /// this guard kept the stale configuration forever. `nonisolated` + static:
+    /// a pure comparison.
     nonisolated static func sameVisibleUser(_ fresh: UserDto, _ current: UserDto?) -> Bool {
         guard let current else { return false }
         return fresh.id == current.id
             && fresh.name == current.name
             && fresh.primaryImageTag == current.primaryImageTag
             && fresh.policy == current.policy
+            && UserPlaybackPreferences(configuration: fresh.configuration)
+                == UserPlaybackPreferences(configuration: current.configuration)
     }
 
     /// Users eligible for the quick-switch surfaces (`UserSwitchSheet` grid +
@@ -1299,7 +1312,8 @@ final class AppState {
 
     /// Saves the ACTIVE account's settings (age cap, accent, light / dark) under
     /// its key before an exit through the login screen (`beginAddServer`,
-    /// `beginReLogin`, `logout(.sessionExpired)`). `applyActiveServer` saves
+    /// `beginReLogin`, `logout(.sessionExpired)`), and at launch
+    /// (`restoreSession`), where the globals are the truth and the snapshot is not. `applyActiveServer` saves
     /// the account it leaves through `swap`; the login-screen path cannot
     /// (`upsertActiveEntry` swaps from `nil`, the account being already gone),
     /// and an account never saved came back with whatever cap was current —

@@ -278,12 +278,20 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return recordLock.withLock { stubbedUsers }
     }
     var stubbedActiveSessions: [SessionInfoDto] = []
+    /// Fails `/Sessions` alone, the rest of the mock answering normally.
+    var activeSessionsError: (any Error)?
     /// Every `getActiveSessions` call's `controllableByUserId`, in order —
     /// `nil` entries are the unfiltered (admin) shape.
     private(set) var activeSessionsQueries: [String?] = []
+    /// Holds `getActiveSessions` open until opened — keeps Home's phase 2 in
+    /// flight (« En direct ») so a test can see a reload return before it.
+    var activeSessionsGate: TestLatch?
+
     func getActiveSessions(activeWithinSeconds: Int, controllableByUserId: String?) async throws -> [SessionInfoDto] {
         recordLock.withLock { activeSessionsQueries.append(controllableByUserId) }
+        if let activeSessionsGate { await activeSessionsGate.wait() }
         if shouldThrow { throw stubbedError }
+        if let error = recordLock.withLock({ activeSessionsError }) { throw error }
         return stubbedActiveSessions
     }
     func getDevices() async throws -> [DeviceInfoDto] { [] }
@@ -653,13 +661,13 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     }
 
     func getTaggedItems(
-        userId: String, tags: [String], includeItemTypes: [BaseItemKind], limit: Int
+        userId: String, tags: [String], genres: [String]?, includeItemTypes: [BaseItemKind], limit: Int
     ) async throws -> [BaseItemDto] {
         recordLock.withLock {
             getItemsQueries.append((
                 includeItemTypes: includeItemTypes, sortBy: [.dateCreated],
                 sortOrder: [.descending], isFavorite: nil, limit: limit,
-                enableTotalRecordCount: false, genres: nil,
+                enableTotalRecordCount: false, genres: genres,
                 tags: tags, filters: nil, fieldSet: .card
             ))
         }

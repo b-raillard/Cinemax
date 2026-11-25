@@ -59,13 +59,16 @@ public struct SeerrPublicSettings: Sendable, Equatable, Decodable {
     public let partialRequestsEnabled: Bool
     public let enableSpecialEpisodes: Bool
     public let cacheImages: Bool
+    /// « Streaming region » (Paramètres → Général), ISO 3166-1; `nil` when
+    /// the admin left it on « all regions » (empty string on the wire).
+    public let streamingRegion: String?
 
     public var isJellyfin: Bool { mediaServerType == 2 }
 
     public init(
         mediaServerType: Int, mediaServerLogin: Bool = true, newPlexLogin: Bool = false,
         partialRequestsEnabled: Bool = true, enableSpecialEpisodes: Bool = false,
-        cacheImages: Bool = false
+        cacheImages: Bool = false, streamingRegion: String? = nil
     ) {
         self.mediaServerType = mediaServerType
         self.mediaServerLogin = mediaServerLogin
@@ -73,11 +76,12 @@ public struct SeerrPublicSettings: Sendable, Equatable, Decodable {
         self.partialRequestsEnabled = partialRequestsEnabled
         self.enableSpecialEpisodes = enableSpecialEpisodes
         self.cacheImages = cacheImages
+        self.streamingRegion = streamingRegion
     }
 
     private enum CodingKeys: String, CodingKey {
         case mediaServerType, mediaServerLogin, newPlexLogin
-        case partialRequestsEnabled, enableSpecialEpisodes, cacheImages
+        case partialRequestsEnabled, enableSpecialEpisodes, cacheImages, streamingRegion
     }
 
     public init(from decoder: Decoder) throws {
@@ -88,6 +92,8 @@ public struct SeerrPublicSettings: Sendable, Equatable, Decodable {
         partialRequestsEnabled = try c.decodeIfPresent(Bool.self, forKey: .partialRequestsEnabled) ?? true
         enableSpecialEpisodes = try c.decodeIfPresent(Bool.self, forKey: .enableSpecialEpisodes) ?? false
         cacheImages = try c.decodeIfPresent(Bool.self, forKey: .cacheImages) ?? false
+        let region = (try? c.decodeIfPresent(String.self, forKey: .streamingRegion))
+        streamingRegion = region.flatMap { $0.isEmpty ? nil : $0.uppercased() }
     }
 }
 
@@ -371,10 +377,14 @@ public struct SeerrTitle: Sendable, Equatable, Decodable {
     public let overview: String?
     public let posterPath: String?
     public let mediaInfo: SeerrMediaInfo?
+    /// TMDb genre ids — list results carry them (`genreIds`: search,
+    /// discover); a details payload (`/movie/{id}`) does not: empty there.
+    public let genreIds: [Int]
 
     public init(
         kind: SeerrMediaKind, tmdbId: Int, title: String, year: Int? = nil,
-        overview: String? = nil, posterPath: String? = nil, mediaInfo: SeerrMediaInfo? = nil
+        overview: String? = nil, posterPath: String? = nil, mediaInfo: SeerrMediaInfo? = nil,
+        genreIds: [Int] = []
     ) {
         self.kind = kind
         self.tmdbId = tmdbId
@@ -383,10 +393,11 @@ public struct SeerrTitle: Sendable, Equatable, Decodable {
         self.overview = overview
         self.posterPath = posterPath
         self.mediaInfo = mediaInfo
+        self.genreIds = genreIds
     }
 
     private enum CodingKeys: String, CodingKey {
-        case mediaType, id, title, name, releaseDate, firstAirDate, overview, posterPath, mediaInfo
+        case mediaType, id, title, name, releaseDate, firstAirDate, overview, posterPath, mediaInfo, genreIds
     }
 
     public init(from decoder: Decoder) throws {
@@ -417,6 +428,7 @@ public struct SeerrTitle: Sendable, Equatable, Decodable {
         posterPath = try c.decodeIfPresent(String.self, forKey: .posterPath)
         // A malformed `mediaInfo` costs the title its status, not its place.
         mediaInfo = try? c.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
+        genreIds = (try? c.decodeIfPresent([Int].self, forKey: .genreIds)) ?? []
     }
 }
 

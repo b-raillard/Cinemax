@@ -8,21 +8,26 @@ enum SeasonalTypography {
     /// Dynamic Type RULE. `nil` when no season, no font, or the font failed to
     /// register (the caller keeps its system font).
     static func titleFont(for theme: SeasonalTheme?, size: CGFloat) -> Font? {
-        guard let name = theme?.titleFont?.postScriptName, UIFont(name: name, size: size) != nil else { return nil }
-        return .custom(name, fixedSize: size)
+        guard let face = theme?.titleFont, UIFont(name: face.postScriptName, size: size) != nil else { return nil }
+        return .custom(face.postScriptName, fixedSize: size * face.sizeScale)
     }
 }
 
-/// The hero title: black system caps, or the season's italic display face in
-/// title case (the canvas's « Nosferatu »).
+/// The hero title: black system caps, or the season's display face — in
+/// title case (Halloween's italic « Nosferatu ») or in spaced capitals
+/// (« Givre »), as its `SeasonFont` says.
 private struct HeroTitleStyle: ViewModifier {
     @Environment(\.seasonID) private var seasonID
     let size: CGFloat
     let uppercase: Bool
 
     func body(content: Content) -> some View {
-        if let font = SeasonalTypography.titleFont(for: SeasonalThemeCatalogue.theme(id: seasonID), size: size) {
-            content.font(font).tracking(-0.5)
+        let theme = SeasonalThemeCatalogue.theme(id: seasonID)
+        if let font = SeasonalTypography.titleFont(for: theme, size: size), let face = theme?.titleFont {
+            content
+                .font(font)
+                .tracking(face.tracking.map { size * $0 } ?? -0.5)
+                .textCase(face.uppercase ? .uppercase : nil)
         } else {
             content
                 .font(.system(size: size, weight: .black))

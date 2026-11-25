@@ -77,6 +77,17 @@ enum WhatsNewCatalogue {
     static let maxPages = 6
 
     static let releases: [WhatsNewRelease] = [
+        // Givre is offered on both apps, but only the iPhone page names the
+        // Seerr row (owner, mockup « Nouveautés 2.8.0 », 2026-11-24): one page
+        // id per platform, never platform branches inside one text.
+        WhatsNewRelease(version: ServerVersion(2, 8, 0), pages: [
+            WhatsNewPage(id: "christmasFrost", illustration: .christmasFrost, offer: .seasonalTheme(id: "christmas"),
+                         platforms: [.iOS], footnoteKey: "whatsNew.footnote.seerr"),
+            WhatsNewPage(id: "christmasFrostTV", illustration: .christmasFrost, offer: .seasonalTheme(id: "christmas"),
+                         platforms: [.tvOS]),
+            WhatsNewPage(id: "rememberedTracks", illustration: .rememberedTracks),
+            WhatsNewPage(id: "requestFiche", illustration: .requestFiche, footnoteKey: "whatsNew.footnote.seerr")
+        ]),
         WhatsNewRelease(version: ServerVersion(2, 6, 0), pages: [
             WhatsNewPage(id: "localAddress", illustration: .localAddress),
             WhatsNewPage(id: "episodeQuality", illustration: .episodeQuality),

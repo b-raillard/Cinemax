@@ -324,7 +324,11 @@ struct AppNavigation: View {
         // (scheduled synchronously: Home and the views wait for it too).
         // Process singletons on both ends: captured strongly.
         serverRoute.attach(appState: appState, reach: { [network] in network.reach })
-        network.onPathChange = { [serverRoute] in serverRoute.pathChanged() }
+        network.onPathChange = { [serverRoute, seerr, appState] in
+            serverRoute.pathChanged()
+            // A Seerr that did not answer on the last network is asked again.
+            Task { await seerr.networkChanged(appState: appState) }
+        }
         appState.prepareRoute = { [serverRoute] in serverRoute.scheduleLaunchEvaluation() }
         appState.onClientRepointed = { [serverRoute] in
             Task { await serverRoute.evaluate(.serverChange) }

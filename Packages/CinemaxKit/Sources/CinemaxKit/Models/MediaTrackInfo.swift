@@ -18,6 +18,14 @@ public struct MediaTrackInfo: Identifiable, Equatable, Sendable {
     /// Track language as the server reports it (`fre`, `eng`, `fr-FR`…).
     /// Used to keep the language when a default has to be replaced.
     public let language: String?
+    /// A subtitle FILE beside the media (`.srt`…), not a stream inside it.
+    /// Jellyfin lists those FIRST, shifting every embedded index, and libVLC
+    /// never loads them — the VLC player leaves them out of its ordinal
+    /// mapping (`VLCStreamPresenter.vlcSubtitleTracks`).
+    public let isExternal: Bool
+    /// Where the server serves an external subtitle file (absolute), when it
+    /// offered it for external delivery; nil for everything else.
+    public let deliveryURL: URL?
 
     public init(
         id: Int,
@@ -25,7 +33,9 @@ public struct MediaTrackInfo: Identifiable, Equatable, Sendable {
         isDefault: Bool,
         isForced: Bool,
         codec: String? = nil,
-        language: String? = nil
+        language: String? = nil,
+        isExternal: Bool = false,
+        deliveryURL: URL? = nil
     ) {
         self.id = id
         self.label = label
@@ -33,5 +43,7 @@ public struct MediaTrackInfo: Identifiable, Equatable, Sendable {
         self.isForced = isForced
         self.codec = codec
         self.language = language
+        self.isExternal = isExternal
+        self.deliveryURL = deliveryURL
     }
 }

@@ -55,6 +55,7 @@ Réglages → Apparence → « Icône de l'app » : **Classique** (l'icône prin
 | Citrouille | `AppIconHalloweenPumpkin` | A · cloche citrouille, tentacules potion |
 | Potion | `AppIconHalloweenPotion` | B · cloche potion, tentacules citrouille |
 | Aubergine | `AppIconHalloween` | A + fond aubergine |
+| Noël | `AppIconChristmas` | `noel` · logo d'origine, bonnet et ampoules ; écrit par `design/noel/icones.py`, pas par `recolor.py` |
 | Rouge … Rose | `AppIconRed`, `Orange`, `Yellow`, `Green`, `Cyan`, `Blue`, `Indigo`, `Purple`, `Pink` | `rouge` … `rose` (fond tvOS « classique ») |
 
 Chaque vignette s'appelle `<nom>Preview`. Jusqu'à ce que l'icône principale redevienne la classique (après le 2 novembre), « Classique » et « Citrouille » sont identiques. Règles : `Shared/DesignSystem/CLAUDE.md` (App Icons).

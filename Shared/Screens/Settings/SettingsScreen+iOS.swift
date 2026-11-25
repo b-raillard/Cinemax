@@ -638,6 +638,7 @@ extension SettingsScreen {
                 iOSSleepTimerRow
             }
             .glassPanel(cornerRadius: CinemaRadius.extraLarge)
+            PlaybackLanguageSection()
         }
     }
 

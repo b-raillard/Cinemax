@@ -168,7 +168,7 @@ final class ThemeManager {
             return Color(hue: _rainbowHue, saturation: 0.85, brightness: 0.95)
         }
         let p = palette
-        return Color.dynamic(light: p.accentLight, dark: p.accentDark)
+        return modeColor(light: p.accentLight, dark: p.accentDark)
     }
 
     /// Accent "container" — used for filled button backgrounds, selection highlights.
@@ -180,7 +180,7 @@ final class ThemeManager {
             return Color(hue: _rainbowHue, saturation: 0.9, brightness: 0.88)
         }
         let p = palette
-        return Color.dynamic(light: p.containerLight, dark: p.containerDark)
+        return modeColor(light: p.containerLight, dark: p.containerDark)
     }
 
     /// Dimmed accent — used for hover/pressed states of accent-colored UI.
@@ -191,7 +191,7 @@ final class ThemeManager {
             return Color(hue: _rainbowHue, saturation: 0.75, brightness: 0.7)
         }
         let p = palette
-        return Color.dynamic(light: p.dimLight, dark: p.dimDark)
+        return modeColor(light: p.dimLight, dark: p.dimDark)
     }
 
     /// On-accent — text/icon color placed on top of `accentContainer`.
@@ -202,7 +202,7 @@ final class ThemeManager {
             return .white
         }
         let p = palette
-        return Color.dynamic(light: p.onAccentLight, dark: p.onAccentDark)
+        return modeColor(light: p.onAccentLight, dark: p.onAccentDark)
     }
 
     /// The label colour for anything drawn ON `accentContainer` — CTAs, the
@@ -225,12 +225,30 @@ final class ThemeManager {
             // pink, whose dark-mode fills also keep a white label.
             let light = AccentLabelContrast.prefersDarkLabel(hex: p.containerLight)
             let darkMode = AccentLabelContrast.prefersDarkLabel(hex: p.containerDark)
-            return Color.dynamic(
-                light: light ? AccentLabelContrast.darkLabel : 0xFFFFFF,
-                dark: darkMode ? AccentLabelContrast.darkLabel : 0xFFFFFF
+            return modeColor(
+                light: p.containerLabelLight ?? (light ? AccentLabelContrast.darkLabel : 0xFFFFFF),
+                dark: p.containerLabelDark ?? (darkMode ? AccentLabelContrast.darkLabel : 0xFFFFFF)
             )
         }
         return dark ? Color.dynamic(light: AccentLabelContrast.darkLabel, dark: AccentLabelContrast.darkLabel) : .white
+    }
+
+    /// The accent's two values as a colour. Normally trait-driven. On tvOS
+    /// under a SEASON accent it follows the APP's mode instead: a focused
+    /// `Button` flips its label to the light trait, and a season whose accent
+    /// swaps with the mode (« Givre »: frost by night, night blue by day)
+    /// then drew focused labels, pills and rings in the OTHER mode's colour —
+    /// night blue on the night page. The picker accents keep the trait
+    /// behaviour their focus states were tuned on. Reactive: a mode change
+    /// bumps `_accentRevision`, which every getter reads first.
+    private func modeColor(light: UInt, dark: UInt) -> Color {
+        #if os(tvOS)
+        if _seasonAccent != nil {
+            let value = darkModeEnabled ? dark : light
+            return Color.dynamic(light: value, dark: value)
+        }
+        #endif
+        return Color.dynamic(light: light, dark: dark)
     }
 
     // MARK: - Color Scheme

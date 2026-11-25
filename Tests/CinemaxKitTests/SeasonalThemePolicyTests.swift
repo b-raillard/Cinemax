@@ -102,7 +102,8 @@ struct SeasonalThemePolicyTests {
         #expect(SeasonalSetting(rawValue: "halloween") == .halloween)
         #expect(SeasonalSetting(rawValue: "always") == nil)
         #expect(SeasonalSetting.halloween.rawValue == SeasonalThemeCatalogue.halloween.id)
-        #expect(SeasonalSetting.choices == [.automatic, .off, .halloween])
+        #expect(SeasonalSetting.choices == [.automatic, .off, .halloween, .christmas])
+        #expect(SeasonalSetting.christmas.rawValue == SeasonalThemeCatalogue.christmas.id)
     }
 
     @Test("Halloween forced shows it out of season when the tier allows it")
@@ -169,18 +170,45 @@ struct SeasonalThemePolicyTests {
     /// Halloween off a free user's screen in season (recette lot C).
     @Test("Stepping wraps both ways; a refused choice leaves the selection where it was")
     func stepping() {
-        let refuseHalloween: (SeasonalSetting) -> Bool = { $0 != .halloween }
+        // A free user: every forced season is refused, not one of them by name.
+        let refuseForced: (SeasonalSetting) -> Bool = { $0.forcedSeasonID == nil }
         #expect(SeasonalSetting.automatic.stepped(by: 1) { _ in true } == .off)
         #expect(SeasonalSetting.off.stepped(by: 1) { _ in true } == .halloween)
-        #expect(SeasonalSetting.halloween.stepped(by: 1) { _ in true } == .automatic)
-        #expect(SeasonalSetting.automatic.stepped(by: -1) { _ in true } == .halloween)
-        #expect(SeasonalSetting.off.stepped(by: 1, admit: refuseHalloween) == .off)
-        #expect(SeasonalSetting.automatic.stepped(by: -1, admit: refuseHalloween) == .automatic)
-        #expect(SeasonalSetting.off.stepped(by: -1, admit: refuseHalloween) == .automatic)
+        #expect(SeasonalSetting.halloween.stepped(by: 1) { _ in true } == .christmas)
+        #expect(SeasonalSetting.christmas.stepped(by: 1) { _ in true } == .automatic)
+        #expect(SeasonalSetting.automatic.stepped(by: -1) { _ in true } == .christmas)
+        #expect(SeasonalSetting.off.stepped(by: 1, admit: refuseForced) == .off)
+        #expect(SeasonalSetting.automatic.stepped(by: -1, admit: refuseForced) == .automatic)
+        #expect(SeasonalSetting.off.stepped(by: -1, admit: refuseForced) == .automatic)
         // Asked once — the one ask raises the Pro sheet.
         var asked: [SeasonalSetting] = []
-        _ = SeasonalSetting.off.stepped(by: 1) { asked.append($0); return $0 != .halloween }
+        _ = SeasonalSetting.off.stepped(by: 1) { asked.append($0); return $0.forcedSeasonID == nil }
         #expect(asked == [.halloween])
+    }
+
+    @Test("Christmas runs from 25 November to 6 January, across the New Year")
+    func christmasWindow() {
+        let paris = calendar("Europe/Paris")
+        let christmas = SeasonalThemeCatalogue.christmas
+        #expect(christmas.window.contains(date("2026-11-24T22:59:59Z"), calendar: paris) == false)
+        #expect(christmas.window.contains(date("2026-11-24T23:00:00Z"), calendar: paris) == true)
+        #expect(christmas.window.contains(date("2026-12-31T23:30:00Z"), calendar: paris) == true)
+        #expect(christmas.window.contains(date("2027-01-06T22:59:59Z"), calendar: paris) == true)
+        #expect(christmas.window.contains(date("2027-01-06T23:00:00Z"), calendar: paris) == false)
+    }
+
+    @Test("Christmas « Givre »: snow, frost, engraved capitals, a winter sky")
+    func christmasDecor() {
+        let christmas = SeasonalThemeCatalogue.christmas
+        #expect(christmas.ambiance == [.snow, .focusGlow])
+        #expect(christmas.decor == .frost)
+        #expect(christmas.titleFont?.uppercase == true)
+        #expect(SeasonalThemeCatalogue.halloween.titleFont?.uppercase == false)
+        #expect(SeasonalThemeCatalogue.halloween.titleFont?.tracking == nil)
+        #expect(christmas.backdrop == .winterSky)
+        #expect(SeasonalThemeCatalogue.halloween.decor == nil)
+        // Still decor: the ambiance POLICY (motion) does not carry it.
+        #expect(AmbiancePolicy.effects(theme: christmas, ambianceEnabled: true, motionEnabled: false).isEmpty)
     }
 
     @Test("Catalogue lookup by id")
@@ -214,7 +242,9 @@ struct SeasonalThemePolicyTests {
             for choice in SeasonalSetting.choices {
                 #expect(table[choice.labelKey] != nil, "\(lang): \(choice.labelKey)")
             }
-            #expect(table["settings.seasonal.choice.halloween.detail"] != nil, "\(lang): halloween.detail")
+            for choice in SeasonalSetting.choices where choice.forcedSeasonID != nil {
+                #expect(table[choice.detailKey] != nil, "\(lang): \(choice.detailKey)")
+            }
         }
     }
 

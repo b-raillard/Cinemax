@@ -12,6 +12,11 @@ struct HomeScreen: View {
     /// « Reprendre ici » (Pro): what plays on another device is shown only
     /// when `allows(.resumeHere)` — never whether something plays.
     @Environment(ProFeatureAccess.self) private var proAccess
+    /// The season's request row (« À demander pour Noël ») — optional, like
+    /// the fiche's: a host without them draws no such row.
+    @Environment(SeerrSession.self) private var seerr: SeerrSession?
+    @Environment(SeerrRequestPresenter.self) private var seerrRequests: SeerrRequestPresenter?
+    @Environment(NetworkMonitor.self) private var network: NetworkMonitor?
     @Environment(\.scenePhase) private var scenePhase
     #if !os(tvOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -49,6 +54,8 @@ struct HomeScreen: View {
     @State private var favoritesDestination: FavoritesDestination?
     /// « Tout voir » on the season row — same hoisting as Favorites.
     @State private var seasonDestination: SeasonDestination?
+    /// The season's films to request, shared with their « Tout voir » page.
+    @State private var seasonRequests = SeasonRequestsModel()
     @State private var playlistsDestination: PlaylistsDestination?
     /// One playlist, opened from a card on the rail.
     @State private var playlistDestination: PlaylistDestination?
@@ -96,12 +103,17 @@ struct HomeScreen: View {
     /// sits in several rails at once — see `CardZoom`.
     @Namespace private var zoomNamespace
 
-    /// Skeleton during phase-1, and kept up while a phase-1-empty result is
-    /// still filling later phases — the all-empty state must only appear once
-    /// the *entire* load finishes, never as a mid-load flash (genre rows
-    /// populate after the hero/rails).
+    /// Skeleton while there is NOTHING to show yet: the first load, and a
+    /// phase-1-empty result still filling later phases — the all-empty state
+    /// must only appear once the *entire* load finishes, never as a mid-load
+    /// flash (genre rows populate after the hero/rails).
+    ///
+    /// A reload over content already on screen (pull-to-refresh) keeps that
+    /// content and updates it in place: swapping the whole page for the
+    /// skeleton and back made it vanish and jump under the refresh control —
+    /// the owner's screen recording, 2026-11-20.
     private var showsSkeleton: Bool {
-        viewModel.isLoading || (isHomeEmpty && !viewModel.isFullyLoaded)
+        isHomeEmpty && (viewModel.isLoading || !viewModel.isFullyLoaded)
     }
 
     var body: some View {
@@ -109,7 +121,7 @@ struct HomeScreen: View {
         // rows' `onAppear` (see `ContentRevealClock`).
         let skeleton = revealClock.noting(skeletonVisible: showsSkeleton, motionEnabled: motionEffects)
         ZStack {
-            SeasonalBackdrop().ignoresSafeArea()
+            SeasonalBackdrop(cornerDecor: false).ignoresSafeArea()
 
             if skeleton {
                 loadingSkeleton
@@ -124,6 +136,9 @@ struct HomeScreen: View {
                 content
                     .environment(\.contentRevealClock, revealClock)
             }
+
+            // The season's frost, in FRONT of the hero (the backdrop's is off).
+            SeasonalTopDecor().ignoresSafeArea()
         }
         .animation(CinemaMotion.gated(CinemaMotion.skeletonFade, enabled: motionEffects), value: skeleton)
         #if os(iOS)
@@ -156,19 +171,25 @@ struct HomeScreen: View {
         // `initial` hands the row to the view model before its first load
         // reads it (that load fetches it); a later change — the season, or
         // its row switch — re-fetches just that row.
-        .onChange(of: "\(seasonID ?? "")-\(showSeasonRow)", initial: true) { old, new in
+        //
+        // ONE `onChange` for both season rows (this body is at the
+        // type-checker's limit): the key's second half is the request row's
+        // own trigger — Seerr connects AFTER Home's first load.
+        .onChange(of: seasonRowsKey, initial: true) { old, new in
             viewModel.setSeasonRow(seasonRow)
             // Its « Tout voir » goes with the row: the destination below draws
             // nothing without a row, so switching the theme or the row off in
             // Settings left a black page with only a back button (recette 2026-10-02).
-            if seasonRow == nil { seasonDestination = nil }
+            if seasonRow == nil, seasonDestination == .library { seasonDestination = nil }
+            if seasonRequestRow == nil, seasonDestination == .requests { seasonDestination = nil }
             // The genre rows too: in season they leave out the season row's genre.
-            if old != new {
+            if old.library != new.library {
                 Task {
                     await viewModel.refreshSeasonRow(using: appState)
                     if showGenreRows { await viewModel.reloadGenreRows(using: appState) }
                 }
             }
+            if old == new || old.requests != new.requests { reloadSeasonRequests() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .cinemaxShouldRefreshCatalogue)) { note in
             // The route owner's launch refresh: only when Home's load went out
@@ -240,11 +261,8 @@ struct HomeScreen: View {
             FavoritesScreen()
                 .tvPushedScreen()
         }
-        .navigationDestination(item: $seasonDestination) { _ in
-            if let row = seasonRow {
-                SeasonCollectionScreen(row: row, title: loc.localized(row.titleKey))
-                    .tvPushedScreen()
-            }
+        .navigationDestination(item: $seasonDestination) { destination in
+            seasonDestinationView(destination)
         }
         // "View All" on the Playlists row → every playlist, read straight from
         // `getPlaylists` so the screen doesn't depend on the server exposing a
@@ -341,6 +359,8 @@ struct HomeScreen: View {
         Task {
             prefetcher.reset()
             await viewModel.reload(using: appState)
+            // `reload` returns after phase 1; the genre rows' posters too.
+            await viewModel.reloadTask?.value
             prefetchCardImages()
         }
     }
@@ -362,8 +382,44 @@ struct HomeScreen: View {
         let id = "favorites"
     }
 
-    private struct SeasonDestination: Identifiable, Hashable {
-        let id = "season"
+    /// « Tout voir » of the season's two rows: its library row, and the films
+    /// to request.
+    private enum SeasonDestination: String, Identifiable, Hashable {
+        case library, requests
+        var id: String { rawValue }
+    }
+
+    /// What the two season rows depend on, as ONE `onChange` value.
+    private struct SeasonRowsKey: Equatable {
+        /// The season and its row switch — the library row's trigger.
+        let library: String
+        /// Whether the request row applies, and for which Seerr account.
+        let requests: String
+    }
+
+    private var seasonRowsKey: SeasonRowsKey {
+        // No row (out of season, switch off, Seerr not visible): the account is not read.
+        let account = seasonRequestRow == nil ? nil : seerr?.snapshot()
+        return SeasonRowsKey(
+            library: "\(seasonID ?? "")-\(showSeasonRow)",
+            requests: "\(seasonRequestRow?.titleKey ?? "")-\(account?.accountKey ?? "")-\(account?.generation ?? 0)"
+        )
+    }
+
+    @ViewBuilder
+    private func seasonDestinationView(_ destination: SeasonDestination) -> some View {
+        switch destination {
+        case .library:
+            if let row = seasonRow {
+                SeasonCollectionScreen(row: row, title: loc.localized(row.titleKey))
+                    .tvPushedScreen()
+            }
+        case .requests:
+            if let row = seasonRequestRow {
+                SeasonRequestsScreen(title: loc.localized(row.titleKey), model: seasonRequests)
+                    .tvPushedScreen()
+            }
+        }
     }
 
     /// The rails currently switched on, among those `HomeViewModel.load()`
@@ -596,6 +652,10 @@ struct HomeScreen: View {
                             .contentReveal(step: 3)
                     }
 
+                    // « À demander pour Noël » — the season's films the library
+                    // lacks, right under its library row.
+                    seasonRequestsRow
+
                     // Next Up (next unwatched episode per in-progress series)
                     if showNextUp, !viewModel.nextUpItems.isEmpty {
                         nextUpRow
@@ -662,6 +722,18 @@ struct HomeScreen: View {
             #if os(iOS)
             .refreshable {
                 PlaylistPreviewStore.shared.invalidate()
+                // A Seerr that did not answer at launch is never asked again
+                // until the next foreground: in season, the pull asks it, or
+                // the request row stayed away (recette 2026-11-21, SR-4).
+                // Its own task: `.refreshable` cancels its own soon after the
+                // pull, which would cancel the probe. NOT awaited: a Seerr
+                // that does not answer held the pull for its whole timeout
+                // before Home even started (owner, 2026-11-22). Coming back,
+                // it moves `seasonRowsKey`, whose `onChange` loads the row.
+                if activeSeason?.requestRow != nil, !seerrVisible, let seerr {
+                    Task { await seerr.reload(appState: appState) }
+                }
+                reloadSeasonRequests()
                 await viewModel.reload(using: appState)
             }
             #endif
@@ -681,6 +753,62 @@ struct HomeScreen: View {
     private var activeSeason: SeasonalTheme? { SeasonalThemeCatalogue.theme(id: seasonID) }
     private var seasonRow: SeasonRow? { showSeasonRow ? activeSeason?.row : nil }
 
+    // MARK: - Season request row (« À demander pour Noël »)
+
+    /// Seerr shows its browse surfaces to this account right now.
+    private var seerrVisible: Bool {
+        guard let seerr, seerrRequests != nil else { return false }
+        // Read FIRST: `isVisible` tests the (unobserved) account before them,
+        // and Home is drawn before Seerr has one — it must redraw on connect.
+        _ = seerr.connection
+        _ = seerr.config
+        return seerr.isVisible(proAllows: proAccess.allows(.requests), isOnline: network?.isOnline ?? false)
+    }
+
+    /// The row's configuration behind ALL its gates; `nil` asks nothing.
+    private var seasonRequestRow: SeasonRequestRow? {
+        guard activeSeason?.requestRow != nil else { return nil }   // out of season: Seerr is not even read
+        return SeasonRequests.row(season: activeSeason, rowSwitch: showSeasonRow, seerrVisible: seerrVisible)
+    }
+
+    private func reloadSeasonRequests() {
+        seasonRequests.seerr = seerr
+        seasonRequests.allowsSeerr = { [seerr, seerrRequests, proAccess, network] in
+            guard let seerr, seerrRequests != nil else { return false }
+            return seerr.isVisible(proAllows: proAccess.allows(.requests), isOnline: network?.isOnline ?? false)
+        }
+        seasonRequests.load(seasonRequestRow)
+    }
+
+    /// Drawn only once it holds cards — no skeleton: the row is decorative,
+    /// and one that flashed then vanished would move everything under it.
+    @ViewBuilder
+    private var seasonRequestsRow: some View {
+        if let row = seasonRequestRow {
+            let titles = seasonRequests.titles(for: seerr?.snapshot())
+            if !titles.isEmpty {
+                ContentRow(
+                    title: loc.localized(row.titleKey),
+                    showViewAll: true,
+                    onViewAll: { seasonDestination = .requests },
+                    titleFont: SeasonalTypography.titleFont(for: activeSeason, size: CinemaScale.pt(seasonalRowTitleSize)),
+                    data: Array(titles.prefix(SeasonRequests.rowLimit)), id: \.id,
+                    itemView: { missing in
+                        MissingTitleButton(missing: missing, onRequest: requestSeasonTitle)
+                            .frame(width: posterCardWidth)
+                    }
+                )
+                .edgeRecede(false)
+                .padding(.bottom, CinemaSpacing.spacing6)
+            }
+        }
+    }
+
+    private func requestSeasonTitle(_ missing: SeerrMissingTitle) {
+        guard let seerr, let seerrRequests else { return }
+        Task { await seerrRequests.request(missing, session: seerr, loc: loc, toasts: toast) }
+    }
+
     // MARK: - Genre Rows
 
     @ViewBuilder
@@ -696,7 +824,7 @@ struct HomeScreen: View {
         ContentRow(
             title: title,
             showViewAll: true,
-            onViewAll: { seasonDestination = SeasonDestination() },
+            onViewAll: { seasonDestination = .library },
             // The season's face at the size of every other rail title
             // (`AdaptiveLayout.sectionTitleFont`: 24 on iPhone, 32 elsewhere).
             titleFont: SeasonalTypography.titleFont(for: activeSeason, size: CinemaScale.pt(seasonalRowTitleSize)),
@@ -923,6 +1051,8 @@ struct HomeScreen: View {
                 }
                 .heroBackdropBleed(clearInLightMode: true)
             }
+            // The season's frost on the image's edges, under the text.
+            .overlay { SeasonalHeroFrost() }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: heroPadding > 60 ? 16 : 10) {
                     let elsewhere = elsewhereEntry(for: item)

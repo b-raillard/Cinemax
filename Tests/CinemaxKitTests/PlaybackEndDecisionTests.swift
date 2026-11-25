@@ -290,6 +290,23 @@ struct RetryLoopGuardTests {
         #expect(loop.retries == 1)
     }
 
+    @Test("a retry that dies during its resume seek fails at the seek's target")
+    func failureDuringResumeSeekIsAtItsTarget() {
+        // The measured loop (2026-11-24): resume seek to 59 812 ms on a
+        // cue-less truncated MKV, the engine still reading 5 174 ms.
+        #expect(PlaybackRetryPolicy.failurePositionMs(stopPositionMs: 59_812, settlingTargetMs: nil, lastKnownMs: 5_174) == 59_812)
+        #expect(PlaybackRetryPolicy.failurePositionMs(stopPositionMs: nil, settlingTargetMs: 59_812, lastKnownMs: 5_174) == 59_812)
+        #expect(PlaybackRetryPolicy.failurePositionMs(stopPositionMs: nil, settlingTargetMs: nil, lastKnownMs: 41_000) == 41_000)
+        // Fed to the guard, the three failures are one place: it gives up.
+        var loop = RetryLoopGuard()
+        let positions = [Int64(59_812), 59_812, 59_731].map {
+            Int64(PlaybackRetryPolicy.failurePositionMs(stopPositionMs: $0, settlingTargetMs: nil, lastKnownMs: 5_174))
+        }
+        #expect(answers(&loop, at: positions) == [false, false, true])
+        // And the retry resumes at the cut, not at 5 s.
+        #expect(PlaybackRetryPolicy.resumeSeconds(lastKnownPositionMs: 59_812) == 59.812)
+    }
+
     @Test("a paused player is never counted — its position cannot move")
     func pausedIsNotALoop() {
         var loop = RetryLoopGuard()
@@ -422,6 +439,28 @@ struct PlaybackRetryPolicyTests {
         #expect(PlaybackRetryPolicy.rebuildFromMs(lastKnownPositionMs: 4_915_487, startTime: 30) == 4_915_487)
         #expect(PlaybackRetryPolicy.rebuildFromMs(lastKnownPositionMs: 0, startTime: 1834.5) == 1_834_500)
         #expect(PlaybackRetryPolicy.rebuildFromMs(lastKnownPositionMs: 800, startTime: nil) == 0)
+    }
+
+    /// iPad du propriétaire, 21/11 : reconstruction à 817 s, le nouveau média
+    /// s'ouvre puis se fige avant son premier tic — horloge à 0, saut de
+    /// reprise jamais parti — et l'image figée reconstruisait « @ 0s » : le
+    /// film repartait du début.
+    @Test("a rebuild net reopens at the held position, never at a clock still reading 0")
+    func netRebuildPosition() {
+        let held = PlaybackReporter.heldPositionSeconds(
+            endedAtMs: nil, pendingResumeSeconds: 817.302, settlingTargetMs: nil,
+            engineClockReliable: true, lastKnownMs: 818_302
+        )
+        #expect(held == 817.302)
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: held, clockMs: 0) == 817_302)
+        // A re-anchor seek still settling: its target.
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: 507.836, clockMs: 0) == 507_836)
+        // Nothing held, clock healthy: the clock.
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: nil, clockMs: 1_200_000) == 1_200_000)
+        // Nothing held and the clock at 0 (a seek back to the start, rebuilt):
+        // the start, not some older position.
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: nil, clockMs: 0) == 0)
+        #expect(PlaybackRetryPolicy.netRebuildFromMs(heldSeconds: .nan, clockMs: 4_000) == 4_000)
     }
 }
 

@@ -395,9 +395,58 @@ final class HomeViewModel {
     /// Re-runs the full home load (equivalent to calling `load` again). Exposed
     /// for pull-to-refresh and `.cinemaxShouldRefreshCatalogue` — bypasses the
     /// `hasLoaded` guard.
+    ///
+    /// Runs on a task of its OWN: a pull-to-refresh's task is cancelled by
+    /// SwiftUI about 10 ms after it starts (measured on the simulator,
+    /// 2026-11-20 — every request then failed « annulé », on `main` as on the
+    /// theme branches), so a load run inside it fetched nothing.
+    ///
+    /// Returns once PHASE 1 has landed (hero + the top rails — `isLoading`
+    /// back to false), not at the end of the load: awaiting the whole of it
+    /// kept the spinner up through the genre fan-out, « En direct », « Parce
+    /// que vous avez vu » and the episode-nav fetches — seconds behind a
+    /// tunnel (owner, 2026-11-22). The rest keeps filling in below, as on a
+    /// first load; `reloadTask` is that load, for the tests.
+    ///
+    /// No pre-clear of « En direct » either: the row stays as it is until its
+    /// own fresh answer, like every other row of a refresh.
     func reload(using appState: AppState) async {
-        activeSessions = []
-        await load(using: appState)
+        let gate = PhaseOneGate()
+        phaseOneGate = gate
+        let task = Task {
+            await self.load(using: appState)
+            gate.open()
+        }
+        reloadTask = task
+        await gate.wait()
+    }
+
+    /// The load the last `reload` started — awaited by tests that check what
+    /// phase 2 left behind.
+    @ObservationIgnored private(set) var reloadTask: Task<Void, Never>?
+    /// Opened when the current load's phase 1 lands (or the load ends).
+    @ObservationIgnored private var phaseOneGate: PhaseOneGate?
+
+    /// Main-actor one-shot: `wait()` returns once `open()` has been called.
+    @MainActor private final class PhaseOneGate {
+        private var isOpen = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+        func open() {
+            guard !isOpen else { return }
+            isOpen = true
+            waiters.forEach { $0.resume() }
+            waiters = []
+        }
+        func wait() async {
+            guard !isOpen else { return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+    }
+
+    /// Phase 1 of the CURRENT load is on screen: a waiting `reload` returns.
+    private func phaseOneLanded() {
+        phaseOneGate?.open()
+        phaseOneGate = nil
     }
 
     /// Internal (not private) so `HomeViewModelTests` can drive it directly
@@ -648,6 +697,7 @@ final class HomeViewModel {
             loadFailure = firstError ?? URLError(.unknown)
             isLoading = false
             isFullyLoaded = true
+            phaseOneLanded()
             return
         }
         loadFailure = nil
@@ -657,6 +707,8 @@ final class HomeViewModel {
         // in below off their own `@Observable` slices (the nav maps only gate the
         // in-player prev/next buttons — nothing on the initial paint).
         isLoading = false
+        // …and a pull-to-refresh lets go of its spinner here.
+        phaseOneLanded()
 
         // Genre rows + active sessions depend on nothing from the episode-nav
         // phase below — run them concurrently with the navigation builds (each
@@ -1316,6 +1368,11 @@ final class HomeViewModel {
         // minute on tvOS, where that pulls focus off whatever the user is on.
         // `SessionInfoDto` is `Hashable` and `SyncPlayGroup` is `Equatable`, so
         // the comparison is the server's own answer, not a digest of it.
+        // The account is not known yet — the launch's first load runs before
+        // `refreshCurrentUser` answers (measured: no policy, not admin). That is
+        // « don't know », not « may not see anyone »: ask nothing, write
+        // nothing; the next refresh of the row has the answer.
+        guard appState.currentUser != nil else { return }
         if currentUserName != appState.currentUser?.name {
             currentUserName = appState.currentUser?.name
         }
@@ -1342,17 +1399,20 @@ final class HomeViewModel {
         )
         let client = appState.apiClient
 
-        async let sessions: [SessionInfoDto] = {
+        // `nil` = the request FAILED (cancelled included), which is not « nobody
+        // is watching »: that source keeps what is on screen. `try? … ?? []`
+        // turned every failed refresh into an empty row (owner, 2026-11-20).
+        async let sessions: [SessionInfoDto]? = {
             guard maySeeOthers else { return [] }
-            let all = (try? await client.getActiveSessions(
+            guard let all = try? await client.getActiveSessions(
                 activeWithinSeconds: 60, controllableByUserId: queryUserId
-            )) ?? []
+            ) else { return nil }
             return all.filter { $0.nowPlayingItem != nil && ($0.userID ?? "") != userId }
         }()
 
-        async let groups: [SyncPlayGroup] = {
+        async let groups: [SyncPlayGroup]? = {
             guard mayJoin else { return [] }
-            return (try? await client.syncPlayListGroups()) ?? []
+            return try? await client.syncPlayListGroups()
         }()
 
         // Each source fails on its own: a dead `/Sessions` must not take the
@@ -1360,8 +1420,8 @@ final class HomeViewModel {
         let freshSessions = await sessions
         let freshGroups = await groups
         guard isCurrent(generation) else { return }
-        if activeSessions != freshSessions { activeSessions = freshSessions }
-        if syncPlayGroups != freshGroups { syncPlayGroups = freshGroups }
+        if let freshSessions, activeSessions != freshSessions { activeSessions = freshSessions }
+        if let freshGroups, syncPlayGroups != freshGroups { syncPlayGroups = freshGroups }
     }
 
     /// Re-fetches only the genre rows — fired from `HomeScreen` when the user
@@ -1421,8 +1481,10 @@ final class HomeViewModel {
         // (limit 10) — we bound the fetch, not the number of rows.
         // In season, the season row already shows this genre's newest titles
         // (same query): its genre row would repeat them a few rows down.
+        // (A `requiresBoth` row only narrows a keyword by its genres: it does
+        // not show a genre's newest titles, so every genre row stays.)
         let seasonGenre = seasonRowConfig.flatMap {
-            SeasonRowMatcher.match(candidates: $0.genreCandidates, in: sortedGenres)
+            $0.requiresBoth ? nil : SeasonRowMatcher.match(candidates: $0.genreCandidates, in: sortedGenres)
         }
         let picked = HomeGenrePreferences.effectiveGenres(available: sortedGenres, in: defaults)
             .filter { $0 != seasonGenre }

@@ -102,20 +102,10 @@ public extension JellyfinAPIClient {
         do {
             guard let client = getClient() else { throw JellyfinError.notConnected }
             let user = try await client.send(Paths.getUserByID(userID: userId)).value
-            let config = user.configuration
             // The server spells "no preference" as an empty string; this model
-            // spells it `nil`. Normalise on the way in, or an untouched
+            // spells it `nil` (normalised by the initialiser), or an untouched
             // round-trip compares as changed.
-            func normalized(_ value: String?) -> String? {
-                guard let value, !value.isEmpty else { return nil }
-                return value
-            }
-            return UserPlaybackPreferences(
-                audioLanguage: normalized(config?.audioLanguagePreference),
-                subtitleLanguage: normalized(config?.subtitleLanguagePreference),
-                subtitleMode: config?.subtitleMode
-                    .flatMap { UserPlaybackPreferences.SubtitleMode(rawValue: $0.rawValue) } ?? .defaultTrack
-            )
+            return UserPlaybackPreferences(configuration: user.configuration) ?? UserPlaybackPreferences()
         } catch {
             notifyIfUnauthorized(error)
             throw error

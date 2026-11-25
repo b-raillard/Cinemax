@@ -21,6 +21,7 @@ struct AppIconPickerTests {
         #expect(choices.map(\.alternateName) == [
             nil,
             "AppIconHalloweenPumpkin", "AppIconHalloweenPotion", halloween,
+            "AppIconChristmas",
             "AppIconRed", "AppIconOrange", "AppIconYellow", "AppIconGreen", "AppIconCyan",
             "AppIconBlue", "AppIconIndigo", "AppIconPurple", "AppIconPink",
         ])
@@ -34,6 +35,7 @@ struct AppIconPickerTests {
         let choices = AppIconCatalogue.choices
         #expect(choices.map(\.family).first == .classic)
         #expect(choices.filter { $0.family == .halloween }.count == 3)
+        #expect(choices.filter { $0.family == .christmas }.map(\.alternateName) == ["AppIconChristmas"])
         let accents = choices.compactMap { choice -> AccentOption? in
             if case .accent(let option) = choice.family { option } else { nil }
         }
@@ -105,7 +107,8 @@ struct AppIconPickerTests {
     func neighbour() {
         #expect(AppIconCatalogue.neighbour(of: nil, by: 1).alternateName == "AppIconHalloweenPumpkin")
         #expect(AppIconCatalogue.neighbour(of: nil, by: -1).alternateName == "AppIconPink")
-        #expect(AppIconCatalogue.neighbour(of: halloween, by: 1).alternateName == "AppIconRed")
+        #expect(AppIconCatalogue.neighbour(of: halloween, by: 1).alternateName == "AppIconChristmas")
+        #expect(AppIconCatalogue.neighbour(of: "AppIconChristmas", by: 1).alternateName == "AppIconRed")
         #expect(AppIconCatalogue.neighbour(of: "AppIconPink", by: 1).alternateName == nil)
         #expect(AppIconCatalogue.neighbour(of: "AppIconRetiree", by: 1).alternateName == "AppIconHalloweenPumpkin")
     }
@@ -132,9 +135,10 @@ struct AppIconPickerTests {
     func phoneSections() {
         let sections = AppIconCatalogue.sections
         #expect(sections.map(\.titleKey) == [
-            "settings.appIcon.section.classic", "settings.appIcon.section.halloween", "settings.appIcon.section.colors",
+            "settings.appIcon.section.classic", "settings.appIcon.section.halloween",
+            "settings.appIcon.section.christmas", "settings.appIcon.section.colors",
         ])
-        #expect(sections.map(\.choices.count) == [1, 3, 9])
+        #expect(sections.map(\.choices.count) == [1, 3, 1, 9])
         #expect(sections.flatMap(\.choices) == AppIconCatalogue.choices)
     }
 
@@ -142,7 +146,7 @@ struct AppIconPickerTests {
     func tvSections() {
         let sections = AppIconCatalogue.tvSections
         #expect(sections.map(\.titleKey) == ["settings.appIcon.section.editions", "settings.appIcon.section.colors"])
-        #expect(sections.map(\.choices.count) == [4, 9])
+        #expect(sections.map(\.choices.count) == [5, 9])
         #expect(sections.flatMap(\.choices) == AppIconCatalogue.choices)
     }
 
@@ -179,9 +183,9 @@ struct AppIconPickerTests {
         #expect(AppIconPickerPolicy.apply(previewing: AppIconCatalogue.primary, current: "AppIconBlue", tier: .free) == .apply(nil))
     }
 
-    @Test("Le bandeau « 12 icônes de plus avec JellyGlass Pro » : gratuit seulement, et le compte vient du catalogue")
+    @Test("Le bandeau « 13 icônes de plus avec JellyGlass Pro » : gratuit seulement, et le compte vient du catalogue")
     func proBanner() {
-        #expect(AppIconPickerPolicy.proBannerCount(tier: .free) == 12)
+        #expect(AppIconPickerPolicy.proBannerCount(tier: .free) == 13)
         #expect(AppIconPickerPolicy.proBannerCount(tier: .pro) == nil)
         #expect(AppIconPickerPolicy.proBannerCount(tier: .founder) == nil)
         // Before the launch nobody is free, so nobody sees it.

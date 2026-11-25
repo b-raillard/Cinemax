@@ -208,6 +208,21 @@ enum PlaybackRetryPolicy {
         return .giveUp(releaseStickyProxy: usingProxy)
     }
 
+    /// Where a failure happened, for the loop guard AND the retry's resume: the
+    /// position the stop was judged at (`PlaybackEndPolicy.stopPositionMs`),
+    /// else the target of a seek still settling, else the last known playhead.
+    /// Never the raw playhead during a settle: reopening a cue-less truncated
+    /// MKV at its cut, libVLC reports the file's FIRST position (5 174 ms)
+    /// while the resume seek (59 812 ms) is on its way; a stop then saved
+    /// 5 174 as « where it failed » — the guard counted a new place and the
+    /// next retry resumed at 5 s, replaying 55 s to the cut, for ever
+    /// (measured on the bench 2026-11-24, ≈ 1 run in 3, on main too).
+    static func failurePositionMs(stopPositionMs: Int64?, settlingTargetMs: Int32?, lastKnownMs: Int32) -> Int32 {
+        if let stopPositionMs { return Int32(clamping: stopPositionMs) }
+        if let settlingTargetMs { return settlingTargetMs }
+        return lastKnownMs
+    }
+
     /// Where the retry reopens, in seconds, or `nil` to keep the open's own
     /// resume point. A drop AFTER playback had begun (an HTTP/2 RST, a
     /// transient blip) resumes where it dropped; a failure before the first
@@ -236,6 +251,23 @@ enum PlaybackRetryPolicy {
         }
         guard let startTime, startTime.isFinite, startTime > 0 else { return 0 }
         return Int32(min((startTime * 1000).rounded(), Double(Int32.max)))
+    }
+
+    /// Where a rebuild NET (frozen picture, relay failover, feed escalation)
+    /// and the wake re-resolve reopen, in ms: the position the viewer is held
+    /// at (`PlaybackReporter.heldPositionSeconds` — a resume seek not sent yet,
+    /// a seek still settling, the last position while the clock is not to be
+    /// trusted), else the clock. Never the clock FIRST: a rebuilt media that
+    /// stalls again before its first time tick reads 0 with its resume seek
+    /// still pending, and a second rebuild from that 0 restarted the film from
+    /// the beginning (owner's iPad, 2026-11-21, DirectStream through a
+    /// Cloudflare tunnel). Not `lastKnownPositionMs` as a fallback: a user
+    /// seek back to the start that never landed leaves it at the old position.
+    static func netRebuildFromMs(heldSeconds: Double?, clockMs: Int32) -> Int32 {
+        if let heldSeconds, heldSeconds.isFinite, heldSeconds > 0 {
+            return Int32(min((heldSeconds * 1000).rounded(), Double(Int32.max)))
+        }
+        return max(clockMs, 0)
     }
 }
 

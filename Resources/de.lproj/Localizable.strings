@@ -732,6 +732,8 @@
 "debug.skipToEnd" = "⏭ Zum Ende springen (Debug)";
 "settings.interface" = "Oberfläche";
 "settings.playback" = "Wiedergabe";
+"settings.playback.languages" = "Sprachen";
+"settings.playback.languages.none" = "Keine";
 "settings.interface.menu" = "Hauptmenü";
 "settings.interface.library" = "Mediathek";
 
@@ -1339,6 +1341,14 @@
 "whatsNew.seerrRequests.body" = "Ein Film oder eine Serie fehlt in deiner Bibliothek? Such danach: „Anfragen“ schickt ihn an deinen Admin, und JellyGlass sagt dir Bescheid, sobald er da ist. Dein Admin schaltet Seerr unter Einstellungen → Seerr ein.";
 "whatsNew.missingEpisodes.title" = "Fehlende Folgen*";
 "whatsNew.missingEpisodes.body" = "In einer unvollständigen Staffel erscheinen die fehlenden Folgen an ihrem Platz, mit ihrem Bild. Ein Knopf meldet sie deinem Admin, der sie in Seerr wiederfindet.";
+"whatsNew.christmasFrost.title" = "Weihnachten im Frost";
+"whatsNew.christmasFrost.body" = "Bis zum 6. Januar überzieht sich die App mit Frost: Nachtblau, gravierte Titel, Eisblumen in den Bildschirmecken und fallender Schnee. Auf der Startseite eine Reihe „Weihnachten mit der Familie“ und Filme, die du dir zu Weihnachten wünschen kannst*. Nach den Feiertagen ist alles wieder wie vorher.";
+"whatsNew.christmasFrostTV.title" = "Weihnachten im Frost";
+"whatsNew.christmasFrostTV.body" = "Bis zum 6. Januar überzieht sich die App mit Frost: Nachtblau, gravierte Titel, Eisblumen in den Bildschirmecken und fallender Schnee, dazu eine Reihe „Weihnachten mit der Familie“ auf der Startseite. Nach den Feiertagen ist alles wieder wie vorher.";
+"whatsNew.rememberedTracks.title" = "Deine Sprachen folgen der Serie";
+"whatsNew.rememberedTracks.body" = "Wähl Ton und Untertitel einmal: JellyGlass behält sie für die ganze Serie, und ein fortgesetzter Film startet in den gewählten Sprachen, auf all deinen Geräten. Deine bevorzugten Sprachen stellst du unter Einstellungen → Wiedergabe → Sprachen ein.";
+"whatsNew.requestFiche.title" = "Erst ansehen, dann anfragen*";
+"whatsNew.requestFiche.body" = "Ein anfragbarer Titel öffnet jetzt seine eigene Seite: Bild, Inhalt, Besetzung und Infos, damit du weißt, was du anfragst, bevor du es abschickst.";
 "whatsNew.footnote.seerr" = "* Erfordert einen Seerr-Server";
 "whatsNew.accounts.title" = "Wer schaut?";
 "whatsNew.accounts.body" = "Jeder behält sein eigenes Konto auf demselben Gerät, mit eigenem Fortschritt und eigenen Einstellungen. Dein Avatar oben links wechselt zwischen ihnen, und ein Code kann jedes Konto schützen.";
@@ -1416,11 +1426,17 @@
 "settings.seasonal.choice.off" = "Aus";
 "settings.seasonal.choice.halloween" = "Halloween";
 "settings.seasonal.choice.halloween.detail" = "Das ganze Jahr";
+"season.christmas.name" = "Raureif";
+"season.christmas.row" = "Weihnachten mit der Familie";
+"season.christmas.requestRow" = "Weihnachtsfilme zum Anfragen";
+"settings.seasonal.choice.christmas" = "Raureif";
+"settings.seasonal.choice.christmas.detail" = "Das ganze Jahr";
 "settings.appIcon.title" = "App-Symbol";
 "settings.appIcon.classic" = "Klassisch";
 "settings.appIcon.halloween" = "Aubergine";
 "settings.appIcon.halloweenPumpkin" = "Kürbis";
 "settings.appIcon.halloweenPotion" = "Zaubertrank";
+"settings.appIcon.christmas" = "Weihnachten";
 "settings.appIcon.locked" = "Erfordert JellyGlass Pro";
 "settings.appIcon.error" = "Das Symbol konnte nicht geändert werden";
 "settings.appIcon.caption.current" = "Aktuelles Symbol";
@@ -1431,10 +1447,12 @@
 "settings.appIcon.proBanner.one" = "%d weiteres Symbol mit JellyGlass Pro";
 "settings.appIcon.section.classic" = "Klassisch";
 "settings.appIcon.section.halloween" = "Halloween";
+"settings.appIcon.section.christmas" = "Weihnachten";
 "settings.appIcon.section.colors" = "Farben";
 "settings.appIcon.section.editions" = "Editionen";
 "settings.appIcon.family.classic" = "Originalsymbol";
 "settings.appIcon.family.halloween" = "Halloween";
+"settings.appIcon.family.christmas" = "Weihnachten";
 "settings.appIcon.family.accent" = "Farbe";
 "settings.appIcon.status.available" = "Zum Verwenden drücken";
 "settings.debug.forceSeason" = "„%@“ erzwingen";
@@ -1702,6 +1720,7 @@
 "seerr.request.forbidden.fix" = "Deine Berechtigungen oder dein Kontingent erlauben es nicht. Bitte den Admin, deine Anfrageberechtigungen zu prüfen.";
 "seerr.request.noSeasons" = "Keine Staffel zum Anfragen";
 "seerr.request.failed" = "Die Anfrage ist nicht durchgegangen";
+"seerr.request.unreachable" = "Seerr antwortet gerade nicht. Versuch es gleich noch einmal.";
 "seerr.request.next.auto" = "Der Download startet sofort.";
 "seerr.request.next.approval" = "Der Admin muss deine Anfrage freigeben; du wirst benachrichtigt, sobald sie da ist.";
 "seerr.request.kind.movie" = "Film";
@@ -1721,6 +1740,7 @@
 "seerr.badge.request" = "Anfragen";
 "seerr.badge.pending" = "Ausstehend";
 "seerr.badge.processing" = "In Vorbereitung";
+"seerr.badge.processing.short" = "In Arbeit";
 "seerr.badge.declined" = "Abgelehnt";
 "seerr.missing.title" = "Noch nicht in deiner Bibliothek";
 "seerr.missing.a11y" = "%@, noch nicht in deiner Bibliothek, %@";
@@ -1755,6 +1775,21 @@
 "seerr.searchPrompt.body" = "Dein Server nutzt Seerr für Anfragen. Melde dich einmal mit deinem Jellyfin-Konto an: nichts zu tippen.";
 "seerr.searchPrompt.later" = "Später";
 "seerr.request.seasonsUnavailable" = "Die Staffeln konnten nicht geladen werden";
+
+// Request fiche (mini-fiche B, 2026-11-22)
+"seerr.fiche.close" = "Schließen";
+"seerr.fiche.infos" = "Details";
+"seerr.fiche.directedBy" = "Regie";
+"seerr.fiche.createdBy" = "Idee";
+"seerr.fiche.release" = "Erscheinungsdatum";
+"seerr.fiche.firstAired" = "Erstausstrahlung";
+"seerr.fiche.runtime" = "Laufzeit";
+"seerr.fiche.episodeRuntime" = "Episodenlänge";
+"seerr.fiche.originalLanguage" = "Originalsprache";
+"seerr.fiche.originalTitle" = "Originaltitel";
+"seerr.fiche.streaming" = "Auch bei";
+"seerr.fiche.votes" = "TMDb · %@ Stimmen";
+"seerr.fiche.votes.one" = "TMDb · %@ Stimme";
 "seerr.settings.section.myRequests" = "Meine Anfragen";
 "seerr.myRequests.empty" = "Noch keine Anfragen";
 "seerr.myRequests.titleUnavailable" = "Titel nicht verfügbar";

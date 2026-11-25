@@ -371,6 +371,17 @@ final class SeerrRequestPresenter {
         }
     }
 
+    /// The toast's second line when a request failed. Seerr not answering is
+    /// said as such — `userFacingMessage` only knows `NSURLError`s, so a
+    /// `SeerrError.unreachable` (the client's own transport mapping) used to
+    /// read « Une erreur est survenue » (recette 21/11, SR-1).
+    static func failureMessage(for error: Error, loc: LocalizationManager) -> String {
+        if case SeerrError.unreachable = error {
+            return loc.localized("seerr.request.unreachable")
+        }
+        return loc.userFacingMessage(for: error)
+    }
+
     private func report(_ outcomes: [Result], loc: LocalizationManager, toasts: ToastCenter) {
         let sent = outcomes.filter { $0.outcome == .sent }
         let duplicates = outcomes.filter { $0.outcome == .duplicate }
@@ -390,7 +401,7 @@ final class SeerrRequestPresenter {
             default:
                 toasts.error(
                     loc.localized("seerr.request.failed"),
-                    message: first.error.map { loc.userFacingMessage(for: $0) })
+                    message: first.error.map { Self.failureMessage(for: $0, loc: loc) })
             }
         } else if !duplicates.isEmpty {
             toasts.info(loc.localized("seerr.request.duplicate"))
@@ -416,28 +427,31 @@ struct SeerrRequestPresentation: ViewModifier {
 
     func body(content: Content) -> some View {
         #if os(tvOS)
-        content.confirmationDialog(
-            dialogTitle,
-            isPresented: Binding(get: { presenter.draft(for: host) != nil }, set: { if !$0 { presenter.draft = nil } }),
-            titleVisibility: .visible,
-            presenting: presenter.draft(for: host)
-        ) { draft in
-            let partial = session.publicSettings?.partialRequestsEnabled ?? true
-            let selection = SeerrRequestPresenter.effectiveSelection(
-                draft, draft.defaultSelection(partial: partial), partial: partial)
-            Button(SeerrRequestPresenter.actionTitle(for: draft, selection: selection, loc: loc)) {
-                Task { await presenter.submit(draft, selection: selection, session: session, loc: loc, toasts: toasts) }
-            }
-            // A season pill / card preselects its own season: with nothing to
-            // tick on tvOS, the others are one more button (« Demander les
-            // saisons 4 à 6 »).
-            if case .series(_, let seasons, _) = draft, selection != Set(seasons) {
-                Button(SeerrRequestPresenter.seasonsActionTitle(seasons, loc: loc)) {
-                    Task { await presenter.submit(draft, selection: Set(seasons), session: session, loc: loc, toasts: toasts) }
+        // A film or a series opens the full-screen fiche (owner's choice
+        // TV-1, 2026-11-23); a saga's « Demander les N » keeps the dialog.
+        content
+            .confirmationDialog(
+                dialogTitle,
+                isPresented: Binding(get: { filmsDraft != nil }, set: { if !$0 { presenter.draft = nil } }),
+                titleVisibility: .visible,
+                presenting: filmsDraft
+            ) { draft in
+                let selection = SeerrRequestPresenter.effectiveSelection(
+                    draft, draft.defaultSelection(partial: true), partial: true)
+                Button(SeerrRequestPresenter.actionTitle(for: draft, selection: selection, loc: loc)) {
+                    Task { await presenter.submit(draft, selection: selection, session: session, loc: loc, toasts: toasts) }
                 }
+                Button(loc.localized("action.cancel"), role: .cancel) {}
             }
-            Button(loc.localized("action.cancel"), role: .cancel) {}
-        }
+            .fullScreenCover(item: Binding(get: { ficheDraft }, set: { if $0 == nil { presenter.draft = nil } })) { draft in
+                SeerrRequestTVFiche(draft: draft)
+                    .environment(appState)
+                    .environment(themeManager)
+                    .environment(loc)
+                    .environment(toasts)
+                    .environment(session)
+                    .environment(presenter)
+            }
         #else
         content.sheet(item: Binding(get: { presenter.draft(for: host) }, set: { presenter.draft = $0 })) { draft in
             SeerrRequestSheet(draft: draft)
@@ -452,12 +466,20 @@ struct SeerrRequestPresentation: ViewModifier {
     }
 
     #if os(tvOS)
+    private var filmsDraft: SeerrRequestDraft? {
+        guard let draft = presenter.draft(for: host), case .films = draft else { return nil }
+        return draft
+    }
+
+    private var ficheDraft: SeerrRequestDraft? {
+        guard let draft = presenter.draft(for: host) else { return nil }
+        if case .films = draft { return nil }
+        return draft
+    }
+
     private var dialogTitle: String {
-        switch presenter.draft {
-        case .movie(let title), .series(let title, _, _): title.title
-        case .films(let titles): loc.counted("seerr.request.films.header", titles.count)
-        case nil: ""
-        }
+        guard case .films(let titles)? = filmsDraft else { return "" }
+        return loc.counted("seerr.request.films.header", titles.count)
     }
     #endif
 }
@@ -468,15 +490,20 @@ struct SeerrRequestPresentation: ViewModifier {
 struct SeerrRequestSheet: View {
     let draft: SeerrRequestDraft
 
-    @Environment(\.dismiss) private var dismiss
-    @Environment(ThemeManager.self) private var themeManager
-    @Environment(LocalizationManager.self) private var loc
+    // Internal, not private: the film / series mini-fiche is drawn by an
+    // extension in `Views/SeerrRequestFicheView.swift`.
+    @Environment(\.dismiss) var dismiss
+    @Environment(ThemeManager.self) var themeManager
+    @Environment(LocalizationManager.self) var loc
     @Environment(ToastCenter.self) private var toasts
-    @Environment(SeerrSession.self) private var session
+    @Environment(SeerrSession.self) var session
     @Environment(SeerrRequestPresenter.self) private var presenter
 
     @State private var selection: Set<Int>
-    @State private var sending = false
+    @State var sending = false
+    /// The fiche's `/movie` or `/tv` read whole; nil until it answered (and
+    /// for good when it did not — the fiche then shows what the card knew).
+    @State var details: SeerrTitleDetails?
 
     init(draft: SeerrRequestDraft) {
         self.draft = draft
@@ -484,6 +511,16 @@ struct SeerrRequestSheet: View {
     }
 
     var body: some View {
+        // A film or a series gets the mini-fiche (owner's choice B,
+        // 2026-11-22); a saga's « Demander les N » keeps the list of ticks.
+        if case .films = draft {
+            listBody
+        } else {
+            ficheBody
+        }
+    }
+
+    private var listBody: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
@@ -510,17 +547,17 @@ struct SeerrRequestSheet: View {
     }
 
     /// The ticks are hidden without partial requests: everything goes.
-    private var effective: Set<Int> {
+    var effective: Set<Int> {
         SeerrRequestPresenter.effectiveSelection(
             draft, selection, partial: session.publicSettings?.partialRequestsEnabled ?? true)
     }
 
-    private var canSend: Bool {
+    var canSend: Bool {
         if case .movie = draft { return !sending }
         return !effective.isEmpty && !sending
     }
 
-    private var leadTitle: SeerrTitle? {
+    var leadTitle: SeerrTitle? {
         switch draft {
         case .movie(let title), .series(let title, _, _): title
         case .films(let titles): titles.first
@@ -576,7 +613,7 @@ struct SeerrRequestSheet: View {
     }
 
     @ViewBuilder
-    private var choices: some View {
+    var choices: some View {
         switch draft {
         case .movie:
             EmptyView()
@@ -621,7 +658,7 @@ struct SeerrRequestSheet: View {
     }
 
     @ViewBuilder
-    private var nextStep: some View {
+    var nextStep: some View {
         if case .connected(let user) = session.connection {
             let kind = leadTitle?.kind ?? .movie
             Text(loc.localized(SeerrRequestPresenter.nextStepKey(permissions: user.permissions, kind: kind)))
@@ -630,7 +667,7 @@ struct SeerrRequestSheet: View {
         }
     }
 
-    private func send() {
+    func send() {
         sending = true
         let chosen = effective
         Task {

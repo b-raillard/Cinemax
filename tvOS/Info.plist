@@ -17,6 +17,7 @@
 			<string>AppIconHalloweenPumpkin</string>
 			<string>AppIconHalloweenPotion</string>
 			<string>AppIconHalloween</string>
+			<string>AppIconChristmas</string>
 			<string>AppIconRed</string>
 			<string>AppIconOrange</string>
 			<string>AppIconYellow</string>
@@ -71,6 +72,7 @@
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fraunces-BlackItalic.ttf</string>
+		<string>CormorantGaramond-Bold.ttf</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

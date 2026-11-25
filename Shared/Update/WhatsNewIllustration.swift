@@ -64,6 +64,14 @@ enum WhatsNewIllustration: Equatable, Sendable, CaseIterable {
     case seerrRequests
     /// Missing episodes — the absent one in its place, reported (animated).
     case missingEpisodes
+    /// The ephemeral « Givre » theme — a snow crystal on a night sky, frost in
+    /// the corners (`WhatsNewFrostScene`, animated, wide like `.halloweenNight`).
+    case christmasFrost
+    /// Audio and subtitles kept across a show — the pills dropping from one
+    /// episode onto the next (animated).
+    case rememberedTracks
+    /// The Seerr request fiche — a card opening into its page (animated).
+    case requestFiche
 }
 
 struct WhatsNewIllustrationView: View {
@@ -77,6 +85,7 @@ struct WhatsNewIllustrationView: View {
     var body: some View {
         switch kind {
         case .halloweenNight: WhatsNewHalloweenScene()
+        case .christmasFrost: WhatsNewFrostScene()
         case .duoTable: WhatsNewDuoScene(side: CinemaScale.pt(baseSize))
         default: motif
         }
@@ -114,9 +123,9 @@ struct WhatsNewIllustrationView: View {
             case .language:      language(u)
             case .everyScreen, .smoothSpeed, .server, .quickConnect, .personalize, .accounts, .resumeHere, .appIcon:
                 MotifCanvas(kind: kind, ink: ink)
-            case .localAddress, .episodeQuality, .seerrRequests, .missingEpisodes:
+            case .localAddress, .episodeQuality, .seerrRequests, .missingEpisodes, .rememberedTracks, .requestFiche:
                 WhatsNewAnimatedMotif(kind: kind, ink: ink)
-            case .halloweenNight, .duoTable: EmptyView()   // drawn by `body` as scenes
+            case .halloweenNight, .christmasFrost, .duoTable: EmptyView()   // drawn by `body` as scenes
             }
         }
         .frame(width: side, height: side)

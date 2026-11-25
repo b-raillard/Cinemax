@@ -916,14 +916,20 @@ private struct SearchResultsGrid: View, Equatable {
             // (root CLAUDE.md, lazy-container RULE).
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
                 chips
+                // Compact (owner 2026-11-21, variant B): the full-size empty
+                // state pushed the titles to request below the fold — and said
+                // the opposite of them. A 64 pt illustration, tight margins.
                 if let noResultsTitle {
-                    EmptyStateView(
-                        systemImage: "magnifyingglass",
-                        illustration: .noResults,
-                        title: noResultsTitle
-                    )
+                    VStack(spacing: CinemaSpacing.spacing2) {
+                        CinemaIllustrationView(kind: .noResults, baseSize: 64)
+                        Text(noResultsTitle)
+                            .font(CinemaFont.dynamicHeadline(.small))
+                            .foregroundStyle(CinemaColor.onSurface)
+                            .multilineTextAlignment(.center)
+                            .accessibilityAddTraits(.isHeader)
+                    }
                     .frame(maxWidth: .infinity)
-                    .padding(.top, CinemaSpacing.spacing6)
+                    .padding(.vertical, CinemaSpacing.spacing2)
                 }
 
                 // Inside the grid's own ScrollView, so the row scrolls away with

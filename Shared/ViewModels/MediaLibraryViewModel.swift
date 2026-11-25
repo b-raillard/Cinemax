@@ -81,6 +81,9 @@ final class MediaLibraryViewModel {
     // Shared state
     var totalCount = 0
     var isLoading = true
+    /// False until a load has put a whole first screen up (or failed). The
+    /// screen shows its skeleton only before that — see `performLoad`.
+    private(set) var hasPresentedContent = false
     var errorMessage: String?
 
     // Sort & filter
@@ -274,11 +277,6 @@ final class MediaLibraryViewModel {
             // so the Play button can never carry the old series' episode.
             heroPlay = nil
 
-            // Progressive render: the hero (and its `totalCount`) are ready, so
-            // drop the skeleton now. The genre rows fetched below fill in off
-            // their own `@Observable` slice (`itemsByGenre`) as each lands.
-            isLoading = false
-
             // Side task, off the critical path: the hero paints now and gains
             // its prev/next buttons (and the end-of-series card) a beat later.
             // Blocking the first paint on a next-up probe would be a poor trade
@@ -301,6 +299,14 @@ final class MediaLibraryViewModel {
                 if Self.isCancellation(error) { return false }
                 logger.error("Library genre rows failed: \(error.localizedDescription, privacy: .public)")
             }
+
+            // The skeleton leaves only NOW, hero and rows together. It used to
+            // leave with the hero: « Parcourir les genres » then sat right
+            // under it until the rows landed and pushed it down the page — the
+            // slide the owner saw on every tab change (2026-11-20). The rows
+            // land with the hero anyway (146 ms against 144 on the LAN).
+            isLoading = false
+            hasPresentedContent = true
         } catch {
             if Self.isCancellation(error) {
                 logger.debug("Library load cancelled — leaving state for the superseding load")
@@ -309,6 +315,7 @@ final class MediaLibraryViewModel {
             logger.error("Library load failed: \(error.localizedDescription, privacy: .public)")
             errorMessage = loc.userFacingMessage(for: error)
             isLoading = false
+            hasPresentedContent = true
             return false
         }
 

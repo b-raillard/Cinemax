@@ -55,6 +55,7 @@
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fraunces-BlackItalic.ttf</string>
+		<string>CormorantGaramond-Bold.ttf</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

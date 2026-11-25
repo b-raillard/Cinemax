@@ -4,15 +4,9 @@ import CinemaxKit
 
 private let logger = Logger(subsystem: "com.cinemax", category: "Profile")
 
-/// The signed-in user's own account: password, and the playback preferences the
-/// SERVER holds for them.
-///
-/// The preferences are deliberately server-side rather than another
-/// `@AppStorage` key. Jellyfin honours `audioLanguagePreference` /
-/// `subtitleLanguagePreference` when it builds `PlaybackInfo`, so setting them
-/// here is setting them for every Jellyfin client this account uses — where a
-/// local copy would be a second opinion that silently disagrees with all of
-/// them.
+/// The signed-in user's own account: avatar, name, server and password. Its
+/// playback language preferences moved to Réglages → Lecture on 2026-11-24
+/// (`PlaybackLanguageSection`).
 ///
 /// Nothing here is admin: `AdminAPI.updateUserPassword` is an admin resetting
 /// somebody ELSE's password and carries no proof of identity. This screen uses
@@ -35,7 +29,6 @@ struct ProfileScreen: View {
 
     var body: some View {
         content
-            .task { await model.load(using: appState) }
         #if os(iOS)
             .navigationTitle(loc.localized("profile.title"))
             .navigationBarTitleDisplayMode(.inline)
@@ -48,7 +41,6 @@ struct ProfileScreen: View {
             VStack(alignment: .leading, spacing: CinemaSpacing.spacing6) {
                 header
                 passwordSection
-                preferencesSection
                 Spacer(minLength: CinemaSpacing.spacing8)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -154,183 +146,6 @@ struct ProfileScreen: View {
         }
     }
 
-    // MARK: - Server-side playback preferences
-
-    @ViewBuilder
-    private var preferencesSection: some View {
-        VStack(alignment: .leading, spacing: CinemaSpacing.spacing3) {
-            sectionHeader(loc.localized("profile.preferences.section"))
-            Text(loc.localized("profile.preferences.hint"))
-                .font(CinemaFont.label(.medium))
-                .foregroundStyle(CinemaColor.onSurfaceVariant)
-            if !model.preferencesLoaded {
-                // The read failed. Saying so beats offering pickers that would
-                // write this type's defaults over the account's real settings.
-                Text(loc.localized("profile.preferences.unavailable"))
-                    .font(CinemaFont.label(.medium))
-                    .foregroundStyle(CinemaColor.error)
-            }
-
-            languageRow(
-                label: loc.localized("profile.audioLanguage"),
-                icon: "waveform",
-                selection: model.preferences.audioLanguage
-            ) { code in
-                Task { await save { $0.audioLanguage = code } }
-            }
-
-            languageRow(
-                label: loc.localized("profile.subtitleLanguage"),
-                icon: "captions.bubble",
-                selection: model.preferences.subtitleLanguage
-            ) { code in
-                Task { await save { $0.subtitleLanguage = code } }
-            }
-
-            subtitleModeRow
-        }
-        .disabled(!model.preferencesLoaded)
-        .opacity(model.preferencesLoaded ? 1 : 0.6)
-    }
-
-    private func save(_ mutate: (inout UserPlaybackPreferences) -> Void) async {
-        var next = model.preferences
-        mutate(&next)
-        switch await model.savePreferences(next, using: appState) {
-        case .saved:
-            toast.success(loc.localized("profile.preferences.saved"))
-        case .skipped:
-            // Nothing was written, so nothing is claimed. Reached when the
-            // preferences never loaded — the pickers are disabled in that state,
-            // so this is a belt-and-braces branch, not a user-visible path.
-            break
-        case .failed(let error):
-            toast.error(loc.userFacingMessage(for: error))
-        }
-    }
-
-    private func languageName(_ code: String?) -> String {
-        guard let code, !code.isEmpty else { return loc.localized("profile.language.none") }
-        return model.cultures.first { $0.code == code }?.displayName ?? code
-    }
-
-    @ViewBuilder
-    private func languageRow(
-        label: String,
-        icon: String,
-        selection: String?,
-        onSelect: @escaping (String?) -> Void
-    ) -> some View {
-        // A `Menu` on iOS and a `confirmationDialog` on tvOS — the two idioms
-        // this app already uses for a value picker (see the sleep-timer row).
-        #if os(tvOS)
-        ProfileTVPickerRow(
-            icon: icon,
-            label: label,
-            value: languageName(selection),
-            options: pickerOptions,
-            selectedCode: selection ?? "",
-            onSelect: onSelect
-        )
-        #else
-        HStack {
-            Image(systemName: icon)
-                .foregroundStyle(themeManager.accent)
-                .frame(width: 24)
-            Text(label)
-                .font(CinemaFont.label(.large))
-                .foregroundStyle(CinemaColor.onSurface)
-            Spacer()
-            // A `Picker` inside the `Menu`, so the current language carries
-            // the system checkmark (and « sélectionné » for VoiceOver).
-            Menu {
-                Picker(label, selection: Binding(
-                    get: { selection ?? "" },
-                    set: { onSelect($0.isEmpty ? nil : $0) }
-                )) {
-                    ForEach(pickerOptions, id: \.0) { option in
-                        Text(option.1).tag(option.0)
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(languageName(selection))
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: CinemaScale.pt(11), weight: .semibold))
-                        .foregroundStyle(CinemaColor.outlineVariant)
-                }
-            }
-            .tint(themeManager.accent)
-        }
-        .padding(CinemaSpacing.spacing3)
-        .glassPanel(cornerRadius: CinemaRadius.large)
-        #endif
-    }
-
-    /// "No preference" first, then every language the server knows. The empty
-    /// code is what clears the preference server-side.
-    private var pickerOptions: [(String, String)] {
-        [("", loc.localized("profile.language.none"))]
-            + model.cultures.map { ($0.code, $0.displayName) }
-    }
-
-    @ViewBuilder
-    private var subtitleModeRow: some View {
-        let options = UserPlaybackPreferences.SubtitleMode.allCases.map {
-            ($0.rawValue, loc.localized("profile.subtitleMode.\($0.rawValue)"))
-        }
-        let current = loc.localized("profile.subtitleMode.\(model.preferences.subtitleMode.rawValue)")
-        #if os(tvOS)
-        ProfileTVPickerRow(
-            icon: "text.bubble",
-            label: loc.localized("profile.subtitleMode"),
-            value: current,
-            options: options,
-            selectedCode: model.preferences.subtitleMode.rawValue
-        ) { raw in
-            guard let raw, let mode = UserPlaybackPreferences.SubtitleMode(rawValue: raw) else { return }
-            Task { await save { $0.subtitleMode = mode } }
-        }
-        #else
-        HStack {
-            Image(systemName: "text.bubble")
-                .foregroundStyle(themeManager.accent)
-                .frame(width: 24)
-            Text(loc.localized("profile.subtitleMode"))
-                .font(CinemaFont.label(.large))
-                .foregroundStyle(CinemaColor.onSurface)
-            Spacer()
-            Menu {
-                Picker(loc.localized("profile.subtitleMode"), selection: Binding(
-                    get: { model.preferences.subtitleMode.rawValue },
-                    set: { raw in
-                        guard let mode = UserPlaybackPreferences.SubtitleMode(rawValue: raw) else { return }
-                        Task { await save { $0.subtitleMode = mode } }
-                    }
-                )) {
-                    ForEach(options, id: \.0) { option in
-                        Text(option.1).tag(option.0)
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Text(current)
-                        .font(CinemaFont.label(.large))
-                        .foregroundStyle(CinemaColor.onSurfaceVariant)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: CinemaScale.pt(11), weight: .semibold))
-                        .foregroundStyle(CinemaColor.outlineVariant)
-                }
-            }
-            .tint(themeManager.accent)
-        }
-        .padding(CinemaSpacing.spacing3)
-        .glassPanel(cornerRadius: CinemaRadius.large)
-        #endif
-    }
-
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(CinemaFont.label(.large))
@@ -365,178 +180,10 @@ struct ProfileScreen: View {
     }
 }
 
-#if os(tvOS)
-/// A settings-shaped value row that opens `ProfileTVOptionList`. It was a
-/// `confirmationDialog`: fine for the five subtitle modes, unusable for the ~190
-/// cultures a server lists, and neither said which option was current
-/// (audit §5, lot 9).
-private struct ProfileTVPickerRow: View {
-    let icon: String
-    let label: String
-    let value: String
-    /// `(code, display)`. An empty code means "no preference".
-    let options: [(String, String)]
-    /// The current option's code (`""` = no preference).
-    let selectedCode: String
-    let onSelect: (String?) -> Void
-
-    @Environment(ThemeManager.self) private var themeManager
-    @Environment(LocalizationManager.self) private var loc
-    @Environment(\.motionEffectsEnabled) private var motionEffects
-    @FocusState private var isFocused: Bool
-    @State private var showPicker = false
-
-    var body: some View {
-        Button {
-            showPicker = true
-        } label: {
-            HStack(spacing: CinemaSpacing.spacing3) {
-                Image(systemName: icon)
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(themeManager.accent)
-                    .frame(width: 24)
-                Text(label)
-                    .font(.system(size: CinemaScale.pt(20), weight: .medium))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
-                Text(value)
-                    .font(.system(size: CinemaScale.pt(17), weight: .semibold))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-                Image(systemName: "chevron.right")
-                    .font(CinemaFont.label(.small))
-                    .foregroundStyle(CinemaColor.onSurfaceVariant)
-            }
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .frame(maxWidth: .infinity, minHeight: 80)
-            .tvSettingsFocusable(
-                isFocused: isFocused,
-                accent: themeManager.accent,
-                animated: motionEffects,
-                colorScheme: themeManager.darkModeEnabled ? .dark : .light
-            )
-        }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
-        .hoverEffectDisabled()
-        .focused($isFocused)
-        .fullScreenCover(isPresented: $showPicker) {
-            ProfileTVOptionList(title: label, options: options, selectedCode: selectedCode) { code in
-                onSelect(code.isEmpty ? nil : code)
-            }
-            // A presentation does not inherit the injected environment.
-            .environment(themeManager)
-            .environment(loc)
-        }
-    }
-}
-
-/// The option list behind `ProfileTVPickerRow`: the standard cover chrome
-/// (title + accent Cancel, `onExitCommand`), one focusable row per option, a
-/// check and `.isSelected` on the current one, and focus + scroll starting
-/// THERE rather than at the top of 190 languages.
-private struct ProfileTVOptionList: View {
-    let title: String
-    let options: [(String, String)]
-    let selectedCode: String
-    let onSelect: (String) -> Void
-
-    @Environment(ThemeManager.self) private var themeManager
-    @Environment(LocalizationManager.self) private var loc
-    @Environment(\.dismiss) private var dismiss
-    @FocusState private var focused: String?
-
-    var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center) {
-                Text(title)
-                    .font(CinemaFont.headline(.large))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer(minLength: CinemaSpacing.spacing6)
-                CinemaButton(title: loc.localized("action.cancel"), style: .accent) { dismiss() }
-                    .frame(width: CinemaTVLayout.ctaWidth)
-            }
-            .padding(.horizontal, CinemaTVLayout.pagePadding)
-            .padding(.top, CinemaSpacing.spacing8)
-            .padding(.bottom, CinemaSpacing.spacing5)
-            .focusSection()
-
-            ScrollViewReader { proxy in
-                ScrollView {
-                    // A plain `VStack`: ~190 text rows are cheap, and every row
-                    // then EXISTS when `defaultFocus` / `scrollTo` look for the
-                    // current one (a lazy stack may not have built it yet).
-                    VStack(spacing: CinemaSpacing.spacing2) {
-                        ForEach(options, id: \.0) { option in
-                            row(option)
-                        }
-                    }
-                    .padding(.horizontal, CinemaTVLayout.pagePadding)
-                    .padding(.bottom, CinemaSpacing.spacing8)
-                }
-                .onAppear { proxy.scrollTo(selectedCode, anchor: .center) }
-            }
-            .focusSection()
-        }
-        .background(CinemaColor.surface.ignoresSafeArea())
-        .defaultFocus($focused, selectedCode)
-        .onExitCommand { dismiss() }
-    }
-
-    private func row(_ option: (String, String)) -> some View {
-        let isSelected = option.0 == selectedCode
-        return Button {
-            onSelect(option.0)
-            dismiss()
-        } label: {
-            HStack {
-                Text(option.1)
-                    .font(.system(size: CinemaScale.pt(20), weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(CinemaColor.onSurface)
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: CinemaScale.pt(18), weight: .bold))
-                        .foregroundStyle(themeManager.accent)
-                }
-            }
-            .padding(.horizontal, CinemaSpacing.spacing4)
-            .frame(maxWidth: .infinity, minHeight: 64)
-            .background(
-                RoundedRectangle(cornerRadius: CinemaRadius.large)
-                    .fill(CinemaColor.surfaceContainerHigh)
-            )
-        }
-        .buttonStyle(TVFilterRowButtonStyle(accent: themeManager.accent))
-        // The validated full-width-row pattern: without these two, the system
-        // focus effect draws on top of the accent stroke.
-        .focusEffectDisabled()
-        .hoverEffectDisabled()
-        .focused($focused, equals: option.0)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .id(option.0)
-    }
-}
-#endif
-
 @MainActor
 @Observable
 final class ProfileModel {
-    private(set) var cultures: [ServerCulture] = []
-    private(set) var preferences = UserPlaybackPreferences()
     private(set) var isChangingPassword = false
-    /// Whether `preferences` came from the server rather than from this type's
-    /// own default.
-    ///
-    /// Load-bearing, not bookkeeping: `savePreferences` posts the WHOLE slice,
-    /// so saving from an unloaded default would clear this account's audio
-    /// language, subtitle language and subtitle mode — on every Jellyfin client
-    /// it has — because one read failed on the way in.
-    private(set) var preferencesLoaded = false
-    /// Serialises saves. Each picker fires its own task, and every save is a
-    /// server-side read-modify-write: two overlapping ones let the second read
-    /// the configuration before the first has written it, so the first field
-    /// silently loses.
-    private var saveChain: Task<Void, Never>?
 
     enum PasswordOutcome {
         case success
@@ -545,23 +192,6 @@ final class ProfileModel {
         /// which it was.
         case refused
         case failed(any Error)
-    }
-
-    /// Both halves fail independently: no culture list still leaves the
-    /// password form usable, and the pickers still render.
-    ///
-    /// A failed preference read leaves `preferencesLoaded` false, which DISABLES
-    /// saving rather than letting the user write this type's defaults over their
-    /// account — see that property.
-    func load(using appState: AppState) async {
-        guard let userId = appState.currentUserId else { return }
-        async let culturesTask = try? appState.apiClient.getCultures()
-        async let prefsTask = try? appState.apiClient.getUserConfiguration(userId: userId)
-        cultures = await culturesTask ?? []
-        if let loaded = await prefsTask {
-            preferences = loaded
-            preferencesLoaded = true
-        }
     }
 
     func changePassword(current: String, new: String, using appState: AppState) async -> PasswordOutcome {
@@ -583,44 +213,5 @@ final class ProfileModel {
             if case JellyfinError.invalidCredentials = error { return .refused }
             return .failed(error)
         }
-    }
-
-    /// What a save actually did. `nil` used to mean both "saved" and "did
-    /// nothing", so a save that never ran still toasted success.
-    enum SaveOutcome {
-        case saved
-        /// Refused before reaching the server — no signed-in user, or the
-        /// preferences were never read, so writing would clear them.
-        case skipped
-        case failed(any Error)
-    }
-
-    /// Optimistic, with rollback: the pickers must not keep showing a language
-    /// the server did not record.
-    ///
-    /// Serialised through `saveChain`, and the rollback target is read INSIDE
-    /// the chained work rather than captured at call time — a snapshot taken
-    /// before an earlier save landed would, on a later failure, restore a state
-    /// that predates both and discard a change the server had accepted.
-    func savePreferences(_ next: UserPlaybackPreferences, using appState: AppState) async -> SaveOutcome {
-        guard let userId = appState.currentUserId, preferencesLoaded else { return .skipped }
-        let previous = saveChain
-        let work = Task { @MainActor [weak self] () -> SaveOutcome in
-            await previous?.value
-            guard let self else { return .skipped }
-            let snapshot = self.preferences
-            self.preferences = next
-            do {
-                try await appState.apiClient.updateUserConfiguration(userId: userId, preferences: next)
-                return .saved
-            } catch {
-                logger.error("Preference save failed: \(error.localizedDescription, privacy: .public)")
-                self.preferences = snapshot
-                return .failed(error)
-            }
-        }
-        // The chain waits on completion, not on the outcome.
-        saveChain = Task { _ = await work.value }
-        return await work.value
     }
 }

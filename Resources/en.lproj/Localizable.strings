@@ -732,6 +732,8 @@
 "debug.skipToEnd" = "⏭ Skip to end (Debug)";
 "settings.interface" = "Interface";
 "settings.playback" = "Playback";
+"settings.playback.languages" = "Languages";
+"settings.playback.languages.none" = "None";
 "settings.interface.menu" = "Main Menu";
 "settings.interface.library" = "Library";
 
@@ -1339,6 +1341,14 @@
 "whatsNew.seerrRequests.body" = "A film or show missing from your library? Search for it: “Request” sends it to your admin, and JellyGlass tells you when it arrives. Your admin turns Seerr on in Settings → Seerr.";
 "whatsNew.missingEpisodes.title" = "Missing episodes*";
 "whatsNew.missingEpisodes.body" = "In an incomplete season, the missing episodes appear in their place, with their picture. One button reports them to your admin, who finds them in Seerr.";
+"whatsNew.christmasFrost.title" = "A Frosted Christmas";
+"whatsNew.christmasFrost.body" = "Until January 6, the app frosts over: night blue, engraved titles, frost in the corners of the screen and falling snow. On Home, a “Family Christmas” row, and films to request for Christmas*. After the holidays, everything goes back to how it was.";
+"whatsNew.christmasFrostTV.title" = "A Frosted Christmas";
+"whatsNew.christmasFrostTV.body" = "Until January 6, the app frosts over: night blue, engraved titles, frost in the corners of the screen and falling snow, with a “Family Christmas” row on Home. After the holidays, everything goes back to how it was.";
+"whatsNew.rememberedTracks.title" = "Your languages follow the show";
+"whatsNew.rememberedTracks.body" = "Pick the audio and subtitles once: JellyGlass keeps them for the whole show, and a film you resume opens in the languages you chose, on all your devices. Set your preferred languages in Settings → Playback → Languages.";
+"whatsNew.requestFiche.title" = "See it before you ask*";
+"whatsNew.requestFiche.body" = "A title to request now opens on its own page: picture, summary, cast and details, so you know what you're asking for before you send it.";
 "whatsNew.footnote.seerr" = "* Requires a Seerr server";
 "whatsNew.accounts.title" = "Who’s watching?";
 "whatsNew.accounts.body" = "Everyone keeps their own account on the same device, with their own progress and settings. Your avatar, top left, switches between them, and a code can protect each account.";
@@ -1416,11 +1426,17 @@
 "settings.seasonal.choice.off" = "Off";
 "settings.seasonal.choice.halloween" = "Halloween";
 "settings.seasonal.choice.halloween.detail" = "All year round";
+"season.christmas.name" = "Frost";
+"season.christmas.row" = "Family Christmas";
+"season.christmas.requestRow" = "Christmas films to request";
+"settings.seasonal.choice.christmas" = "Frost";
+"settings.seasonal.choice.christmas.detail" = "All year round";
 "settings.appIcon.title" = "App icon";
 "settings.appIcon.classic" = "Classic";
 "settings.appIcon.halloween" = "Aubergine";
 "settings.appIcon.halloweenPumpkin" = "Pumpkin";
 "settings.appIcon.halloweenPotion" = "Potion";
+"settings.appIcon.christmas" = "Christmas";
 "settings.appIcon.locked" = "Requires JellyGlass Pro";
 "settings.appIcon.error" = "Couldn't change the icon";
 "settings.appIcon.caption.current" = "Current icon";
@@ -1431,10 +1447,12 @@
 "settings.appIcon.proBanner.one" = "%d more icon with JellyGlass Pro";
 "settings.appIcon.section.classic" = "Classic";
 "settings.appIcon.section.halloween" = "Halloween";
+"settings.appIcon.section.christmas" = "Christmas";
 "settings.appIcon.section.colors" = "Colours";
 "settings.appIcon.section.editions" = "Editions";
 "settings.appIcon.family.classic" = "Original icon";
 "settings.appIcon.family.halloween" = "Halloween";
+"settings.appIcon.family.christmas" = "Christmas";
 "settings.appIcon.family.accent" = "Colour";
 "settings.appIcon.status.available" = "Press to use it";
 "settings.debug.forceSeason" = "Force “%@”";
@@ -1702,6 +1720,7 @@
 "seerr.request.forbidden.fix" = "Your permissions or quota do not allow it. Ask the admin to check your request permissions.";
 "seerr.request.noSeasons" = "No season to request";
 "seerr.request.failed" = "The request did not go through";
+"seerr.request.unreachable" = "Seerr isn't answering right now. Try again in a moment.";
 "seerr.request.next.auto" = "The download starts right away.";
 "seerr.request.next.approval" = "The admin has to approve your request; you will be told when it arrives.";
 "seerr.request.kind.movie" = "Movie";
@@ -1721,6 +1740,7 @@
 "seerr.badge.request" = "Request";
 "seerr.badge.pending" = "Pending";
 "seerr.badge.processing" = "Preparing";
+"seerr.badge.processing.short" = "Preparing";
 "seerr.badge.declined" = "Declined";
 "seerr.missing.title" = "Not in your library yet";
 "seerr.missing.a11y" = "%@, not in your library yet, %@";
@@ -1755,6 +1775,21 @@
 "seerr.searchPrompt.body" = "Your server uses Seerr for requests. Sign in once with your Jellyfin account: nothing to type.";
 "seerr.searchPrompt.later" = "Later";
 "seerr.request.seasonsUnavailable" = "Couldn't load the seasons";
+
+// Request fiche (mini-fiche B, 2026-11-22)
+"seerr.fiche.close" = "Close";
+"seerr.fiche.infos" = "Details";
+"seerr.fiche.directedBy" = "Director";
+"seerr.fiche.createdBy" = "Created by";
+"seerr.fiche.release" = "Release";
+"seerr.fiche.firstAired" = "First aired";
+"seerr.fiche.runtime" = "Runtime";
+"seerr.fiche.episodeRuntime" = "Episode length";
+"seerr.fiche.originalLanguage" = "Original language";
+"seerr.fiche.originalTitle" = "Original title";
+"seerr.fiche.streaming" = "Also on";
+"seerr.fiche.votes" = "TMDb · %@ votes";
+"seerr.fiche.votes.one" = "TMDb · %@ vote";
 "seerr.settings.section.myRequests" = "My requests";
 "seerr.myRequests.empty" = "No requests yet";
 "seerr.myRequests.titleUnavailable" = "Title unavailable";
