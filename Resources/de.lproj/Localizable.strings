@@ -906,6 +906,8 @@
 
 "player.subtitles" = "Untertitel";
 "player.subtitles.off" = "Aus";
+"player.subtitles.preparing.title" = "Untertitel werden vorbereitet";
+"player.subtitles.preparing.message" = "Der Server liest sie aus der Datei aus. Sie erscheinen, sobald sie bereit sind.";
 "player.pip" = "Bild-in-Bild";
 "player.skipIntro" = "Intro überspringen";
 "player.skipCredits" = "Abspann überspringen";

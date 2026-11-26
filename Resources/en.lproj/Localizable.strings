@@ -906,6 +906,8 @@
 
 "player.subtitles" = "Subtitles";
 "player.subtitles.off" = "Off";
+"player.subtitles.preparing.title" = "Preparing subtitles";
+"player.subtitles.preparing.message" = "The server is extracting them from the file. They will appear as soon as they are ready.";
 "player.pip" = "Picture in Picture";
 "player.skipIntro" = "Skip Intro";
 "player.skipCredits" = "Skip Credits";

@@ -285,6 +285,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// A remembered subtitle whose track libVLC had not listed yet on the
     /// `.tracksChanged` that applied the defaults; selected as soon as it is.
     private var pendingRememberedSubtitleOrdinal: Int?
+    /// A transcode's text subtitles, downloaded in the background and added to
+    /// the running player (`LateSubtitles`): the files landed so far, in the
+    /// order of `LateSubtitles.tracks`, and what they were downloaded for.
+    private var lateSubtitleFiles: [URL] = []
+    private var lateSubtitleKey: String?
+    /// How many of them the CURRENT media has been given (0 from each open).
+    private var lateSubtitlesAdded = 0
+    private var lateSubtitleTask: Task<Void, Never>?
+    private var lateSubtitleNotice: Task<Void, Never>?
+    private let lateSubtitleDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("late-subtitles", isDirectory: true)
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
     /// Bumped wherever `info` is replaced (episode nav, wake rebuild): an iOS
     /// picker opened while the next episode was negotiating — `navGeneration`
     /// already bumped — still lists the outgoing episode's tracks.
@@ -887,6 +899,9 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         seeks.cancelPending()
         skipHUDHide?.cancel()
         noticeHide?.cancel()
+        lateSubtitleTask?.cancel()
+        lateSubtitleNotice?.cancel()
+        try? FileManager.default.removeItem(at: lateSubtitleDirectory)
         centerGlyphHide?.cancel()
         skipGlyphHide?.cancel()
         pendingTimeRefreshes.forEach { $0.cancel() }
@@ -1004,6 +1019,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// episode nav) invalidates "we know a demuxer exists".
     private func beginOpenLoading() {
         mediaConfirmedOpen = false
+        lateSubtitlesAdded = 0
         pauseOnOpen = false
         endedAtMs = nil
         // Until this open reaches its `play()`, any `.stopped` is the media it
@@ -4113,7 +4129,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         #endif
         let anchor = currentMs
         player.selectedSubtitleTrack = track
-        guard track != nil, mediaConfirmedOpen, lengthMs > 0 else { return }
+        // A transcode's subtitles are whole FILES (`LateSubtitles`), read from
+        // the playhead at once: nothing was dropped at demux time, and a
+        // re-anchor would only stall the picture.
+        guard track != nil, mediaConfirmedOpen, lengthMs > 0, info.playMethod != .transcode else { return }
         logger.notice("CINEMAX-SUBS ▸ changement de piste, réancrage à \(anchor, privacy: .public) ms")
         seeks.engineSeek(anchor)
     }
@@ -4321,9 +4340,12 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
             if let subtitle = kept.subtitle {
                 // Not listed yet on this `.tracksChanged` (an attached file
                 // comes later): selected as soon as it is.
-                if subtitle < player.subtitleTracks.count {
+                if subtitle < player.subtitleTracks.count, info.playMethod != .transcode {
                     player.selectedSubtitleTrack = player.subtitleTracks[subtitle]
                 } else {
+                    // Always on a transcode: its subtitles are added after the
+                    // open, and on a rebuild this event still lists the
+                    // PREVIOUS media's — selecting one of those selects nothing.
                     pendingRememberedSubtitleOrdinal = subtitle
                 }
             } else {
@@ -4362,7 +4384,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         switch decision.subtitle {
         case .off:
             player.selectedSubtitleTrack = nil
-        case .ordinal(let ordinal) where ordinal < player.subtitleTracks.count:
+        case .ordinal(let ordinal) where ordinal < player.subtitleTracks.count && !isTranscode:
             player.selectedSubtitleTrack = player.subtitleTracks[ordinal]
         case .ordinal(let ordinal):
             // Not listed yet on this `.tracksChanged`.
@@ -4379,21 +4401,97 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         logger.notice("CINEMAX-SUBS ▸ \(subtitleSummary, privacy: .public) (\(decision.subtitleReason.rawValue, privacy: .public))")
     }
 
-    /// The subtitles libVLC actually lists, in its order: the embedded streams,
-    /// then the external files `attachExternalSubtitles` attached as slaves.
-    /// Jellyfin lists those files FIRST, which shifted every ordinal by one
-    /// while libVLC never saw them; a file the server offered no URL for is
-    /// left out.
+    /// The subtitles libVLC lists, in its order. DirectPlay: the embedded
+    /// streams, then the external files `attachExternalSubtitles` attached as
+    /// slaves (Jellyfin lists those files FIRST, which shifted every ordinal by
+    /// one while libVLC never saw them; a file the server offered no URL for is
+    /// left out). A transcode: the files brought in late, alone — its stream
+    /// carries no subtitle track, and libVLC lists them as they land.
     private var vlcSubtitleTracks: [MediaTrackInfo] {
-        info.subtitleTracks.filter { !$0.isExternal } + externalSubtitles
+        guard info.playMethod != .transcode else { return LateSubtitles.tracks(of: info) }
+        return info.subtitleTracks.filter { !$0.isExternal } + externalSubtitles
     }
 
-    /// The external files attached to libVLC — none on a forced HLS
-    /// transcode, which keeps its pre-2026-11-24 subtitle handling (the
-    /// transcode profile offers no external delivery).
+    /// The external files attached to libVLC AT OPEN — DirectPlay only: on a
+    /// transcode a file may sit behind a whole-file extraction, and a slave
+    /// given at open holds the first frame back until it answers.
     private var externalSubtitles: [MediaTrackInfo] {
         guard info.playMethod != .transcode else { return [] }
         return info.subtitleTracks.filter { $0.isExternal && $0.deliveryURL != nil }
+    }
+
+    /// Brings a transcode's text subtitles in once the picture is up
+    /// (`LateSubtitles`): re-adds the files already downloaded to this fresh
+    /// media, and starts — once per source — the background download of the
+    /// rest, one after the other in the server's order so libVLC's ordinals
+    /// are the positions in `vlcSubtitleTracks`. Called on every confirmed
+    /// open; a file that fails takes its place as an empty track.
+    private func attachLateSubtitles() {
+        let tracks = LateSubtitles.tracks(of: info)
+        // Before anything else, and with no tracks too: a download still
+        // running for the PREVIOUS media must not land on this one.
+        let key = tracks.isEmpty ? nil : LateSubtitles.cacheKey(of: info, itemId: itemId)
+        if lateSubtitleKey != key {
+            lateSubtitleTask?.cancel()
+            lateSubtitleTask = nil
+            lateSubtitleFiles = []
+            lateSubtitleKey = key
+        }
+        guard let key else { return }
+        lateSubtitlesAdded = 0
+        for (position, file) in lateSubtitleFiles.enumerated() { addLateSubtitle(file, position: position) }
+        scheduleLateSubtitleNotice()
+        guard lateSubtitleTask == nil, lateSubtitleFiles.count < tracks.count else { return }
+        let directory = lateSubtitleDirectory.appendingPathComponent(String(UInt(bitPattern: key.hashValue)), isDirectory: true)
+        let started = Date()
+        lateSubtitleTask = Task { [weak self] in
+            for position in (self?.lateSubtitleFiles.count ?? 0)..<tracks.count {
+                guard let url = tracks[position].deliveryURL else { return }
+                let downloaded = await LateSubtitles.downloadWithRetries(url, position: position, into: directory)
+                guard let self, !Task.isCancelled, !self.isTearingDown, self.lateSubtitleKey == key else { return }
+                guard let file = downloaded ?? LateSubtitles.placeholderFile(in: directory) else { return }
+                if downloaded == nil {
+                    logger.error("CINEMAX-SUBS ▸ sous-titre [\(position, privacy: .public)] non reçu du serveur — piste vide")
+                }
+                self.lateSubtitleFiles.append(file)
+                if self.mediaConfirmedOpen { self.addLateSubtitle(file, position: position) }
+            }
+            guard let self, !Task.isCancelled, self.lateSubtitleKey == key else { return }
+            self.lateSubtitleTask = nil
+            let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
+            logger.notice("CINEMAX-SUBS ▸ \(tracks.count, privacy: .public) sous-titres reçus après l'ouverture en \(seconds, privacy: .public) s")
+        }
+    }
+
+    /// Adds one file to the running player — SELECTED when it is the one this
+    /// opening wants: libVLC then selects the track it creates for it, with no
+    /// ordinal looked up in a track list that may not be this media's yet.
+    private func addLateSubtitle(_ file: URL, position: Int) {
+        let wanted = pendingRememberedSubtitleOrdinal == position
+        do {
+            try player.addExternalTrack(from: file, type: .subtitle, select: wanted)
+            lateSubtitlesAdded = position + 1
+            if wanted {
+                pendingRememberedSubtitleOrdinal = nil
+                logger.notice("CINEMAX-SUBS ▸ sous-titre [\(position, privacy: .public)] ajouté et sélectionné")
+            }
+        } catch {
+            logger.error("CINEMAX-SUBS ▸ sous-titre reçu mais refusé par le lecteur")
+        }
+    }
+
+    /// Says so when the subtitle this opening wants is still on its way after
+    /// `LateSubtitles.noticeDelay`: without it, a film that starts with no
+    /// subtitles reads as subtitles being broken.
+    private func scheduleLateSubtitleNotice() {
+        lateSubtitleNotice?.cancel()
+        lateSubtitleNotice = Task { [weak self] in
+            try? await Task.sleep(for: LateSubtitles.noticeDelay)
+            guard let self, !Task.isCancelled, !self.isTearingDown,
+                  self.pendingRememberedSubtitleOrdinal != nil, self.lateSubtitleTask != nil else { return }
+            self.showNotice(symbol: "captions.bubble", title: self.loc.localized("player.subtitles.preparing.title"),
+                            message: self.loc.localized("player.subtitles.preparing.message"))
+        }
     }
 
     /// Attaches the external subtitle files to `media` before it plays, through
@@ -4417,6 +4515,13 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
     /// is already playing.
     private func applyPendingRememberedSubtitleIfListed() {
         guard let ordinal = pendingRememberedSubtitleOrdinal, ordinal < player.subtitleTracks.count else { return }
+        // A transcode's wanted file is selected as it is added
+        // (`addLateSubtitle`). Here only when it was added BEFORE the choice was
+        // made, and only on a list that is this media's: the files given to it,
+        // no more — never the previous media's list, still up during a rebuild.
+        if info.playMethod == .transcode {
+            guard ordinal < lateSubtitlesAdded, player.subtitleTracks.count == lateSubtitlesAdded else { return }
+        }
         pendingRememberedSubtitleOrdinal = nil
         let track = player.subtitleTracks[ordinal]
         // While the resume seek is still to go out or settling, the clock reads
@@ -4542,6 +4647,7 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         } else {
             auth = "aucun"
         }
+        openStartedAt = Date()
         logger.notice("CINEMAX-STREAM ▸ ouverture \(isRetry ? "après échec" : "initiale", privacy: .public) voie=\(opened.viaProxy ? "proxy" : "directe", privacy: .public) jeton=\(auth, privacy: .public)")
         return opened
     }
@@ -4664,6 +4770,10 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         }
     }
 
+    /// When the current open was handed to libVLC — read once by
+    /// `noteMediaOpened` for the permanent « ouvert en … s » line.
+    private var openStartedAt: Date?
+
     /// The media is CONFIRMED open — a real length or a moving playhead, the
     /// only two signals libVLC gives that a demuxer actually exists. Stands the
     /// watchdog down, drops a stale error alert, and renews the retry budget so
@@ -4681,10 +4791,18 @@ private final class VLCStreamViewController: UIViewController, UIScrollViewDeleg
         // its budget spent (`giveUpAfterSpentRecovery`) — must not be dismissed
         // by the next tick of a clock that kept running.
         if !wasOpen { recoverFromErrorIfNeeded() }
+        // Permanent: « it takes ages to start » is otherwise invisible in an
+        // export — the open succeeds, nothing fails, nothing is logged.
+        if !wasOpen, let started = openStartedAt {
+            openStartedAt = nil
+            let seconds = String(format: "%.1f", Date().timeIntervalSince(started))
+            logger.notice("CINEMAX-STREAM ▸ ouvert en \(seconds, privacy: .public) s (\(self.info.playMethod == .transcode ? "transcodage" : "direct", privacy: .public))")
+        }
         didRetry = false
         // Releases the spinner gate — see `clearLoadingIfOpen()`. The engine
         // state that follows (`.playing` / a time tick) does the actual hiding.
         mediaConfirmedOpen = true
+        if !wasOpen { attachLateSubtitles() }
         // A demuxer provably exists now, so the chapter-strip garnish can have
         // the network.
         if let startThumbnails = pendingChapterThumbnails {
