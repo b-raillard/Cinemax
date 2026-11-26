@@ -486,6 +486,8 @@
 "player.audio" = "Audio";
 "player.subtitles" = "Sous-titres";
 "player.subtitles.off" = "Désactivé";
+"player.subtitles.preparing.title" = "Sous-titres en préparation";
+"player.subtitles.preparing.message" = "Le serveur les extrait du fichier. Ils s’afficheront dès qu’ils seront prêts.";
 "player.pip" = "Image dans l'image";
 "player.skipIntro" = "Passer l'intro";
 "player.skipCredits" = "Passer le générique";

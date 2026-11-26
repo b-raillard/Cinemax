@@ -274,6 +274,21 @@ struct DeviceProfileTests {
         }
     }
 
+    @Test("both VLC profiles take text subtitles as external files, image ones embedded only")
+    func vlcSubtitlesAreExternalOnATranscodeToo() throws {
+        for profile in [JellyfinAPIClient.buildVLCDeviceProfile(), JellyfinAPIClient.buildVLCTranscodeProfile()] {
+            let subtitles = try #require(profile.subtitleProfiles)
+            let external = Set(subtitles.filter { $0.method == .external }.compactMap(\.format))
+            // Burned into a transcode, an embedded text subtitle holds the
+            // first segment back until the whole file is read.
+            #expect(external == ["srt", "subrip", "ass", "ssa", "vtt", "webvtt"])
+            #expect(external.isDisjoint(with: ["pgssub", "dvbsub", "dvdsub"]))
+            // The server takes the FIRST matching profile: external before embed.
+            let firstSrt = try #require(subtitles.first { $0.format == "srt" })
+            #expect(firstSrt.method == .external)
+        }
+    }
+
     @Test("the forced-transcode profile offers no DirectPlay at all")
     func vlcTranscodeForcesTranscode() {
         #expect(JellyfinAPIClient.buildVLCTranscodeProfile().directPlayProfiles?.isEmpty == true)

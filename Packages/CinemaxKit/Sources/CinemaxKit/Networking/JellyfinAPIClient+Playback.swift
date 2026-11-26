@@ -206,26 +206,6 @@ extension JellyfinAPIClient {
             #endif
         }
 
-        // The VLC profile offers EXTERNAL delivery for text subtitles so a `.srt`
-        // beside the media plays directly (the player attaches it). But on a
-        // transcode the server then serves the EMBEDDED subtitles as external
-        // files too — measured 2026-11-24, a bitrate-capped MKV: no burn-in, and
-        // each one extracted from the whole file first (2 min 13 on a 19 GB
-        // MKV, 13/11). A transcode therefore re-negotiates once with the
-        // transcode profile, embed-only, which burns them in as before.
-        if engine == .vlc, !forcedTranscode, mediaSource.transcodingURL != nil,
-           (mediaSource.mediaStreams ?? []).contains(where: {
-               $0.type == .subtitle && $0.isExternal != true && $0.deliveryMethod == .external
-           }) {
-            if let transcoded = try? await _getPlaybackInfo(
-                itemId: effectiveItemId, userId: userId, maxBitrate: maxBitrate,
-                audioStreamIndex: audioStreamIndex, subtitleStreamIndex: subtitleStreamIndex,
-                engine: engine, mediaSourceId: mediaSource.id ?? mediaSourceId, forceTranscode: true
-            ), transcoded.playMethod == .transcode {
-                return transcoded
-            }
-        }
-
         // Step 4: Build stream URL (same logic as Swiftfin's streamURL)
 
         // Option A: Server returned a transcoding URL — use it directly
@@ -850,11 +830,14 @@ extension JellyfinAPIClient {
             videoCodec: "hevc,h264"
         ),
     ]
-    /// The file the server serves for an EXTERNAL subtitle (a `.srt` beside
-    /// the media), absolute — the player attaches it to libVLC as a slave.
-    /// Same base-path join as `TranscodingUrl`'s.
+    /// The file the server serves a subtitle as, absolute, when it chose
+    /// EXTERNAL delivery: a `.srt` beside the media (DirectPlay — the player
+    /// attaches it to libVLC as a slave), and on a transcode every text
+    /// subtitle, the embedded ones included (the player downloads them once
+    /// the picture is up — `LateSubtitles`). Same base-path join as
+    /// `TranscodingUrl`'s.
     fileprivate static func externalSubtitleURL(_ stream: MediaStream, serverURL: URL) -> URL? {
-        guard stream.isExternal == true, stream.deliveryMethod == .external,
+        guard stream.deliveryMethod == .external,
               let path = stream.deliveryURL, !path.isEmpty else { return nil }
         // An absolute URL is kept only on the server's own origin: the player
         // may fetch it through the loopback proxy, which attaches the
@@ -879,6 +862,13 @@ extension JellyfinAPIClient {
     // transcode — which it did whenever it picked that file as the default
     // subtitle (measured on the bench, 2026-11-24). The player attaches them
     // to libVLC itself (`VLCStreamPresenter.attachExternalSubtitles`).
+    // The forced-transcode profile takes the SAME list (2026-11-26): on a
+    // transcode an embedded text subtitle is extracted from the whole file
+    // whichever way it is served, and burned in it holds the first segment
+    // back until that is done (8.7 s against 1.6 s on 8.9 GB, bench; 2 min 13
+    // on a 19 GB MKV on a NAS). External, the transcode starts without it and
+    // the player brings the file in afterwards. Image subtitles have no
+    // external form here: on a transcode the server still burns them in.
     fileprivate static let _vlcSubtitleProfiles: [SubtitleProfile] = [
         SubtitleProfile(format: "srt", method: .external),
         SubtitleProfile(format: "subrip", method: .external),
@@ -897,12 +887,6 @@ extension JellyfinAPIClient {
         SubtitleProfile(format: "dvbsub", method: .embed),
         SubtitleProfile(format: "dvdsub", method: .embed),
     ]
-
-    /// The forced-transcode profile's list: the embed-only one it always had —
-    /// external delivery is for DirectPlay, where the player attaches the files.
-    fileprivate static let _vlcTranscodeSubtitleProfiles: [SubtitleProfile] = _vlcSubtitleProfiles.filter {
-        $0.method != .external
-    }
 
     /// Broad-DirectPlay profile for the VLC engine — Jellyfin serves the raw
     /// file with no transcode (4K / HEVC 10-bit / Dolby Vision preserved).
@@ -923,7 +907,7 @@ extension JellyfinAPIClient {
         DeviceProfile(
             directPlayProfiles: [],
             maxStreamingBitrate: maxBitrate,
-            subtitleProfiles: _vlcTranscodeSubtitleProfiles,
+            subtitleProfiles: _vlcSubtitleProfiles,
             transcodingProfiles: _vlcTranscodingProfiles
         )
     }
