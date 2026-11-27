@@ -59,6 +59,11 @@ struct PlaylistDetailScreen: View {
     #if os(iOS)
     @State private var editMode: EditMode = .inactive
     @Environment(\.horizontalSizeClass) private var sizeClass
+    /// An iPhone Duo: opened, its hinge runs down the middle of the screen.
+    @State private var isDuo = false
+    /// From the panes' leading edge to the middle of the WINDOW — where the
+    /// hinge is. 0 until the probe has answered.
+    @State private var widthToHinge: CGFloat = 0
     #else
     @State private var isSorting = false
     @State private var showsOptions = false
@@ -208,14 +213,17 @@ struct PlaylistDetailScreen: View {
     private var loaded: some View {
         if isRegular {
             HStack(alignment: .top, spacing: 0) {
-                ScrollView {
-                    header
-                        .padding(.top, CinemaSpacing.spacing5)
-                }
-                .frame(width: Self.sidePaneWidth)
+                sidePane
                 list(includesHeader: false)
             }
+            .background(alignment: .leading) {
+                WindowMidlineProbe { width in
+                    if abs(width - widthToHinge) > 0.5 { widthToHinge = width }
+                }
+                .frame(width: 1)
+            }
             .background(SeasonalBackdrop().ignoresSafeArea())
+            .detectsIPhoneDuo($isDuo)
         } else {
             list(includesHeader: true)
                 .background(SeasonalBackdrop().ignoresSafeArea())
@@ -223,6 +231,26 @@ struct PlaylistDetailScreen: View {
     }
 
     private static let sidePaneWidth: CGFloat = 360
+
+    /// The playlist's own pane. On an open iPhone Duo it runs to the MIDDLE OF
+    /// THE WINDOW, so the two panes meet on the hinge: at the iPad's 360 pt
+    /// the hinge ran through the titles of the list, and half of the
+    /// CONTAINER fell 41 pt short of it — the container stops at the vertical
+    /// tab bar, the hinge does not (Duo simulator: 951 pt wide, hinge at 475,
+    /// container 868). SwiftUI cannot see past that container (a background
+    /// ignoring the safe area stops there too), hence the UIKit probe.
+    @ViewBuilder
+    private var sidePane: some View {
+        let pane = ScrollView {
+            header
+                .padding(.top, CinemaSpacing.spacing5)
+        }
+        if isDuo, widthToHinge > Self.sidePaneWidth {
+            pane.frame(width: widthToHinge)
+        } else {
+            pane.frame(width: Self.sidePaneWidth)
+        }
+    }
 
     /// The navigation bar carries « Trier » and « … » on a PHONE only. At
     /// regular width the floating tab bar takes the middle of that bar and the
@@ -839,6 +867,46 @@ struct PlaylistDetailScreen: View {
         toast.error(loc.userFacingMessage(for: failure))
     }
 }
+
+#if os(iOS)
+/// Reports the distance from its own leading edge to the middle of the window
+/// it sits in — on an open iPhone Duo, the hinge.
+private struct WindowMidlineProbe: UIViewRepresentable {
+    let onChange: @MainActor (CGFloat) -> Void
+
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.isUserInteractionEnabled = false
+        view.onChange = onChange
+        return view
+    }
+
+    func updateUIView(_ uiView: ProbeView, context: Context) {
+        uiView.onChange = onChange
+    }
+
+    final class ProbeView: UIView {
+        var onChange: (@MainActor (CGFloat) -> Void)?
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            report()
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            report()
+        }
+
+        private func report() {
+            guard let window else { return }
+            let width = window.bounds.midX - convert(CGPoint.zero, to: nil).x
+            // Off the layout pass: the answer writes SwiftUI state.
+            DispatchQueue.main.async { [onChange] in onChange?(width) }
+        }
+    }
+}
+#endif
 
 // MARK: - Rows
 

@@ -570,19 +570,35 @@ private struct PlaylistAddTitlesPresentation: ViewModifier {
     @Environment(LocalizationManager.self) private var loc
     @Environment(ToastCenter.self) private var toast
 
+    /// What the picker sent, held until it has CLOSED. The page reloads on
+    /// `onAdded`; done while the cover was still closing, that reload took the
+    /// tvOS focus off « Ajouter des titres » and left it on the tab bar
+    /// (closing without adding returned it correctly — measured on the
+    /// simulator, 2026-11-27). The page now changes only once the focus is
+    /// back where it came from.
+    @State private var addedCount = 0
+
     func body(content: Content) -> some View {
         #if os(tvOS)
-        content.fullScreenCover(isPresented: $isPresented) { sheet }
+        content.fullScreenCover(isPresented: $isPresented, onDismiss: reportAdded) { sheet }
         #else
         // `.page`: on an iPad the default form sheet is a phone-wide column,
         // three posters across in the middle of the screen.
-        content.sheet(isPresented: $isPresented) { sheet.presentationSizing(.page) }
+        content.sheet(isPresented: $isPresented, onDismiss: reportAdded) { sheet.presentationSizing(.page) }
         #endif
+    }
+
+    private func reportAdded() {
+        guard addedCount > 0 else { return }
+        let count = addedCount
+        addedCount = 0
+        onAdded(count)
     }
 
     private var sheet: some View {
         PlaylistAddTitlesSheet(
-            playlistId: playlistId, playlistTitle: playlistTitle, existing: existing, onAdded: onAdded
+            playlistId: playlistId, playlistTitle: playlistTitle, existing: existing,
+            onAdded: { addedCount = $0 }
         )
         .environment(appState)
         .environment(themeManager)
