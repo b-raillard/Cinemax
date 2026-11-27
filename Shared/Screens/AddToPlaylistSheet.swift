@@ -72,6 +72,35 @@ final class AddToPlaylistModel {
     /// create button so a double tap can't add twice.
     var busy = false
     var newPlaylistName = ""
+    /// The ENTRY ids that stand for the title in each playlist holding it (a
+    /// series: its episodes). A playlist missing here has not answered yet —
+    /// its row then offers the add, which is what the sheet always did.
+    private(set) var membership: [String: [String]] = [:]
+
+    func isMember(_ playlistId: String?) -> Bool {
+        playlistId.flatMap { membership[$0] }?.isEmpty == false
+    }
+
+    /// Which playlists already hold the title. Jellyfin has no « playlists
+    /// containing this item » read, so each playlist's entries are asked for,
+    /// in parallel; a playlist that fails to answer is left unknown.
+    func loadMembership(itemId: String, userId: String?, api: any PlaylistAPI) async {
+        guard let userId else { return }
+        let ids = playlists.compactMap(\.id)
+        await withTaskGroup(of: (String, [String])?.self) { group in
+            for playlistId in ids {
+                group.addTask {
+                    guard let items = try? await api.getPlaylistItems(playlistId: playlistId, userId: userId) else {
+                        return nil
+                    }
+                    return (playlistId, PlaylistMembership.entryIds(matching: itemId, in: items))
+                }
+            }
+            for await answer in group {
+                if let answer { membership[answer.0] = answer.1 }
+            }
+        }
+    }
 
     func load(userId: String?, api: any PlaylistAPI, loc: LocalizationManager) async {
         guard let userId else { return }
@@ -204,7 +233,10 @@ struct AddToPlaylistSheet: View {
 
     @ViewBuilder
     private var playlistList: some View {
-        if model.isLoading {
+        // The spinner only before the first answer: every press reloads the
+        // list (counts, ticks), and swapping the rows for a spinner dropped
+        // the tvOS focus off the row that had just been pressed.
+        if model.isLoading && model.playlists.isEmpty {
             LoadingStateView()
         } else if let error = model.errorMessage {
             ErrorStateView(message: error, retryTitle: loc.localized("action.retry")) {
@@ -242,34 +274,49 @@ struct AddToPlaylistSheet: View {
     }
 
     private func rowButton(_ playlist: BaseItemDto) -> some View {
-        Button {
-            add(to: playlist)
+        let isMember = model.isMember(playlist.id)
+        let count = loc.itemCount(playlist.childCount ?? 0)
+        return Button {
+            toggle(playlist)
         } label: {
             HStack(spacing: CinemaSpacing.spacing3) {
-                Image(systemName: "music.note.list")
-                    .font(.system(size: CinemaScale.pt(20), weight: .semibold))
-                    .foregroundStyle(themeManager.accent)
+                PlaylistSheetCover(playlist: playlist)
+                    .frame(width: Self.coverSide)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayName(playlist))
                         .font(CinemaFont.body)
                         .foregroundStyle(CinemaColor.onSurface)
                         .lineLimit(1)
-                    Text(loc.itemCount(playlist.childCount ?? 0))
+                    Text(isMember ? count + " · " + loc.localized("playlist.sheet.contains") : count)
                         .font(CinemaFont.label(.small))
                         .foregroundStyle(CinemaColor.onSurfaceVariant)
                         .lineLimit(1)
                 }
                 Spacer(minLength: CinemaSpacing.spacing2)
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: CinemaScale.pt(22), weight: .semibold))
-                    .foregroundStyle(themeManager.accent)
+                // A tick where the title already is, a plus where a press
+                // would put it — the sheet used to offer « + » everywhere and
+                // add a second copy without a word.
+                Image(systemName: isMember ? "checkmark.circle.fill" : "plus.circle")
+                    .font(.system(size: CinemaScale.pt(24), weight: .semibold))
+                    .foregroundStyle(isMember ? themeManager.accent : CinemaColor.onSurfaceVariant)
             }
-            .padding(CinemaSpacing.spacing4)
+            .padding(CinemaSpacing.spacing3)
             .glassPanel()
+            .contentShape(Rectangle())
         }
         .disabled(model.busy)
         .accessibilityLabel(displayName(playlist))
-        .accessibilityHint(loc.localized("playlist.add.title"))
+        .accessibilityValue(isMember ? loc.localized("playlist.sheet.contains") : "")
+        .accessibilityHint(loc.localized(isMember ? "playlist.removeItem" : "playlist.add.title"))
+        .accessibilityAddTraits(isMember ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private static var coverSide: CGFloat {
+        #if os(tvOS)
+        CinemaScale.pt(64)
+        #else
+        CinemaScale.pt(52)
+        #endif
     }
 
     private func displayName(_ playlist: BaseItemDto) -> String {
@@ -281,26 +328,34 @@ struct AddToPlaylistSheet: View {
 
     private func reload() async {
         await model.load(userId: appState.currentUserId, api: appState.apiClient, loc: loc)
+        await model.loadMembership(itemId: request.itemId, userId: appState.currentUserId, api: appState.apiClient)
     }
 
-    private func add(to playlist: BaseItemDto) {
+    /// One press adds the title, or takes it out of a playlist that holds it.
+    /// The sheet STAYS open: a title often goes into more than one playlist,
+    /// and « Terminé » is the way out.
+    private func toggle(_ playlist: BaseItemDto) {
         guard !model.busy, let playlistId = playlist.id, let userId = appState.currentUserId else { return }
+        let held = model.membership[playlistId] ?? []
         Task {
             model.busy = true
+            defer { model.busy = false }
             do {
-                try await appState.apiClient.addToPlaylist(
-                    playlistId: playlistId,
-                    itemIds: [request.itemId],
-                    userId: userId
-                )
-                model.busy = false
+                if held.isEmpty {
+                    try await appState.apiClient.addToPlaylist(
+                        playlistId: playlistId, itemIds: [request.itemId], userId: userId
+                    )
+                    toast.success(loc.localized("playlist.added", displayName(playlist)))
+                } else {
+                    // Entry ids: every occurrence of the title (for a series,
+                    // each of its episodes) is an entry of its own.
+                    try await appState.apiClient.removeFromPlaylist(playlistId: playlistId, entryIds: held)
+                    toast.success(loc.localized("playlist.removedFrom", displayName(playlist)))
+                }
                 NotificationCenter.default.post(name: .cinemaxPlaylistsChanged, object: nil)
-                toast.success(loc.localized("playlist.added", displayName(playlist)))
-                dismiss()
+                await reload()
             } catch {
-                // Sheet stays open so the user can retry or pick another one.
-                model.busy = false
-                logger.error("Add to playlist failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("Playlist toggle failed: \(error.localizedDescription, privacy: .public)")
                 toast.error(loc.userFacingMessage(for: error))
             }
         }
@@ -321,9 +376,10 @@ struct AddToPlaylistSheet: View {
                     userId: userId
                 )
                 model.busy = false
+                model.newPlaylistName = ""
                 NotificationCenter.default.post(name: .cinemaxPlaylistsChanged, object: nil)
                 toast.success(loc.localized("playlist.added", name))
-                dismiss()
+                await reload()
             } catch {
                 model.busy = false
                 logger.error("Create playlist failed: \(error.localizedDescription, privacy: .public)")
@@ -371,5 +427,40 @@ struct AddToPlaylistPresentation: ViewModifier {
             .environment(themeManager)
             .environment(loc)
             .environment(toast)
+    }
+}
+
+/// A playlist's poster-stack cover on a row of the sheet, from the shared
+/// preview store — the same request, held once, as the card on Home.
+private struct PlaylistSheetCover: View {
+    let playlist: BaseItemDto
+
+    @Environment(AppState.self) private var appState
+    @AppStorage(SettingsKey.privacyMaxContentAge) private var maxContentAge: Int = SettingsKey.Default.privacyMaxContentAge
+
+    private var store: PlaylistPreviewStore { .shared }
+
+    var body: some View {
+        let preview = playlist.id.flatMap { store.preview(for: $0) }
+        PlaylistCover(
+            content: PlaylistCoverStack.content(preview: preview, fallbackCount: playlist.childCount),
+            imageBuilder: appState.imageBuilder,
+            cornerRadius: CinemaRadius.medium
+        )
+        .accessibilityHidden(true)
+        .task(id: Request(
+            playlistId: playlist.id, userId: appState.currentUserId,
+            contentAgeCap: maxContentAge, generation: store.generation
+        )) {
+            guard let id = playlist.id, let userId = appState.currentUserId else { return }
+            store.load(playlistId: id, userId: userId, contentAgeCap: maxContentAge, api: appState.apiClient)
+        }
+    }
+
+    private struct Request: Hashable {
+        let playlistId: String?
+        let userId: String?
+        let contentAgeCap: Int
+        let generation: Int
     }
 }

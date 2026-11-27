@@ -1289,7 +1289,7 @@
 "playlist.manage" = "Playlist-Optionen";
 "playlist.manage.denied" = "Nur der Besitzer dieser Playlist (oder ein Administrator) kann sie ändern";
 "playlist.create" = "Erstellen";
-"playlist.create.message" = "Titel fügst du über ihre Detailseite hinzu.";
+"playlist.create.message" = "Titel kannst du gleich danach hinzufügen.";
 "playlist.create.done" = "Playlist „%@“ erstellt";
 
 /* Home "Upcoming" and "Collections" rows. */
@@ -1880,3 +1880,47 @@
 "seerr.arrival.several" = "%d Anfragen sind verfügbar";
 "seerr.arrival.several.one" = "%d Anfrage ist verfügbar";
 "seerr.arrival.view" = "Anzeigen";
+
+/* Playlists, lot 1 : ajouter des titres depuis la playlist, lignes enrichies, série repliée, feuille d'ajout avec coches. */
+"action.undo" = "Rückgängig";
+"playlist.addTitles" = "Titel hinzufügen";
+"playlist.addTitles.title" = "Zu „%@“ hinzufügen";
+"playlist.options" = "Optionen";
+"playlist.sort.hint" = "Im Sortiermodus hat jede Zeile eigene Tasten: nach oben, nach unten, entfernen.";
+"playlist.meta.watched" = "%d gesehen";
+"playlist.meta.watched.one" = "%d gesehen";
+"playlist.run.subtitle" = "Serie · %d Folgen";
+"playlist.run.subtitle.one" = "Serie · %d Folge";
+"playlist.run.expanded" = "Ausgeklappt";
+"playlist.run.collapsed" = "Eingeklappt";
+"playlist.run.remove.message" = "Die %d Folgen von „%@“ werden aus der Playlist entfernt.";
+"playlist.run.remove.message.one" = "%d Folge von „%@“ wird aus der Playlist entfernt.";
+"playlist.removeWatched" = "Gesehene Titel entfernen";
+"playlist.removeWatched.message" = "%d gesehene Titel werden aus der Playlist entfernt.";
+"playlist.removeWatched.message.one" = "%d gesehener Titel wird aus der Playlist entfernt.";
+"playlist.removed.count" = "%d Titel entfernt";
+"playlist.removed.count.one" = "%d Titel entfernt";
+"playlist.removedFrom" = "Aus %@ entfernt";
+"playlist.sheet.contains" = "bereits enthalten";
+"playlist.picker.search" = "Film oder Serie suchen";
+"playlist.picker.filter.recent" = "Neu";
+"playlist.picker.filter.movies" = "Filme";
+"playlist.picker.filter.series" = "Serien";
+"playlist.picker.filter.favorites" = "Favoriten";
+"playlist.picker.already" = "Bereits in der Liste";
+"playlist.picker.seriesAdds" = "Serie · alle Folgen";
+"playlist.picker.seriesPartial" = "Serie · %d Folgen bereits in der Liste";
+"playlist.picker.seriesPartial.one" = "Serie · %d Folge bereits in der Liste";
+"playlist.picker.selected" = "%d Titel ausgewählt";
+"playlist.picker.selected.one" = "%d Titel ausgewählt";
+"playlist.picker.selected.none" = "Kein Titel ausgewählt";
+"playlist.picker.hint" = "Wähle die Poster in der gewünschten Reihenfolge.";
+"playlist.picker.ordered" = "Wird in der Reihenfolge der Nummern hinzugefügt.";
+"playlist.picker.add" = "%d Titel hinzufügen";
+"playlist.picker.add.one" = "%d Titel hinzufügen";
+"playlist.picker.add.none" = "Hinzufügen";
+"playlist.picker.added" = "%d Titel hinzugefügt";
+"playlist.picker.added.one" = "%d Titel hinzugefügt";
+"playlist.picker.empty" = "Kein passender Titel";
+"playlist.picker.more" = "Nutze die Suche, um weitere Titel zu finden.";
+"playlist.picker.a11y.number" = "Nummer %d";

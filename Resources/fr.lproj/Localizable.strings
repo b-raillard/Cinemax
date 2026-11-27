@@ -1242,7 +1242,7 @@
 "home.playlists" = "Vos playlists";
 "settings.homePage.playlists" = "Playlists";
 "playlist.contents.empty" = "Cette playlist est vide";
-"playlist.reorder" = "Ordonner";
+"playlist.reorder" = "Trier";
 "playlist.moveUp" = "Monter";
 "playlist.moveDown" = "Descendre";
 "playlist.add.action" = "Ajouter à une playlist";
@@ -1291,7 +1291,7 @@
 "playlist.manage" = "Options de la playlist";
 "playlist.manage.denied" = "Seul le propriétaire de cette playlist (ou un administrateur) peut la modifier";
 "playlist.create" = "Créer";
-"playlist.create.message" = "Tu ajouteras des titres depuis leur fiche.";
+"playlist.create.message" = "Tu pourras y ajouter des titres juste après.";
 "playlist.create.done" = "Playlist « %@ » créée";
 
 /* Rangées d'accueil « Prochainement » et « Collections ». */
@@ -1882,3 +1882,47 @@
 "seerr.arrival.several" = "%d demandes sont disponibles";
 "seerr.arrival.several.one" = "%d demande est disponible";
 "seerr.arrival.view" = "Voir";
+
+/* Playlists, lot 1 : ajouter des titres depuis la playlist, lignes enrichies, série repliée, feuille d'ajout avec coches. */
+"action.undo" = "Annuler";
+"playlist.addTitles" = "Ajouter des titres";
+"playlist.addTitles.title" = "Ajouter à « %@ »";
+"playlist.options" = "Options";
+"playlist.sort.hint" = "En mode Trier, chaque ligne porte ses boutons : monter, descendre, retirer.";
+"playlist.meta.watched" = "%d vus";
+"playlist.meta.watched.one" = "%d vu";
+"playlist.run.subtitle" = "Série · %d épisodes";
+"playlist.run.subtitle.one" = "Série · %d épisode";
+"playlist.run.expanded" = "Déplié";
+"playlist.run.collapsed" = "Replié";
+"playlist.run.remove.message" = "Les %d épisodes de « %@ » seront retirés de la playlist.";
+"playlist.run.remove.message.one" = "%d épisode de « %@ » sera retiré de la playlist.";
+"playlist.removeWatched" = "Retirer les titres vus";
+"playlist.removeWatched.message" = "%d titres vus seront retirés de la playlist.";
+"playlist.removeWatched.message.one" = "%d titre vu sera retiré de la playlist.";
+"playlist.removed.count" = "%d titres retirés";
+"playlist.removed.count.one" = "%d titre retiré";
+"playlist.removedFrom" = "Retiré de %@";
+"playlist.sheet.contains" = "ce titre y est";
+"playlist.picker.search" = "Rechercher un film, une série";
+"playlist.picker.filter.recent" = "Récents";
+"playlist.picker.filter.movies" = "Films";
+"playlist.picker.filter.series" = "Séries";
+"playlist.picker.filter.favorites" = "Favoris";
+"playlist.picker.already" = "Déjà dans la liste";
+"playlist.picker.seriesAdds" = "Série · tous ses épisodes";
+"playlist.picker.seriesPartial" = "Série · %d épisodes déjà dans la liste";
+"playlist.picker.seriesPartial.one" = "Série · %d épisode déjà dans la liste";
+"playlist.picker.selected" = "%d titres sélectionnés";
+"playlist.picker.selected.one" = "%d titre sélectionné";
+"playlist.picker.selected.none" = "Aucun titre sélectionné";
+"playlist.picker.hint" = "Choisis les affiches dans l'ordre voulu.";
+"playlist.picker.ordered" = "Ajoutés dans l'ordre des numéros.";
+"playlist.picker.add" = "Ajouter %d titres";
+"playlist.picker.add.one" = "Ajouter %d titre";
+"playlist.picker.add.none" = "Ajouter";
+"playlist.picker.added" = "%d titres ajoutés";
+"playlist.picker.added.one" = "%d titre ajouté";
+"playlist.picker.empty" = "Aucun titre ne correspond";
+"playlist.picker.more" = "Utilise la recherche pour trouver d'autres titres.";
+"playlist.picker.a11y.number" = "Numéro %d";
