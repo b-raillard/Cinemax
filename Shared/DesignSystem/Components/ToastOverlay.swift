@@ -55,7 +55,13 @@ private struct ToastView: View {
     #endif
 
     var body: some View {
-        HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
+        // Everything sits on the title's FIRST BASELINE. With `.top`, four
+        // boxes of four heights (20 pt icon, text line, the button's and the
+        // ✕'s 44 pt targets pulled back by negative padding) were centred on
+        // four different lines: « Annuler » read 2 pt lower than the title
+        // beside it (seen on device, 2026-11-27). A baseline holds whatever
+        // the text size, and keeps the icon on the first line of a long title.
+        HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing3) {
             Image(systemName: toast.level.systemImage)
                 .font(.system(size: CinemaScale.pt(20), weight: .semibold))
                 .foregroundStyle(toast.level.tint)
@@ -68,7 +74,7 @@ private struct ToastView: View {
                 // a long title beside a fixed-width button was truncated on
                 // a narrow iPhone.
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: CinemaSpacing.spacing3) {
+                    HStack(alignment: .firstTextBaseline, spacing: CinemaSpacing.spacing3) {
                         textStack
                         actionButton(action, inline: true)
                     }
