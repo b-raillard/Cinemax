@@ -183,6 +183,76 @@ struct MediaPageSkeleton: View {
     }
 }
 
+// MARK: - Grid skeleton (Library « Tout afficher »)
+
+/// Full-page placeholder mirroring `MediaLibraryScreen`'s flat grid: the count
+/// line (tvOS: the top bar's title + count) over a grid of posters. The
+/// library opens on it when the layout setting is « Tout afficher » — the
+/// hero skeleton announced a page that never came.
+struct MediaGridSkeleton: View {
+    /// The grid's own columns, so a block sits exactly where a poster lands.
+    let columns: [GridItem]
+    let spacing: CGFloat
+    let horizontalPadding: CGFloat
+    /// Enough to fill the tallest window; the rest is clipped.
+    let cellCount: Int
+    /// tvOS draws the screen's title above the count.
+    var showsTitle = false
+
+    @Environment(\.motionEffectsEnabled) private var motionEffects
+
+    var body: some View {
+        // One shared clock for every block — see `MediaPageSkeleton`.
+        if motionEffects {
+            TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let phase = (t.truncatingRemainder(dividingBy: SkeletonBlock.period)) / SkeletonBlock.period * 2 - 1
+                content
+                    .environment(\.skeletonPhase, phase)
+            }
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: CinemaSpacing.spacing4) {
+            VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                if showsTitle {
+                    SkeletonBlock(cornerRadius: CinemaRadius.small)
+                        .frame(width: 220, height: CinemaScale.pt(30))
+                }
+                SkeletonBlock(cornerRadius: CinemaRadius.small)
+                    .frame(width: 110, height: CinemaScale.pt(18))
+            }
+            .padding(.horizontal, horizontalPadding)
+
+            // A fixed handful of blocks, and nothing scrolls.
+            LazyVGrid(columns: columns, spacing: spacing) {
+                ForEach(0..<cellCount, id: \.self) { _ in
+                    VStack(alignment: .leading, spacing: CinemaSpacing.spacing2) {
+                        SkeletonBlock()
+                            .aspectRatio(2 / 3, contentMode: .fit)
+                        // Title, then the year / rating line.
+                        SkeletonBlock(cornerRadius: CinemaRadius.small)
+                            .frame(height: CinemaScale.pt(14))
+                            .padding(.trailing, CinemaSpacing.spacing6)
+                        SkeletonBlock(cornerRadius: CinemaRadius.small)
+                            .frame(width: 44, height: CinemaScale.pt(12))
+                    }
+                }
+            }
+            .padding(.horizontal, horizontalPadding)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.top, CinemaSpacing.spacing3)
+        .allowsHitTesting(false)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
+    }
+}
+
 #if DEBUG
 #Preview("MediaPageSkeleton") {
     MediaPageSkeleton(
