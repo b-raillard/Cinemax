@@ -760,6 +760,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         if shouldFailPlaylistRemove { throw stubbedError }
     }
 
+    /// Every `addToPlaylist` call, in order — the ids as they were sent.
+    private(set) var addToPlaylistCalls: [(playlistId: String, itemIds: [String])] = []
+    var shouldFailPlaylistAdd = false
+    func addToPlaylist(playlistId: String, itemIds: [String], userId: String) async throws {
+        recordLock.withLock { addToPlaylistCalls.append((playlistId: playlistId, itemIds: itemIds)) }
+        if shouldFailPlaylistAdd { throw stubbedError }
+    }
+
     /// Previews per playlist id; an id absent here answers an empty page.
     var stubbedPlaylistPreviews: [String: PlaylistPreviewPage] = [:]
     /// Every `getPlaylistPreview` call's playlist id, in order.

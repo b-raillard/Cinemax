@@ -1289,7 +1289,7 @@
 "playlist.manage" = "Playlist options";
 "playlist.manage.denied" = "Only this playlist's owner (or an administrator) can change it";
 "playlist.create" = "Create";
-"playlist.create.message" = "You'll add titles from their detail page.";
+"playlist.create.message" = "You can add titles to it right after.";
 "playlist.create.done" = "Playlist “%@” created";
 
 /* Home "Upcoming" and "Collections" rows. */
@@ -1880,3 +1880,47 @@
 "seerr.arrival.several" = "%d requests are available";
 "seerr.arrival.several.one" = "%d request is available";
 "seerr.arrival.view" = "View";
+
+/* Playlists, lot 1 : ajouter des titres depuis la playlist, lignes enrichies, série repliée, feuille d'ajout avec coches. */
+"action.undo" = "Undo";
+"playlist.addTitles" = "Add titles";
+"playlist.addTitles.title" = "Add to “%@”";
+"playlist.options" = "Options";
+"playlist.sort.hint" = "In sort mode, each row has its own buttons: move up, move down, remove.";
+"playlist.meta.watched" = "%d watched";
+"playlist.meta.watched.one" = "%d watched";
+"playlist.run.subtitle" = "Series · %d episodes";
+"playlist.run.subtitle.one" = "Series · %d episode";
+"playlist.run.expanded" = "Expanded";
+"playlist.run.collapsed" = "Collapsed";
+"playlist.run.remove.message" = "The %d episodes of “%@” will be removed from the playlist.";
+"playlist.run.remove.message.one" = "%d episode of “%@” will be removed from the playlist.";
+"playlist.removeWatched" = "Remove watched titles";
+"playlist.removeWatched.message" = "%d watched titles will be removed from the playlist.";
+"playlist.removeWatched.message.one" = "%d watched title will be removed from the playlist.";
+"playlist.removed.count" = "%d titles removed";
+"playlist.removed.count.one" = "%d title removed";
+"playlist.removedFrom" = "Removed from %@";
+"playlist.sheet.contains" = "already in it";
+"playlist.picker.search" = "Search for a film or series";
+"playlist.picker.filter.recent" = "Recent";
+"playlist.picker.filter.movies" = "Films";
+"playlist.picker.filter.series" = "Series";
+"playlist.picker.filter.favorites" = "Favourites";
+"playlist.picker.already" = "Already in the list";
+"playlist.picker.seriesAdds" = "Series · all its episodes";
+"playlist.picker.seriesPartial" = "Series · %d episodes already in the list";
+"playlist.picker.seriesPartial.one" = "Series · %d episode already in the list";
+"playlist.picker.selected" = "%d titles selected";
+"playlist.picker.selected.one" = "%d title selected";
+"playlist.picker.selected.none" = "No title selected";
+"playlist.picker.hint" = "Pick the posters in the order you want.";
+"playlist.picker.ordered" = "Added in the order of the numbers.";
+"playlist.picker.add" = "Add %d titles";
+"playlist.picker.add.one" = "Add %d title";
+"playlist.picker.add.none" = "Add";
+"playlist.picker.added" = "%d titles added";
+"playlist.picker.added.one" = "%d title added";
+"playlist.picker.empty" = "No matching title";
+"playlist.picker.more" = "Use the search to find other titles.";
+"playlist.picker.a11y.number" = "Number %d";
