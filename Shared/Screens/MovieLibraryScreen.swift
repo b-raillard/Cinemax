@@ -803,16 +803,47 @@ struct MediaLibraryScreen: View {
 
     // MARK: - Loading & Error
 
-    /// Layout-shaped placeholder for the initial load — mirrors the browse
-    /// view's hero + poster rows instead of a context-free spinner.
+    /// Layout-shaped placeholder for the initial load, instead of a
+    /// context-free spinner. It follows the layout the load lands on:
+    /// « Tout afficher » (or a saved sort / filter) opens on the grid, so its
+    /// skeleton is a grid — the hero one announced a page that never came
+    /// (owner, 2026-11-28).
+    @ViewBuilder
     private var loadingView: some View {
-        MediaPageSkeleton(
-            heroHeight: skeletonHeroHeight,
-            rows: [.poster, .poster],
-            posterCardWidth: skeletonPosterWidth,
-            wideCardWidth: skeletonPosterWidth * 2,
-            horizontalPadding: browseGenresPadding
-        )
+        if shouldShowFilteredView {
+            MediaGridSkeleton(
+                columns: filteredColumns,
+                spacing: gridSpacing,
+                horizontalPadding: gridPadding,
+                cellCount: skeletonGridCellCount,
+                showsTitle: skeletonGridShowsTitle
+            )
+        } else {
+            MediaPageSkeleton(
+                heroHeight: skeletonHeroHeight,
+                rows: [.poster, .poster],
+                posterCardWidth: skeletonPosterWidth,
+                wideCardWidth: skeletonPosterWidth * 2,
+                horizontalPadding: browseGenresPadding
+            )
+        }
+    }
+
+    /// Enough rows to fill the window; the skeleton clips the rest.
+    private var skeletonGridCellCount: Int {
+        #if os(tvOS)
+        CinemaTVLayout.gridColumnCount * 3
+        #else
+        sizeClass == .regular ? 40 : 15
+        #endif
+    }
+
+    private var skeletonGridShowsTitle: Bool {
+        #if os(tvOS)
+        true
+        #else
+        false
+        #endif
     }
 
     private var skeletonHeroHeight: CGFloat {
